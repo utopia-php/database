@@ -2848,6 +2848,9 @@ class Database
             }
         }
 
+        $collection->setAttribute('attributes', \array_values($attributes));
+        $collection->setAttribute('indexes', \array_values($indexes));
+
         $success = false;
         try {
             if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
@@ -2859,24 +2862,9 @@ class Database
             $success = false;
         }
 
-        $collection->setAttribute('attributes', \array_values($attributes));
-        $collection->setAttribute('indexes', \array_values($indexes));
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->createAttribute(
-                $collection->getId(),
-                $id,
-                $attribute['type'],
-                $attribute['size'],
-                $attribute['signed'] ?? false,
-                $attribute['array'] ?? false,
-                $attribute['required'] ?? false
-            ),
-            shouldRollback: $success,
-            operationDescription: "attribute deletion '{$id}'",
-            silentRollback: true
-        );
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
@@ -3193,7 +3181,6 @@ class Database
                 $this->rollbackAttributeMetadata($collection, [$id]);
                 $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
-                // Rollback adapter relationship
                 try {
                     $this->adapter->deleteRelationship(
                         $collection->getId(),
@@ -3204,7 +3191,7 @@ class Database
                         $twoWayKey,
                         Database::RELATION_SIDE_PARENT
                     );
-                } catch (\Throwable $rollbackException) {
+                } catch (\Throwable $e) {
                     // Continue to rollback junction table
                 }
 
@@ -3222,6 +3209,7 @@ class Database
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
+            $indexesCreated = [];
 
             try {
                 switch ($type) {
@@ -3248,19 +3236,16 @@ class Database
                         throw new RelationshipException('Invalid relationship type.');
                 }
             } catch (\Throwable $e) {
-                // Rollback any indexes that were successfully created
                 foreach ($indexesCreated as $indexInfo) {
                     try {
                         $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
-                    } catch (\Throwable $rollbackException) {
+                    } catch (\Throwable $e) {
                         // Continue rollback
                     }
                 }
 
-                // Rollback metadata updates via transaction
                 try {
                     $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
-                        // Remove relationship attributes from collections
                         $attributes = $collection->getAttribute('attributes', []);
                         $collection->setAttribute('attributes', array_filter($attributes, fn ($attr) => $attr->getId() !== $id));
                         $this->updateDocument(self::METADATA, $collection->getId(), $collection);
@@ -3273,7 +3258,6 @@ class Database
                     // Continue rollback
                 }
 
-                // Rollback adapter relationship
                 try {
                     $this->adapter->deleteRelationship(
                         $collection->getId(),
@@ -3284,15 +3268,14 @@ class Database
                         $twoWayKey,
                         Database::RELATION_SIDE_PARENT
                     );
-                } catch (\Throwable $rollbackException) {
+                } catch (\Throwable $e) {
                     // Continue rollback
                 }
 
-                // Rollback junction table if it was created
                 if ($junctionCollection !== null) {
                     try {
                         $this->deleteCollection($junctionCollection);
-                    } catch (\Throwable $rollbackException) {
+                    } catch (\Throwable $e) {
                         // Continue to throw original error
                     }
                 }
@@ -3558,45 +3541,10 @@ class Database
 
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
-        $deleted = $this->adapter->deleteRelationship(
-            $collection->getId(),
-            $relatedCollection->getId(),
-            $type,
-            $twoWay,
-            $id,
-            $twoWayKey,
-            $side
-        );
+        $collectionAttributes = $collection->getAttribute('attributes');
+        $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes');
 
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete relationship');
-        }
-
-        try {
-            $this->withRetries(function () use ($collection, $relatedCollection) {
-                $this->silent(function () use ($collection, $relatedCollection) {
-                    $this->withTransaction(function () use ($collection, $relatedCollection) {
-                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                    });
-                });
-            });
-        } catch (\Throwable $e) {
-            try {
-                $this->adapter->createRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey
-                );
-            } catch (\Throwable $rollbackError) {
-                // Log rollback failure but don't throw - we're already handling an error
-            }
-            throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
-        }
-
+        // Delete indexes BEFORE dropping columns to avoid referencing non-existent columns
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -3643,6 +3591,50 @@ class Database
                     throw new RelationshipException('Invalid relationship type.');
             }
         });
+
+        $collection = $this->silent(fn () => $this->getCollection($collection->getId()));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection->getId()));
+        $collection->setAttribute('attributes', $collectionAttributes);
+        $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
+
+        $deleted = $this->adapter->deleteRelationship(
+            $collection->getId(),
+            $relatedCollection->getId(),
+            $type,
+            $twoWay,
+            $id,
+            $twoWayKey,
+            $side
+        );
+
+        if (!$deleted) {
+            throw new DatabaseException('Failed to delete relationship');
+        }
+
+        try {
+            $this->withRetries(function () use ($collection, $relatedCollection) {
+                $this->silent(function () use ($collection, $relatedCollection) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
+                });
+            });
+        } catch (\Throwable $e) {
+            try {
+                $this->adapter->createRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $twoWay,
+                    $id,
+                    $twoWayKey
+                );
+            } catch (\Throwable $rollbackError) {
+                // Log rollback failure but don't throw - we're already handling an error
+            }
+            throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
+        }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));

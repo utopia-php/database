@@ -1600,8 +1600,8 @@ class Database
             if ($created) {
                 try {
                     $this->cleanupCollection($id);
-                } catch (\Throwable $rollbackError) {
-                    Console::error("Failed to rollback collection '{$id}': " . $rollbackError->getMessage());
+                } catch (\Throwable $e) {
+                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
@@ -3250,7 +3250,7 @@ class Database
 
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
-        
+
         $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
             $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
@@ -9124,9 +9124,9 @@ class Database
                     // Regular mode: rollback throws on failure
                     try {
                         $rollbackOperation();
-                    } catch (\Throwable $e) {
+                    } catch (\Throwable $ex) {
                         throw new DatabaseException(
-                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: " . $e->getMessage() . ' | Cleanup error: ' . $rollbackException->getMessage(),
+                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: " . $ex->getMessage() . ' | Cleanup error: ' . $e->getMessage(),
                             previous: $e
                         );
                     }

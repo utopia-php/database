@@ -80,7 +80,6 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
-    // keeping
     public const INDEX_OBJECT = 'object';
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';

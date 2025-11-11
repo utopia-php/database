@@ -2286,12 +2286,6 @@ class Database
             fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
         );
 
-        try {
-            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$index]);
-        } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
-        }
-
         return $indexes[$index];
     }
 

@@ -8984,7 +8984,7 @@ class Database
                     break;
                 }
 
-                if (Coroutine::getCid() > 0) {
+                if (\extension_loaded('swoole') && Coroutine::getCid() > 0) {
                     Coroutine::sleep($delayMs / 1000);
                 } else {
                     \usleep($delayMs * 1000);

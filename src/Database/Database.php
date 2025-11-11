@@ -1600,8 +1600,8 @@ class Database
             if ($created) {
                 try {
                     $this->adapter->deleteCollection($id);
-                } catch (\Throwable $rollbackError) {
-                    // Log rollback failure but continue throwing original error
+                } catch (\Throwable $e) {
+                    // Ignore
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
@@ -3295,7 +3295,7 @@ class Database
                 if ($junctionCollection !== null) {
                     try {
                         $this->deleteCollection($junctionCollection);
-                    } catch (\Throwable $rollbackException) {
+                    } catch (\Throwable $e) {
                         // Continue to throw original error
                     }
                 }
@@ -3350,7 +3350,7 @@ class Database
                         $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn ($attr) => $attr->getId() !== $twoWayKey));
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
-                } catch (\Throwable $rollbackException) {
+                } catch (\Throwable $e) {
                     // Continue rollback
                 }
 
@@ -3537,8 +3537,8 @@ class Database
                         $id,
                         $oldTwoWayKey
                     );
-                } catch (\Throwable $rollbackError) {
-                    // Log rollback failure but continue throwing original error
+                } catch (\Throwable $e) {
+                    // Ignore
                 }
             }
             throw $e;
@@ -3748,7 +3748,7 @@ class Database
                     $id,
                     $twoWayKey
                 );
-            } catch (\Throwable $rollbackError) {
+            } catch (\Throwable $e) {
                 // Log rollback failure but don't throw - we're already handling an error
             }
             throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
@@ -9089,14 +9089,14 @@ class Database
                     // Silent mode: swallow rollback errors
                     try {
                         $rollbackOperation();
-                    } catch (\Throwable $rollbackError) {
+                    } catch (\Throwable $e) {
                         // Silent rollback - errors are swallowed
                     }
                 } else {
                     // Regular mode: rollback throws on failure
                     try {
                         $rollbackOperation();
-                    } catch (\Throwable $rollbackException) {
+                    } catch (\Throwable $e) {
                         throw new DatabaseException(
                             "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: " . $e->getMessage() . ' | Cleanup error: ' . $rollbackException->getMessage(),
                             previous: $e

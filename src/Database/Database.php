@@ -1845,7 +1845,6 @@ class Database
         );
 
         $created = false;
-        $duplicateInSharedTable = false;
 
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
@@ -1858,7 +1857,6 @@ class Database
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            $duplicateInSharedTable = true;
         }
 
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
@@ -1959,7 +1957,6 @@ class Database
         }
 
         $created = false;
-        $duplicateInSharedTable = false;
 
         try {
             $created = $this->adapter->createAttributes($collection->getId(), $attributes);
@@ -1973,7 +1970,6 @@ class Database
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            $duplicateInSharedTable = true;
         }
 
         foreach ($attributeDocuments as $attributeDocument) {
@@ -3836,7 +3832,6 @@ class Database
         }
 
         $created = false;
-        $duplicateInSharedTable = false;
 
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
@@ -3849,7 +3844,6 @@ class Database
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            $duplicateInSharedTable = true;
         }
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);

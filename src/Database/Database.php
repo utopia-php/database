@@ -8853,7 +8853,7 @@ class Database
                 }
 
                 if (Coroutine::getCid() > 0) {
-                    Coroutine::sleep($delayMs * 1000);
+                    Coroutine::sleep($delayMs / 1000);
                 } else {
                     \usleep($delayMs * 1000);
                 }

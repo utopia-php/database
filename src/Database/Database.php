@@ -1566,8 +1566,11 @@ class Database
             }
         }
 
+        $created = false;
+
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
+            $created = true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
@@ -1579,7 +1582,18 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (\Throwable $e) {
+            if ($created) {
+                try {
+                    $this->adapter->deleteCollection($id);
+                } catch (\Throwable $rollbackError) {
+                    // Log rollback failure but continue throwing original error
+                }
+            }
+            throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
+        }
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 

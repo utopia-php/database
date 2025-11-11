@@ -2916,15 +2916,14 @@ class Database
         $collection->setAttribute('attributes', \array_values($attributes));
         $collection->setAttribute('indexes', \array_values($indexes));
 
-        $success = false;
+        $shouldRollback = false;
         try {
             if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
                 throw new DatabaseException('Failed to delete attribute');
             }
-            $success = true;
+            $shouldRollback = true;
         } catch (NotFoundException) {
             // Ignore
-            $success = false;
         }
 
         $this->updateMetadata(
@@ -2938,7 +2937,7 @@ class Database
                 $attribute['array'] ?? false,
                 $attribute['required'] ?? false
             ),
-            shouldRollback: $success,
+            shouldRollback: $shouldRollback,
             operationDescription: "attribute deletion '{$id}'",
             silentRollback: true
         );

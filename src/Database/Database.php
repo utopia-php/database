@@ -1378,7 +1378,7 @@ class Database
         try {
             $this->trigger(self::EVENT_DATABASE_CREATE, $database);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -1412,7 +1412,7 @@ class Database
         try {
             $this->trigger(self::EVENT_DATABASE_LIST, $databases);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $databases;
@@ -1437,7 +1437,7 @@ class Database
                 'deleted' => $deleted
             ]);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         $this->cache->flush();
@@ -1610,7 +1610,7 @@ class Database
         try {
             $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $createdCollection;
@@ -1658,7 +1658,7 @@ class Database
         try {
             $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $collection;
@@ -1688,7 +1688,7 @@ class Database
         try {
             $this->trigger(self::EVENT_COLLECTION_READ, $collection);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $collection;
@@ -1713,7 +1713,7 @@ class Database
         try {
             $this->trigger(self::EVENT_COLLECTION_LIST, $result);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $result;
@@ -1827,7 +1827,7 @@ class Database
             try {
                 $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
             } catch (\Throwable $e) {
-                // Log but don't throw - event failures shouldn't fail the operation
+                // Ignore
             }
         }
 
@@ -1923,13 +1923,13 @@ class Database
                 '$collection' => self::METADATA
             ]));
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -2048,13 +2048,13 @@ class Database
                 '$collection' => self::METADATA
             ]));
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -2393,7 +2393,7 @@ class Database
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $attributes[$index];
@@ -2810,13 +2810,13 @@ class Database
                 '$collection' => self::METADATA
             ]));
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $attribute;
@@ -2951,13 +2951,13 @@ class Database
                 '$collection' => self::METADATA
             ]));
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -3051,7 +3051,7 @@ class Database
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $renamed;
@@ -3383,7 +3383,7 @@ class Database
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -3760,7 +3760,7 @@ class Database
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -3829,7 +3829,7 @@ class Database
         try {
             $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return true;
@@ -4060,7 +4060,7 @@ class Database
         try {
             $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
         } catch (\Throwable $e) {
-            // Log but don't throw - event failures shouldn't fail the operation
+            // Ignore
         }
 
         return $deleted;

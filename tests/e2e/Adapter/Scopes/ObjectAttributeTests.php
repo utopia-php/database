@@ -2,9 +2,11 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -152,21 +154,31 @@ trait ObjectAttributeTests
 
         // Test 11d: notEqual on scalar inside object should exclude doc1
         $results = $database->find($collectionId, [
-            Query::notEqual('meta', [['age' => 26]])
+            Query::notEqual('meta', ['age' => 26])
         ]);
         // Should return doc2 only
         $this->assertCount(1, $results);
         $this->assertEquals('doc2', $results[0]->getId());
 
+        try {
+            // test -> not equal allows one value only
+            $results = $database->find($collectionId, [
+                Query::notEqual('meta', [['age' => 26],['age' => 27]])
+            ]);
+            $this->fail('No query thrown');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+        }
+
         // Test 11e: notEqual on nested object should exclude doc1
         $results = $database->find($collectionId, [
-            Query::notEqual('meta', [[
+            Query::notEqual('meta', [
                 'user' => [
                     'info' => [
                         'country' => 'CA'
                     ]
                 ]
-            ]])
+            ])
         ]);
         // Should return doc2 only
         $this->assertCount(1, $results);
@@ -588,9 +600,10 @@ trait ObjectAttributeTests
 
         // Test 3: Query with equal on indexed JSONB column
         $results = $database->find($collectionId, [
-            Query::equal('data', [['env' => 'production']])
+            Query::equal('data', [['config' => ['env' => 'production']]])
         ]);
-        $this->assertCount(0, $results); // Note: Object index doesn't make equal queries work differently
+        $this->assertCount(1, $results);
+        $this->assertEquals('gin1', $results[0]->getId());
 
         // Test 4: Query with contains on indexed JSONB column
         $results = $database->find($collectionId, [

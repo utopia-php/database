@@ -163,12 +163,8 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_OBJECT:
-                    // For JSONB/object queries, value must be an array
-                    if (!is_array($value)) {
-                        $this->message = 'Query value for object type must be an array';
-                        return false;
-                    }
-                    // No further validation needed - JSONB accepts any valid array structure
+                    // value for object can be of any type as its a hashmap
+                    // eg; ['key'=>value']
                     continue 2;
 
                 case Database::VAR_POINT:

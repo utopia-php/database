@@ -1599,9 +1599,9 @@ class Database
         } catch (\Throwable $e) {
             if ($created) {
                 try {
-                    $this->adapter->deleteCollection($id);
-                } catch (\Throwable $e) {
-                    // Ignore
+                    $this->cleanupCollection($id);
+                } catch (\Throwable $rollbackError) {
+                    Console::error("Failed to rollback collection '{$id}': " . $rollbackError->getMessage());
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
@@ -2928,18 +2928,9 @@ class Database
 
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: fn () => $this->adapter->createAttribute(
-                $collection->getId(),
-                $id,
-                $attribute['type'],
-                $attribute['size'],
-                $attribute['signed'] ?? false,
-                $attribute['array'] ?? false,
-                $attribute['required'] ?? false
-            ),
-            shouldRollback: $shouldRollback,
-            operationDescription: "attribute deletion '{$id}'",
-            silentRollback: true
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute deletion '{$id}'"
         );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -3107,6 +3098,66 @@ class Database
     }
 
     /**
+     * Cleanup (delete) a collection with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupCollection(
+        string $collectionId,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteCollection($collectionId),
+            'collection',
+            $collectionId,
+            $maxAttempts
+        );
+    }
+
+    /**
+     * Cleanup (delete) a relationship with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param string $relatedCollectionId The related collection ID
+     * @param string $type The relationship type
+     * @param bool $twoWay Whether the relationship is two-way
+     * @param string $key The relationship key
+     * @param string $twoWayKey The two-way relationship key
+     * @param string $side The relationship side
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupRelationship(
+        string $collectionId,
+        string $relatedCollectionId,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side = Database::RELATION_SIDE_PARENT,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteRelationship(
+                $collectionId,
+                $relatedCollectionId,
+                $type,
+                $twoWay,
+                $key,
+                $twoWayKey,
+                $side
+            ),
+            'relationship',
+            $key,
+            $maxAttempts
+        );
+    }
+
+    /**
      * Create a relationship attribute
      *
      * @param string $collection
@@ -3199,9 +3250,7 @@ class Database
 
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
-
-
-        // Track junction collection name for rollback
+        
         $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
             $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
@@ -3252,12 +3301,11 @@ class Database
         );
 
         if (!$created) {
-            // Rollback junction table if it was created
             if ($junctionCollection !== null) {
                 try {
-                    $this->silent(fn () => $this->deleteCollection($junctionCollection));
+                    $this->silent(fn () => $this->cleanupCollection($junctionCollection));
                 } catch (\Throwable $e) {
-                    // Continue to throw the main error
+                    Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
                 }
             }
             throw new DatabaseException('Failed to create relationship');
@@ -3278,7 +3326,7 @@ class Database
                 $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
                 try {
-                    $this->adapter->deleteRelationship(
+                    $this->cleanupRelationship(
                         $collection->getId(),
                         $relatedCollection->getId(),
                         $type,
@@ -3288,15 +3336,14 @@ class Database
                         Database::RELATION_SIDE_PARENT
                     );
                 } catch (\Throwable $e) {
-                    // Continue to rollback junction table
+                    Console::error("Failed to cleanup relationship '{$id}': " . $e->getMessage());
                 }
 
-                // Rollback junction table if it was created
                 if ($junctionCollection !== null) {
                     try {
-                        $this->deleteCollection($junctionCollection);
+                        $this->cleanupCollection($junctionCollection);
                     } catch (\Throwable $e) {
-                        // Continue to throw original error
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
                     }
                 }
 
@@ -3335,8 +3382,8 @@ class Database
                 foreach ($indexesCreated as $indexInfo) {
                     try {
                         $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
-                    } catch (\Throwable $e) {
-                        // Continue rollback
+                    } catch (\Throwable $cleanupError) {
+                        Console::error("Failed to cleanup index '{$indexInfo['index']}': " . $cleanupError->getMessage());
                     }
                 }
 
@@ -3350,12 +3397,13 @@ class Database
                         $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn ($attr) => $attr->getId() !== $twoWayKey));
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
-                } catch (\Throwable $e) {
-                    // Continue rollback
+                } catch (\Throwable $cleanupError) {
+                    Console::error("Failed to cleanup metadata for relationship '{$id}': " . $cleanupError->getMessage());
                 }
 
+                // Cleanup relationship
                 try {
-                    $this->adapter->deleteRelationship(
+                    $this->cleanupRelationship(
                         $collection->getId(),
                         $relatedCollection->getId(),
                         $type,
@@ -3364,15 +3412,15 @@ class Database
                         $twoWayKey,
                         Database::RELATION_SIDE_PARENT
                     );
-                } catch (\Throwable $e) {
-                    // Continue rollback
+                } catch (\Throwable $cleanupError) {
+                    Console::error("Failed to cleanup relationship '{$id}': " . $cleanupError->getMessage());
                 }
 
                 if ($junctionCollection !== null) {
                     try {
-                        $this->deleteCollection($junctionCollection);
-                    } catch (\Throwable $e) {
-                        // Continue to throw original error
+                        $this->cleanupCollection($junctionCollection);
+                    } catch (\Throwable $cleanupError) {
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $cleanupError->getMessage());
                     }
                 }
 
@@ -3739,18 +3787,6 @@ class Database
                 });
             });
         } catch (\Throwable $e) {
-            try {
-                $this->adapter->createRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey
-                );
-            } catch (\Throwable $e) {
-                // Log rollback failure but don't throw - we're already handling an error
-            }
             throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
         }
 
@@ -4043,17 +4079,9 @@ class Database
 
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: fn () => $this->adapter->createIndex(
-                $collection->getId(),
-                $id,
-                $indexDeleted['type'],
-                $indexDeleted['attributes'],
-                $indexDeleted['lengths'] ?? [],
-                $indexDeleted['orders'] ?? []
-            ),
-            shouldRollback: $deleted,
-            operationDescription: "index deletion '{$id}'",
-            silentRollback: true
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index deletion '{$id}'"
         );
 
 

@@ -2278,8 +2278,11 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
-        $this->withRetries(
-            fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index metadata update '{$id}'"
         );
 
         return $indexes[$index];
@@ -2316,8 +2319,11 @@ class Database
 
         $collection->setAttribute('attributes', $attributes);
 
-        $this->withRetries(
-            fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute metadata update '{$id}'"
         );
 
         try {

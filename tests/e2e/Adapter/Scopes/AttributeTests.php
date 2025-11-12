@@ -1568,7 +1568,7 @@ trait AttributeTests
                 ]);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
+                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
             }
 
             $documents = $database->find($collection, [
@@ -1752,16 +1752,23 @@ trait AttributeTests
         }
     }
 
-    public function testCreateDateTimeAttributeFailure(): void
+    public function testCreateDatetimeAddingAutoFilter(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('datetime_fail');
+        $database->createCollection('datetime_auto_filter');
 
-        /** Test for FAILURE */
         $this->expectException(Exception::class);
-        $database->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
+        $database->createAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:['json']);
+        $collection = $database->getCollection('datetime_auto_filter');
+        $attribute = $collection->getAttribute('attributes')[0];
+        $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
+        $database->updateAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:[]);
+        $collection = $database->getCollection('datetime_auto_filter');
+        $attribute = $collection->getAttribute('attributes')[0];
+        $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
+        $database->deleteCollection('datetime_auto_filter');
     }
     /**
      * @depends testCreateDeleteAttribute

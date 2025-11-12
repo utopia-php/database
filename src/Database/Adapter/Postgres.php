@@ -889,7 +889,8 @@ class Postgres extends SQL
             Database::INDEX_HNSW_COSINE,
             Database::INDEX_HNSW_DOT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
+            Database::INDEX_OBJECT => 'INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
@@ -908,6 +909,7 @@ class Postgres extends SQL
             Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
             Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
             Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
+            Database::INDEX_OBJECT => " USING GIN ({$attributes})",
             default => " ({$attributes})",
         };
 
@@ -1657,6 +1659,62 @@ class Postgres extends SQL
     }
 
     /**
+     * Handle JSONB queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+     */
+    protected function handleObjectQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        switch ($query->getMethod()) {
+            case Query::TYPE_EQUAL:
+            case Query::TYPE_NOT_EQUAL: {
+                $isNot = $query->getMethod() === Query::TYPE_NOT_EQUAL;
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                    $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
+                }
+                $separator = $isNot ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+            }
+
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_CONTAINS: {
+                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    if (count($value) === 1) {
+                        $jsonKey = array_key_first($value);
+                        $jsonValue = $value[$jsonKey];
+
+                        // If scalar (e.g. "skills" => "typescript"),
+                        // wrap it to express array containment: {"skills": ["typescript"]}
+                        // If it's already an object/associative array (e.g. "config" => ["lang" => "en"]),
+                        // keep as-is to express object containment.
+                        if (!\is_array($jsonValue)) {
+                            $value[$jsonKey] = [$jsonValue];
+                        }
+                    }
+                    $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                    $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
+                }
+                $separator = $isNot ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+            }
+
+            default:
+                throw new DatabaseException('Query method ' . $query->getMethod() . ' not supported for object attributes');
+        }
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1677,6 +1735,10 @@ class Postgres extends SQL
 
         if ($query->isSpatialAttribute()) {
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+        }
+
+        if ($query->isObjectAttribute()) {
+            return $this->handleObjectQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {
@@ -1860,6 +1922,9 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
+            case Database::VAR_OBJECT:
+                return 'JSONB';
+
             case Database::VAR_POINT:
                 return 'GEOMETRY(POINT,' . Database::DEFAULT_SRID . ')';
 
@@ -1873,7 +1938,7 @@ class Postgres extends SQL
                 return "VECTOR({$size})";
 
             default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -2102,6 +2167,16 @@ class Postgres extends SQL
      * @return bool
     */
     public function getSupportForSpatialAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are object (JSONB) attributes supported?
+     *
+     * @return bool
+    */
+    public function getSupportForObject(): bool
     {
         return true;
     }

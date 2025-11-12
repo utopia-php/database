@@ -463,7 +463,11 @@ class Query
      */
     public static function notEqual(string $attribute, string|int|float|bool|array $value): self
     {
-        return new self(self::TYPE_NOT_EQUAL, $attribute, is_array($value) ? $value : [$value]);
+        // maps or not an array
+        if ((is_array($value) && !array_is_list($value)) || !is_array($value)) {
+            $value = [$value];
+        }
+        return new self(self::TYPE_NOT_EQUAL, $attribute, $value);
     }
 
     /**
@@ -975,6 +979,14 @@ class Query
     public function isSpatialAttribute(): bool
     {
         return in_array($this->attributeType, Database::SPATIAL_TYPES);
+    }
+
+    /**
+     * @return bool
+     */
+    public function isObjectAttribute(): bool
+    {
+        return $this->attributeType === Database::VAR_OBJECT;
     }
 
     // Spatial query methods

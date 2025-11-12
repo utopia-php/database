@@ -1760,11 +1760,11 @@ trait AttributeTests
         $this->expectException(Exception::class);
         $database->createAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:['json']);
         $collection = $database->getCollection('datetime_auto_filter');
-        $attribute = $collection->getAttributes()[0];
+        $attribute = $collection->getAttribute('attributes')[0];
         $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
         $database->updateAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:[]);
         $collection = $database->getCollection('datetime_auto_filter');
-        $attribute = $collection->getAttributes()[0];
+        $attribute = $collection->getAttribute('attributes')[0];
         $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
         $database->deleteCollection('datetime_auto_filter');
     }

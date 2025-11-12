@@ -6240,7 +6240,6 @@ class Database
 
                 if (!$old->isEmpty()) {
                     $old = $this->adapter->castingAfter($collection, $old);
-                    $old = $this->decode($collection, $old);
                 }
 
                 try {

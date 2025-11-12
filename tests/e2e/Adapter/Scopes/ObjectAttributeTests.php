@@ -652,7 +652,7 @@ trait ObjectAttributeTests
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
-            $this->assertStringContainsString('Object indexes do not support explicit orders', $e->getMessage());
+            $this->assertStringContainsString('Object index do not support explicit orders', $e->getMessage());
         }
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index with orders');
 

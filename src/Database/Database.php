@@ -73,6 +73,7 @@ class Database
         ...self::SPATIAL_TYPES,
         self::VAR_VECTOR,
         self::VAR_OBJECT,
+        self::VAR_DATETIME
     ];
 
     // Index Types
@@ -2579,7 +2580,8 @@ class Database
                         self::VAR_FLOAT,
                         self::VAR_BOOLEAN,
                         self::VAR_DATETIME,
-                        self::VAR_RELATIONSHIP . ', ' . self::VAR_OBJECT
+                        self::VAR_RELATIONSHIP,
+                        self::VAR_OBJECT
                     ];
                     if ($this->adapter->getSupportForVectors()) {
                         $supportedTypes[] = self::VAR_VECTOR;
@@ -3614,27 +3616,6 @@ class Database
                     }
                     break;
                 }
-            }
-        }
-
-        if ($type === self::INDEX_OBJECT) {
-            if (count($attributes) !== 1) {
-                throw new IndexException('Object index can be created on a single object attribute');
-            }
-
-            foreach ($attributes as $attr) {
-                if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
-                }
-
-                $attributeType = $indexAttributesWithTypes[$attr];
-                if ($attributeType !== self::VAR_OBJECT) {
-                    throw new IndexException('Object index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
-                }
-            }
-
-            if (!empty($orders)) {
-                throw new IndexException('Object indexes do not support explicit orders. Remove the orders to create this index.');
             }
         }
 

@@ -2711,7 +2711,7 @@ trait VectorTests
         $database->deleteCollection('vectorSum');
     }
 
-    public function testVetorUpsert(): void
+    public function testVectorUpsert(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

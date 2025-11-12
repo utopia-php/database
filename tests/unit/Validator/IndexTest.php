@@ -241,7 +241,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testGinIndexValidation(): void
+    public function testObjectIndexValidation(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),

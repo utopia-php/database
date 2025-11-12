@@ -47,6 +47,9 @@ class Database
     public const VAR_ID = 'id';
     public const VAR_UUID7 = 'uuid7';
 
+    // object type
+    public const VAR_OBJECT = 'object';
+
     // Vector types
     public const VAR_VECTOR = 'vector';
 
@@ -65,11 +68,20 @@ class Database
         self::VAR_POLYGON
     ];
 
+    // All types which requires filters
+    public const ATTRIBUTE_FILTER_TYPES = [
+        ...self::SPATIAL_TYPES,
+        self::VAR_VECTOR,
+        self::VAR_OBJECT,
+        self::VAR_DATETIME
+    ];
+
     // Index Types
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
+    public const INDEX_OBJECT = 'object';
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
@@ -607,6 +619,35 @@ class Database
                 }
 
                 return \json_encode(\array_map(\floatval(...), $value));
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                if (!is_string($value)) {
+                    return $value;
+                }
+                $decoded = json_decode($value, true);
+                return is_array($decoded) ? $decoded : $value;
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_OBJECT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!\is_array($value)) {
+                    return $value;
+                }
+
+                return \json_encode($value);
             },
             /**
              * @param string|null $value
@@ -1512,7 +1553,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         foreach ($attributes as &$attribute) {
-            if (in_array($attribute['type'], Database::SPATIAL_TYPES) || $attribute['type'] === Database::VAR_VECTOR) {
+            if (in_array($attribute['type'], self::ATTRIBUTE_FILTER_TYPES)) {
                 $existingFilters = $attribute['filters'] ?? [];
                 if (!is_array($existingFilters)) {
                     $existingFilters = [$existingFilters];
@@ -1599,6 +1640,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
+                $this->adapter->getSupportForObject(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1884,11 +1926,8 @@ class Database
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
-        if (in_array($type, Database::SPATIAL_TYPES)) {
-            $filters[] = $type;
-            $filters = array_unique($filters);
-        }
-        if ($type === Database::VAR_VECTOR) {
+
+        if (in_array($type, self::ATTRIBUTE_FILTER_TYPES)) {
             $filters[] = $type;
             $filters = array_unique($filters);
         }
@@ -2142,6 +2181,17 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::VAR_OBJECT:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('Object attributes are not supported');
+                }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for object attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Object attributes cannot be arrays');
+                }
+                break;
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -2200,6 +2250,9 @@ class Database
                 if ($this->adapter->getSupportForSpatialAttributes()) {
                     \array_push($supportedTypes, ...self::SPATIAL_TYPES);
                 }
+                if ($this->adapter->getSupportForObject()) {
+                    $supportedTypes[] = self::VAR_OBJECT;
+                }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
 
@@ -2250,7 +2303,7 @@ class Database
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (!in_array($type, Database::SPATIAL_TYPES)) {
+            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::VAR_OBJECT) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -2547,6 +2600,18 @@ class Database
                     }
                     break;
 
+                case self::VAR_OBJECT:
+                    if (!$this->adapter->getSupportForObject()) {
+                        throw new DatabaseException('Object attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty for object attributes');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Object attributes cannot be arrays');
+                    }
+                    break;
+
                 case self::VAR_POINT:
                 case self::VAR_LINESTRING:
                 case self::VAR_POLYGON:
@@ -2594,7 +2659,8 @@ class Database
                         self::VAR_FLOAT,
                         self::VAR_BOOLEAN,
                         self::VAR_DATETIME,
-                        self::VAR_RELATIONSHIP
+                        self::VAR_RELATIONSHIP,
+                        self::VAR_OBJECT
                     ];
                     if ($this->adapter->getSupportForVectors()) {
                         $supportedTypes[] = self::VAR_VECTOR;
@@ -2719,6 +2785,7 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
+                        $this->adapter->getSupportForObject()
                     );
 
                     foreach ($indexes as $index) {
@@ -3592,8 +3659,14 @@ class Database
                 }
                 break;
 
+            case self::INDEX_OBJECT:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('Object indexes are not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */
@@ -3648,6 +3721,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
+                $this->adapter->getSupportForObject(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

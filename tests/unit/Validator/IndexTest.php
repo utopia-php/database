@@ -241,6 +241,93 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
+    public function testObjectIndexValidation(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('data'),
+                    'type' => Database::VAR_OBJECT,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => false,
+                    'required' => true,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            'indexes' => []
+        ]);
+
+        // Validator with supportForObjectIndexes enabled
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes:true);
+
+        // Valid: Object index on single VAR_OBJECT attribute
+        $validIndex = new Document([
+            '$id' => ID::custom('idx_gin_valid'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['data'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validIndex));
+
+        // Invalid: Object index on non-object attribute
+        $invalidIndexType = new Document([
+            '$id' => ID::custom('idx_gin_invalid_type'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['name'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexType));
+        $this->assertStringContainsString('Object index can only be created on object attributes', $validator->getDescription());
+
+        // Invalid: Object index on multiple attributes
+        $invalidIndexMulti = new Document([
+            '$id' => ID::custom('idx_gin_multi'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['data', 'name'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexMulti));
+        $this->assertStringContainsString('Object index can be created on a single object attribute', $validator->getDescription());
+
+        // Invalid: Object index with orders
+        $invalidIndexOrder = new Document([
+            '$id' => ID::custom('idx_gin_order'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['data'],
+            'lengths' => [],
+            'orders' => ['asc'],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexOrder));
+        $this->assertStringContainsString('Object index do not support explicit orders', $validator->getDescription());
+
+        // Validator with supportForObjectIndexes disabled should reject GIN
+        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false);
+        $this->assertFalse($validatorNoSupport->isValid($validIndex));
+        $this->assertEquals('Object indexes are not supported', $validatorNoSupport->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
     public function testDuplicatedAttributes(): void
     {
         $collection = new Document([

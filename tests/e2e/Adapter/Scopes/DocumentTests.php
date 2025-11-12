@@ -1890,7 +1890,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array or string.', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }
@@ -3371,7 +3371,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query notContains on attribute "price" because it is not an array or string.', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query notContains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }

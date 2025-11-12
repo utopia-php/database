@@ -585,6 +585,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForObject(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function castingBefore(Document $collection, Document $document): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

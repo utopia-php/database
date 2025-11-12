@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter;
 use PHPUnit\Framework\TestCase;
 use Tests\E2E\Adapter\Scopes\AttributeTests;
 use Tests\E2E\Adapter\Scopes\CollectionTests;
+use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
@@ -22,6 +23,7 @@ use Utopia\Database\Validator\Authorization;
 abstract class Base extends TestCase
 {
     use CollectionTests;
+    use CustomDocumentTypeTests;
     use DocumentTests;
     use AttributeTests;
     use IndexTests;

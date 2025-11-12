@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
@@ -1391,7 +1392,11 @@ class Database
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
-        $this->trigger(self::EVENT_DATABASE_CREATE, $database);
+        try {
+            $this->trigger(self::EVENT_DATABASE_CREATE, $database);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -1421,7 +1426,11 @@ class Database
     {
         $databases = $this->adapter->list();
 
-        $this->trigger(self::EVENT_DATABASE_LIST, $databases);
+        try {
+            $this->trigger(self::EVENT_DATABASE_LIST, $databases);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $databases;
     }
@@ -1439,10 +1448,14 @@ class Database
 
         $deleted = $this->adapter->delete($database);
 
-        $this->trigger(self::EVENT_DATABASE_DELETE, [
-            'name' => $database,
-            'deleted' => $deleted
-        ]);
+        try {
+            $this->trigger(self::EVENT_DATABASE_DELETE, [
+                'name' => $database,
+                'deleted' => $deleted
+            ]);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         $this->cache->flush();
 
@@ -1582,8 +1595,11 @@ class Database
             }
         }
 
+        $created = false;
+
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
+            $created = true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
@@ -1595,9 +1611,24 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (\Throwable $e) {
+            if ($created) {
+                try {
+                    $this->cleanupCollection($id);
+                } catch (\Throwable $e) {
+                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+                }
+            }
+            throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
+        }
 
-        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $createdCollection;
     }
@@ -1641,7 +1672,11 @@ class Database
 
         $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $collection;
     }
@@ -1667,7 +1702,11 @@ class Database
             return new Document();
         }
 
-        $this->trigger(self::EVENT_COLLECTION_READ, $collection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_READ, $collection);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $collection;
     }
@@ -1688,7 +1727,11 @@ class Database
             Query::offset($offset)
         ]));
 
-        $this->trigger(self::EVENT_COLLECTION_LIST, $result);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_LIST, $result);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $result;
     }
@@ -1798,7 +1841,11 @@ class Database
         }
 
         if ($deleted) {
-            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            try {
+                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            } catch (\Throwable $e) {
+                // Ignore
+            }
         }
 
         $this->purgeCachedCollection($id);
@@ -1860,11 +1907,7 @@ class Database
             $filters
         );
 
-        $collection->setAttribute(
-            'attributes',
-            $attribute,
-            Document::SET_TYPE_APPEND
-        );
+        $created = false;
 
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
@@ -1879,14 +1922,32 @@ class Database
             }
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->cleanupAttribute($collection->getId(), $id),
+            shouldRollback: $created,
+            operationDescription: "attribute creation '{$id}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection->getId(),
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Ignore
         }
 
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -1964,14 +2025,10 @@ class Database
                 $attribute['filters']
             );
 
-            $collection->setAttribute(
-                'attributes',
-                $attributeDocument,
-                Document::SET_TYPE_APPEND
-            );
-
             $attributeDocuments[] = $attributeDocument;
         }
+
+        $created = false;
 
         try {
             $created = $this->adapter->createAttributes($collection->getId(), $attributes);
@@ -1987,14 +2044,35 @@ class Database
             }
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        foreach ($attributeDocuments as $attributeDocument) {
+            $collection->setAttribute('attributes', $attributeDocument, Document::SET_TYPE_APPEND);
         }
 
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->cleanupAttributes($collection->getId(), $attributeDocuments),
+            shouldRollback: $created,
+            operationDescription: 'attributes creation',
+            rollbackReturnsErrors: true
+        );
 
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection->getId(),
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -2279,12 +2357,14 @@ class Database
         // Execute update from callback
         $updateCallback($indexes[$index], $collection, $index);
 
-        // Save
         $collection->setAttribute('indexes', $indexes);
 
-        $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$index]);
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index metadata update '{$id}'"
+        );
 
         return $indexes[$index];
     }
@@ -2318,12 +2398,20 @@ class Database
         // Execute update from callback
         $updateCallback($attributes[$index], $collection, $index);
 
-        // Save
         $collection->setAttribute('attributes', $attributes);
 
-        $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute metadata update '{$id}'"
+        );
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $attributes[$index];
     }
@@ -2443,255 +2531,312 @@ class Database
      */
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
+        $collectionDoc = $this->silent(fn () => $this->getCollection($collection));
 
-            // Store original indexes before any modifications (deep copy preserving Document objects)
-            $originalIndexes = [];
-            foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
-                $originalIndexes[] = clone $index;
-            }
+        if ($collectionDoc->getId() === self::METADATA) {
+            throw new DatabaseException('Cannot update metadata attributes');
+        }
 
-            $altering = !\is_null($type)
-                || !\is_null($size)
-                || !\is_null($signed)
-                || !\is_null($array)
-                || !\is_null($newKey);
-            $type ??= $attribute->getAttribute('type');
-            $size ??= $attribute->getAttribute('size');
-            $signed ??= $attribute->getAttribute('signed');
-            $required ??= $attribute->getAttribute('required');
-            $default ??= $attribute->getAttribute('default');
-            $array ??= $attribute->getAttribute('array');
-            $format ??= $attribute->getAttribute('format');
-            $formatOptions ??= $attribute->getAttribute('formatOptions');
-            $filters ??= $attribute->getAttribute('filters');
+        $attributes = $collectionDoc->getAttribute('attributes', []);
+        $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
-            if ($required === true && !\is_null($default)) {
-                $default = null;
-            }
+        if ($attributeIndex === false) {
+            throw new NotFoundException('Attribute not found');
+        }
 
-            // we need to alter table attribute type to NOT NULL/NULL for change in required
-            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
-                $altering = true;
-            }
+        $attribute = $attributes[$attributeIndex];
 
-            switch ($type) {
-                case self::VAR_STRING:
-                    if (empty($size)) {
-                        throw new DatabaseException('Size length is required');
-                    }
+        $originalType = $attribute->getAttribute('type');
+        $originalSize = $attribute->getAttribute('size');
+        $originalSigned = $attribute->getAttribute('signed');
+        $originalArray = $attribute->getAttribute('array');
+        $originalRequired = $attribute->getAttribute('required');
+        $originalKey = $attribute->getAttribute('key');
 
-                    if ($size > $this->adapter->getLimitForString()) {
-                        throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
-                    }
-                    break;
+        $originalIndexes = [];
+        foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
+            $originalIndexes[] = clone $index;
+        }
 
-                case self::VAR_INTEGER:
-                    $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
-                    if ($size > $limit) {
-                        throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
-                    }
-                    break;
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                case self::VAR_DATETIME:
-                    if (!empty($size)) {
-                        throw new DatabaseException('Size must be empty');
-                    }
-                    break;
+        $altering = !\is_null($type)
+            || !\is_null($size)
+            || !\is_null($signed)
+            || !\is_null($array)
+            || !\is_null($newKey);
+        $type ??= $attribute->getAttribute('type');
+        $size ??= $attribute->getAttribute('size');
+        $signed ??= $attribute->getAttribute('signed');
+        $required ??= $attribute->getAttribute('required');
+        $default ??= $attribute->getAttribute('default');
+        $array ??= $attribute->getAttribute('array');
+        $format ??= $attribute->getAttribute('format');
+        $formatOptions ??= $attribute->getAttribute('formatOptions');
+        $filters ??= $attribute->getAttribute('filters');
 
-                case self::VAR_POINT:
-                case self::VAR_LINESTRING:
-                case self::VAR_POLYGON:
-                    if (!$this->adapter->getSupportForSpatialAttributes()) {
-                        throw new DatabaseException('Spatial attributes are not supported');
-                    }
-                    if (!empty($size)) {
-                        throw new DatabaseException('Size must be empty for spatial attributes');
-                    }
-                    if (!empty($array)) {
-                        throw new DatabaseException('Spatial attributes cannot be arrays');
-                    }
-                    break;
-                case self::VAR_VECTOR:
-                    if (!$this->adapter->getSupportForVectors()) {
-                        throw new DatabaseException('Vector types are not supported by the current database');
-                    }
-                    if ($array) {
-                        throw new DatabaseException('Vector type cannot be an array');
-                    }
-                    if ($size <= 0) {
-                        throw new DatabaseException('Vector dimensions must be a positive integer');
-                    }
-                    if ($size > self::MAX_VECTOR_DIMENSIONS) {
-                        throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
-                    }
-                    if ($default !== null) {
-                        if (!\is_array($default)) {
-                            throw new DatabaseException('Vector default value must be an array');
-                        }
-                        if (\count($default) !== $size) {
-                            throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
-                        }
-                        foreach ($default as $component) {
-                            if (!\is_int($component) && !\is_float($component)) {
-                                throw new DatabaseException('Vector default value must contain only numeric elements');
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    $supportedTypes = [
-                        self::VAR_STRING,
-                        self::VAR_INTEGER,
-                        self::VAR_FLOAT,
-                        self::VAR_BOOLEAN,
-                        self::VAR_DATETIME,
-                        self::VAR_RELATIONSHIP
-                    ];
-                    if ($this->adapter->getSupportForVectors()) {
-                        $supportedTypes[] = self::VAR_VECTOR;
-                    }
-                    if ($this->adapter->getSupportForSpatialAttributes()) {
-                        \array_push($supportedTypes, ...self::SPATIAL_TYPES);
-                    }
-                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
-            }
+        if ($required === true && !\is_null($default)) {
+            $default = null;
+        }
 
-            /** Ensure required filters for the attribute are passed */
-            $requiredFilters = $this->getRequiredFilters($type);
-            if (!empty(array_diff($requiredFilters, $filters))) {
-                throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
-            }
+        // we need to alter table attribute type to NOT NULL/NULL for change in required
+        if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+            $altering = true;
+        }
 
-            if ($format) {
-                if (!Structure::hasFormat($format, $type)) {
-                    throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
-                }
-            }
-
-            if (!\is_null($default)) {
-                if ($required) {
-                    throw new DatabaseException('Cannot set a default value on a required attribute');
+        switch ($type) {
+            case self::VAR_STRING:
+                if (empty($size)) {
+                    throw new DatabaseException('Size length is required');
                 }
 
-                $this->validateDefaultTypes($type, $default);
-            }
-
-            $attribute
-                ->setAttribute('$id', $newKey ?? $id)
-                ->setattribute('key', $newKey ?? $id)
-                ->setAttribute('type', $type)
-                ->setAttribute('size', $size)
-                ->setAttribute('signed', $signed)
-                ->setAttribute('array', $array)
-                ->setAttribute('format', $format)
-                ->setAttribute('formatOptions', $formatOptions)
-                ->setAttribute('filters', $filters)
-                ->setAttribute('required', $required)
-                ->setAttribute('default', $default);
-
-            $attributes = $collectionDoc->getAttribute('attributes');
-            $attributes[$attributeIndex] = $attribute;
-            $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
-
-            if (
-                $this->adapter->getDocumentSizeLimit() > 0 &&
-                $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
-            ) {
-                throw new LimitException('Row width limit reached. Cannot update attribute.');
-            }
-
-            if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
-                $attributeMap = [];
-                foreach ($attributes as $attrDoc) {
-                    $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
-                    $attributeMap[$key] = $attrDoc;
+                if ($size > $this->adapter->getLimitForString()) {
+                    throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
+                break;
 
-                $indexes = $collectionDoc->getAttribute('indexes', []);
-                foreach ($indexes as $index) {
-                    if ($index->getAttribute('type') !== self::INDEX_SPATIAL) {
+            case self::VAR_INTEGER:
+                $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
+                if ($size > $limit) {
+                    throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
+                }
+                break;
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+            case self::VAR_DATETIME:
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty');
+                }
+                break;
+
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial attributes are not supported');
+                }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for spatial attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Spatial attributes cannot be arrays');
+                }
+                break;
+            case self::VAR_VECTOR:
+                if (!$this->adapter->getSupportForVectors()) {
+                    throw new DatabaseException('Vector types are not supported by the current database');
+                }
+                if ($array) {
+                    throw new DatabaseException('Vector type cannot be an array');
+                }
+                if ($size <= 0) {
+                    throw new DatabaseException('Vector dimensions must be a positive integer');
+                }
+                if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
+                }
+                if ($default !== null) {
+                    if (!\is_array($default)) {
+                        throw new DatabaseException('Vector default value must be an array');
+                    }
+                    if (\count($default) !== $size) {
+                        throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                    }
+                    foreach ($default as $component) {
+                        if (!\is_int($component) && !\is_float($component)) {
+                            throw new DatabaseException('Vector default value must contain only numeric elements');
+                        }
+                    }
+                }
+                break;
+            default:
+                $supportedTypes = [
+                    self::VAR_STRING,
+                    self::VAR_INTEGER,
+                    self::VAR_FLOAT,
+                    self::VAR_BOOLEAN,
+                    self::VAR_DATETIME,
+                    self::VAR_RELATIONSHIP
+                ];
+                if ($this->adapter->getSupportForVectors()) {
+                    $supportedTypes[] = self::VAR_VECTOR;
+                }
+                if ($this->adapter->getSupportForSpatialAttributes()) {
+                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
+        }
+
+        /** Ensure required filters for the attribute are passed */
+        $requiredFilters = $this->getRequiredFilters($type);
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        }
+
+        if ($format) {
+            if (!Structure::hasFormat($format, $type)) {
+                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            }
+        }
+
+        if (!\is_null($default)) {
+            if ($required) {
+                throw new DatabaseException('Cannot set a default value on a required attribute');
+            }
+
+            $this->validateDefaultTypes($type, $default);
+        }
+
+        $attribute
+            ->setAttribute('$id', $newKey ?? $id)
+            ->setattribute('key', $newKey ?? $id)
+            ->setAttribute('type', $type)
+            ->setAttribute('size', $size)
+            ->setAttribute('signed', $signed)
+            ->setAttribute('array', $array)
+            ->setAttribute('format', $format)
+            ->setAttribute('formatOptions', $formatOptions)
+            ->setAttribute('filters', $filters)
+            ->setAttribute('required', $required)
+            ->setAttribute('default', $default);
+
+        $attributes = $collectionDoc->getAttribute('attributes');
+        $attributes[$attributeIndex] = $attribute;
+        $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+        if (
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot update attribute.');
+        }
+
+        if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
+            $attributeMap = [];
+            foreach ($attributes as $attrDoc) {
+                $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
+                $attributeMap[$key] = $attrDoc;
+            }
+
+            $indexes = $collectionDoc->getAttribute('indexes', []);
+            foreach ($indexes as $index) {
+                if ($index->getAttribute('type') !== self::INDEX_SPATIAL) {
+                    continue;
+                }
+                $indexAttributes = $index->getAttribute('attributes', []);
+                foreach ($indexAttributes as $attributeName) {
+                    $lookup = \strtolower($attributeName);
+                    if (!isset($attributeMap[$lookup])) {
                         continue;
                     }
-                    $indexAttributes = $index->getAttribute('attributes', []);
-                    foreach ($indexAttributes as $attributeName) {
-                        $lookup = \strtolower($attributeName);
-                        if (!isset($attributeMap[$lookup])) {
-                            continue;
-                        }
-                        $attrDoc = $attributeMap[$lookup];
-                        $attrType = $attrDoc->getAttribute('type');
-                        $attrRequired = (bool)$attrDoc->getAttribute('required', false);
+                    $attrDoc = $attributeMap[$lookup];
+                    $attrType = $attrDoc->getAttribute('type');
+                    $attrRequired = (bool)$attrDoc->getAttribute('required', false);
 
-                        if (in_array($attrType, self::SPATIAL_TYPES, true) && !$attrRequired) {
-                            throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
-                        }
+                    if (in_array($attrType, self::SPATIAL_TYPES, true) && !$attrRequired) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
                     }
                 }
             }
+        }
 
-            if ($altering) {
-                $indexes = $collectionDoc->getAttribute('indexes');
+        $updated = false;
 
-                if (!\is_null($newKey) && $id !== $newKey) {
-                    foreach ($indexes as $index) {
-                        if (in_array($id, $index['attributes'])) {
-                            $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
-                                return $attribute === $id ? $newKey : $attribute;
-                            }, $index['attributes']);
-                        }
-                    }
+        if ($altering) {
+            $indexes = $collectionDoc->getAttribute('indexes');
 
-                    /**
-                     * Check index dependency if we are changing the key
-                     */
-                    $validator = new IndexDependencyValidator(
-                        $collectionDoc->getAttribute('indexes', []),
-                        $this->adapter->getSupportForCastIndexArray(),
-                    );
-
-                    if (!$validator->isValid($attribute)) {
-                        throw new DependencyException($validator->getDescription());
+            if (!\is_null($newKey) && $id !== $newKey) {
+                foreach ($indexes as $index) {
+                    if (in_array($id, $index['attributes'])) {
+                        $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
+                            return $attribute === $id ? $newKey : $attribute;
+                        }, $index['attributes']);
                     }
                 }
 
                 /**
-                 * Since we allow changing type & size we need to validate index length
+                 * Check index dependency if we are changing the key
                  */
-                if ($this->validate) {
-                    $validator = new IndexValidator(
-                        $attributes,
-                        $originalIndexes,
-                        $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys(),
-                        $this->adapter->getSupportForIndexArray(),
-                        $this->adapter->getSupportForSpatialIndexNull(),
-                        $this->adapter->getSupportForSpatialIndexOrder(),
-                        $this->adapter->getSupportForVectors(),
-                        $this->adapter->getSupportForAttributes(),
-                        $this->adapter->getSupportForMultipleFulltextIndexes(),
-                        $this->adapter->getSupportForIdenticalIndexes(),
-                    );
+                $validator = new IndexDependencyValidator(
+                    $collectionDoc->getAttribute('indexes', []),
+                    $this->adapter->getSupportForCastIndexArray(),
+                );
 
-                    foreach ($indexes as $index) {
-                        if (!$validator->isValid($index)) {
-                            throw new IndexException($validator->getDescription());
-                        }
-                    }
+                if (!$validator->isValid($attribute)) {
+                    throw new DependencyException($validator->getDescription());
                 }
-
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
-
-                if (!$updated) {
-                    throw new DatabaseException('Failed to update attribute');
-                }
-
-                $this->purgeCachedCollection($collection);
             }
 
-            $this->purgeCachedDocument(self::METADATA, $collection);
-        });
+            /**
+             * Since we allow changing type & size we need to validate index length
+             */
+            if ($this->validate) {
+                $validator = new IndexValidator(
+                    $attributes,
+                    $originalIndexes,
+                    $this->adapter->getMaxIndexLength(),
+                    $this->adapter->getInternalIndexesKeys(),
+                    $this->adapter->getSupportForIndexArray(),
+                    $this->adapter->getSupportForSpatialIndexNull(),
+                    $this->adapter->getSupportForSpatialIndexOrder(),
+                    $this->adapter->getSupportForVectors(),
+                    $this->adapter->getSupportForAttributes(),
+                    $this->adapter->getSupportForMultipleFulltextIndexes(),
+                    $this->adapter->getSupportForIdenticalIndexes(),
+                );
+
+                foreach ($indexes as $index) {
+                    if (!$validator->isValid($index)) {
+                        throw new IndexException($validator->getDescription());
+                    }
+                }
+            }
+
+            $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
+
+            if (!$updated) {
+                throw new DatabaseException('Failed to update attribute');
+            }
+        }
+
+        $collectionDoc->setAttribute('attributes', $attributes);
+
+        $this->updateMetadata(
+            collection: $collectionDoc,
+            rollbackOperation: fn () => $this->adapter->updateAttribute(
+                $collection,
+                $newKey ?? $id,
+                $originalType,
+                $originalSize,
+                $originalSigned,
+                $originalArray,
+                $originalKey,
+                $originalRequired
+            ),
+            shouldRollback: $updated,
+            operationDescription: "attribute update '{$id}'",
+            silentRollback: true
+        );
+
+        if ($altering) {
+            $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+        }
+        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
+
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection,
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        return $attribute;
     }
 
     /**
@@ -2785,25 +2930,43 @@ class Database
             }
         }
 
+        $collection->setAttribute('attributes', \array_values($attributes));
+        $collection->setAttribute('indexes', \array_values($indexes));
+
+        $shouldRollback = false;
         try {
             if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
                 throw new DatabaseException('Failed to delete attribute');
             }
+            $shouldRollback = true;
         } catch (NotFoundException) {
             // Ignore
         }
 
-        $collection->setAttribute('attributes', \array_values($attributes));
-        $collection->setAttribute('indexes', \array_values($indexes));
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "attribute deletion '{$id}'"
+        );
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection->getId(),
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Ignore
         }
 
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -2873,18 +3036,142 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        $renamed = false;
+        try {
+            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+            if (!$renamed) {
+                throw new DatabaseException('Failed to rename attribute');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+        }
 
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
+            shouldRollback: $renamed,
+            operationDescription: "attribute rename '{$old}' to '{$new}'"
+        );
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+        } catch (\Throwable $e) {
+            // Ignore
         }
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
-
         return $renamed;
+    }
+
+    /**
+     * Cleanup (delete) a single attribute with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param string $attributeId The attribute ID
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupAttribute(
+        string $collectionId,
+        string $attributeId,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteAttribute($collectionId, $attributeId),
+            'attribute',
+            $attributeId,
+            $maxAttempts
+        );
+    }
+
+    /**
+     * Cleanup (delete) multiple attributes with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param array<Document> $attributeDocuments The attribute documents to cleanup
+     * @param int $maxAttempts Maximum retry attempts per attribute
+     * @return array<string> Array of error messages for failed cleanups (empty if all succeeded)
+     */
+    private function cleanupAttributes(
+        string $collectionId,
+        array $attributeDocuments,
+        int $maxAttempts = 3
+    ): array {
+        $errors = [];
+
+        foreach ($attributeDocuments as $attributeDocument) {
+            try {
+                $this->cleanupAttribute($collectionId, $attributeDocument->getId(), $maxAttempts);
+            } catch (DatabaseException $e) {
+                // Continue cleaning up other attributes even if one fails
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Cleanup (delete) a collection with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupCollection(
+        string $collectionId,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteCollection($collectionId),
+            'collection',
+            $collectionId,
+            $maxAttempts
+        );
+    }
+
+    /**
+     * Cleanup (delete) a relationship with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param string $relatedCollectionId The related collection ID
+     * @param string $type The relationship type
+     * @param bool $twoWay Whether the relationship is two-way
+     * @param string $key The relationship key
+     * @param string $twoWayKey The two-way relationship key
+     * @param string $side The relationship side
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupRelationship(
+        string $collectionId,
+        string $relatedCollectionId,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side = Database::RELATION_SIDE_PARENT,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteRelationship(
+                $collectionId,
+                $relatedCollectionId,
+                $type,
+                $twoWay,
+                $key,
+                $twoWayKey,
+                $side
+            ),
+            'relationship',
+            $key,
+            $maxAttempts
+        );
     }
 
     /**
@@ -2981,11 +3268,10 @@ class Database
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
 
-        $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
-        $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
-
+        $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->silent(fn () => $this->createCollection('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence(), [
+            $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+            $this->silent(fn () => $this->createCollection($junctionCollection, [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -3032,54 +3318,138 @@ class Database
         );
 
         if (!$created) {
+            if ($junctionCollection !== null) {
+                try {
+                    $this->silent(fn () => $this->cleanupCollection($junctionCollection));
+                } catch (\Throwable $e) {
+                    Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                }
+            }
             throw new DatabaseException('Failed to create relationship');
         }
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
+        $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
+        $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
+
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection) {
+            $indexesCreated = [];
             try {
                 $this->withTransaction(function () use ($collection, $relatedCollection) {
                     $this->updateDocument(self::METADATA, $collection->getId(), $collection);
                     $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                 });
             } catch (\Throwable $e) {
-                $this->adapter->deleteRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey,
-                    Database::RELATION_SIDE_PARENT
-                );
+                $this->rollbackAttributeMetadata($collection, [$id]);
+                $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
+
+                try {
+                    $this->cleanupRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey,
+                        Database::RELATION_SIDE_PARENT
+                    );
+                } catch (\Throwable $e) {
+                    Console::error("Failed to cleanup relationship '{$id}': " . $e->getMessage());
+                }
+
+                if ($junctionCollection !== null) {
+                    try {
+                        $this->cleanupCollection($junctionCollection);
+                    } catch (\Throwable $e) {
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                    }
+                }
 
                 throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
             }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
+            $indexesCreated = [];
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
-                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_UNIQUE, [$id]);
-                    if ($twoWay) {
-                        $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_UNIQUE, [$twoWayKey]);
+            try {
+                switch ($type) {
+                    case self::RELATION_ONE_TO_ONE:
+                        $this->createIndex($collection->getId(), $indexKey, self::INDEX_UNIQUE, [$id]);
+                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
+                        if ($twoWay) {
+                            $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_UNIQUE, [$twoWayKey]);
+                            $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
+                        }
+                        break;
+                    case self::RELATION_ONE_TO_MANY:
+                        $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_KEY, [$twoWayKey]);
+                        $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
+                        break;
+                    case self::RELATION_MANY_TO_ONE:
+                        $this->createIndex($collection->getId(), $indexKey, self::INDEX_KEY, [$id]);
+                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
+                        break;
+                    case self::RELATION_MANY_TO_MANY:
+                        // Indexes created on junction collection creation
+                        break;
+                    default:
+                        throw new RelationshipException('Invalid relationship type.');
+                }
+            } catch (\Throwable $e) {
+                foreach ($indexesCreated as $indexInfo) {
+                    try {
+                        $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
+                    } catch (\Throwable $cleanupError) {
+                        Console::error("Failed to cleanup index '{$indexInfo['index']}': " . $cleanupError->getMessage());
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_KEY, [$twoWayKey]);
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_KEY, [$id]);
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    // Indexes created on junction collection creation
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
+                }
+
+                try {
+                    $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
+                        $attributes = $collection->getAttribute('attributes', []);
+                        $collection->setAttribute('attributes', array_filter($attributes, fn ($attr) => $attr->getId() !== $id));
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+
+                        $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn ($attr) => $attr->getId() !== $twoWayKey));
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
+                } catch (\Throwable $cleanupError) {
+                    Console::error("Failed to cleanup metadata for relationship '{$id}': " . $cleanupError->getMessage());
+                }
+
+                // Cleanup relationship
+                try {
+                    $this->cleanupRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey,
+                        Database::RELATION_SIDE_PARENT
+                    );
+                } catch (\Throwable $cleanupError) {
+                    Console::error("Failed to cleanup relationship '{$id}': " . $cleanupError->getMessage());
+                }
+
+                if ($junctionCollection !== null) {
+                    try {
+                        $this->cleanupCollection($junctionCollection);
+                    } catch (\Throwable $cleanupError) {
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $cleanupError->getMessage());
+                    }
+                }
+
+                throw new DatabaseException('Failed to create relationship indexes: ' . $e->getMessage());
             }
         });
 
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -3137,83 +3507,107 @@ class Database
         $relatedCollectionId = $attribute['options']['relatedCollection'];
         $relatedCollection = $this->getCollection($relatedCollectionId);
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
-            $altering = (!\is_null($newKey) && $newKey !== $id)
-                || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
+        // Determine if we need to alter the database (rename columns/indexes)
+        $oldAttribute = $attributes[$attributeIndex];
+        $oldTwoWayKey = $oldAttribute['options']['twoWayKey'];
+        $altering = (!\is_null($newKey) && $newKey !== $id)
+            || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $oldTwoWayKey);
 
-            $relatedCollectionId = $attribute['options']['relatedCollection'];
-            $relatedCollection = $this->getCollection($relatedCollectionId);
-            $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+        // Validate new keys don't already exist
+        if (
+            !\is_null($newTwoWayKey)
+            && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedCollection->getAttribute('attributes', [])))
+        ) {
+            throw new DuplicateException('Related attribute already exists');
+        }
 
-            if (
-                !\is_null($newTwoWayKey)
-                && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
-            ) {
-                throw new DuplicateException('Related attribute already exists');
+        $actualNewKey = $newKey ?? $id;
+        $actualNewTwoWayKey = $newTwoWayKey ?? $oldTwoWayKey;
+        $actualTwoWay = $twoWay ?? $oldAttribute['options']['twoWay'];
+        $actualOnDelete = $onDelete ?? $oldAttribute['options']['onDelete'];
+
+        $adapterUpdated = false;
+        if ($altering) {
+            try {
+                $adapterUpdated = $this->adapter->updateRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $actualTwoWay,
+                    $id,
+                    $oldTwoWayKey,
+                    $side,
+                    $actualNewKey,
+                    $actualNewTwoWayKey
+                );
+
+                if (!$adapterUpdated) {
+                    throw new DatabaseException('Failed to update relationship');
+                }
+            } catch (\Throwable $e) {
+                throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
             }
+        }
 
-            $newKey ??= $attribute['key'];
-            $twoWayKey = $attribute['options']['twoWayKey'];
-            $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-            $twoWay ??= $attribute['options']['twoWay'];
-            $onDelete ??= $attribute['options']['onDelete'];
+        try {
+            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $type, $side) {
+                $attribute->setAttribute('$id', $actualNewKey);
+                $attribute->setAttribute('key', $actualNewKey);
+                $attribute->setAttribute('options', [
+                    'relatedCollection' => $relatedCollection->getId(),
+                    'relationType' => $type,
+                    'twoWay' => $actualTwoWay,
+                    'twoWayKey' => $actualNewTwoWayKey,
+                    'onDelete' => $actualOnDelete,
+                    'side' => $side,
+                ]);
+            });
 
-            $attribute->setAttribute('$id', $newKey);
-            $attribute->setAttribute('key', $newKey);
-            $attribute->setAttribute('options', [
-                'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type,
-                'twoWay' => $twoWay,
-                'twoWayKey' => $newTwoWayKey,
-                'onDelete' => $onDelete,
-                'side' => $side,
-            ]);
-
-
-            $this->updateAttributeMeta($relatedCollection->getId(), $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
+            $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function ($twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
-                $options['twoWayKey'] = $newKey;
-                $options['twoWay'] = $twoWay;
-                $options['onDelete'] = $onDelete;
+                $options['twoWayKey'] = $actualNewKey;
+                $options['twoWay'] = $actualTwoWay;
+                $options['onDelete'] = $actualOnDelete;
 
-                $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
-                $twoWayAttribute->setAttribute('key', $newTwoWayKey);
+                $twoWayAttribute->setAttribute('$id', $actualNewTwoWayKey);
+                $twoWayAttribute->setAttribute('key', $actualNewTwoWayKey);
                 $twoWayAttribute->setAttribute('options', $options);
             });
 
             if ($type === self::RELATION_MANY_TO_MANY) {
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
-                    $junctionAttribute->setAttribute('$id', $newKey);
-                    $junctionAttribute->setAttribute('key', $newKey);
+                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
+                    $junctionAttribute->setAttribute('$id', $actualNewKey);
+                    $junctionAttribute->setAttribute('key', $actualNewKey);
                 });
-                $this->updateAttributeMeta($junction, $twoWayKey, function ($junctionAttribute) use ($newTwoWayKey) {
-                    $junctionAttribute->setAttribute('$id', $newTwoWayKey);
-                    $junctionAttribute->setAttribute('key', $newTwoWayKey);
+                $this->updateAttributeMeta($junction, $oldTwoWayKey, function ($junctionAttribute) use ($actualNewTwoWayKey) {
+                    $junctionAttribute->setAttribute('$id', $actualNewTwoWayKey);
+                    $junctionAttribute->setAttribute('key', $actualNewTwoWayKey);
                 });
 
-                $this->purgeCachedCollection($junction);
+                $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
-
-            if ($altering) {
-                $updated = $this->adapter->updateRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey,
-                    $side,
-                    $newKey,
-                    $newTwoWayKey
-                );
-
-                if (!$updated) {
-                    throw new DatabaseException('Failed to update relationship');
+        } catch (\Throwable $e) {
+            if ($adapterUpdated) {
+                try {
+                    $this->adapter->updateRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $actualTwoWay,
+                        $actualNewKey,
+                        $actualNewTwoWayKey,
+                        $side,
+                        $id,
+                        $oldTwoWayKey
+                    );
+                } catch (\Throwable $e) {
+                    // Ignore
                 }
             }
-        });
+            throw $e;
+        }
 
         // Update Indexes
         $renameIndex = function (string $collection, string $key, string $newKey) {
@@ -3229,59 +3623,53 @@ class Database
             );
         };
 
-        $newKey ??= $attribute['key'];
-        $twoWayKey = $attribute['options']['twoWayKey'];
-        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-        $twoWay ??= $attribute['options']['twoWay'];
-        $onDelete ??= $attribute['options']['onDelete'];
-
         switch ($type) {
             case self::RELATION_ONE_TO_ONE:
-                if ($id !== $newKey) {
-                    $renameIndex($collection->getId(), $id, $newKey);
+                if ($id !== $actualNewKey) {
+                    $renameIndex($collection->getId(), $id, $actualNewKey);
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                if ($actualTwoWay && $oldTwoWayKey !== $actualNewTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                 }
                 break;
             case self::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                     }
                 } else {
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($collection->getId(), $id, $actualNewKey);
                     }
                 }
                 break;
             case self::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($collection->getId(), $id, $actualNewKey);
                     }
                 } else {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                     }
                 }
                 break;
             case self::RELATION_MANY_TO_MANY:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                if ($id !== $newKey) {
-                    $renameIndex($junction, $id, $newKey);
+                if ($id !== $actualNewKey) {
+                    $renameIndex($junction, $id, $actualNewKey);
                 }
-                if ($twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                    $renameIndex($junction, $oldTwoWayKey, $actualNewTwoWayKey);
                 }
                 break;
             default:
                 throw new RelationshipException('Invalid relationship type.');
         }
 
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedCollection($relatedCollection->getId());
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
         return true;
     }
@@ -3336,16 +3724,11 @@ class Database
 
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
-            try {
-                $this->withTransaction(function () use ($collection, $relatedCollection) {
-                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                });
-            } catch (\Throwable $e) {
-                throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
-            }
+        $collectionAttributes = $collection->getAttribute('attributes');
+        $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes');
 
+        // Delete indexes BEFORE dropping columns to avoid referencing non-existent columns
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
 
@@ -3392,6 +3775,11 @@ class Database
             }
         });
 
+        $collection = $this->silent(fn () => $this->getCollection($collection->getId()));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection->getId()));
+        $collection->setAttribute('attributes', $collectionAttributes);
+        $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
+
         $deleted = $this->adapter->deleteRelationship(
             $collection->getId(),
             $relatedCollection->getId(),
@@ -3406,10 +3794,27 @@ class Database
             throw new DatabaseException('Failed to delete relationship');
         }
 
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedCollection($relatedCollection->getId());
+        try {
+            $this->withRetries(function () use ($collection, $relatedCollection) {
+                $this->silent(function () use ($collection, $relatedCollection) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
+                });
+            });
+        } catch (\Throwable $e) {
+            throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
+        }
 
-        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -3457,13 +3862,28 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
-        $this->adapter->renameIndex($collection->getId(), $old, $new);
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $renamed = false;
+        try {
+            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+            if (!$renamed) {
+                throw new DatabaseException('Failed to rename index');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
         }
 
-        $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
+            shouldRollback: $renamed,
+            operationDescription: "index rename '{$old}' to '{$new}'"
+        );
+
+        try {
+            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return true;
     }
@@ -3607,7 +4027,7 @@ class Database
             }
         }
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+        $created = false;
 
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
@@ -3617,15 +4037,19 @@ class Database
             }
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->cleanupIndex($collection->getId(), $id),
+            shouldRollback: $created,
+            operationDescription: "index creation '{$id}'"
+        );
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
@@ -3658,15 +4082,31 @@ class Database
             }
         }
 
+        if (\is_null($indexDeleted)) {
+            throw new NotFoundException('Index not found');
+        }
+
         $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
+        if (!$deleted) {
+            throw new DatabaseException('Failed to delete index');
+        }
 
         $collection->setAttribute('indexes', \array_values($indexes));
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index deletion '{$id}'"
+        );
 
-        $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+
+        try {
+            $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         return $deleted;
     }
@@ -5937,7 +6377,7 @@ class Database
                     $document->getId(),
                 ))));
             } else {
-                $old =  $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
+                $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
                 )));
@@ -7045,7 +7485,7 @@ class Database
      * @return bool
      * @throws Exception
      */
-    public function purgeCachedDocument(string $collectionId, ?string $id): bool
+    protected function purgeCachedDocumentInternal(string $collectionId, ?string $id): bool
     {
         if ($id === null) {
             return true;
@@ -7056,12 +7496,32 @@ class Database
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
 
-        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-            '$id' => $id,
-            '$collection' => $collectionId
-        ]));
-
         return true;
+    }
+
+    /**
+     * Cleans a specific document from cache and triggers EVENT_DOCUMENT_PURGE.
+     * And related document reference in the collection cache.
+     *
+     * Note: Do not retry this method as it triggers events. Use purgeCachedDocumentInternal() with retry instead.
+     *
+     * @param string $collectionId
+     * @param string|null $id
+     * @return bool
+     * @throws Exception
+     */
+    public function purgeCachedDocument(string $collectionId, ?string $id): bool
+    {
+        $result = $this->purgeCachedDocumentInternal($collectionId, $id);
+
+        if ($id !== null) {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $id,
+                '$collection' => $collectionId
+            ]));
+        }
+
+        return $result;
     }
 
     /**
@@ -7160,7 +7620,7 @@ class Database
             $cursor = $this->adapter->castingBefore($collection, $cursor);
             $cursor = $cursor->getArrayCopy();
         } else {
-            $cursor =  [];
+            $cursor = [];
         }
 
         /**  @var array<Query> $queries */
@@ -8545,4 +9005,183 @@ class Database
                 throw new DatabaseException('Unknown spatial type: ' . $type);
         }
     }
+
+    /**
+     * Retry a callable with exponential backoff
+     *
+     * @param callable $operation The operation to retry
+     * @param int $maxAttempts Maximum number of retry attempts
+     * @param int $initialDelayMs Initial delay in milliseconds
+     * @param float $multiplier Backoff multiplier
+     * @return void The result of the operation
+     * @throws \Throwable The last exception if all retries fail
+     */
+    private function withRetries(
+        callable $operation,
+        int $maxAttempts = 3,
+        int $initialDelayMs = 100,
+        float $multiplier = 2.0
+    ): void {
+        $attempt = 0;
+        $delayMs = $initialDelayMs;
+        $lastException = null;
+
+        while ($attempt < $maxAttempts) {
+            try {
+                $operation();
+                return;
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                $attempt++;
+
+                if ($attempt >= $maxAttempts) {
+                    break;
+                }
+
+                if (\extension_loaded('swoole') && Coroutine::getCid() > 0) {
+                    Coroutine::sleep($delayMs / 1000);
+                } else {
+                    \usleep($delayMs * 1000);
+                }
+
+                $delayMs = (int)($delayMs * $multiplier);
+            }
+        }
+
+        throw $lastException;
+    }
+
+    /**
+     * Generic cleanup operation with retry logic
+     *
+     * @param callable $operation The cleanup operation to execute
+     * @param string $resourceType Type of resource being cleaned up (e.g., 'attribute', 'index')
+     * @param string $resourceId ID of the resource being cleaned up
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanup(
+        callable $operation,
+        string $resourceType,
+        string $resourceId,
+        int $maxAttempts = 3
+    ): void {
+        try {
+            $this->withRetries($operation, maxAttempts: $maxAttempts);
+        } catch (\Throwable $e) {
+            Console::error("Failed to cleanup {$resourceType} '{$resourceId}' after {$maxAttempts} attempts: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Cleanup (delete) an index with retry logic
+     *
+     * @param string $collectionId The collection ID
+     * @param string $indexId The index ID
+     * @param int $maxAttempts Maximum retry attempts
+     * @return void
+     * @throws DatabaseException If cleanup fails after all retries
+     */
+    private function cleanupIndex(
+        string $collectionId,
+        string $indexId,
+        int $maxAttempts = 3
+    ): void {
+        $this->cleanup(
+            fn () => $this->adapter->deleteIndex($collectionId, $indexId),
+            'index',
+            $indexId,
+            $maxAttempts
+        );
+    }
+
+    /**
+     * Persist metadata with automatic rollback on failure
+     *
+     * Centralizes the common pattern of:
+     * 1. Attempting to persist metadata with retry
+     * 2. Rolling back database operations if metadata persistence fails
+     * 3. Providing detailed error messages for both success and failure scenarios
+     *
+     * @param Document $collection The collection document to persist
+     * @param callable|null $rollbackOperation Cleanup operation to run if persistence fails (null if no cleanup needed)
+     * @param bool $shouldRollback Whether rollback should be attempted (e.g., false for duplicates in shared tables)
+     * @param string $operationDescription Description of the operation for error messages
+     * @param bool $rollbackReturnsErrors Whether rollback operation returns error array (true) or throws (false)
+     * @param bool $silentRollback Whether rollback errors should be silently caught (true) or thrown (false)
+     * @return void
+     * @throws DatabaseException If metadata persistence fails after all retries
+     */
+    private function updateMetadata(
+        Document $collection,
+        ?callable $rollbackOperation,
+        bool $shouldRollback,
+        string $operationDescription = 'operation',
+        bool $rollbackReturnsErrors = false,
+        bool $silentRollback = false
+    ): void {
+        try {
+            if ($collection->getId() !== self::METADATA) {
+                $this->withRetries(
+                    fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
+                );
+            }
+        } catch (\Throwable $e) {
+            // Attempt rollback only if conditions are met
+            if ($shouldRollback && $rollbackOperation !== null) {
+                if ($rollbackReturnsErrors) {
+                    // Batch mode: rollback returns array of errors
+                    $cleanupErrors = $rollbackOperation();
+                    if (!empty($cleanupErrors)) {
+                        throw new DatabaseException(
+                            "Failed to persist metadata after retries and cleanup encountered errors for {$operationDescription}: " . $e->getMessage() . ' | Cleanup errors: ' . implode(', ', $cleanupErrors),
+                            previous: $e
+                        );
+                    }
+                } elseif ($silentRollback) {
+                    // Silent mode: swallow rollback errors
+                    try {
+                        $rollbackOperation();
+                    } catch (\Throwable $e) {
+                        // Silent rollback - errors are swallowed
+                    }
+                } else {
+                    // Regular mode: rollback throws on failure
+                    try {
+                        $rollbackOperation();
+                    } catch (\Throwable $ex) {
+                        throw new DatabaseException(
+                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: " . $ex->getMessage() . ' | Cleanup error: ' . $e->getMessage(),
+                            previous: $e
+                        );
+                    }
+                }
+            }
+
+            throw new DatabaseException(
+                "Failed to persist metadata after retries for {$operationDescription}: " . $e->getMessage(),
+                previous: $e
+            );
+        }
+    }
+
+    /**
+     * Rollback metadata state by removing specified attributes from collection
+     *
+     * @param Document $collection The collection document
+     * @param array<string> $attributeIds Attribute IDs to remove
+     * @return void
+     */
+    private function rollbackAttributeMetadata(Document $collection, array $attributeIds): void
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+        $filteredAttributes = \array_filter(
+            $attributes,
+            fn ($attr) => !\in_array($attr->getId(), $attributeIds)
+        );
+        $collection->setAttribute('attributes', \array_values($filteredAttributes));
+    }
+
 }

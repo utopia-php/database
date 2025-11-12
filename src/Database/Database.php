@@ -3887,6 +3887,8 @@ class Database
                     }
 
                     foreach ($relationships as $relationship) {
+                        var_dump($relationship);
+
                         $key = $relationship['key'];
                         $queries = $sels[$key] ?? [];
                         $relationship->setAttribute('collection', $coll->getId());
@@ -3932,7 +3934,8 @@ class Database
                                     fn ($attr) => $attr['type'] === Database::VAR_RELATIONSHIP
                                 );
 
-                                $nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
+                                //$nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
+                                [$selects, $nextSelects] = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
 
                                 // If parent has explicit selects, child inherits that mode
                                 // (even if nextSelects is empty, we're still in explicit mode)
@@ -7253,7 +7256,7 @@ class Database
                 vectors: Query::getVectorQueries($queries),
                 orderQueries: $orders
             );
-            }
+        }
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {

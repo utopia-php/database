@@ -179,7 +179,7 @@ class V2 extends Validator
             return;
         }
 
-        var_dump('=== validateAttributeExist');
+        //var_dump('=== validateAttributeExist');
 
         //        if (\str_contains($attributeId, '.')) {
         //            // Check for special symbol `.`
@@ -203,9 +203,16 @@ class V2 extends Validator
             throw new \Exception('Invalid query: Unknown Alias context');
         }
 
-        if (! isset($this->schema[$collection->getId()][$attributeId])) {
+        $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
+
+        if (empty($attribute)) {
             throw new \Exception('Invalid query: Attribute not found in schema: '.$attributeId);
         }
+
+        if (\in_array('encrypt', $attribute['filters'] ?? [])) {
+            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
+        }
+
     }
 
     /**
@@ -358,9 +365,9 @@ class V2 extends Validator
             throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
         }
 
-        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
-            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
-        }
+//        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
+//            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
+//        }
     }
 
     /**

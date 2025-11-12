@@ -22,12 +22,12 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
-//    use CollectionTests;
-//    use DocumentTests;
-//    use AttributeTests;
-//    use IndexTests;
-//    use OperatorTests;
-//    use PermissionTests;
+    use CollectionTests;
+    use DocumentTests;
+    use AttributeTests;
+    use IndexTests;
+    use OperatorTests;
+    use PermissionTests;
     use RelationshipTests;
     use SpatialTests;
     use SchemalessTests;

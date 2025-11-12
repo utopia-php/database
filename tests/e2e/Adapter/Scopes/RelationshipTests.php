@@ -329,6 +329,8 @@ trait RelationshipTests
         $this->assertEquals(2, count($president['votes']));
         $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
 
+        var_dump('===================================================================');
+
         $president = $database->findOne('presidents', [
             Query::select('*'),
             Query::select('votes.*'),
@@ -2832,11 +2834,9 @@ var_dump($make);
 
         // Query all cars with nested relationship selections
         $cars = $database->find('car', [
-            Query::select([
-                '*',
-                'customer.*',
-                'customer.inspections.type',
-            ]),
+            Query::select('*'),
+            Query::select('customer.*'),
+            Query::select('customer.inspections.type'),
         ]);
 
         $this->assertCount(3, $cars);
@@ -2885,11 +2885,9 @@ var_dump($make);
         ]);
 
         $cars = $database->find('car', [
-            Query::select([
-                '*',
-                'customer.*',
-                'customer.inspections.type',
-            ]),
+            Query::select('*'),
+            Query::select('customer.*'),
+            Query::select('customer.inspections.type'),
         ]);
 
         // Verify all cars still have nested relationships after batch create

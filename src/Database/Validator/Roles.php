@@ -15,6 +15,7 @@ class Roles extends Validator
     public const ROLE_TEAM = 'team';
     public const ROLE_MEMBER = 'member';
     public const ROLE_LABEL = 'label';
+    public const ROLE_PROJECT = 'project';
 
     public const ROLES = [
         self::ROLE_ANY,
@@ -24,6 +25,7 @@ class Roles extends Validator
         self::ROLE_TEAM,
         self::ROLE_MEMBER,
         self::ROLE_LABEL,
+        self::ROLE_PROJECT,
     ];
 
     protected string $message = 'Roles Error';
@@ -108,6 +110,16 @@ class Roles extends Validator
                 'required' => false,
             ],
         ],
+        self::ROLE_PROJECT => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+        ]
     ];
 
     // Dimensions

@@ -6363,4 +6363,190 @@ trait DocumentTests
         // Cleanup
         $database->deleteCollection($collection);
     }
+
+    public function testUpsertWithJSONFilters(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create collection with JSON filter attribute
+        $collection = ID::unique();
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute($collection, 'metadata', Database::VAR_STRING, 4000, true, filters: ['json']);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        // Test 1: Insertion (createDocument) with JSON filter
+        $docId1 = 'json-doc-1';
+        $initialMetadata = [
+            'version' => '1.0.0',
+            'tags' => ['php', 'database'],
+            'config' => [
+                'debug' => false,
+                'timeout' => 30
+            ]
+        ];
+
+        $document1 = $database->createDocument($collection, new Document([
+            '$id' => $docId1,
+            'name' => 'Initial Document',
+            'metadata' => $initialMetadata,
+            '$permissions' => $permissions,
+        ]));
+
+        $this->assertEquals($docId1, $document1->getId());
+        $this->assertEquals('Initial Document', $document1->getAttribute('name'));
+        $this->assertIsArray($document1->getAttribute('metadata'));
+        $this->assertEquals('1.0.0', $document1->getAttribute('metadata')['version']);
+        $this->assertEquals(['php', 'database'], $document1->getAttribute('metadata')['tags']);
+
+        // Test 2: Update (updateDocument) with modified JSON filter
+        $updatedMetadata = [
+            'version' => '2.0.0',
+            'tags' => ['php', 'database', 'json'],
+            'config' => [
+                'debug' => true,
+                'timeout' => 60,
+                'cache' => true
+            ],
+            'updated' => true
+        ];
+
+        $document1->setAttribute('name', 'Updated Document');
+        $document1->setAttribute('metadata', $updatedMetadata);
+
+        $updatedDoc = $database->updateDocument($collection, $docId1, $document1);
+
+        $this->assertEquals($docId1, $updatedDoc->getId());
+        $this->assertEquals('Updated Document', $updatedDoc->getAttribute('name'));
+        $this->assertIsArray($updatedDoc->getAttribute('metadata'));
+        $this->assertEquals('2.0.0', $updatedDoc->getAttribute('metadata')['version']);
+        $this->assertEquals(['php', 'database', 'json'], $updatedDoc->getAttribute('metadata')['tags']);
+        $this->assertTrue($updatedDoc->getAttribute('metadata')['config']['debug']);
+        $this->assertTrue($updatedDoc->getAttribute('metadata')['updated']);
+
+        // Test 3: Upsert - Create new document (upsertDocument)
+        $docId2 = 'json-doc-2';
+        $newMetadata = [
+            'version' => '1.5.0',
+            'tags' => ['javascript', 'node'],
+            'config' => [
+                'debug' => false,
+                'timeout' => 45
+            ]
+        ];
+
+        $document2 = new Document([
+            '$id' => $docId2,
+            'name' => 'New Upsert Document',
+            'metadata' => $newMetadata,
+            '$permissions' => $permissions,
+        ]);
+
+        $upsertedDoc = $database->upsertDocument($collection, $document2);
+
+        $this->assertEquals($docId2, $upsertedDoc->getId());
+        $this->assertEquals('New Upsert Document', $upsertedDoc->getAttribute('name'));
+        $this->assertIsArray($upsertedDoc->getAttribute('metadata'));
+        $this->assertEquals('1.5.0', $upsertedDoc->getAttribute('metadata')['version']);
+
+        // Test 4: Upsert - Update existing document (upsertDocument)
+        $document2->setAttribute('name', 'Updated Upsert Document');
+        $document2->setAttribute('metadata', [
+            'version' => '2.5.0',
+            'tags' => ['javascript', 'node', 'typescript'],
+            'config' => [
+                'debug' => true,
+                'timeout' => 90
+            ],
+            'migrated' => true
+        ]);
+
+        $upsertedDoc2 = $database->upsertDocument($collection, $document2);
+
+        $this->assertEquals($docId2, $upsertedDoc2->getId());
+        $this->assertEquals('Updated Upsert Document', $upsertedDoc2->getAttribute('name'));
+        $this->assertIsArray($upsertedDoc2->getAttribute('metadata'));
+        $this->assertEquals('2.5.0', $upsertedDoc2->getAttribute('metadata')['version']);
+        $this->assertEquals(['javascript', 'node', 'typescript'], $upsertedDoc2->getAttribute('metadata')['tags']);
+        $this->assertTrue($upsertedDoc2->getAttribute('metadata')['migrated']);
+
+        // Test 5: Upsert - Bulk upsertDocuments (create and update)
+        $docId3 = 'json-doc-3';
+        $docId4 = 'json-doc-4';
+
+        $bulkDocuments = [
+            new Document([
+                '$id' => $docId3,
+                'name' => 'Bulk Upsert 1',
+                'metadata' => [
+                    'version' => '3.0.0',
+                    'tags' => ['python', 'flask'],
+                    'config' => ['debug' => false]
+                ],
+                '$permissions' => $permissions,
+            ]),
+            new Document([
+                '$id' => $docId4,
+                'name' => 'Bulk Upsert 2',
+                'metadata' => [
+                    'version' => '3.1.0',
+                    'tags' => ['go', 'golang'],
+                    'config' => ['debug' => true]
+                ],
+                '$permissions' => $permissions,
+            ]),
+            // Update existing document
+            new Document([
+                '$id' => $docId1,
+                'name' => 'Bulk Updated Document',
+                'metadata' => [
+                    'version' => '3.0.0',
+                    'tags' => ['php', 'database', 'bulk'],
+                    'config' => [
+                        'debug' => false,
+                        'timeout' => 120
+                    ],
+                    'bulkUpdated' => true
+                ],
+                '$permissions' => $permissions,
+            ]),
+        ];
+
+        $count = $database->upsertDocuments($collection, $bulkDocuments);
+        $this->assertEquals(3, $count);
+
+        // Verify bulk upsert results
+        $bulkDoc1 = $database->getDocument($collection, $docId3);
+        $this->assertEquals('Bulk Upsert 1', $bulkDoc1->getAttribute('name'));
+        $this->assertEquals('3.0.0', $bulkDoc1->getAttribute('metadata')['version']);
+
+        $bulkDoc2 = $database->getDocument($collection, $docId4);
+        $this->assertEquals('Bulk Upsert 2', $bulkDoc2->getAttribute('name'));
+        $this->assertEquals('3.1.0', $bulkDoc2->getAttribute('metadata')['version']);
+
+        $bulkDoc3 = $database->getDocument($collection, $docId1);
+        $this->assertEquals('Bulk Updated Document', $bulkDoc3->getAttribute('name'));
+        $this->assertEquals('3.0.0', $bulkDoc3->getAttribute('metadata')['version']);
+        $this->assertTrue($bulkDoc3->getAttribute('metadata')['bulkUpdated']);
+
+        // Cleanup
+        $database->deleteCollection($collection);
+    }
 }

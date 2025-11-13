@@ -175,4 +175,9 @@ class Role
     {
         return new self('member', $identifier);
     }
+
+    public static function project(string $identifier, string $dimension = ''): self
+    {
+        return new self('project', $identifier, $dimension);
+    }
 }

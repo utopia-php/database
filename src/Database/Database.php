@@ -6673,6 +6673,8 @@ class Database
                 }
             }
 
+            $document = $this->encode($collection, $document);
+
             if ($this->validate) {
                 $validator = new Structure(
                     $collection,
@@ -6687,8 +6689,6 @@ class Database
                     throw new StructureException($validator->getDescription());
                 }
             }
-
-            $document = $this->encode($collection, $document);
 
             if (!$old->isEmpty()) {
                 // Check if document was updated after the request timestamp

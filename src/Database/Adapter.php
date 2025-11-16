@@ -1240,9 +1240,9 @@ abstract class Adapter
 
     /**
      * @param array<Query> $selects
-     * @return string
+     * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selects): string;
+    abstract protected function getAttributeProjection(array $selects): mixed;
 
     /**
      * Filter Keys

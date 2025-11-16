@@ -1123,10 +1123,9 @@ class Mongo extends Adapter
 
         $options = $this->getTransactionOptions();
 
-        $selections = $this->getAttributeSelections($queries);
-
-        if (!empty($selections) && !\in_array('*', $selections)) {
-            $options['projection'] = $this->getAttributeProjection($selections);
+        $projections = $this->getAttributeProjection($queries);
+        if (!empty($projections)) {
+            $options['projection'] = $projections;
         }
 
         try {
@@ -1846,15 +1845,18 @@ class Mongo extends Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
+     * @param QueryContext $context
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array $vectors
+     * @param array<Query> $orderQueries
      *
      * @return array<Document>
      * @throws Exception
@@ -1875,10 +1877,15 @@ class Mongo extends Adapter
         array $orderQueries = []
     ): array
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        unset($queries); // remove this since we pass explicit queries
 
-        $filters = $this->buildFilters($queries);
+        $collection = $context->getCollections()[0];
+
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+
+        $filters = array_map(fn ($query) => clone $query, $filters);
+
+        $filters = $this->buildFilters($filters);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
@@ -1903,9 +1910,9 @@ class Mongo extends Adapter
             $options['maxTimeMS'] = $this->timeout;
         }
 
-        $selections = $this->getAttributeSelections($queries);
-        if (!empty($selections) && !\in_array('*', $selections)) {
-            $options['projection'] = $this->getAttributeProjection($selections);
+        $projections = $this->getAttributeProjection($selects);
+        if(!empty($projections)){
+            $options['projection'] = $projections;
         }
 
         // Add transaction context to options
@@ -1913,26 +1920,24 @@ class Mongo extends Adapter
 
         $orFilters = [];
 
-        foreach ($orderAttributes as $i => $originalAttribute) {
+        foreach ($orderQueries as $i => $order) {
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $direction = $orderType;
+            $direction = $order->getOrderDirection();
 
-            /** Get sort direction  ASC || DESC **/
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
             $options['sort'][$attribute] = $this->getOrder($direction);
 
             /** Get operator sign  '$lt' ? '$gt' **/
             $operator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+                ? ($direction === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($direction === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
             $operator = $this->getQueryOperator($operator);
 
@@ -1940,7 +1945,7 @@ class Mongo extends Adapter
 
                 $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
-                    $originalPrev = $orderAttributes[$j];
+                    $originalPrev = $orderQueries[$j]->getAttribute();
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
                     $tmp = $cursor[$originalPrev];
                     $andConditions[] = [
@@ -1952,7 +1957,7 @@ class Mongo extends Adapter
 
                 if ($originalAttribute === '$sequence') {
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
-                    if (count($orderAttributes) === 1) {
+                    if (count($orderQueries) === 1) {
                         $filters[$attribute] = [
                             $operator => $tmp
                         ];
@@ -2529,33 +2534,41 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selects
+     *
+     * @return array
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selects): array
     {
         $projection = [];
 
-        $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
-        );
+        if (empty($selects)) {
+            return [];
+        }
 
-        foreach ($selections as $selection) {
-            // Skip internal attributes since all are selected by default
-            if (\in_array($selection, $internalKeys)) {
+        foreach ($selects as $select) {
+            if ($select->getAttribute() === '$collection') {
                 continue;
             }
 
-            $projection[$selection] = 1;
-        }
+            $attribute = $select->getAttribute();
 
-        $projection['_uid'] = 1;
-        $projection['_id'] = 1;
-        $projection['_createdAt'] = 1;
-        $projection['_updatedAt'] = 1;
-        $projection['_permissions'] = 1;
+            if ($attribute === '*') {
+                return [];
+            }
+
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$sequence' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
+
+            $projection[$attribute] = 1;
+        }
 
         return $projection;
     }

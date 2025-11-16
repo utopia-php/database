@@ -18,7 +18,6 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
@@ -383,7 +382,7 @@ abstract class SQL extends Adapter
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
         }
-var_dump($sql);
+        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
@@ -2362,7 +2361,7 @@ var_dump($sql);
 
             $as = $select->getAs();
 
-            if (!empty($as)){
+            if (!empty($as)) {
                 $as = ' as '.$this->quote($this->filter($as));
             }
 
@@ -3141,7 +3140,7 @@ var_dump($sql);
             {$sqlOrder}
             {$sqlLimit};
         ";
-var_dump($sql);
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

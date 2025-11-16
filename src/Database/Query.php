@@ -1045,7 +1045,7 @@ class Query
     public static function getLimitQueries(array $queries): array
     {
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_LIMIT){
+            if ($query->getMethod() === Query::TYPE_LIMIT) {
                 return [clone $query];
             }
         }
@@ -1076,7 +1076,7 @@ class Query
     public static function getOffsetQueries(array $queries): array
     {
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_OFFSET){
+            if ($query->getMethod() === Query::TYPE_OFFSET) {
                 return [clone $query];
             }
         }
@@ -1535,16 +1535,16 @@ class Query
         $found = false;
 
         foreach ($queries as $q) {
-            if ($q->getMethod() === self::TYPE_SELECT){
+            if ($q->getMethod() === self::TYPE_SELECT) {
                 $found = true;
 
-                if ($q->getAlias() === $query->getAlias()){
-                    if ($q->getAttribute() === '*'){
+                if ($q->getAlias() === $query->getAlias()) {
+                    if ($q->getAttribute() === '*') {
                         $merge = false;
                     }
 
-                    if ($q->getAttribute() === $query->getAttribute()){
-                        if ($q->getAs() === $query->getAs()){
+                    if ($q->getAttribute() === $query->getAttribute()) {
+                        if ($q->getAs() === $query->getAs()) {
                             $merge = false;
                         }
                     }
@@ -1552,7 +1552,7 @@ class Query
             }
         }
 
-        if ($found && $merge){
+        if ($found && $merge) {
             $queries = [
                 ...$queries,
                 $query

@@ -3727,7 +3727,7 @@ class Database
 
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
-        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
+        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions', system: true));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
@@ -3811,7 +3811,7 @@ class Database
             }
         }
 
-        if($permissionsAdded){ // Or remove all queries added by system
+        if ($permissionsAdded) { // Or remove all queries added by system
             $document->removeAttribute('$permissions');
         }
 
@@ -7612,7 +7612,7 @@ class Database
             $attributeKey = '';
 
             foreach ($selects as $select) {
-                if ($select->getAs() === $key){
+                if ($select->getAs() === $key) {
                     $attributeKey = $key;
                     $key = $select->getAttribute();
                     $alias = $select->getAlias();
@@ -7642,7 +7642,7 @@ class Database
                 continue;
             }
 
-            if (empty($attributeKey)){
+            if (empty($attributeKey)) {
                 $attributeKey = $attribute['$id'];
             }
 
@@ -7711,7 +7711,7 @@ class Database
             $attributeKey = '';
 
             foreach ($selects as $select) {
-                if ($select->getAs() === $key){
+                if ($select->getAs() === $key) {
                     $attributeKey = $key;
                     $key = $select->getAttribute();
                     $alias = $select->getAlias();
@@ -7741,7 +7741,7 @@ class Database
                 continue;
             }
 
-            if (empty($attributeKey)){
+            if (empty($attributeKey)) {
                 $attributeKey = $attribute['$id'];
             }
 
@@ -8146,17 +8146,17 @@ class Database
                 continue;
             }
 
-                // Shift the top level off the dot-path to pass the selection down the chain
-                // 'foo.bar.baz' becomes 'bar.baz'
+            // Shift the top level off the dot-path to pass the selection down the chain
+            // 'foo.bar.baz' becomes 'bar.baz'
 
-                $nestingPath = \implode('.', $nesting);
+            $nestingPath = \implode('.', $nesting);
 
-                // If nestingPath is empty, it means we want all attributes (*) for this relationship
-                if (empty($nestingPath)) {
-                    $nestedSelections[$selectedKey][] = Query::select('*');
-                } else {
-                    $nestedSelections[$selectedKey][] = Query::select($nestingPath);
-                }
+            // If nestingPath is empty, it means we want all attributes (*) for this relationship
+            if (empty($nestingPath)) {
+                $nestedSelections[$selectedKey][] = Query::select('*');
+            } else {
+                $nestedSelections[$selectedKey][] = Query::select($nestingPath);
+            }
 
             $type = $relationship->getAttribute('options')['relationType'];
             $side = $relationship->getAttribute('options')['side'];
@@ -8189,7 +8189,7 @@ class Database
          * In order to populateDocumentRelationships we need $id
          */
         if (\count($queries) > 0) {
-            [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id',  system: true));
+            [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id', system: true));
         }
 
         return [$queries, $nestedSelections];

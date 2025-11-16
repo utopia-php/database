@@ -19,8 +19,6 @@ use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Authorization;
 
 /**
  * Differences between MariaDB and Postgres

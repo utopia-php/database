@@ -1581,7 +1581,7 @@ trait RelationshipTests
         $make = $database->getDocument('make', 'ford', [
             Query::select('models.*'),
         ]);
-var_dump($make);
+        var_dump($make);
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }

@@ -13,8 +13,7 @@ class AsQuery extends Validator
      */
     public function __construct(
         private readonly string $attribute,
-    )
-    {
+    ) {
 
     }
 
@@ -51,7 +50,7 @@ class AsQuery extends Validator
             return false;
         }
 
-        if($this->attribute === '*'){
+        if ($this->attribute === '*') {
             $this->message = 'Invalid "as" on attribute "*"';
             return false;
         }

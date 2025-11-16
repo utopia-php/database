@@ -71,7 +71,9 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
@@ -113,7 +115,9 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
@@ -125,7 +129,9 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                         Query::equal('user_id', [$user1->getId()], 'B'),
@@ -174,7 +180,9 @@ trait JoinsTests
             $db->find(
                 '__users',
                 [
-                    Query::join('__sessions', 'B',
+                    Query::join(
+                        '__sessions',
+                        'B',
                         [
                             Query::relationEqual('', '$id', '', '$id'),
                         ]
@@ -245,7 +253,9 @@ trait JoinsTests
             $db->find(
                 '__users',
                 [
-                    Query::join('__sessions', $alias,
+                    Query::join(
+                        '__sessions',
+                        $alias,
                         [
                             Query::relationEqual($alias, 'user_id', '', '$id'),
                         ]
@@ -264,12 +274,16 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
                 ),
-                Query::join('__sessions', 'C',
+                Query::join(
+                    '__sessions',
+                    'C',
                     [
                         Query::relationEqual('C', 'user_id', 'B', 'user_id'),
                     ]
@@ -284,7 +298,9 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
@@ -298,7 +314,9 @@ trait JoinsTests
         $documents = $db->find(
             '__users',
             [
-                Query::join('__sessions', 'B',
+                Query::join(
+                    '__sessions',
+                    'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
@@ -319,7 +337,9 @@ trait JoinsTests
                 Query::select('user_id', 'S'),
                 Query::select('float', 'S'),
                 Query::select('boolean', 'S'),
-                Query::join('__sessions', 'S',
+                Query::join(
+                    '__sessions',
+                    'S',
                     [
                         Query::relationEqual('', '$id', 'S', 'user_id'),
                         Query::greaterThan('float', 1.1, 'S'),
@@ -469,7 +489,9 @@ trait JoinsTests
                 Query::select('float', 'S', as: 'as_float'),
                 Query::select('boolean', 'S', as: 'as_boolean'),
                 Query::select('$permissions', 'S', as: 'as_permissions'),
-                Query::join('__sessions', 'S',
+                Query::join(
+                    '__sessions',
+                    'S',
                     [
                         Query::relationEqual('', '$id', 'S', 'user_id'),
                     ]
@@ -486,80 +508,80 @@ trait JoinsTests
 
 
 
-//        /**
-//         * ambiguous and duplications selects
-//         */
-//        try {
-//            $db->find(
-//                '__users',
-//                [
-//                    Query::select('$id', 'main'),
-//                    Query::select('$id', 'S'),
-//                    Query::join('__sessions', 'S',
-//                        [
-//                            Query::relationEqual('', '$id', 'S', 'user_id'),
-//                        ]
-//                    )
-//                ]
-//            );
-//            $this->fail('Failed to throw exception');
-//        } catch (\Throwable $e) {
-//            $this->assertTrue($e instanceof QueryException);
-//            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-//        }
-//
-//        try {
-//            $db->find(
-//                '__users',
-//                [
-//                    Query::select('*', 'main'),
-//                    Query::select('*', 'S'),
-//                    Query::join('__sessions', 'S',
-//                        [
-//                            Query::relationEqual('', '$id', 'S', 'user_id'),
-//                        ]
-//                    )
-//                ]
-//            );
-//            $this->fail('Failed to throw exception');
-//        } catch (\Throwable $e) {
-//            $this->assertTrue($e instanceof QueryException);
-//            $this->assertEquals('Invalid Query Select: ambiguous column "*"', $e->getMessage());
-//        }
-//
-//        try {
-//            $db->find('__users',
-//                [
-//                    Query::select('$id'),
-//                    Query::select('$id'),
-//                ]
-//            );
-//            $this->fail('Failed to throw exception');
-//        } catch (\Throwable $e) {
-//            $this->assertTrue($e instanceof QueryException);
-//            $this->assertEquals('Duplicate Query Select on "main.$id"', $e->getMessage());
-//        }
-//
-//        /**
-//         * This should fail? since 2 _uid attributes will be returned?
-//         */
-//        try {
-//            $db->find(
-//                '__users',
-//                [
-//                    Query::select('*', 'main'),
-//                    Query::select('$id', 'S'),
-//                    Query::join('__sessions', 'S',
-//                        [
-//                            Query::relationEqual('', '$id', 'S', 'user_id'),
-//                        ]
-//                    )
-//                ]
-//            );
-//            $this->fail('Failed to throw exception');
-//        } catch (\Throwable $e) {
-//            $this->assertTrue($e instanceof QueryException);
-//            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-//        }
+        //        /**
+        //         * ambiguous and duplications selects
+        //         */
+        //        try {
+        //            $db->find(
+        //                '__users',
+        //                [
+        //                    Query::select('$id', 'main'),
+        //                    Query::select('$id', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        //        }
+        //
+        //        try {
+        //            $db->find(
+        //                '__users',
+        //                [
+        //                    Query::select('*', 'main'),
+        //                    Query::select('*', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "*"', $e->getMessage());
+        //        }
+        //
+        //        try {
+        //            $db->find('__users',
+        //                [
+        //                    Query::select('$id'),
+        //                    Query::select('$id'),
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Duplicate Query Select on "main.$id"', $e->getMessage());
+        //        }
+        //
+        //        /**
+        //         * This should fail? since 2 _uid attributes will be returned?
+        //         */
+        //        try {
+        //            $db->find(
+        //                '__users',
+        //                [
+        //                    Query::select('*', 'main'),
+        //                    Query::select('$id', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        //        }
     }
 }

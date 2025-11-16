@@ -17,7 +17,6 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
 
@@ -1875,8 +1874,7 @@ class Mongo extends Adapter
         array $joins = [],
         array $vectors = [],
         array $orderQueries = []
-    ): array
-    {
+    ): array {
         unset($queries); // remove this since we pass explicit queries
 
         $collection = $context->getCollections()[0];
@@ -1911,7 +1909,7 @@ class Mongo extends Adapter
         }
 
         $projections = $this->getAttributeProjection($selects);
-        if(!empty($projections)){
+        if (!empty($projections)) {
             $options['projection'] = $projections;
         }
 

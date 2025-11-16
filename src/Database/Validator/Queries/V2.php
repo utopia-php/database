@@ -176,7 +176,7 @@ class V2 extends Validator
         /**
          * This is for making query::select('$permissions')) pass
          */
-        if($attributeId === '$permissions' || $attributeId === '$collection'){
+        if ($attributeId === '$permissions' || $attributeId === '$collection') {
             return;
         }
 
@@ -268,7 +268,7 @@ class V2 extends Validator
             /**
              * This attribute name has a special symbol `.` or is a relationship
              */
-            if (empty($this->schema[$collection->getId()][$attributeId])){
+            if (empty($this->schema[$collection->getId()][$attributeId])) {
                 /**
                  * relationships, just validate the top level.
                  * will validate each nested level during the recursive calls.
@@ -419,9 +419,9 @@ class V2 extends Validator
             throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
         }
 
-//        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
-//            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
-//        }
+        //        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
+        //            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
+        //        }
     }
 
     /**
@@ -451,16 +451,16 @@ class V2 extends Validator
 
         $alias = $query->getAlias();
 
-//        if (\str_contains($attribute, '.')) {
-//            try {
-//                // Handle attributes containing dots (e.g., relationships or special symbols)
-//                $this->validateAttributeExist($attribute, $alias);
-//            } catch (\Throwable $e) {
-//                // For relationships, validate only the top-level attribute
-//                $attribute = \explode('.', $attribute)[0];
-//                $this->validateAttributeExist($attribute, $alias);
-//            }
-//        }
+        //        if (\str_contains($attribute, '.')) {
+        //            try {
+        //                // Handle attributes containing dots (e.g., relationships or special symbols)
+        //                $this->validateAttributeExist($attribute, $alias);
+        //            } catch (\Throwable $e) {
+        //                // For relationships, validate only the top-level attribute
+        //                $attribute = \explode('.', $attribute)[0];
+        //                $this->validateAttributeExist($attribute, $alias);
+        //            }
+        //        }
 
         $this->validateAttributeExist($attribute, $alias);
     }
@@ -586,7 +586,7 @@ class V2 extends Validator
 
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                    break;
+                        break;
 
                     case Query::TYPE_CROSSES:
                     case Query::TYPE_NOT_CROSSES:
@@ -699,30 +699,30 @@ class V2 extends Validator
 
                         $this->validateSelect($query);
 
-                        if($query->getAttribute() === '*'){
+                        if ($query->getAttribute() === '*') {
                             $collection = $this->context->getCollectionByAlias($query->getAlias());
                             $attributes = $this->schema[$collection->getId()];
-                            foreach ($attributes as $attribute){
-                                if (($duplications[$query->getAlias()][$attribute['$id']] ?? false) === true){
+                            foreach ($attributes as $attribute) {
+                                if (($duplications[$query->getAlias()][$attribute['$id']] ?? false) === true) {
                                     //throw new \Exception('Ambiguous column using "*" for "'.$query->getAlias().'.'.$attribute['$id'].'"');
                                 }
 
                                 $duplications[$query->getAlias()][$attribute['$id']] = true;
                             }
                         } else {
-                            if (($duplications[$query->getAlias()][$query->getAttribute()] ?? false) === true){
+                            if (($duplications[$query->getAlias()][$query->getAttribute()] ?? false) === true) {
                                 //throw new \Exception('Duplicate Query Select on "'.$query->getAlias().'.'.$query->getAttribute().'"');
                             }
                             $duplications[$query->getAlias()][$query->getAttribute()] = true;
                         }
 
-                        if (!empty($query->getAs())){
+                        if (!empty($query->getAs())) {
                             $needle = $query->getAs();
                         } else {
                             $needle = $query->getAttribute(); // todo: convert internal attribute from $id => _id
                         }
 
-                        if (in_array($needle, $ambiguous)){
+                        if (in_array($needle, $ambiguous)) {
                             //throw new \Exception('Invalid Query Select: ambiguous column "'.$needle.'"');
                         }
 
@@ -751,15 +751,15 @@ class V2 extends Validator
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
 
                         // Handle dotted attributes (relationships)
-//                    $attributeKey = $attribute;
-//                    if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
-//                        $attributeKey = \explode('.', $attributeKey)[0];
-//                    }
-//
-//                    $attributeSchema = $this->schema[$attributeKey];
-//                    if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
-//                        throw new \Exception('Vector queries can only be used on vector attributes');
-//                    }
+                        //                    $attributeKey = $attribute;
+                        //                    if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+                        //                        $attributeKey = \explode('.', $attributeKey)[0];
+                        //                    }
+                        //
+                        //                    $attributeSchema = $this->schema[$attributeKey];
+                        //                    if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+                        //                        throw new \Exception('Vector queries can only be used on vector attributes');
+                        //                    }
 
                         if (count($query->getValues()) != 1) {
                             throw new \Exception(\ucfirst($method) . ' queries require exactly one vector value.');

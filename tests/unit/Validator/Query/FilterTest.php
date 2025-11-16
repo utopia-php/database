@@ -95,8 +95,8 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid([Query::offset(-1)]));
         $this->assertFalse($this->validator->isValid([Query::equal('dne', ['v'])]));
         $this->assertFalse($this->validator->isValid([Query::equal('', ['v'])]));
-        $this->assertFalse($this->validator->isValid([Query::cursorAfter(new Document(['$uid'=>'asdf']))]));
-        $this->assertFalse($this->validator->isValid([Query::cursorBefore(new Document(['$uid'=>'asdf']))]));
+        $this->assertFalse($this->validator->isValid([Query::cursorAfter(new Document(['$uid' => 'asdf']))]));
+        $this->assertFalse($this->validator->isValid([Query::cursorBefore(new Document(['$uid' => 'asdf']))]));
         $this->assertFalse($this->validator->isValid([Query::contains('integer', ['super'])]));
         $this->assertFalse($this->validator->isValid([Query::equal('integer_array', [100,-1])]));
         $this->assertFalse($this->validator->isValid([Query::contains('integer_array', [10.6])]));

@@ -439,7 +439,6 @@ class Query
     }
 
     /**
-     * Check if method is a spatial-only query method
      * @param $method
      * @return bool
      */
@@ -460,6 +459,15 @@ class Query
             self::TYPE_NOT_TOUCHES => true,
             default => false,
         };
+    }
+
+    /**
+     * @param $method
+     * @return bool
+     */
+    public static function isVectorQuery($method): bool
+    {
+        return \in_array($method, Query::VECTOR_TYPES);
     }
 
     /**

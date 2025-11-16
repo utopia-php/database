@@ -43,6 +43,7 @@ class V2 extends Validator
 
     protected \DateTime $maxAllowedDate;
     protected string $idAttributeType;
+    protected int $vectors = 0;
 
     /**
      * @throws Exception
@@ -170,7 +171,7 @@ class V2 extends Validator
     /**
      * @throws \Exception
      */
-    protected function validateAttributeExist(string $attributeId, string $alias): void
+    protected function validateAttributeExist(string $attributeId, string $alias, string $method = ''): void
     {
         /**
          * This is for making query::select('$permissions')) pass
@@ -179,32 +180,28 @@ class V2 extends Validator
             return;
         }
 
-        //var_dump('=== validateAttributeExist');
-
-        //        if (\str_contains($attributeId, '.')) {
-        //            // Check for special symbol `.`
-        //            if (isset($this->schema[$attributeId])) {
-        //                return true;
-        //            }
-        //
-        //            // For relationships, just validate the top level.
-        //            // will validate each nested level during the recursive calls.
-        //            $attributeId = \explode('.', $attributeId)[0];
-        //
-        //            if (isset($this->schema[$attributeId])) {
-        //                $this->message = 'Cannot query nested attribute on: '.$attributeId;
-        //
-        //                return false;
-        //            }
-        //        }
-
         $collection = $this->context->getCollectionByAlias($alias);
         if ($collection->isEmpty()) {
             throw new \Exception('Invalid query: Unknown Alias context');
         }
 
-        $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
+        $isNested = false;
 
+        if (\str_contains($attributeId, '.')) {
+            /**
+             * This attribute name has a special symbol `.` or is a relationship
+             */
+            if (empty($this->schema[$collection->getId()][$attributeId])) {
+                /**
+                 * relationships, just validate the top level.
+                 * will validate each nested level during the recursive calls.
+                 */
+                $attributeId = \explode('.', $attributeId)[0];
+                $isNested = true;
+            }
+        }
+
+        $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
         if (empty($attribute)) {
             throw new \Exception('Invalid query: Attribute not found in schema: '.$attributeId);
         }
@@ -213,6 +210,9 @@ class V2 extends Validator
             throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
         }
 
+        if ($isNested && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
+            throw new \Exception('Cannot order by nested attribute: ' . $attributeId);
+        }
     }
 
     /**
@@ -262,15 +262,45 @@ class V2 extends Validator
             throw new \Exception('Unknown Alias context');
         }
 
+        $isNested = false;
+
+        if (\str_contains($attributeId, '.')) {
+            /**
+             * This attribute name has a special symbol `.` or is a relationship
+             */
+            if (empty($this->schema[$collection->getId()][$attributeId])){
+                /**
+                 * relationships, just validate the top level.
+                 * will validate each nested level during the recursive calls.
+                 */
+                $attributeId = \explode('.', $attributeId)[0];
+                $isNested = true;
+            }
+        }
+
         $attribute = $this->schema[$collection->getId()][$attributeId];
+
+        /**
+         * Skip value validation for nested relationship queries (e.g., author.age)
+         * The values will be validated when querying the related collection
+         */
+        if ($attribute['type'] === Database::VAR_RELATIONSHIP && $isNested) {
+            return;
+        }
 
         $array = $attribute['array'] ?? false;
         $filters = $attribute['filters'] ?? [];
-
-        // If the query method is spatial-only, the attribute must be a spatial type
+        $size = $attribute['size'] ?? 0;
 
         if (Query::isSpatialQuery($method) && !in_array($attribute['type'], Database::SPATIAL_TYPES, true)) {
+            /**
+             * If the query method is spatial-only, the attribute must be a spatial type
+             */
             throw new \Exception('Invalid query: Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute);
+        }
+
+        if (Query::isVectorQuery($method) && $attribute['type'] !== Database::VAR_VECTOR) {
+            throw new \Exception('Vector queries can only be used on vector attributes');
         }
 
         foreach ($values as $value) {
@@ -290,7 +320,7 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
+                    $validator =  new FloatValidator();
                     break;
 
                 case Database::VAR_BOOLEAN:
@@ -314,8 +344,32 @@ class V2 extends Validator
                     if (!is_array($value)) {
                         throw new \Exception('Spatial data must be an array');
                     }
+
                     continue 2;
 
+                case Database::VAR_VECTOR:
+                    if ($this->vectors > 0) {
+                        throw new \Exception('Cannot use multiple vector queries in a single request');
+                    }
+
+                    $this->vectors++;
+
+                    // For vector queries, validate that the value is an array of floats
+                    if (!is_array($value)) {
+                        throw new \Exception('Vector query value must be an array');
+                    }
+
+                    foreach ($value as $component) {
+                        if (!is_numeric($component)) {
+                            throw new \Exception('Vector query value must contain only numeric values');
+                        }
+                    }
+                    // Check size match
+                    if (count($value) !== $size) {
+                        throw new \Exception("Vector query value must have {$size} elements");
+                    }
+
+                    continue 2;
                 default:
                     throw new \Exception('Unknown Data type');
             }
@@ -397,23 +451,16 @@ class V2 extends Validator
 
         $alias = $query->getAlias();
 
-        if (\str_contains($attribute, '.')) {
-            if (\str_contains($attribute, '.')) {
-                try {
-                    /**
-                     * Special symbols with `dots`
-                     */
-                    $this->validateAttributeExist($attribute, $alias);
-                } catch (\Throwable $e) {
-                    /**
-                     * For relationships, just validate the top level.
-                     * Will validate each nested level during the recursive calls.
-                     */
-                    $attribute = \explode('.', $attribute)[0];
-                    $this->validateAttributeExist($attribute, $alias);
-                }
-            }
-        }
+//        if (\str_contains($attribute, '.')) {
+//            try {
+//                // Handle attributes containing dots (e.g., relationships or special symbols)
+//                $this->validateAttributeExist($attribute, $alias);
+//            } catch (\Throwable $e) {
+//                // For relationships, validate only the top-level attribute
+//                $attribute = \explode('.', $attribute)[0];
+//                $this->validateAttributeExist($attribute, $alias);
+//            }
+//        }
 
         $this->validateAttributeExist($attribute, $alias);
     }
@@ -596,7 +643,6 @@ class V2 extends Validator
                     case Query::TYPE_OR:
                     case Query::TYPE_AND:
                         $this->validateFilterQueries($query);
-
                         $filters = Query::getFilterQueries($query->getValues());
 
                         if (count($filters) < 2) {
@@ -683,15 +729,12 @@ class V2 extends Validator
                         $ambiguous[] = $needle;
 
                         break;
-
                     case Query::TYPE_ORDER_RANDOM:
-                        /**
-                         * todo: Validations
-                         */
+
                         break;
                     case Query::TYPE_ORDER_ASC:
                     case Query::TYPE_ORDER_DESC:
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias(), $query->getMethod());
 
                         break;
                     case Query::TYPE_CURSOR_AFTER:
@@ -702,7 +745,28 @@ class V2 extends Validator
                         }
 
                         break;
+                    case Query::TYPE_VECTOR_DOT:
+                    case Query::TYPE_VECTOR_COSINE:
+                    case Query::TYPE_VECTOR_EUCLIDEAN:
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
 
+                        // Handle dotted attributes (relationships)
+//                    $attributeKey = $attribute;
+//                    if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+//                        $attributeKey = \explode('.', $attributeKey)[0];
+//                    }
+//
+//                    $attributeSchema = $this->schema[$attributeKey];
+//                    if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+//                        throw new \Exception('Vector queries can only be used on vector attributes');
+//                    }
+
+                        if (count($query->getValues()) != 1) {
+                            throw new \Exception(\ucfirst($method) . ' queries require exactly one vector value.');
+                        }
+
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        break;
                     default:
                         throw new \Exception('Invalid query: Method not found ');
                 }

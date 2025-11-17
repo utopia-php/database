@@ -30,7 +30,7 @@ use Utopia\Database\Query;
  */
 class Postgres extends SQL
 {
-    const MAX_IDENTIFIER_NAME = 63;
+    public const MAX_IDENTIFIER_NAME = 63;
     /**
      * @inheritDoc
      */

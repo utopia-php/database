@@ -526,7 +526,7 @@ trait CollectionTests
         $this->assertEquals('Richard', $document->getAttribute('name'));
 
         if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
-            $this->assertArrayHasKey('age', $document); // Issue in Mongo
+            $this->assertArrayHasKey('age', $document); // Issue in Mongo with Document Decode , Since no attribute exist
         }
     }
 

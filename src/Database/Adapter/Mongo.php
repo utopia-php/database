@@ -1122,9 +1122,17 @@ class Mongo extends Adapter
 
         $options = $this->getTransactionOptions();
 
+        $removeSequence = false;
         $projections = $this->getAttributeProjection($queries);
         if (!empty($projections)) {
             $options['projection'] = $projections;
+
+            /**
+             * Hack for _id is always returned?
+             */
+            if (empty($options['projection']['_id'])){
+                $removeSequence = true;
+            }
         }
 
         try {
@@ -1141,6 +1149,10 @@ class Mongo extends Adapter
         $result = $this->replaceChars('_', '$', $resultArray);
         $document = new Document($result);
         $document = $this->castingAfter($collection, $document);
+
+        if ($removeSequence) {
+            $document->removeAttribute('$sequence');
+        }
 
         return $document;
     }
@@ -1890,7 +1902,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if ($this->authorization->getStatus()) {
+        $skipAuth = $context->skipAuth($this->filter($collection->getId()), $forPermission, $this->authorization);
+        if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
@@ -1908,9 +1921,17 @@ class Mongo extends Adapter
             $options['maxTimeMS'] = $this->timeout;
         }
 
+        $removeSequence = false;
         $projections = $this->getAttributeProjection($selects);
         if (!empty($projections)) {
             $options['projection'] = $projections;
+
+            /**
+             * Hack for _id is always returned?
+             */
+            if (empty($options['projection']['_id'])){
+                $removeSequence = true;
+            }
         }
 
         // Add transaction context to options
@@ -1933,14 +1954,9 @@ class Mongo extends Adapter
             $options['sort'][$attribute] = $this->getOrder($direction);
 
             /** Get operator sign  '$lt' ? '$gt' **/
-            $operator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($direction === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($direction === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-
-            $operator = $this->getQueryOperator($operator);
+            $operator = $this->getQueryOperator($direction === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER);
 
             if (!empty($cursor)) {
-
                 $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderQueries[$j]->getAttribute();
@@ -1994,7 +2010,13 @@ class Mongo extends Adapter
             // Process first batch
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
-                $found[] = new Document($record);
+
+                $doc = new Document($record);
+                if ($removeSequence) {
+                    $doc->removeAttribute('$sequence');
+                }
+
+                $found[] = $doc;
             }
 
             // Get cursor ID for subsequent batches
@@ -2011,7 +2033,13 @@ class Mongo extends Adapter
 
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
-                    $found[] = new Document($record);
+
+                    $doc = new Document($record);
+                    if ($removeSequence) {
+                        $doc->removeAttribute('$sequence');
+                    }
+
+                    $found[] = $doc;
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);

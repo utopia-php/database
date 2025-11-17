@@ -627,6 +627,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $documents = $database->find($collection->getId());
+        var_dump($documents);
         $this->assertNotEmpty($documents);
 
         $this->getDatabase()->getAuthorization()->cleanRoles();

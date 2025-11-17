@@ -3724,7 +3724,6 @@ class Database
         );
 
         $selects = Query::getSelectQueries($queries);
-
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions', system: true));
@@ -3788,7 +3787,6 @@ class Database
 
         $document = $this->casting($context, $document, $selects);
         $document = $this->decode($context, $document, $selects);
-        $this->map = [];
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
@@ -3887,8 +3885,6 @@ class Database
                     }
 
                     foreach ($relationships as $relationship) {
-                        var_dump($relationship);
-
                         $key = $relationship['key'];
                         $queries = $sels[$key] ?? [];
                         $relationship->setAttribute('collection', $coll->getId());
@@ -7191,6 +7187,7 @@ class Database
         $limit = Query::getLimitQuery($queries, 25);
         $offset = Query::getOffsetQuery($queries, 0);
         $orders = Query::getOrderQueries($queries);
+        $vectors = Query::getVectorQueries($queries);
 
         $uniqueOrderBy = false;
         foreach ($orders as $order) {
@@ -7253,7 +7250,7 @@ class Database
                 selects: $selects,
                 filters: $filters,
                 joins: $joins,
-                vectors: Query::getVectorQueries($queries),
+                vectors: $vectors,
                 orderQueries: $orders
             );
         }

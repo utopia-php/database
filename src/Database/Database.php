@@ -350,9 +350,9 @@ class Database
 
     protected Adapter $adapter;
 
-    protected Cache $cache;
+    public Cache $cache;
 
-    protected string $cacheName = 'default';
+    public string $cacheName = 'default';
 
     /**
      * @var array<string, array{encode: callable, decode: callable}>

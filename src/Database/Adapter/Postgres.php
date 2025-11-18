@@ -2770,7 +2770,7 @@ class Postgres extends SQL
             $suffix = substr($key, $separatorPosition + 1);
         }
 
-        $hash = hash('crc32b', $key);
+        $hash = md5($key);
 
         if ($suffix !== '') {
             $hashedKey = "{$hash}_{$suffix}";

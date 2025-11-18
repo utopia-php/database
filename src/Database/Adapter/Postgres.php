@@ -245,10 +245,10 @@ class Postgres extends SQL
         ";
 
         if ($this->sharedTables) {
-            $uidIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_uid");
-            $createdIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_created");
-            $updatedIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_updated");
-            $tenantIdIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
+            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_uid");
+            $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
+            $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
+            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
             $collection .= "
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai, \"_tenant\");
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
@@ -256,9 +256,9 @@ class Postgres extends SQL
             	CREATE INDEX \"{$tenantIdIndex}\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
-            $uidIndex = $this->getIndexKey("{$namespace}_{$id}_uid");
-            $createdIndex = $this->getIndexKey("{$namespace}_{$id}_created");
-            $updatedIndex = $this->getIndexKey("{$namespace}_{$id}_updated");
+            $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
+            $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
+            $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
             $collection .= "
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (\"_createdAt\");
@@ -279,8 +279,8 @@ class Postgres extends SQL
         ";
 
         if ($this->sharedTables) {
-            $uniquePermissionIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_ukey");
-            $permissionIndex = $this->getIndexKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
+            $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
@@ -288,8 +288,8 @@ class Postgres extends SQL
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
-            $uniquePermissionIndex = $this->getIndexKey("{$namespace}_{$id}_ukey");
-            $permissionIndex = $this->getIndexKey("{$namespace}_{$id}_permission");
+            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
+            $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
@@ -905,7 +905,7 @@ class Postgres extends SQL
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
-        $keyName = $this->getIndexKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
         $attributes = \implode(', ', $attributes);
 
         if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
@@ -948,7 +948,7 @@ class Postgres extends SQL
         $id = $this->filter($id);
         $schemaName = $this->getDatabase();
 
-        $keyName = $this->getIndexKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
 
         $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".\"{$keyName}\"";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
@@ -974,8 +974,8 @@ class Postgres extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
         $schema = $this->getDatabase();
-        $oldIndexName = $this->getIndexKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
-        $newIndexName = $this->getIndexKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
+        $oldIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
+        $newIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
 
         $sql = "ALTER INDEX \"{$schema}\".\"{$oldIndexName}\" RENAME TO \"{$newIndexName}\"";
         $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
@@ -2758,7 +2758,7 @@ class Postgres extends SQL
      * @param string $key
      * @return string
      */
-    protected function getIndexKey(string $key): string
+    protected function getShortKey(string $key): string
     {
         if (\strlen($key) <= self::MAX_IDENTIFIER_NAME) {
             return $key;
@@ -2785,7 +2785,7 @@ class Postgres extends SQL
     protected function getSQLTable(string $name): string
     {
         $table = "{$this->getNamespace()}_{$this->filter($name)}";
-        $table = $this->getIndexKey($table);
+        $table = $this->getShortKey($table);
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }

@@ -1112,6 +1112,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialAttributes(): bool;
 
     /**
+     * Are object (JSON) attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForObject(): bool;
+
+    /**
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool

@@ -2844,6 +2844,11 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForObject(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *

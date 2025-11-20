@@ -3,6 +3,7 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Swoole\FastCGI\Record\Data;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -40,7 +41,10 @@ class IndexedQueriesTest extends TestCase
         $context = new QueryContext();
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $this->assertEquals(true, $validator->isValid([]));
     }
@@ -50,7 +54,10 @@ class IndexedQueriesTest extends TestCase
         $context = new QueryContext();
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
     }
@@ -60,7 +67,10 @@ class IndexedQueriesTest extends TestCase
         $context = new QueryContext();
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
@@ -70,7 +80,10 @@ class IndexedQueriesTest extends TestCase
         $context = new QueryContext();
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
@@ -162,10 +175,12 @@ class IndexedQueriesTest extends TestCase
         ]);
 
         $context = new QueryContext();
-
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $query = Query::equal('dne', ['value']);
         $this->assertEquals(false, $validator->isValid([$query]));
@@ -211,10 +226,12 @@ class IndexedQueriesTest extends TestCase
         ]);
 
         $context = new QueryContext();
-
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
     }

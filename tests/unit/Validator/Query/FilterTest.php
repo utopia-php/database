@@ -12,6 +12,7 @@ use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 class FilterTest extends TestCase
 {
     protected DocumentsValidator $validator;
+    protected int $maxValuesCount = 10;
 
     /**
      * @throws \Utopia\Database\Exception
@@ -54,10 +55,13 @@ class FilterTest extends TestCase
         ]);
 
         $context = new QueryContext();
-
         $context->add($collection);
 
-        $this->validator = new DocumentsValidator($context);
+        $this->validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER,
+            maxValuesCount: $this->maxValuesCount
+        );
     }
 
     public function testSuccess(): void
@@ -122,39 +126,39 @@ class FilterTest extends TestCase
 
     public function testMaxValuesCount(): void
     {
-        $max = $this->validator->getMaxValuesCount();
+        $max = $this->maxValuesCount;
         $values = [];
         for ($i = 1; $i <= $max + 1; $i++) {
             $values[] = $i;
         }
 
-        $this->assertFalse($this->validator->isValid(Query::equal('integer', $values)));
+        $this->assertFalse($this->validator->isValid([Query::equal('integer', $values)]));
         $this->assertEquals('Query on attribute has greater than '.$max.' values: integer', $this->validator->getDescription());
     }
 
     public function testNotContains(): void
     {
         // Test valid notContains queries
-        $this->assertTrue($this->validator->isValid(Query::notContains('string', ['unwanted'])));
-        $this->assertTrue($this->validator->isValid(Query::notContains('string_array', ['spam', 'unwanted'])));
-        $this->assertTrue($this->validator->isValid(Query::notContains('integer_array', [100, 200])));
+        $this->assertTrue($this->validator->isValid([Query::notContains('string', ['unwanted'])]));
+        $this->assertTrue($this->validator->isValid([Query::notContains('string_array', ['spam', 'unwanted'])]));
+        $this->assertTrue($this->validator->isValid([Query::notContains('integer_array', [100, 200])]));
 
         // Test invalid notContains queries (empty values)
-        $this->assertFalse($this->validator->isValid(Query::notContains('string', [])));
+        $this->assertFalse($this->validator->isValid([Query::notContains('string', [])]));
         $this->assertEquals('NotContains queries require at least one value.', $this->validator->getDescription());
     }
 
     public function testNotSearch(): void
     {
         // Test valid notSearch queries
-        $this->assertTrue($this->validator->isValid(Query::notSearch('string', 'unwanted')));
+        $this->assertTrue($this->validator->isValid([Query::notSearch('string', 'unwanted')]));
 
         // Test that arrays cannot use notSearch
-        $this->assertFalse($this->validator->isValid(Query::notSearch('string_array', 'unwanted')));
+        $this->assertFalse($this->validator->isValid([Query::notSearch('string_array', 'unwanted')]));
         $this->assertEquals('Cannot query notSearch on attribute "string_array" because it is an array.', $this->validator->getDescription());
 
         // Test multiple values not allowed
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_SEARCH, 'string', ['word1', 'word2'])));
+        $this->assertFalse($this->validator->isValid([new Query(Query::TYPE_NOT_SEARCH, 'string', ['word1', 'word2'])]));
         $this->assertEquals('NotSearch queries require exactly one value.', $this->validator->getDescription());
     }
 

@@ -60,7 +60,7 @@ class MariaDB extends SQL
         $sql = "DROP DATABASE `{$name}`;";
 
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
-        var_dump($sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();

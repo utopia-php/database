@@ -204,7 +204,6 @@ abstract class SQL extends Adapter
             $stmt->execute();
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
-            var_dump($document);
         } catch (PDOException $e) {
             $e = $this->processException($e);
 
@@ -382,7 +381,7 @@ abstract class SQL extends Adapter
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
         }
-        var_dump($sql);
+
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
@@ -3145,7 +3144,7 @@ abstract class SQL extends Adapter
             {$sqlOrder}
             {$sqlLimit};
         ";
-        var_dump($sql);
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

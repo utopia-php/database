@@ -329,8 +329,6 @@ trait RelationshipTests
         $this->assertEquals(2, count($president['votes']));
         $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
 
-        var_dump('===================================================================');
-
         $president = $database->findOne('presidents', [
             Query::select('*'),
             Query::select('votes.*'),
@@ -1581,7 +1579,7 @@ trait RelationshipTests
         $make = $database->getDocument('make', 'ford', [
             Query::select('models.*'),
         ]);
-        var_dump($make);
+
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }

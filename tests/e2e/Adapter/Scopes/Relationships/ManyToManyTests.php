@@ -146,7 +146,6 @@ trait ManyToManyTests
         if ($playlist->isEmpty()) {
             throw new Exception('Playlist not found');
         }
-        var_dump($playlist);
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 

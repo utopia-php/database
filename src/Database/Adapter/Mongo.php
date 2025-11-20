@@ -708,8 +708,8 @@ class Mongo extends Adapter
      * Rename Attribute.
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws DatabaseException
      * @throws MongoException
@@ -1857,7 +1857,6 @@ class Mongo extends Adapter
      * Find data sets using chosen queries
      *
      * @param QueryContext $context
-     * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
      * @param array<string, mixed> $cursor
@@ -1866,7 +1865,7 @@ class Mongo extends Adapter
      * @param array<Query> $selects
      * @param array<Query> $filters
      * @param array<Query> $joins
-     * @param array $vectors
+     * @param array<Query> $vectors
      * @param array<Query> $orderQueries
      *
      * @return array<Document>
@@ -2559,7 +2558,7 @@ class Mongo extends Adapter
     /**
      * @param array<Query> $selects
      *
-     * @return array
+     * @return array<string, int>
      */
     protected function getAttributeProjection(array $selects): array
     {

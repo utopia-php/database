@@ -821,7 +821,7 @@ abstract class Adapter
      * @param array<Query> $selects
      * @param array<Query> $filters
      * @param array<Query> $joins
-     * @param array $vectors
+     * @param array<Query> $vectors
      * @param array<Query> $orderQueries
      *
      * @return array<Document>

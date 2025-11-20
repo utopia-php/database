@@ -338,6 +338,11 @@ class V2 extends Validator
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
 
+                case Database::VAR_OBJECT:
+                    // value for object can be of any type as its a hashmap
+                    // eg; ['key'=>value']
+                    continue 2;
+
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
@@ -407,9 +412,10 @@ class V2 extends Validator
             ! $array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attribute['type'] !== Database::VAR_STRING &&
+            $attribute['type'] !== Database::VAR_OBJECT &&
             !in_array($attribute['type'], Database::SPATIAL_TYPES)
         ) {
-            throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is not an array or string.');
+            throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is not an array, string, or object.');
         }
 
         if (

@@ -194,7 +194,8 @@ trait ObjectAttributeTests
 
         // Test 11b: Test Query::select to limit returned attributes
         $results = $database->find($collectionId, [
-            Query::select(['$id', 'meta']),
+            Query::select('$id'),
+            Query::select('meta'),
             Query::equal('meta', [['age' => 26]])
         ]);
         $this->assertCount(1, $results);
@@ -204,7 +205,7 @@ trait ObjectAttributeTests
 
         // Test 11c: Test Query::select with only $id (exclude meta)
         $results = $database->find($collectionId, [
-            Query::select(['$id']),
+            Query::select('$id'),
             Query::equal('meta', [['age' => 30]])
         ]);
         $this->assertCount(1, $results);
@@ -506,7 +507,9 @@ trait ObjectAttributeTests
 
         // Test 34: Test Query::select with complex nested structures
         $results = $database->find($collectionId, [
-            Query::select(['$id', '$permissions', 'meta']),
+            Query::select('$id'),
+            Query::select('$permissions'),
+            Query::select('meta'),
             Query::equal('meta', [[
                 'level1' => [
                     'level2' => [
@@ -525,7 +528,8 @@ trait ObjectAttributeTests
 
         // Test 35: Test selecting multiple documents and verifying object attributes
         $allDocs = $database->find($collectionId, [
-            Query::select(['$id', 'meta']),
+            Query::select('$id'),
+            Query::select('meta'),
             Query::limit(25)
         ]);
         $this->assertGreaterThan(10, count($allDocs));
@@ -540,7 +544,7 @@ trait ObjectAttributeTests
 
         // Test 36: Test Query::select with only meta attribute
         $results = $database->find($collectionId, [
-            Query::select(['meta']),
+            Query::select('meta'),
             Query::equal('meta', [['tags' => ['php', 'javascript', 'python', 'go', 'rust']]])
         ]);
         $this->assertCount(1, $results);
@@ -808,7 +812,8 @@ trait ObjectAttributeTests
 
         // Test 12: Test Query::select with valid document
         $results = $database->find($collectionId, [
-            Query::select(['$id', 'meta']),
+            Query::select('$id'),
+            Query::select('meta'),
             Query::equal('meta', [['name' => 'John']])
         ]);
         $this->assertCount(1, $results);
@@ -827,7 +832,8 @@ trait ObjectAttributeTests
 
         // Test 14: Test Query::select excluding meta
         $results = $database->find($collectionId, [
-            Query::select(['$id', '$permissions']),
+            Query::select('$id'),
+            Query::select('$permissions'),
             Query::equal('meta', [['fruits' => ['apple', 'banana', 'orange']]])
         ]);
         $this->assertCount(1, $results);

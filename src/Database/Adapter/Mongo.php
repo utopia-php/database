@@ -1130,7 +1130,7 @@ class Mongo extends Adapter
             /**
              * Hack for _id is always returned?
              */
-            if (empty($options['projection']['_id'])){
+            if (empty($options['projection']['_id'])) {
                 $removeSequence = true;
             }
         }
@@ -1875,7 +1875,6 @@ class Mongo extends Adapter
      */
     public function find(
         QueryContext $context,
-        array $queries = [],
         ?int $limit = 25,
         ?int $offset = null,
         array $cursor = [],
@@ -1887,8 +1886,6 @@ class Mongo extends Adapter
         array $vectors = [],
         array $orderQueries = []
     ): array {
-        unset($queries); // remove this since we pass explicit queries
-
         $collection = $context->getCollections()[0];
 
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -1929,7 +1926,7 @@ class Mongo extends Adapter
             /**
              * Hack for _id is always returned?
              */
-            if (empty($options['projection']['_id'])){
+            if (empty($options['projection']['_id'])) {
                 $removeSequence = true;
             }
         }

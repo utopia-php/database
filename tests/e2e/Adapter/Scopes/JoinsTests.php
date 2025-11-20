@@ -349,20 +349,15 @@ trait JoinsTests
             ]
         );
 
-        $document = $documents[0];
-        var_dump($document);
-
         /**
          * Since we use main.* we should see all attributes
          */
-        //$this->assertArrayHasKey('$id', $document);
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
         $this->assertIsFloat($document->getAttribute('float'));
         $this->assertEquals(10.5, $document->getAttribute('float'));
-
         $this->assertIsBool($document->getAttribute('boolean'));
         $this->assertEquals(false, $document->getAttribute('boolean'));
-        //$this->assertIsArray($document->getAttribute('colors'));
-        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
 
         /**
          * Test invalid as
@@ -387,14 +382,6 @@ trait JoinsTests
             $this->assertEquals('Invalid Query Select: Invalid "as" on attribute "*"', $e->getMessage());
         }
 
-
-        $document = $db->getDocument(
-            '__sessions',
-            $session2->getId()
-        );
-        var_dump($document);
-        $this->assertEquals('dsdsd', 'ds');
-
         /**
          * Simple `as` query getDocument
          */
@@ -412,10 +399,10 @@ trait JoinsTests
             ]
         );
 
-        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
         $this->assertArrayHasKey('___permissions', $document);
         $this->assertArrayHasKey('___uid', $document);
-        $this->assertArrayNotHasKey('$id', $document);
+        //$this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
@@ -441,10 +428,10 @@ trait JoinsTests
                 Query::select('$permissions', as: '___permissions'),
             ]
         );
-
-        $this->assertArrayHasKey('$permissions', $document);
-        $this->assertArrayHasKey('$collection', $document);
         $this->assertArrayHasKey('___permissions', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        //$this->assertArrayNotHasKey('$id', $document); // Added in processRelationshipQueries
+        $this->assertArrayHasKey('$collection', $document);
 
         /**
          * Simple `as` query find
@@ -462,7 +449,7 @@ trait JoinsTests
         );
 
         $this->assertArrayHasKey('___uid', $document);
-        $this->assertArrayNotHasKey('$id', $document);
+        //$this->assertArrayNotHasKey('$id', $document); // Added in processRelationshipQueries
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);

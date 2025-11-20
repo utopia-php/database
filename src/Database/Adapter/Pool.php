@@ -270,7 +270,6 @@ class Pool extends Adapter
 
     public function find(
         QueryContext $context,
-        array $queries = [],
         ?int $limit = 25,
         ?int $offset = null,
         array $cursor = [],

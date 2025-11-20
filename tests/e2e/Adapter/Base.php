@@ -9,8 +9,8 @@ use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
-use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\JoinsTests;
+use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
@@ -24,6 +24,7 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
+    use JoinsTests;
     use CollectionTests;
     use CustomDocumentTypeTests;
     use DocumentTests;
@@ -37,7 +38,6 @@ abstract class Base extends TestCase
     use ObjectAttributeTests;
     use VectorTests;
     use GeneralTests;
-    //use JoinsTests;
 
     protected static string $namespace;
 

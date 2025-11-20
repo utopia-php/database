@@ -7794,16 +7794,9 @@ class Database
         $queries = self::convertQueries($context, $queries);
 
         $grouped = Query::groupByType($queries);
-        $filters = $grouped['filters'];
-        $selects = $grouped['selections'];
-        $limit = $grouped['limit'];
-        $offset = $grouped['offset'];
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
-        $filters = Query::getFilterQueries($queries);
         $selects = Query::getSelectQueries($queries);
         $limit = Query::getLimitQuery($queries, 25);
         $offset = Query::getOffsetQuery($queries, 0);
@@ -7844,8 +7837,6 @@ class Database
             $cursor = [];
         }
 
-        //$selects = $this->validateSelections($collection, $selects);
-
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         // Convert relationship filter queries to SQL-level subqueries
@@ -7856,13 +7847,10 @@ class Database
             $results = [];
         } else {
             $queries = $queriesOrNull;
-
             $filters = Query::getFilterQueries($queries);
-            //$selects = Query::getSelectQueries($selects);
 
             $results = $this->adapter->find(
                 $context,
-                [],
                 $limit ?? 25,
                 $offset ?? 0,
                 $cursor,
@@ -8227,7 +8215,7 @@ class Database
             }
         }
 
-        $new = new Document();
+        $new = $this->createDocumentInstance($context->getCollections()[0]->getId(), []);
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
@@ -8326,7 +8314,7 @@ class Database
             }
         }
 
-        $new = new Document();
+        $new = $this->createDocumentInstance($context->getCollections()[0]->getId(), []);
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;

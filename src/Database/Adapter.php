@@ -813,7 +813,6 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param QueryContext $context
-     * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
      * @param array<string, mixed> $cursor
@@ -829,7 +828,6 @@ abstract class Adapter
      */
     abstract public function find(
         QueryContext $context,
-        array $queries = [],
         ?int $limit = 25,
         ?int $offset = null,
         array $cursor = [],

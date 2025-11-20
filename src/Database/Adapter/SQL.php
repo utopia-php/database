@@ -2966,7 +2966,6 @@ abstract class SQL extends Adapter
      * Find Documents
      *
      * @param QueryContext $context
-     * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
      * @param array<string, mixed> $cursor
@@ -2983,7 +2982,6 @@ abstract class SQL extends Adapter
      */
     public function find(
         QueryContext $context,
-        array $queries = [],
         ?int $limit = 25,
         ?int $offset = null,
         array $cursor = [],
@@ -2995,8 +2993,6 @@ abstract class SQL extends Adapter
         array $vectors = [],
         array $orderQueries = []
     ): array {
-        unset($queries); // remove this since we pass explicit queries
-
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
@@ -3030,7 +3026,7 @@ abstract class SQL extends Adapter
                 $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$direction}";
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$direction}";
 
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {

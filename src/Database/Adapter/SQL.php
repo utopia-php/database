@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 
 abstract class SQL extends Adapter
 {
@@ -365,16 +366,15 @@ abstract class SQL extends Adapter
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
-        $selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $alias = Query::DEFAULT_ALIAS;
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections, $alias)}
+		    SELECT {$this->getAttributeProjection($queries)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            WHERE {$this->quote($alias)}._uid = :_uid 
             {$this->getTenantQuery($collection, $alias)}
 		";
 
@@ -2330,40 +2330,57 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selects
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    protected function getAttributeProjection(array $selects): string
     {
-        if (empty($selections) || \in_array('*', $selections)) {
-            return "{$this->quote($prefix)}.*";
+        //todo: fix this $spatialAttributes
+
+        if (empty($selects)) {
+            return Query::DEFAULT_ALIAS.'.*';
         }
 
-        // Handle specific selections with spatial conversion where needed
-        $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
-        ];
+        $string = '';
+        foreach ($selects as $select) {
+            if ($select->getAttribute() === '$collection') {
+                continue;
+            }
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+            $alias = $select->getAlias();
+            $alias = $this->filter($alias);
+            $attribute = $select->getAttribute();
 
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$sequence' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
+
+            if ($attribute !== '*') {
+                $attribute = $this->filter($attribute);
+                $attribute = $this->quote($attribute);
+            }
+
+            $as = $select->getAs();
+
+            if (!empty($as)) {
+                $as = ' as '.$this->quote($this->filter($as));
+            }
+
+            if (!empty($string)) {
+                $string .= ', ';
+            }
+
+            $string .= "{$this->quote($alias)}.{$attribute}{$as}";
         }
 
-        $projections = [];
-        foreach ($selections as $selection) {
-            $filteredSelection = $this->filter($selection);
-            $quotedSelection = $this->quote($filteredSelection);
-            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-        }
-
-        return \implode(',', $projections);
+        return $string;
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string
@@ -2947,75 +2964,73 @@ abstract class SQL extends Adapter
     /**
      * Find Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $attributes = $collection->getAttribute('attributes', []);
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
-        $where = [];
-        $orders = [];
+    public function find(
+        QueryContext $context,
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $vectors = [],
+        array $orderQueries = []
+    ): array {
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
 
-        // Extract vector queries for ORDER BY
-        $vectorQueries = [];
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
-            }
-        }
+        $roles = $this->authorization->getRoles();
+        $where = [];
+        $orders = [];
 
-        $queries = $otherQueries;
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         $cursorWhere = [];
 
-        foreach ($orderAttributes as $i => $originalAttribute) {
-            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
+            $attribute = $this->filter($attribute);
 
-            // Handle random ordering
-            if ($orderType === Database::ORDER_RANDOM) {
+            $direction = $order->getOrderDirection();
+
+            // Handle random ordering specially
+            if ($direction === Database::ORDER_RANDOM) {
                 $orders[] = $this->getRandomOrder();
                 continue;
             }
 
-            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
-            $attribute = $this->filter($attribute);
-
-            $orderType = $this->filter($orderType);
-            $direction = $orderType;
-
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$direction}";
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$direction}";
 
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
                 // Special case: No tie breaks. only 1 attribute and it's a unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                if (count($orderQueries) === 1 && $i === 0 && $originalAttribute === '$sequence') {
                     $operator = ($direction === Database::ORDER_DESC)
                         ? Query::TYPE_LESSER
                         : Query::TYPE_GREATER;
@@ -3023,7 +3038,7 @@ abstract class SQL extends Adapter
                     $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
 
-                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    $cursorWhere[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
                     break;
                 }
 
@@ -3031,13 +3046,14 @@ abstract class SQL extends Adapter
 
                 // Add equality conditions for previous attributes
                 for ($j = 0; $j < $i; $j++) {
-                    $prevOriginal = $orderAttributes[$j];
+                    $prevQuery = $orderQueries[$j];
+                    $prevOriginal = $prevQuery->getAttribute();
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
                     $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
-                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                    $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($prevAttr)} = {$bindName}";
                 }
 
                 // Add comparison for current attribute
@@ -3048,7 +3064,7 @@ abstract class SQL extends Adapter
                 $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
 
-                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
 
                 $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
             }
@@ -3058,25 +3074,44 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, $forPermission, $this->authorization);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        $skipAuth = $context->skipAuth($name, $forPermission, $this->authorization);
+        if (! $skipAuth) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         // Add vector distance calculations to ORDER BY
         $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
+        foreach ($vectors as $query) {
             $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
             if ($vectorOrder) {
                 $vectorOrders[] = $vectorOrder;
@@ -3101,11 +3136,10 @@ abstract class SQL extends Adapter
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($queries);
-
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjection($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -3125,12 +3159,12 @@ abstract class SQL extends Adapter
             }
 
             $this->execute($stmt);
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {

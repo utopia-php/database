@@ -9,6 +9,7 @@ use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\JoinsTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
@@ -35,6 +36,7 @@ abstract class Base extends TestCase
     use SchemalessTests;
     use ObjectAttributeTests;
     use VectorTests;
+    use JoinsTests;
     use GeneralTests;
 
     protected static string $namespace;

@@ -65,7 +65,10 @@ class DocumentQueriesTest extends TestCase
      */
     public function testValidQueries(): void
     {
-        $validator = new DocumentsValidator($this->context);
+        $validator = new DocumentsValidator(
+            $this->context,
+            Database::VAR_INTEGER
+        );
 
         $queries = [
             Query::select('title'),
@@ -82,16 +85,20 @@ class DocumentQueriesTest extends TestCase
      */
     public function testInvalidQueries(): void
     {
-        $validator = new DocumentsValidator($this->context);
+        $validator = new DocumentsValidator(
+            $this->context,
+            Database::VAR_INTEGER
+        );
 
         $queries = [
             Query::limit(1)
         ];
 
         /**
-         * Think what to do about this?
+         * Remove this tests
+         * Think what to do about this? originally we had DocumentValidator which only allow select queires
+         * Added tests this test to check it out testGetDocumentOnlySelectQueries
          */
         //$this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals(true, $validator->isValid($queries));
     }
 }

@@ -4297,6 +4297,11 @@ class Database
 
         $this->checkQueryTypes($queries);
 
+        $selects = Query::getSelectQueries($queries);
+        if (count($selects) != count($queries)) {
+            throw new QueryException('Only Select queries are permitted');
+        }
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
@@ -4313,7 +4318,6 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::getSelectQueries($queries);
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions', system: true));

@@ -557,8 +557,6 @@ class V2 extends Validator
                     }
                 }
 
-                //var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
-
                 $this->validateAlias($query);
 
                 if ($query->isNested()) {

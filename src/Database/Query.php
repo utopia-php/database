@@ -503,7 +503,11 @@ class Query
     {
         $method = $query['method'] ?? '';
         $attribute = $query['attribute'] ?? '';
+        $attributeRight = $query['attributeRight'] ?? '';
         $values = $query['values'] ?? [];
+        $alias = $query['alias'] ?? '';
+        $aliasRight = $query['aliasRight'] ?? '';
+        $as = $query['as'] ?? '';
 
         if (!\is_string($method)) {
             throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
@@ -527,7 +531,15 @@ class Query
             }
         }
 
-        return new self($method, $attribute, $values);
+        return new self(
+            $method,
+            $attribute,
+            $values,
+            alias: $alias,
+            attributeRight: $attributeRight,
+            aliasRight: $aliasRight,
+            as: $as,
+        );
     }
 
     /**
@@ -558,6 +570,22 @@ class Query
 
         if (!empty($this->attribute)) {
             $array['attribute'] = $this->attribute;
+        }
+
+        if (!empty($this->attributeRight)) {
+            $array['attributeRight'] = $this->attributeRight;
+        }
+
+        if (!empty($this->alias) && $this->alias != Query::DEFAULT_ALIAS) {
+            $array['alias'] = $this->alias;
+        }
+
+        if (!empty($this->aliasRight) && $this->aliasRight != Query::DEFAULT_ALIAS) {
+            $array['aliasRight'] = $this->aliasRight;
+        }
+
+        if (!empty($this->as)) {
+            $array['as'] = $this->as;
         }
 
         if (\in_array($array['method'], self::LOGICAL_TYPES)) {
@@ -740,7 +768,7 @@ class Query
         return new self(self::TYPE_NOT_SEARCH, $attribute, [$value]);
     }
 
-    public static function select(string $attribute, string $alias = '', string $as = '', string $function = '', bool $system = false): self
+    public static function select(string $attribute, string $alias = '', string $as = '', bool $system = false): self
     {
         return new self(self::TYPE_SELECT, $attribute, [], alias: $alias, as: $as, system: $system);
     }

@@ -1433,6 +1433,42 @@ trait DocumentTests
 
         return $document;
     }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocumentOnlySelectQueries(Document $document): Document
+    {
+        $documentId = $document->getId();
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $invalidMessage = 'Only Select queries are permitted';
+
+        try {
+            $database->getDocument('documents', $documentId, [
+                Query::equal('$id', ['id']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals($invalidMessage, $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
+        try {
+            $database->getDocument('documents', $documentId, [
+                Query::limit(1),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals($invalidMessage, $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
+        return $document;
+    }
+
     /**
      * @return array<string, mixed>
      */

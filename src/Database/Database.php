@@ -8253,6 +8253,10 @@ class Database
             }
 
             if (is_null($attribute)) {
+                if (!$this->adapter->getSupportForAttributes()) {
+                    $new->setAttribute($key, $value);  /** Schemaless */
+                }
+
                 continue;
             }
 
@@ -8260,7 +8264,6 @@ class Database
                 $attributeKey = $attribute['$id'];
             }
 
-            $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
 

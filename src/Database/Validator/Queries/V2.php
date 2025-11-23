@@ -202,7 +202,7 @@ class V2 extends Validator
         }
 
         $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
-        if (empty($attribute)) {
+        if (empty($attribute) && $this->supportForAttributes) {
             throw new \Exception('Invalid query: Attribute not found in schema: '.$attributeId);
         }
 
@@ -278,7 +278,10 @@ class V2 extends Validator
             }
         }
 
-        $attribute = $this->schema[$collection->getId()][$attributeId];
+        $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
+        if (empty($attribute) && !$this->supportForAttributes) {
+            return;
+        }
 
         /**
          * Skip value validation for nested relationship queries (e.g., author.age)

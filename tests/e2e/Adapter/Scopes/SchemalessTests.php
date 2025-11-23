@@ -172,13 +172,13 @@ trait SchemalessTests
         ];
         $this->assertEquals(3, $database->createDocuments($colName, $docs));
 
-        $docA = $database->getDocument($colName, 'doc1', [Query::select(['freeA'])]);
+        $docA = $database->getDocument($colName, 'doc1', [Query::select('freeA')]);
         $this->assertEquals('doc1', $docA->getAttribute('freeA'));
 
-        $docC = $database->getDocument($colName, 'doc1', [Query::select(['freeC'])]);
+        $docC = $database->getDocument($colName, 'doc1', [Query::select('freeC')]);
         $this->assertNull($docC->getAttribute('freeC'));
 
-        $docs = $database->find($colName, [Query::equal('$id', ['doc1','doc2']),Query::select(['freeC'])]);
+        $docs = $database->find($colName, [Query::equal('$id', ['doc1','doc2']),Query::select('freeC')]);
         foreach ($docs as $doc) {
             $this->assertNull($doc->getAttribute('freeC'));
             // since not selected
@@ -188,13 +188,13 @@ trait SchemalessTests
 
         $docA = $database->find($colName, [
             Query::equal('$id', ['doc1']),
-            Query::select(['freeA'])
+            Query::select('freeA')
         ]);
         $this->assertEquals('doc1', $docA[0]->getAttribute('freeA'));
 
         $docC = $database->find($colName, [
             Query::equal('$id', ['doc1']),
-            Query::select(['freeC'])
+            Query::select('freeC')
         ]);
         $this->assertArrayNotHasKey('freeC', $docC[0]->getAttributes());
     }
@@ -860,7 +860,13 @@ trait SchemalessTests
         $this->assertContains(Permission::delete(Role::any()), $perms);
 
         $selected = $database->getDocument($col, 'i1', [
-            Query::select(['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'])
+            Query::select('name'),
+            Query::select('$id'),
+            Query::select('$sequence'),
+            Query::select('$collection'),
+            Query::select('$createdAt'),
+            Query::select('$updatedAt'),
+            Query::select('$permissions')
         ]);
         $this->assertEquals('alpha', $selected->getAttribute('name'));
         $this->assertArrayHasKey('$id', $selected);
@@ -872,7 +878,12 @@ trait SchemalessTests
 
         $found = $database->find($col, [
             Query::equal('$id', ['i1']),
-            Query::select(['$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'])
+            Query::select('$id'),
+            Query::select('$sequence'),
+            Query::select('$collection'),
+            Query::select('$createdAt'),
+            Query::select('$updatedAt'),
+            Query::select('$permissions')
         ]);
         $this->assertCount(1, $found);
         $this->assertArrayHasKey('$id', $found[0]);

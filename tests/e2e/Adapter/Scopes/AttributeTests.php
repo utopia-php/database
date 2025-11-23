@@ -1633,6 +1633,8 @@ trait AttributeTests
             }
         }
 
+        var_dump('============================================================');
+
         $doc = $database->createDocument('datetime', new Document([
             '$id' => ID::custom('id1234'),
             '$permissions' => [

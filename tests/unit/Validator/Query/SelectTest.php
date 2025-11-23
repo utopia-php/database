@@ -43,10 +43,12 @@ class SelectTest extends TestCase
         ]);
 
         $context = new QueryContext();
-
         $context->add($collection);
 
-        $this->validator = new DocumentsValidator($context);
+        $this->validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER,
+        );
     }
 
     public function testValueSuccess(): void

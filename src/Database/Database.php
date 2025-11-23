@@ -8480,65 +8480,6 @@ class Database
     }
 
     /**
-     * Validate if a set of attributes can be selected from the collection
-     *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @return array<Query>
-     * @throws QueryException
-     */
-    private function validateSelections(Document $collection, array $queries): array
-    {
-        if (empty($queries)) {
-            return [];
-        }
-
-        $selections = [];
-        $relationshipSelections = [];
-
-        foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                if (\str_contains($query->getValue(), '.')) {
-                    $relationshipSelections[] = $query;
-                    continue;
-                }
-
-                $selections[] = $query;
-            }
-        }
-
-        // Allow querying internal attributes
-        $keys = \array_map(
-            fn ($attribute) => $attribute['$id'],
-            $this->getInternalAttributes()
-        );
-
-        foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
-                $keys[] = $attribute['key'] ?? $attribute['$id'];
-            }
-        }
-        if ($this->adapter->getSupportForAttributes()) {
-            $invalid = \array_diff($selections, $keys);
-            if (!empty($invalid) && !\in_array('*', $invalid)) {
-                throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
-            }
-        }
-
-        $selections = \array_merge($selections, $relationshipSelections);
-
-        $selections[] = '$id';
-        $selections[] = '$sequence';
-        $selections[] = '$collection';
-        $selections[] = '$createdAt';
-        $selections[] = '$updatedAt';
-        $selections[] = '$permissions';
-
-        return \array_values(\array_unique($selections));
-    }
-
-    /**
      * Get adapter attribute limit, accounting for internal metadata
      * Returns 0 to indicate no limit
      *

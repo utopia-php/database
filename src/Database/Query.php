@@ -438,10 +438,10 @@ class Query
     }
 
     /**
-     * @param $method
+     * @param string $method
      * @return bool
      */
-    public static function isSpatialQuery($method): bool
+    public static function isSpatialQuery(string $method): bool
     {
         return match ($method) {
             self::TYPE_CROSSES,
@@ -461,10 +461,10 @@ class Query
     }
 
     /**
-     * @param $method
+     * @param string $method
      * @return bool
      */
-    public static function isVectorQuery($method): bool
+    public static function isVectorQuery(string $method): bool
     {
         return \in_array($method, Query::VECTOR_TYPES);
     }
@@ -1565,7 +1565,7 @@ class Query
     /**
      * @param array<Query> $queries
      * @param Query $query
-     * @return array
+     * @return array{array<Query>, bool}
      * @throws \Exception
      */
     public static function addSelect(array $queries, Query $query): array

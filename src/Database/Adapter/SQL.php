@@ -2339,7 +2339,7 @@ abstract class SQL extends Adapter
         //todo: fix this $spatialAttributes
 
         if (empty($selects)) {
-            return Query::DEFAULT_ALIAS.'.*';
+            return $this->quote(Query::DEFAULT_ALIAS).'.*';
         }
 
         $string = '';

@@ -139,7 +139,6 @@ class Query
         self::TYPE_LESSER_EQUAL,
         self::TYPE_GREATER,
         self::TYPE_GREATER_EQUAL,
-        self::TYPE_GREATER_EQUAL,
         self::TYPE_CONTAINS,
         self::TYPE_NOT_CONTAINS,
         self::TYPE_SEARCH,

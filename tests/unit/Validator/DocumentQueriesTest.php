@@ -80,25 +80,25 @@ class DocumentQueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid($queries));
     }
 
-//    /**
-//     * @throws Exception
-//     */
-//    public function testInvalidQueries(): void
-//    {
-//        $validator = new DocumentsValidator(
-//            $this->context,
-//            Database::VAR_INTEGER
-//        );
-//
-//        $queries = [
-//            Query::limit(1)
-//        ];
-//
-//        /**
-//         * Remove this tests
-//         * Think what to do about this? originally we had DocumentValidator which only allow select queires
-//         * Added tests this test to check it out testGetDocumentOnlySelectQueries
-//         */
-//        //$this->assertEquals(false, $validator->isValid($queries));
-//    }
+    //    /**
+    //     * @throws Exception
+    //     */
+    //    public function testInvalidQueries(): void
+    //    {
+    //        $validator = new DocumentsValidator(
+    //            $this->context,
+    //            Database::VAR_INTEGER
+    //        );
+    //
+    //        $queries = [
+    //            Query::limit(1)
+    //        ];
+    //
+    //        /**
+    //         * Remove this tests
+    //         * Think what to do about this? originally we had DocumentValidator which only allow select queires
+    //         * Added tests this test to check it out testGetDocumentOnlySelectQueries
+    //         */
+    //        //$this->assertEquals(false, $validator->isValid($queries));
+    //    }
 }

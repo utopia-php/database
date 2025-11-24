@@ -8264,7 +8264,7 @@ class Database
      */
     public function casting(Document $collection, Document $document): Document
     {
-        if ($this->adapter->getSupportForCasting()) {
+        if (!$this->adapter->getSupportForCasting()) {
             return $document;
         }
 

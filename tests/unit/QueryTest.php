@@ -524,6 +524,9 @@ class QueryTest extends TestCase
         $this->assertEquals('id1', $query->getAttribute());
         $this->assertEquals('id2', $query->getAttributeRight());
 
+        /**
+         * Inner join
+         */
         $string = Query::join(
             'users',
             'U',
@@ -544,6 +547,56 @@ class QueryTest extends TestCase
         $this->assertEquals('right', $query->getRightAlias());
         $this->assertEquals('id1', $query->getAttribute());
         $this->assertEquals('id2', $query->getAttributeRight());
+
+        /**
+         * Left join
+         */
+        $string = Query::leftJoin(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"leftJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('leftJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollection());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+        /**
+         * Left join
+         */
+        $string = Query::rightJoin(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"rightJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('rightJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollection());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+
     }
 
 }

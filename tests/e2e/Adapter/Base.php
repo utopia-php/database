@@ -24,8 +24,8 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
-//    use CollectionTests;
-//    use CustomDocumentTypeTests;
+    use CollectionTests;
+    use CustomDocumentTypeTests;
     use DocumentTests;
     use AttributeTests;
     use IndexTests;

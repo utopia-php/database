@@ -568,7 +568,7 @@ class V2 extends Validator
                 $this->validateAlias($query);
 
                 if ($query->isNested()) {
-                    if (! self::isValid($query->getValues(), $scope)) {
+                    if (! $this->isValid($query->getValues(), $scope)) {
                         throw new \Exception($this->message);
                     }
                 }
@@ -667,7 +667,7 @@ class V2 extends Validator
                     case Query::TYPE_RIGHT_JOIN:
                         $this->validateFilterQueries($query);
 
-                        if (! self::isValid($query->getValues(), 'joins')) {
+                        if (! $this->isValid($query->getValues(), 'joins')) {
                             throw new \Exception($this->message);
                         }
 

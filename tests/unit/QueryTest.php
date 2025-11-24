@@ -595,8 +595,5 @@ class QueryTest extends TestCase
         $this->assertEquals('right', $query->getRightAlias());
         $this->assertEquals('id1', $query->getAttribute());
         $this->assertEquals('id2', $query->getAttributeRight());
-
-
     }
-
 }

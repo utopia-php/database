@@ -8513,7 +8513,7 @@ class Database
     {
         foreach ($queries as $index => $query) {
             if ($query->isNested() || $query->isJoin()) {
-                $values = self::convertQueries($context, $query->getValues());
+                $values = $this->convertQueries($context, $query->getValues());
                 $query->setValues($values);
             }
 

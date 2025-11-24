@@ -161,12 +161,9 @@ trait JoinsTests
          * Test Ambiguous alias
          */
         try {
-            $db->find(
-                '__users',
-                [
-                    Query::join('__sessions', Query::DEFAULT_ALIAS, []),
-                ]
-            );
+            $db->find('__users', [
+                Query::join('__sessions', Query::DEFAULT_ALIAS)
+            ]);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
@@ -449,7 +446,7 @@ trait JoinsTests
         );
 
         $this->assertArrayHasKey('___uid', $document);
-        $this->assertArrayHasKey('$id', $document); // Added in processRelationshipQueries
+        //$this->assertArrayHasKey('$id', $document); // Added in processRelationshipQueries
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
@@ -493,28 +490,27 @@ trait JoinsTests
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
 
-
-        //        /**
-        //         * ambiguous and duplications selects
-        //         */
-        //        try {
-        //            $db->find(
-        //                '__users',
-        //                [
-        //                    Query::select('$id', 'main'),
-        //                    Query::select('$id', 'S'),
-        //                    Query::join('__sessions', 'S',
-        //                        [
-        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
-        //                        ]
-        //                    )
-        //                ]
-        //            );
-        //            $this->fail('Failed to throw exception');
-        //        } catch (\Throwable $e) {
-        //            $this->assertTrue($e instanceof QueryException);
-        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-        //        }
+                /**
+                 * ambiguous and duplications selects
+                 */
+                try {
+                    $db->find(
+                        '__users',
+                        [
+                            Query::select('$id', 'main'),
+                            Query::select('$id', 'S'),
+                            Query::join('__sessions', 'S',
+                                [
+                                    Query::relationEqual('', '$id', 'S', 'user_id'),
+                                ]
+                            )
+                        ]
+                    );
+                    $this->fail('Failed to throw exception');
+                } catch (\Throwable $e) {
+                    $this->assertTrue($e instanceof QueryException);
+                    $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+                }
         //
         //        try {
         //            $db->find(

@@ -8302,7 +8302,7 @@ class Database
      */
     public function casting(QueryContext $context, Document $document, array $selects = []): Document
     {
-        if ($this->adapter->getSupportForCasting()) {
+        if (!$this->adapter->getSupportForCasting()) {
             return $document;
         }
 

@@ -2923,7 +2923,7 @@ class Mongo extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return true;
+        return false;
     }
 
     /**

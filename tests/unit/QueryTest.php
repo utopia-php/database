@@ -285,7 +285,6 @@ class QueryTest extends TestCase
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('alias', $query->getAlias());
         $this->assertEquals('as', $query->getAs());
-        //$this->assertEquals(['title', 'director'], $query->getValues());
 
         // Test new date query wrapper methods parsing
         $query = Query::parse(Query::createdBefore('2023-01-01T00:00:00.000Z')->toString());
@@ -509,4 +508,42 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::DEFAULT_ALIAS, $query1->getRightAlias());
         $this->assertEquals('', $query1->getAttributeRight());
     }
+
+    /**
+     * @throws QueryException
+     */
+    public function testJoinsParse(): void
+    {
+        $string = Query::relationEqual('left', 'id1', 'right', 'id2')->toString();
+        $this->assertEquals($string, '{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}');
+
+        $query = Query::parse($string);
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+        $string = Query::join(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"innerJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('innerJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollection());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+    }
+
 }

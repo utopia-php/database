@@ -449,7 +449,7 @@ trait JoinsTests
         );
 
         $this->assertArrayHasKey('___uid', $document);
-        //$this->assertArrayNotHasKey('$id', $document); // Added in processRelationshipQueries
+        $this->assertArrayHasKey('$id', $document); // Added in processRelationshipQueries
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
@@ -492,7 +492,6 @@ trait JoinsTests
         $this->assertArrayHasKey('as_boolean', $document);
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
-
 
 
         //        /**

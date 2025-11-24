@@ -68,9 +68,7 @@ class Query
 
     // Join methods
     public const TYPE_INNER_JOIN = 'innerJoin';
-
     public const TYPE_LEFT_JOIN = 'leftJoin';
-
     public const TYPE_RIGHT_JOIN = 'rightJoin';
 
     public const DEFAULT_ALIAS = 'main';
@@ -130,6 +128,12 @@ class Query
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+    ];
+
+    protected const JOINS_TYPES = [
+        self::TYPE_INNER_JOIN,
+        self::TYPE_LEFT_JOIN,
+        self::TYPE_RIGHT_JOIN,
     ];
 
     protected const FILTER_TYPES = [
@@ -430,6 +434,10 @@ class Query
             self::TYPE_OR,
             self::TYPE_AND,
             self::TYPE_SELECT,
+            self::TYPE_RELATION_EQUAL,
+            self::TYPE_INNER_JOIN,
+            self::TYPE_LEFT_JOIN,
+            self::TYPE_RIGHT_JOIN,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
             self::TYPE_VECTOR_EUCLIDEAN => true,
@@ -507,6 +515,7 @@ class Query
         $alias = $query['alias'] ?? '';
         $aliasRight = $query['aliasRight'] ?? '';
         $as = $query['as'] ?? '';
+        $collection = $query['collection'] ?? '';
 
         if (!\is_string($method)) {
             throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
@@ -524,7 +533,7 @@ class Query
             throw new QueryException('Invalid query values. Must be an array, got ' . \gettype($values));
         }
 
-        if (\in_array($method, self::LOGICAL_TYPES)) {
+        if (\in_array($method, self::LOGICAL_TYPES) || \in_array($method, self::JOINS_TYPES)) {
             foreach ($values as $index => $value) {
                 $values[$index] = self::parseQuery($value);
             }
@@ -537,6 +546,7 @@ class Query
             alias: $alias,
             attributeRight: $attributeRight,
             aliasRight: $aliasRight,
+            collection: $collection,
             as: $as,
         );
     }
@@ -587,7 +597,15 @@ class Query
             $array['as'] = $this->as;
         }
 
-        if (\in_array($array['method'], self::LOGICAL_TYPES)) {
+        if (!empty($this->collection)) {
+            $array['collection'] = $this->collection;
+        }
+
+        if ($this->isNested()) {
+            foreach ($this->values as $index => $value) {
+                $array['values'][$index] = $value->toArray();
+            }
+        } else if ($this->isJoin()) {
             foreach ($this->values as $index => $value) {
                 $array['values'][$index] = $value->toArray();
             }
@@ -1062,11 +1080,7 @@ class Query
      */
     public static function getJoinQueries(array $queries): array
     {
-        return self::getByType($queries, [
-            Query::TYPE_INNER_JOIN,
-            Query::TYPE_LEFT_JOIN,
-            Query::TYPE_RIGHT_JOIN,
-        ]);
+        return self::getByType($queries, self::JOINS_TYPES);
     }
 
     /**
@@ -1210,7 +1224,6 @@ class Query
     public static function groupByType(array $queries): array
     {
         $filters = [];
-        $joins = [];
         $selections = [];
         $limit = null;
         $offset = null;
@@ -1311,13 +1324,7 @@ class Query
      */
     public function isJoin(): bool
     {
-        $types = [self::TYPE_INNER_JOIN, self::TYPE_LEFT_JOIN, self::TYPE_RIGHT_JOIN];
-
-        if (in_array($this->getMethod(), $types)) {
-            return true;
-        }
-
-        return false;
+        return in_array($this->getMethod(), self::JOINS_TYPES);
     }
 
     public static function isFilter(string $method): bool

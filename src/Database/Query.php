@@ -605,7 +605,7 @@ class Query
             foreach ($this->values as $index => $value) {
                 $array['values'][$index] = $value->toArray();
             }
-        } else if ($this->isJoin()) {
+        } elseif ($this->isJoin()) {
             foreach ($this->values as $index => $value) {
                 $array['values'][$index] = $value->toArray();
             }

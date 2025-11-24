@@ -316,7 +316,7 @@ class V2 extends Validator
 
             switch ($attribute['type']) {
                 case Database::VAR_ID:
-                    $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
+                    $validator = new Sequence($this->idAttributeType, $attributeId === '$sequence');
                     break;
 
                 case Database::VAR_STRING:

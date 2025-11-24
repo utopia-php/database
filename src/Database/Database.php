@@ -4318,7 +4318,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
+        [$selects, $nestedSelections, $idAdded] = $this->processRelationshipQueries($relationships, $selects);
 
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions', system: true));
 
@@ -4410,6 +4410,10 @@ class Database
 
         if ($permissionsAdded) { // Or remove all queries added by system
             $document->removeAttribute('$permissions');
+        }
+
+        if ($idAdded) { // Or remove all queries added by system
+            $document->removeAttribute('$id');
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
@@ -4529,7 +4533,7 @@ class Database
                                     fn ($attr) => $attr['type'] === Database::VAR_RELATIONSHIP
                                 );
 
-                                [$selects, $nextSelects] = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
+                                [$selects, $nextSelects, $idAdded] = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
 
                                 // If parent has explicit selects, child inherits that mode
                                 // (even if nextSelects is empty, we're still in explicit mode)
@@ -7841,7 +7845,7 @@ class Database
             $cursor = [];
         }
 
-        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
+        [$selects, $nestedSelections, $idAdded] = $this->processRelationshipQueries($relationships, $selects);
 
         // Convert relationship filter queries to SQL-level subqueries
         $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
@@ -7886,6 +7890,10 @@ class Database
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
+            }
+
+            if ($idAdded) { // Or remove all queries added by system
+                $node->removeAttribute('$id');
             }
 
             $results[$index] = $node;
@@ -8745,11 +8753,13 @@ class Database
         /**
          * In order to populateDocumentRelationships we need $id
          */
+        $idAdded = false;
+
         if (\count($queries) > 0) {
             [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id', system: true));
         }
 
-        return [$queries, $nestedSelections];
+        return [$queries, $nestedSelections, $idAdded];
     }
 
     /**

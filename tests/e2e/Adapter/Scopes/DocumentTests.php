@@ -1408,7 +1408,7 @@ trait DocumentTests
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
-        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
@@ -3750,7 +3750,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);
@@ -3790,7 +3790,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);
@@ -3810,7 +3810,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);
@@ -3830,7 +3830,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
@@ -3850,7 +3850,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);
@@ -3870,7 +3870,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);

@@ -1497,7 +1497,7 @@ abstract class SQL extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForNumericCasting(): bool

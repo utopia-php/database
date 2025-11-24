@@ -1459,7 +1459,7 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayNotHasKey('$createdAt', $make);
@@ -1476,7 +1476,7 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayNotHasKey('$createdAt', $make);
@@ -1493,7 +1493,7 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
@@ -1510,7 +1510,7 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayNotHasKey('$createdAt', $make);
@@ -1527,7 +1527,7 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayNotHasKey('$createdAt', $make);

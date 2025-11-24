@@ -299,7 +299,7 @@ class V2 extends Validator
             /**
              * If the query method is spatial-only, the attribute must be a spatial type
              */
-            throw new \Exception('Invalid query: Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute);
+            throw new \Exception('Invalid query: Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attributeId);
         }
 
         if (Query::isVectorQuery($method) && $attribute['type'] !== Database::VAR_VECTOR) {

@@ -1176,19 +1176,6 @@ class Query
     }
 
     /**
-     * @param Query $query
-     * @return Document
-     */
-    public function getCursorDocument(?Query $query): Document
-    {
-        if (! is_null($query) && in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE])) {
-            return $query->getValue();
-        }
-
-        return new Document();
-    }
-
-    /**
      * @param  array<Query>  $queries
      * @return array<Query>
      */

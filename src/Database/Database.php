@@ -6723,8 +6723,6 @@ class Database
                 }
             }
 
-            $document = $this->encode($collection, $document);
-
             if (!$old->isEmpty()) {
                 // Check if document was updated after the request timestamp
                 try {

@@ -76,8 +76,11 @@ class DocumentQueriesTest extends TestCase
 
         $this->assertEquals(true, $validator->isValid($queries));
 
+        /**
+         * Check the top level is a relationship attribute
+         */
         $queries[] = Query::select('price.relation');
-        $this->assertEquals(true, $validator->isValid($queries));
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Only nested relationships allowed', $validator->getDescription());
     }
-
 }

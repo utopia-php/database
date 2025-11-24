@@ -187,6 +187,7 @@ class V2 extends Validator
 
         $isNested = false;
 
+
         if (\str_contains($attributeId, '.')) {
             /**
              * This attribute name has a special symbol `.` or is a relationship
@@ -208,6 +209,10 @@ class V2 extends Validator
 
         if (\in_array('encrypt', $attribute['filters'] ?? [])) {
             throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
+        }
+
+        if ($isNested && $attribute['type'] != Database::VAR_RELATIONSHIP) {
+            throw new \Exception('Only nested relationships allowed');
         }
 
         if ($isNested && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {

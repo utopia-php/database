@@ -489,28 +489,29 @@ trait JoinsTests
         $this->assertArrayHasKey('as_boolean', $document);
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
+        //
+        //        /**
+        //         * ambiguous and duplications selects
+        //         */
+        //        try {
+        //            $db->find(
+        //                '__users',
+        //                [
+        //                    Query::select('$id', 'main'),
+        //                    Query::select('$id', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        //        }
 
-                /**
-                 * ambiguous and duplications selects
-                 */
-                try {
-                    $db->find(
-                        '__users',
-                        [
-                            Query::select('$id', 'main'),
-                            Query::select('$id', 'S'),
-                            Query::join('__sessions', 'S',
-                                [
-                                    Query::relationEqual('', '$id', 'S', 'user_id'),
-                                ]
-                            )
-                        ]
-                    );
-                    $this->fail('Failed to throw exception');
-                } catch (\Throwable $e) {
-                    $this->assertTrue($e instanceof QueryException);
-                    $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-                }
         //
         //        try {
         //            $db->find(

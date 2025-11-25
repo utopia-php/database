@@ -8743,7 +8743,7 @@ class Database
         /**
          * In order to populateDocumentRelationships we need $id
          */
-        if (\count($queries) > 0) {
+        if (!empty($relationships)) {
             [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id', system: true));
         }
 

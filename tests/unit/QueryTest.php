@@ -573,7 +573,7 @@ class QueryTest extends TestCase
         $this->assertEquals('id2', $query->getAttributeRight());
 
         /**
-         * Left join
+         * Right join
          */
         $string = Query::rightJoin(
             'users',

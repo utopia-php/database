@@ -441,47 +441,6 @@ class V2 extends Validator
     /**
      * @throws \Exception
      */
-    public function validateSelect(Query $query): void
-    {
-        $asValidator = new AsValidator($query->getAttribute());
-        if (! $asValidator->isValid($query->getAs())) {
-            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$asValidator->getDescription());
-        }
-
-        $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
-        );
-
-        $attribute = $query->getAttribute();
-
-        if ($attribute === '*') {
-            return;
-        }
-
-        if (\in_array($attribute, $internalKeys)) {
-            //return;
-        }
-
-        $alias = $query->getAlias();
-
-        //        if (\str_contains($attribute, '.')) {
-        //            try {
-        //                // Handle attributes containing dots (e.g., relationships or special symbols)
-        //                $this->validateAttributeExist($attribute, $alias);
-        //            } catch (\Throwable $e) {
-        //                // For relationships, validate only the top-level attribute
-        //                $attribute = \explode('.', $attribute)[0];
-        //                $this->validateAttributeExist($attribute, $alias);
-        //            }
-        //        }
-
-        $this->validateAttributeExist($attribute, $alias);
-    }
-
-    /**
-     * @throws \Exception
-     */
     public function validateFulltextIndex(Query $query): void
     {
         if ($query->getMethod() !== Query::TYPE_SEARCH) {
@@ -703,13 +662,15 @@ class V2 extends Validator
 
                         break;
                     case Query::TYPE_SELECT:
-                        $validator = new AsValidator($query->getAttribute());
-
-                        if (! $validator->isValid($query->getAs())) {
-                            throw new \Exception('Invalid Query Select: '.$validator->getDescription());
+                        $asValidator = new AsValidator($query->getAttribute());
+                        if (! $asValidator->isValid($query->getAs())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' '.$asValidator->getDescription());
                         }
 
-                        $this->validateSelect($query);
+                        if ($query->getAttribute() !== '*') {
+                            $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        }
+
 
                         if ($query->getAttribute() === '*') {
                             $collection = $this->context->getCollectionByAlias($query->getAlias());

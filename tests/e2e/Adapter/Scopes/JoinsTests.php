@@ -366,7 +366,7 @@ trait JoinsTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid Query Select: "as" must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
+            $this->assertEquals('Invalid query: Select "as" must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
         }
 
         try {
@@ -376,7 +376,7 @@ trait JoinsTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid Query Select: Invalid "as" on attribute "*"', $e->getMessage());
+            $this->assertEquals('Invalid query: Select Invalid "as" on attribute "*"', $e->getMessage());
         }
 
         /**
@@ -399,7 +399,7 @@ trait JoinsTests
         $this->assertArrayNotHasKey('$permissions', $document);
         $this->assertArrayHasKey('___permissions', $document);
         $this->assertArrayHasKey('___uid', $document);
-        //$this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
@@ -427,7 +427,7 @@ trait JoinsTests
         );
         $this->assertArrayHasKey('___permissions', $document);
         $this->assertArrayNotHasKey('$permissions', $document);
-        //$this->assertArrayNotHasKey('$id', $document); // Added in processRelationshipQueries
+        $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('$collection', $document);
 
         /**
@@ -446,7 +446,7 @@ trait JoinsTests
         );
 
         $this->assertArrayHasKey('___uid', $document);
-        //$this->assertArrayHasKey('$id', $document); // Added in processRelationshipQueries
+        $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);

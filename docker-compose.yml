@@ -189,7 +189,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u $$MYSQL_USER -p $$MYSQL_PASSWORD"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -211,7 +211,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u $$MYSQL_USER -p $$MYSQL_PASSWORD"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5

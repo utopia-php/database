@@ -1797,6 +1797,12 @@ abstract class SQL extends Adapter
             case Query::TYPE_VECTOR_COSINE:
             case Query::TYPE_VECTOR_EUCLIDEAN:
                 throw new DatabaseException('Vector queries are not supported by this database');
+            case Query::TYPE_INNER_JOIN:
+                return 'JOIN';
+            case Query::TYPE_RIGHT_JOIN:
+                return 'RIGHT JOIN';
+            case Query::TYPE_LEFT_JOIN:
+                return 'LEFT JOIN';
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -3085,7 +3091,7 @@ abstract class SQL extends Adapter
                 $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
             }
 
-            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            $sqlJoin .= "{$this->getSQLOperator($join->getMethod())} {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
             ON {$this->getSQLConditions($join->getValues(), $binds)}
             {$permissions}
             {$this->getTenantQuery($collection, $join->getAlias())}
@@ -3148,6 +3154,7 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {
+            var_dump($sql);
             $stmt = $this->getPDO()->prepare($sql);
 
             foreach ($binds as $key => $value) {

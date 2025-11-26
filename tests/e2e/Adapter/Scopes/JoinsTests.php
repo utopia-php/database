@@ -489,7 +489,7 @@ trait JoinsTests
         $this->assertArrayHasKey('as_boolean', $document);
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
-        //
+
         //        /**
         //         * ambiguous and duplications selects
         //         */
@@ -566,5 +566,188 @@ trait JoinsTests
         //            $this->assertTrue($e instanceof QueryException);
         //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
         //        }
+    }
+
+    public function testLeftJoin(): void
+    {
+        /**
+         * @var Database $db
+         */
+        $db = static::getDatabase();
+
+        if (!$db->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = $db->find(
+            '__users',
+            [
+                Query::select('username'),
+                Query::select('float', 'B'),
+                Query::leftJoin(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('', '$id', 'B', 'user_id'),
+                    ]
+                ),
+                Query::orderAsc('username')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+
+        /**
+         * Left join skip permissions
+         */
+        $documents = $db->getAuthorization()->skip(function () use ($db){
+            return $db->find(
+                '__users',
+                [
+                    Query::select('username'),
+                    Query::select('float', 'B'),
+                    Query::leftJoin(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', 'B', 'user_id'),
+                        ]
+                    ),
+                    Query::orderAsc('username'),
+                    Query::orderAsc('float', 'B')
+                ]
+            );
+        });
+        $this->assertEquals(3, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[2]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[2]->getAttribute('float'));
+
+        /**
+         * Left join with additional query in ON clause
+         */
+        $documents = $db->find(
+            '__users',
+            [
+                Query::select('username'),
+                Query::select('float', 'B'),
+                Query::leftJoin(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('', '$id', 'B', 'user_id'),
+                        Query::equal('float', [5.5], 'B'),
+                    ]
+                ),
+                Query::orderAsc('username')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+    }
+
+    public function testRightJoin(): void
+    {
+        /**
+         * @var Database $db
+         */
+        $db = static::getDatabase();
+
+        if (!$db->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = $db->find(
+            '__sessions',
+            [
+                Query::select('float'),
+                Query::select('username', 'B'),
+                Query::rightJoin(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                    ]
+                ),
+                Query::orderAsc('username', 'B')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+
+        /**
+         * Right join skip permissions
+         */
+        $documents = $db->getAuthorization()->skip(function () use ($db){
+            return $db->find(
+                '__sessions',
+                [
+                    Query::select('float'),
+                    Query::select('username', 'B'),
+                    Query::rightJoin(
+                        '__users',
+                        'B',
+                        [
+                            Query::relationEqual('B', '$id', '', 'user_id'),
+                        ]
+                    ),
+                    Query::orderAsc('username', 'B')
+                ]
+            );
+        });
+        $this->assertEquals(3, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[2]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[2]->getAttribute('float'));
+
+        /**
+         * Right join with additional query in ON clause
+         */
+        $documents = $db->find(
+            '__sessions',
+            [
+                Query::select('float'),
+                Query::select('username', 'B'),
+                Query::rightJoin(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                        Query::equal('float', [5.5]),
+                    ]
+                ),
+                Query::orderAsc('username', 'B')
+            ]
+        );
+
+        /**
+         * Issue because right join query return nulls and permissins query + tenant
+         */
+        var_dump($documents);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
     }
 }

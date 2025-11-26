@@ -671,7 +671,6 @@ class V2 extends Validator
                             $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         }
 
-
                         if ($query->getAttribute() === '*') {
                             $collection = $this->context->getCollectionByAlias($query->getAlias());
                             $attributes = $this->schema[$collection->getId()];
@@ -722,17 +721,6 @@ class V2 extends Validator
                     case Query::TYPE_VECTOR_COSINE:
                     case Query::TYPE_VECTOR_EUCLIDEAN:
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-
-                        // Handle dotted attributes (relationships)
-                        //                    $attributeKey = $attribute;
-                        //                    if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
-                        //                        $attributeKey = \explode('.', $attributeKey)[0];
-                        //                    }
-                        //
-                        //                    $attributeSchema = $this->schema[$attributeKey];
-                        //                    if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
-                        //                        throw new \Exception('Vector queries can only be used on vector attributes');
-                        //                    }
 
                         if (count($query->getValues()) != 1) {
                             throw new \Exception(\ucfirst($method) . ' queries require exactly one vector value.');

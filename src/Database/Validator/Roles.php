@@ -298,8 +298,6 @@ class Roles extends Validator
         }
 
         // Required and has no dimension
-        // PHPStan complains because there are currently no dimensions that are required, but there might be in future
-        // @phpstan-ignore-next-line
         if ($allowed && $required && empty($dimension)) {
             $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
             return false;

@@ -24,65 +24,65 @@ class KeyTest extends TestCase
     public function testValues(): void
     {
         // Must be strings
-        $this->assertEquals(false, $this->object->isValid(false));
-        $this->assertEquals(false, $this->object->isValid(null));
-        $this->assertEquals(false, $this->object->isValid(['value']));
-        $this->assertEquals(false, $this->object->isValid(0));
-        $this->assertEquals(false, $this->object->isValid(1.5));
-        $this->assertEquals(true, $this->object->isValid('asdas7as9as'));
-        $this->assertEquals(true, $this->object->isValid('5f058a8925807'));
+        $this->assertSame(false, $this->object->isValid(false));
+        $this->assertSame(false, $this->object->isValid(null));
+        $this->assertSame(false, $this->object->isValid(['value']));
+        $this->assertSame(false, $this->object->isValid(0));
+        $this->assertSame(false, $this->object->isValid(1.5));
+        $this->assertSame(true, $this->object->isValid('asdas7as9as'));
+        $this->assertSame(true, $this->object->isValid('5f058a8925807'));
 
         // Don't allow empty string
-        $this->assertEquals(false, $this->object->isValid(''));
-        $this->assertEquals(true, $this->object->isValid('0'));
-        $this->assertEquals(true, $this->object->isValid('null'));
+        $this->assertSame(false, $this->object->isValid(''));
+        $this->assertSame(true, $this->object->isValid('0'));
+        $this->assertSame(true, $this->object->isValid('null'));
 
         // No leading special chars
-        $this->assertEquals(false, $this->object->isValid('_asdasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('.as5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('-as5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('_asdasdasdas'));
+        $this->assertSame(false, $this->object->isValid('.as5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('-as5dasdasdas'));
 
         // Special chars allowed: underscore, period, hyphen
-        $this->assertEquals(true, $this->object->isValid('as5dadasdas_'));
-        $this->assertEquals(true, $this->object->isValid('as_5dasdasdas'));
-        $this->assertEquals(true, $this->object->isValid('as5dasdasdas.'));
-        $this->assertEquals(true, $this->object->isValid('as.5dasdasdas'));
-        $this->assertEquals(true, $this->object->isValid('as5dasdasdas-'));
-        $this->assertEquals(true, $this->object->isValid('as-5dasdasdas'));
+        $this->assertSame(true, $this->object->isValid('as5dadasdas_'));
+        $this->assertSame(true, $this->object->isValid('as_5dasdasdas'));
+        $this->assertSame(true, $this->object->isValid('as5dasdasdas.'));
+        $this->assertSame(true, $this->object->isValid('as.5dasdasdas'));
+        $this->assertSame(true, $this->object->isValid('as5dasdasdas-'));
+        $this->assertSame(true, $this->object->isValid('as-5dasdasdas'));
 
-        $this->assertEquals(false, $this->object->isValid('dasda asdasd'));
-        $this->assertEquals(false, $this->object->isValid('asd"asd6sdas'));
-        $this->assertEquals(false, $this->object->isValid('asd\'as0asdas'));
-        $this->assertEquals(false, $this->object->isValid('as!5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as@5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as#5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as$5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as%5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as^5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as&5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as*5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as(5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as)5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as+5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as=5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('dasda asdasd'));
+        $this->assertSame(false, $this->object->isValid('asd"asd6sdas'));
+        $this->assertSame(false, $this->object->isValid('asd\'as0asdas'));
+        $this->assertSame(false, $this->object->isValid('as!5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as@5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as#5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as$5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as%5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as^5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as&5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as*5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as(5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as)5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as+5dasdasdas'));
+        $this->assertSame(false, $this->object->isValid('as=5dasdasdas'));
 
         // At most 36 chars
-        $this->assertEquals(true, $this->object->isValid(str_repeat('a', 36)));
-        $this->assertEquals(false, $this->object->isValid(str_repeat('a', 256)));
+        $this->assertSame(true, $this->object->isValid(str_repeat('a', 36)));
+        $this->assertSame(false, $this->object->isValid(str_repeat('a', 256)));
 
         // Internal keys
         $validator = new Key(true);
-        $this->assertEquals(true, $validator->isValid('appwrite'));
-        $this->assertEquals(true, $validator->isValid('appwrite_'));
-        $this->assertEquals(false, $validator->isValid('_appwrite'));
-        $this->assertEquals(false, $validator->isValid('_'));
+        $this->assertSame(true, $validator->isValid('appwrite'));
+        $this->assertSame(true, $validator->isValid('appwrite_'));
+        $this->assertSame(false, $validator->isValid('_appwrite'));
+        $this->assertSame(false, $validator->isValid('_'));
 
-        $this->assertEquals(true, $validator->isValid('$id'));
-        $this->assertEquals(true, $validator->isValid('$createdAt'));
-        $this->assertEquals(true, $validator->isValid('$updatedAt'));
+        $this->assertSame(true, $validator->isValid('$id'));
+        $this->assertSame(true, $validator->isValid('$createdAt'));
+        $this->assertSame(true, $validator->isValid('$updatedAt'));
 
-        $this->assertEquals(false, $validator->isValid('$appwrite'));
-        $this->assertEquals(false, $validator->isValid('$permissions'));
-        $this->assertEquals(false, $validator->isValid('$'));
+        $this->assertSame(false, $validator->isValid('$appwrite'));
+        $this->assertSame(false, $validator->isValid('$permissions'));
+        $this->assertSame(false, $validator->isValid('$'));
     }
 }

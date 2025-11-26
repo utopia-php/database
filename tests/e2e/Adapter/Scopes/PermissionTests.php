@@ -48,11 +48,11 @@ trait PermissionTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         foreach ($results as $result) {
-            $this->assertEquals('Donald Trump', $result->getAttribute('president'));
-            $this->assertEquals($permissions, $result->getPermissions());
+            $this->assertSame('Donald Trump', $result->getAttribute('president'));
+            $this->assertSame($permissions, $result->getPermissions());
         }
 
         /**
@@ -71,20 +71,20 @@ trait PermissionTests
             }
         );
 
-        $this->assertEquals(3, $modified);
+        $this->assertSame(3, $modified);
 
         foreach ($results as $result) {
-            $this->assertEquals('George Washington', $result->getAttribute('president'));
-            $this->assertEquals($permissions, $result->getPermissions());
+            $this->assertSame('George Washington', $result->getAttribute('president'));
+            $this->assertSame($permissions, $result->getPermissions());
         }
 
         $documents = $database->find(__FUNCTION__);
 
-        $this->assertEquals(3, count($documents));
+        $this->assertSame(3, count($documents));
 
         foreach ($documents as $document) {
-            $this->assertEquals('George Washington', $document->getAttribute('president'));
-            $this->assertEquals($permissions, $document->getPermissions());
+            $this->assertSame('George Washington', $document->getAttribute('president'));
+            $this->assertSame($permissions, $document->getPermissions());
         }
 
         /**
@@ -110,21 +110,21 @@ trait PermissionTests
             }
         );
 
-        $this->assertEquals(3, $modified);
+        $this->assertSame(3, $modified);
 
         foreach ($results as $result) {
-            $this->assertEquals('Joe biden', $result->getAttribute('president'));
-            $this->assertEquals($permissions, $result->getPermissions());
+            $this->assertSame('Joe biden', $result->getAttribute('president'));
+            $this->assertSame($permissions, $result->getPermissions());
             $this->assertArrayNotHasKey('$skipPermissionsUpdate', $result);
         }
 
         $documents = $database->find(__FUNCTION__);
 
-        $this->assertEquals(3, count($documents));
+        $this->assertSame(3, count($documents));
 
         foreach ($documents as $document) {
-            $this->assertEquals('Joe biden', $document->getAttribute('president'));
-            $this->assertEquals($permissions, $document->getPermissions());
+            $this->assertSame('Joe biden', $document->getAttribute('president'));
+            $this->assertSame($permissions, $document->getPermissions());
         }
 
         /**
@@ -144,25 +144,25 @@ trait PermissionTests
             }
         );
 
-        $this->assertEquals(3, $modified);
+        $this->assertSame(3, $modified);
 
         foreach ($results as $result) {
-            $this->assertEquals('Richard Nixon', $result->getAttribute('president'));
-            $this->assertEquals([], $result->getPermissions());
+            $this->assertSame('Richard Nixon', $result->getAttribute('president'));
+            $this->assertSame([], $result->getPermissions());
         }
 
         $documents = $database->find(__FUNCTION__);
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
 
         $this->getDatabase()->getAuthorization()->disable();
         $documents = $database->find(__FUNCTION__);
         $this->getDatabase()->getAuthorization()->reset();
 
-        $this->assertEquals(3, count($documents));
+        $this->assertSame(3, count($documents));
 
         foreach ($documents as $document) {
-            $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
-            $this->assertEquals([], $document->getPermissions());
+            $this->assertSame('Richard Nixon', $document->getAttribute('president'));
+            $this->assertSame([], $document->getPermissions());
             $this->assertArrayNotHasKey('$skipPermissionsUpdate', $document);
         }
     }
@@ -181,7 +181,7 @@ trait PermissionTests
         $document = $database->createDocument(__FUNCTION__, new Document());
 
         $this->assertArrayHasKey('$permissions', $document);
-        $this->assertEquals([], $document->getAttribute('$permissions'));
+        $this->assertSame([], $document->getAttribute('$permissions'));
 
         $documents = [];
 
@@ -194,10 +194,10 @@ trait PermissionTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
         foreach ($results as $result) {
             $this->assertArrayHasKey('$permissions', $result);
-            $this->assertEquals([], $result->getAttribute('$permissions'));
+            $this->assertSame([], $result->getAttribute('$permissions'));
         }
     }
 
@@ -231,7 +231,7 @@ trait PermissionTests
 
         $document = $database->getDocument($document->getCollection(), $document->getId());
 
-        $this->assertEquals(true, $document->isEmpty());
+        $this->assertSame(true, $document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
@@ -267,7 +267,7 @@ trait PermissionTests
 
         // Document should not be updated as there is no change.
         // It should also not throw any authorization exception without any permission because of no change.
-        $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
+        $this->assertSame($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         $document = $database->createDocument('documents', new Document([
             '$id' => ID::unique(),
@@ -361,8 +361,8 @@ trait PermissionTests
             return $database->find($collection);
         });
 
-        $this->assertEquals(10, $modified);
-        $this->assertEquals(11, \count($documents));
+        $this->assertSame(10, $modified);
+        $this->assertSame(11, \count($documents));
 
         $modifiedDocuments = array_filter($documents, function (Document $document) {
             return $document->getAttribute('$permissions') == [
@@ -399,7 +399,7 @@ trait PermissionTests
             'string' => 'text📝 updated',
         ]));
 
-        $this->assertEquals(10, $modified);
+        $this->assertSame(10, $modified);
 
         $documents = $this->getDatabase()->getAuthorization()->skip(function () use ($collection) {
             return $this->getDatabase()->find($collection);
@@ -417,7 +417,7 @@ trait PermissionTests
         });
 
         foreach ($modifiedDocuments as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertSame('text📝 updated', $document->getAttribute('string'));
         }
     }
 
@@ -784,7 +784,7 @@ trait PermissionTests
             $collection->getId()
         );
 
-        $this->assertEquals(1, $documents);
+        $this->assertSame(1, $documents);
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
@@ -793,7 +793,7 @@ trait PermissionTests
             $collection->getId()
         );
 
-        $this->assertEquals(1, $documents);
+        $this->assertSame(1, $documents);
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('unknown')->toString());
@@ -802,7 +802,7 @@ trait PermissionTests
             $collection->getId()
         );
 
-        $this->assertEquals(0, $documents);
+        $this->assertSame(0, $documents);
     }
 
     /**
@@ -1248,8 +1248,8 @@ trait PermissionTests
 
         $docs = $this->getDatabase()->getAuthorization()->skip(fn () => $database->find('animals'));
         $this->assertCount(1, $docs);
-        $this->assertEquals('cat', $docs[0]['$id']);
-        $this->assertEquals('newCat', $docs[0]['type']);
+        $this->assertSame('cat', $docs[0]['$id']);
+        $this->assertSame('newCat', $docs[0]['type']);
     }
 
     public function testCreateRelationDocumentWithoutUpdatePermission(): void
@@ -1296,7 +1296,7 @@ trait PermissionTests
                 ],
             ],
         ]));
-        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
+        $this->assertSame('child1', $parent->getAttribute('children')[0]->getId());
         $parent->setAttribute('children', [
             [
                 '$id' => 'child2',
@@ -1304,7 +1304,7 @@ trait PermissionTests
         ]);
         $updatedParent = $database->updateDocument('parentRelationTest', 'parent1', $parent);
 
-        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
+        $this->assertSame('child2', $updatedParent->getAttribute('children')[0]->getId());
 
         $database->deleteCollection('parentRelationTest');
         $database->deleteCollection('childRelationTest');

@@ -48,10 +48,10 @@ trait VectorTests
 
         $this->assertNotNull($embeddingAttr);
         $this->assertNotNull($largeEmbeddingAttr);
-        $this->assertEquals(Database::VAR_VECTOR, $embeddingAttr['type']);
-        $this->assertEquals(3, $embeddingAttr['size']);
-        $this->assertEquals(Database::VAR_VECTOR, $largeEmbeddingAttr['type']);
-        $this->assertEquals(128, $largeEmbeddingAttr['size']);
+        $this->assertSame(Database::VAR_VECTOR, $embeddingAttr['type']);
+        $this->assertSame(3, $embeddingAttr['size']);
+        $this->assertSame(Database::VAR_VECTOR, $largeEmbeddingAttr['type']);
+        $this->assertSame(128, $largeEmbeddingAttr['size']);
 
         // Cleanup
         $database->deleteCollection('vectorCollection');
@@ -142,9 +142,9 @@ trait VectorTests
         $this->assertNotEmpty($doc2->getId());
         $this->assertNotEmpty($doc3->getId());
 
-        $this->assertEquals([1.0, 0.0, 0.0], $doc1->getAttribute('embedding'));
-        $this->assertEquals([0.0, 1.0, 0.0], $doc2->getAttribute('embedding'));
-        $this->assertEquals([0.0, 0.0, 1.0], $doc3->getAttribute('embedding'));
+        $this->assertSame([1.0, 0.0, 0.0], $doc1->getAttribute('embedding'));
+        $this->assertSame([0.0, 1.0, 0.0], $doc2->getAttribute('embedding'));
+        $this->assertSame([0.0, 0.0, 1.0], $doc3->getAttribute('embedding'));
 
         // Cleanup
         $database->deleteCollection('vectorDocuments');
@@ -230,7 +230,7 @@ trait VectorTests
 
         $this->assertCount(2, $results);
         // The most similar vector should be the one closest to [1.0, 0.0, 0.0]
-        $this->assertEquals('Test 1', $results[0]->getAttribute('name'));
+        $this->assertSame('Test 1', $results[0]->getAttribute('name'));
 
         // Test vector query with limit of 1
         $results = $database->find('vectorQueries', [
@@ -239,7 +239,7 @@ trait VectorTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('Test 2', $results[0]->getAttribute('name'));
+        $this->assertSame('Test 2', $results[0]->getAttribute('name'));
 
         // Test vector query combined with other filters
         $results = $database->find('vectorQueries', [
@@ -260,7 +260,7 @@ trait VectorTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('Test 3', $results[0]->getAttribute('name'));
+        $this->assertSame('Test 3', $results[0]->getAttribute('name'));
 
         // Test vector query with offset - skip first result
         $results = $database->find('vectorQueries', [
@@ -296,7 +296,7 @@ trait VectorTests
         // Test 2 dot product: 0.4*0.0 + 0.6*1.0 + 0.0*0.0 = 0.6
         // Test 3 dot product: 0.4*0.5 + 0.6*0.5 + 0.0*0.0 = 0.5
         // So Test 2 should come first (higher dot product with negative inner product operator)
-        $this->assertEquals('Test 2', $results[0]->getAttribute('name'));
+        $this->assertSame('Test 2', $results[0]->getAttribute('name'));
 
         // Cleanup
         $database->deleteCollection('vectorQueries');
@@ -519,7 +519,7 @@ trait VectorTests
         ]));
 
         $this->assertCount(1536, $doc->getAttribute('embedding'));
-        $this->assertEquals(1.0, $doc->getAttribute('embedding')[0]);
+        $this->assertSame(1.0, $doc->getAttribute('embedding')[0]);
 
         // Test vector search on large vectors
         $searchVector = array_fill(0, 1536, 0.0);
@@ -557,21 +557,21 @@ trait VectorTests
             'embedding' => [1.0, 0.0, 0.0]
         ]));
 
-        $this->assertEquals([1.0, 0.0, 0.0], $doc->getAttribute('embedding'));
+        $this->assertSame([1.0, 0.0, 0.0], $doc->getAttribute('embedding'));
 
         // Update the vector
         $updated = $database->updateDocument('vectorUpdates', $doc->getId(), new Document([
             'embedding' => [0.0, 1.0, 0.0]
         ]));
 
-        $this->assertEquals([0.0, 1.0, 0.0], $updated->getAttribute('embedding'));
+        $this->assertSame([0.0, 1.0, 0.0], $updated->getAttribute('embedding'));
 
         // Test partial update (should replace entire vector)
         $updated2 = $database->updateDocument('vectorUpdates', $doc->getId(), new Document([
             'embedding' => [0.5, 0.5, 0.5]
         ]));
 
-        $this->assertEquals([0.5, 0.5, 0.5], $updated2->getAttribute('embedding'));
+        $this->assertSame([0.5, 0.5, 0.5], $updated2->getAttribute('embedding'));
 
         // Cleanup
         $database->deleteCollection('vectorUpdates');
@@ -617,7 +617,7 @@ trait VectorTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('Doc 1', $results[0]->getAttribute('name'));
+        $this->assertSame('Doc 1', $results[0]->getAttribute('name'));
 
         // Query by second vector
         $results = $database->find('multiVector', [
@@ -625,7 +625,7 @@ trait VectorTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('Doc 2', $results[0]->getAttribute('name'));
+        $this->assertSame('Doc 2', $results[0]->getAttribute('name'));
 
         // Cleanup
         $database->deleteCollection('multiVector');
@@ -752,8 +752,8 @@ trait VectorTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('AI', $results[0]->getAttribute('category'));
-        $this->assertEquals('Machine Learning Basics', $results[0]->getAttribute('title'));
+        $this->assertSame('AI', $results[0]->getAttribute('category'));
+        $this->assertSame('Machine Learning Basics', $results[0]->getAttribute('title'));
 
         // Combine vector search with text search
         $results = $database->find('vectorTextSearch', [
@@ -904,7 +904,7 @@ trait VectorTests
         $this->assertCount(10, $results2);
 
         // Results should be the same
-        $this->assertEquals(
+        $this->assertSame(
             array_map(fn ($d) => $d->getId(), $results1),
             array_map(fn ($d) => $d->getId(), $results2)
         );
@@ -996,7 +996,7 @@ trait VectorTests
 
         // For cosine similarity, [3, 4, 0] has similarity 3/5 = 0.6 with [1, 0, 0]
         // So [1, 0, 0] should be first (similarity = 1.0)
-        $this->assertEquals([1.0, 0.0, 0.0], $results[0]->getAttribute('embedding'));
+        $this->assertSame([1.0, 0.0, 0.0], $results[0]->getAttribute('embedding'));
 
         // Cleanup
         $database->deleteCollection('vectorNorm');
@@ -1301,13 +1301,13 @@ trait VectorTests
         ]);
 
         $this->assertCount(2, $results);
-        $this->assertEquals('Parent 1', $results[0]->getAttribute('name'));
+        $this->assertSame('Parent 1', $results[0]->getAttribute('name'));
 
         // Verify relationships are intact
         $parent1Fetched = $database->getDocument('vectorParent', $parent1->getId());
         $children = $parent1Fetched->getAttribute('children');
         $this->assertCount(1, $children);
-        $this->assertEquals('Child 1', $children[0]->getAttribute('title'));
+        $this->assertSame('Child 1', $children[0]->getAttribute('title'));
 
         // Query with vector and relationship filter combined
         $results = $database->find('vectorParent', [
@@ -1376,7 +1376,7 @@ trait VectorTests
         ]);
 
         $this->assertCount(1, $results);
-        $this->assertEquals('Book 1', $results[0]->getAttribute('title'));
+        $this->assertSame('Book 1', $results[0]->getAttribute('title'));
 
         // Query authors and verify relationship
         $authorFetched = $database->getDocument('vectorAuthors', $author->getId());
@@ -1409,7 +1409,7 @@ trait VectorTests
             'embedding' => [0.0, 0.0, 0.0]
         ]));
 
-        $this->assertEquals([0.0, 0.0, 0.0], $doc->getAttribute('embedding'));
+        $this->assertSame([0.0, 0.0, 0.0], $doc->getAttribute('embedding'));
 
         // Create another document with non-zero vector
         $doc2 = $database->createDocument('vectorZeros', new Document([
@@ -1903,8 +1903,8 @@ trait VectorTests
 
         // Last update should win
         $final = $database->getDocument('vectorConcurrent', $doc->getId());
-        $this->assertEquals([0.0, 0.0, 1.0], $final->getAttribute('embedding'));
-        $this->assertEquals(3, $final->getAttribute('version'));
+        $this->assertSame([0.0, 0.0, 1.0], $final->getAttribute('embedding'));
+        $this->assertSame(3, $final->getAttribute('version'));
 
         // Cleanup
         $database->deleteCollection('vectorConcurrent');
@@ -2133,8 +2133,8 @@ trait VectorTests
             'embedding' => [0.5]
         ]));
 
-        $this->assertEquals([1.0], $doc1->getAttribute('embedding'));
-        $this->assertEquals([0.5], $doc2->getAttribute('embedding'));
+        $this->assertSame([1.0], $doc1->getAttribute('embedding'));
+        $this->assertSame([0.5], $doc2->getAttribute('embedding'));
 
         // Query with single dimension
         $results = $database->find('vectorSingleDim', [
@@ -2489,7 +2489,7 @@ trait VectorTests
 
         $this->assertCount(2, $results);
         foreach ($results as $doc) {
-            $this->assertEquals('active', $doc->getAttribute('status'));
+            $this->assertSame('active', $doc->getAttribute('status'));
         }
 
         // Cleanup
@@ -2534,7 +2534,7 @@ trait VectorTests
         // Should get category A documents with priority > 0
         $this->assertCount(2, $results);
         foreach ($results as $doc) {
-            $this->assertEquals('A', $doc->getAttribute('category'));
+            $this->assertSame('A', $doc->getAttribute('category'));
             $this->assertGreaterThan(0, $doc->getAttribute('priority'));
         }
 
@@ -2649,7 +2649,7 @@ trait VectorTests
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
 
         $database->deleteCollection('vectorCount');
     }
@@ -2698,7 +2698,7 @@ trait VectorTests
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
-        $this->assertEquals(60, $sum);
+        $this->assertSame(60, $sum);
 
         // Test sum with vector query and filter combined
         $sum = $database->sum('vectorSum', 'value', [
@@ -2706,7 +2706,7 @@ trait VectorTests
             Query::greaterThan('value', 15),
         ]);
 
-        $this->assertEquals(50, $sum);
+        $this->assertSame(50, $sum);
 
         $database->deleteCollection('vectorSum');
     }
@@ -2733,10 +2733,10 @@ trait VectorTests
             'embedding' => [1.0, 0.0, 0.0],
         ]));
 
-        $this->assertEquals([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
+        $this->assertSame([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
 
         $insertedDoc = $database->getDocument('vectorUpsert', 'vectorUpsert');
-        $this->assertEquals([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
+        $this->assertSame([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
 
         $updatedDoc = $database->upsertDocument('vectorUpsert', new Document([
             '$id' => 'vectorUpsert',
@@ -2747,10 +2747,10 @@ trait VectorTests
             'embedding' => [2.0, 0.0, 0.0],
         ]));
 
-        $this->assertEquals([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
+        $this->assertSame([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
 
         $updatedDoc = $database->getDocument('vectorUpsert', 'vectorUpsert');
-        $this->assertEquals([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
+        $this->assertSame([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
 
         $database->deleteCollection('vectorUpsert');
     }

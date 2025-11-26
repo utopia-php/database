@@ -62,87 +62,87 @@ trait AttributeTests
 
         $database->createCollection('attributes');
 
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'id', Database::VAR_ID, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'id', Database::VAR_ID, 0, true));
 
-        $this->assertEquals(true, $database->createIndex('attributes', 'id_index', Database::INDEX_KEY, ['id']));
-        $this->assertEquals(true, $database->createIndex('attributes', 'string1_index', Database::INDEX_KEY, ['string1']));
-        $this->assertEquals(true, $database->createIndex('attributes', 'string2_index', Database::INDEX_KEY, ['string2'], [255]));
-        $this->assertEquals(true, $database->createIndex('attributes', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]));
+        $this->assertSame(true, $database->createIndex('attributes', 'id_index', Database::INDEX_KEY, ['id']));
+        $this->assertSame(true, $database->createIndex('attributes', 'string1_index', Database::INDEX_KEY, ['string1']));
+        $this->assertSame(true, $database->createIndex('attributes', 'string2_index', Database::INDEX_KEY, ['string2'], [255]));
+        $this->assertSame(true, $database->createIndex('attributes', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(9, $collection->getAttribute('attributes'));
         $this->assertCount(4, $collection->getAttribute('indexes'));
 
         // Array
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, null, true, true));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(13, $collection->getAttribute('attributes'));
 
         // Default values
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, false, 'test'));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, false, 1));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, false, 1.5));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, false, false));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'datetime_default', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, false, 'test'));
+        $this->assertSame(true, $database->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, false, 1));
+        $this->assertSame(true, $database->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, false, 1.5));
+        $this->assertSame(true, $database->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, false, false));
+        $this->assertSame(true, $database->createAttribute('attributes', 'datetime_default', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(18, $collection->getAttribute('attributes'));
 
         // Delete
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string1'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string2'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string3'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string4'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'integer'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'bigint'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'float'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'boolean'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'id'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string1'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string2'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string3'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string4'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'integer'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'bigint'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'float'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'boolean'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'id'));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(9, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // Delete Array
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string_list'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'integer_list'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'float_list'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'boolean_list'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string_list'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'integer_list'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'float_list'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'boolean_list'));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(5, $collection->getAttribute('attributes'));
 
         // Delete default
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string_default'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'integer_default'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'float_default'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'boolean_default'));
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'datetime_default'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string_default'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'integer_default'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'float_default'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'boolean_default'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'datetime_default'));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
 
         // Test for custom chars in ID
-        $this->assertEquals(true, $database->createAttribute('attributes', 'as_5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'as5dasdasdas_', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', '.as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', '-as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'as-5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'as_5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'as5dasdasdas_', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', '.as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', '-as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'as-5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
 
         // Test non-shared tables duplicates throw duplicate
         $database->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
@@ -154,17 +154,17 @@ trait AttributeTests
         }
 
         // Test delete attribute when column does not exist
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
         sleep(1);
 
-        $this->assertEquals(true, $this->deleteColumn('attributes', 'string1'));
+        $this->assertSame(true, $this->deleteColumn('attributes', 'string1'));
 
         $collection = $database->getCollection('attributes');
         $attributes = $collection->getAttribute('attributes');
         $attribute = end($attributes);
-        $this->assertEquals('string1', $attribute->getId());
+        $this->assertSame('string1', $attribute->getId());
 
-        $this->assertEquals(true, $database->deleteAttribute('attributes', 'string1'));
+        $this->assertSame(true, $database->deleteAttribute('attributes', 'string1'));
 
         $collection = $database->getCollection('attributes');
         $attributes = $collection->getAttribute('attributes');
@@ -183,7 +183,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $this->expectException(\Exception::class);
-        $this->assertEquals(false, $database->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
+        $this->assertSame(false, $database->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
     }
     /**
     * @depends testInvalidDefaultValues
@@ -193,9 +193,9 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
-        $this->assertEquals(true, $database->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
     }
 
     public function testAttributeKeyWithSymbols(): void
@@ -205,7 +205,7 @@ trait AttributeTests
 
         $database->createCollection('attributesWithKeys');
 
-        $this->assertEquals(true, $database->createAttribute('attributesWithKeys', 'key_with.sym$bols', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('attributesWithKeys', 'key_with.sym$bols', Database::VAR_STRING, 128, true));
 
         $document = $database->createDocument('attributesWithKeys', new Document([
             'key_with.sym$bols' => 'value',
@@ -214,11 +214,11 @@ trait AttributeTests
             ]
         ]));
 
-        $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+        $this->assertSame('value', $document->getAttribute('key_with.sym$bols'));
 
         $document = $database->getDocument('attributesWithKeys', $document->getId());
 
-        $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+        $this->assertSame('value', $document->getAttribute('key_with.sym$bols'));
     }
 
     public function testAttributeNamesWithDots(): void
@@ -281,7 +281,7 @@ trait AttributeTests
             Query::select(['*']),
         ]);
 
-        $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
+        $this->assertSame('Bill clinton', $documents[0]['dots.name']);
     }
 
 
@@ -333,7 +333,7 @@ trait AttributeTests
         ]));
 
         $this->assertIsNumeric($doc->getAttribute('inStock'));
-        $this->assertEquals(100, $doc->getAttribute('inStock'));
+        $this->assertSame(100, $doc->getAttribute('inStock'));
 
         $database->updateAttributeDefault('flowers', 'inStock', null);
     }
@@ -366,20 +366,20 @@ trait AttributeTests
         $this->assertTrue($attribute);
 
         $colors = $database->getCollection('colors');
-        $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
-        $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
+        $this->assertSame('hex', $colors->getAttribute('attributes')[1]['$id']);
+        $this->assertSame('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));
 
         // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
-        $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
+        $this->assertSame('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
         $this->assertCount(1, $colors->getAttribute('indexes'));
 
         // Document should be there if adapter migrated properly
         $document = $database->findOne('colors');
         $this->assertFalse($document->isEmpty());
-        $this->assertEquals('black', $document->getAttribute('verbose'));
-        $this->assertEquals('#000000', $document->getAttribute('hex'));
-        $this->assertEquals(null, $document->getAttribute('name'));
+        $this->assertSame('black', $document->getAttribute('verbose'));
+        $this->assertSame('#000000', $document->getAttribute('hex'));
+        $this->assertSame(null, $document->getAttribute('name'));
     }
 
 
@@ -434,15 +434,15 @@ trait AttributeTests
         ]));
 
         $this->assertIsString($doc->getAttribute('cartModel'));
-        $this->assertEquals('{"color":"string","size":"number"}', $doc->getAttribute('cartModel'));
+        $this->assertSame('{"color":"string","size":"number"}', $doc->getAttribute('cartModel'));
 
         $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
 
         $doc = $database->getDocument('flowers', $doc->getId());
         $this->assertIsArray($doc->getAttribute('cartModel'));
         $this->assertCount(2, $doc->getAttribute('cartModel'));
-        $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
-        $this->assertEquals('number', $doc->getAttribute('cartModel')['size']);
+        $this->assertSame('string', $doc->getAttribute('cartModel')['color']);
+        $this->assertSame('number', $doc->getAttribute('cartModel')['size']);
     }
 
     /**
@@ -475,7 +475,7 @@ trait AttributeTests
         ]));
 
         $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
+        $this->assertSame(500, $doc->getAttribute('price'));
 
         Structure::addFormat('priceRange', function ($attribute) {
             $min = $attribute['formatOptions']['min'];
@@ -523,134 +523,134 @@ trait AttributeTests
         // price attribute
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(null, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(null, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('priceRange', $attribute['format']);
+        $this->assertSame(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', default: 100);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('priceRange', $attribute['format']);
+        $this->assertSame(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('priceRangeNew', $attribute['format']);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('priceRangeNew', $attribute['format']);
+        $this->assertSame(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: '');
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min' => 1, 'max' => 999], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame(['min' => 1, 'max' => 999], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: []);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals([], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame([], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', signed: false);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(false, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(100, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals([], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(false, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(100, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame([], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', required: true);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('integer', $attribute['type']);
-        $this->assertEquals(false, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(null, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(true, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals([], $attribute['formatOptions']);
+        $this->assertSame('integer', $attribute['type']);
+        $this->assertSame(false, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(null, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(true, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame([], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', type: Database::VAR_STRING, size: Database::LENGTH_KEY, format: '');
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];
-        $this->assertEquals('string', $attribute['type']);
-        $this->assertEquals(false, $attribute['signed']);
-        $this->assertEquals(255, $attribute['size']);
-        $this->assertEquals(null, $attribute['default']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals(true, $attribute['required']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $this->assertSame('string', $attribute['type']);
+        $this->assertSame(false, $attribute['signed']);
+        $this->assertSame(255, $attribute['size']);
+        $this->assertSame(null, $attribute['default']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame(true, $attribute['required']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame([], $collection->getAttribute('attributes')[4]['formatOptions']);
 
         // Date attribute
         $attribute = $collection->getAttribute('attributes')[2];
-        $this->assertEquals('date', $attribute['key']);
-        $this->assertEquals('string', $attribute['type']);
-        $this->assertEquals(null, $attribute['default']);
+        $this->assertSame('date', $attribute['key']);
+        $this->assertSame('string', $attribute['type']);
+        $this->assertSame(null, $attribute['default']);
 
         $database->updateAttribute('flowers', 'date', type: Database::VAR_DATETIME, size: 0, filters: ['datetime']);
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[2];
-        $this->assertEquals('datetime', $attribute['type']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(null, $attribute['default']);
-        $this->assertEquals(false, $attribute['required']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(false, $attribute['array']);
-        $this->assertEquals('', $attribute['format']);
-        $this->assertEquals([], $attribute['formatOptions']);
+        $this->assertSame('datetime', $attribute['type']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(null, $attribute['default']);
+        $this->assertSame(false, $attribute['required']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(false, $attribute['array']);
+        $this->assertSame('', $attribute['format']);
+        $this->assertSame([], $attribute['formatOptions']);
 
         $doc = $database->getDocument('flowers', 'LiliPriced');
         $this->assertIsString($doc->getAttribute('price'));
-        $this->assertEquals('500', $doc->getAttribute('price'));
+        $this->assertSame('500', $doc->getAttribute('price'));
 
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
+        $this->assertSame('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
     public function testUpdateAttributeRename(): void
@@ -665,7 +665,7 @@ trait AttributeTests
 
         $database->createCollection('rename_test');
 
-        $this->assertEquals(true, $database->createAttribute('rename_test', 'rename_me', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('rename_test', 'rename_me', Database::VAR_STRING, 128, true));
 
         $doc = $database->createDocument('rename_test', new Document([
             '$permissions' => [
@@ -677,7 +677,7 @@ trait AttributeTests
             'rename_me' => 'string'
         ]));
 
-        $this->assertEquals('string', $doc->getAttribute('rename_me'));
+        $this->assertSame('string', $doc->getAttribute('rename_me'));
 
         // Create an index to check later
         $database->createIndex('rename_test', 'renameIndexes', Database::INDEX_KEY, ['rename_me'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
@@ -691,7 +691,7 @@ trait AttributeTests
         $doc = $database->getDocument('rename_test', $doc->getId());
 
         // Check the attribute was correctly renamed
-        $this->assertEquals('string', $doc->getAttribute('renamed'));
+        $this->assertSame('string', $doc->getAttribute('renamed'));
         $this->assertArrayNotHasKey('rename_me', $doc);
 
         // Check we can update the document with the new key
@@ -699,13 +699,13 @@ trait AttributeTests
         $database->updateDocument('rename_test', $doc->getId(), $doc);
 
         $doc = $database->getDocument('rename_test', $doc->getId());
-        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+        $this->assertSame('string2', $doc->getAttribute('renamed'));
 
         // Check collection
         $collection = $database->getCollection('rename_test');
-        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
-        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
+        $this->assertSame('renamed', $collection->getAttribute('attributes')[0]['key']);
+        $this->assertSame('renamed', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertSame('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
         $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
 
@@ -731,24 +731,24 @@ trait AttributeTests
 
         $collection = $database->getCollection('rename_test');
 
-        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
-        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
+        $this->assertSame('renamed', $collection->getAttribute('attributes')[0]['key']);
+        $this->assertSame('renamed', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertSame('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
         $doc = $database->getDocument('rename_test', $doc->getId());
 
-        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+        $this->assertSame('string2', $doc->getAttribute('renamed'));
         $this->assertArrayNotHasKey('rename_me', $doc->getAttributes());
 
         // Check the metadata was correctly updated
         $attribute = $collection->getAttribute('attributes')[0];
-        $this->assertEquals('renamed', $attribute['key']);
-        $this->assertEquals('renamed', $attribute['$id']);
+        $this->assertSame('renamed', $attribute['key']);
+        $this->assertSame('renamed', $attribute['$id']);
 
         // Check the indexes were updated
         $index = $collection->getAttribute('indexes')[0];
-        $this->assertEquals('renamed', $index->getAttribute('attributes')[0]);
-        $this->assertEquals(1, count($collection->getAttribute('indexes')));
+        $this->assertSame('renamed', $index->getAttribute('attributes')[0]);
+        $this->assertSame(1, count($collection->getAttribute('indexes')));
 
         // Try and create new document with new key
         $doc = $database->createDocument('rename_test', new Document([
@@ -761,7 +761,7 @@ trait AttributeTests
             'renamed' => 'string'
         ]));
 
-        $this->assertEquals('string', $doc->getAttribute('renamed'));
+        $this->assertSame('string', $doc->getAttribute('renamed'));
 
         // Make sure we can't create a new attribute with the old key
         try {
@@ -788,7 +788,7 @@ trait AttributeTests
 
         $doc = $database->getDocument('rename_test', $doc->getId());
 
-        $this->assertEquals('string', $doc->getAttribute('renamed-test'));
+        $this->assertSame('string', $doc->getAttribute('renamed-test'));
         $this->assertArrayNotHasKey('renamed', $doc->getAttributes());
     }
 
@@ -832,7 +832,7 @@ trait AttributeTests
         $collection = $database->createCollection('width_limit');
 
         $init = $database->getAdapter()->getAttributeWidth($collection);
-        $this->assertEquals(1067, $init);
+        $this->assertSame(1067, $init);
 
         $attribute = new Document([
             '$id' => ID::custom('varchar_100'),
@@ -845,7 +845,7 @@ trait AttributeTests
             'filters' => [],
         ]);
         $res = $database->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(401, $res - $init); // 100 * 4 + 1 (length)
+        $this->assertSame(401, $res - $init); // 100 * 4 + 1 (length)
 
         $attribute = new Document([
             '$id' => ID::custom('json'),
@@ -858,7 +858,7 @@ trait AttributeTests
             'filters' => [],
         ]);
         $res = $database->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
+        $this->assertSame(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
 
         $attribute = new Document([
             '$id' => ID::custom('text'),
@@ -871,7 +871,7 @@ trait AttributeTests
             'filters' => [],
         ]);
         $res = $database->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(20, $res - $init);
+        $this->assertSame(20, $res - $init);
 
         $attribute = new Document([
             '$id' => ID::custom('bigint'),
@@ -884,7 +884,7 @@ trait AttributeTests
             'filters' => [],
         ]);
         $res = $database->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(8, $res - $init);
+        $this->assertSame(8, $res - $init);
 
         $attribute = new Document([
             '$id' => ID::custom('date'),
@@ -897,7 +897,7 @@ trait AttributeTests
             'filters' => [],
         ]);
         $res = $database->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(7, $res - $init);
+        $this->assertSame(7, $res - $init);
     }
 
     public function testExceptionAttributeLimit(): void
@@ -932,7 +932,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Attribute limit of 1017 exceeded. Cannot create collection.', $e->getMessage());
+            $this->assertSame('Attribute limit of 1017 exceeded. Cannot create collection.', $e->getMessage());
         }
 
         /**
@@ -959,7 +959,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertSame('Column limit reached. Cannot create new attribute.', $e->getMessage());
         }
 
         try {
@@ -967,7 +967,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertSame('Column limit reached. Cannot create new attribute.', $e->getMessage());
         }
     }
 
@@ -1010,7 +1010,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Document size limit of 65535 exceeded. Cannot create collection.', $e->getMessage());
+            $this->assertSame('Document size limit of 65535 exceeded. Cannot create collection.', $e->getMessage());
         }
 
         /**
@@ -1037,7 +1037,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertSame('Row width limit reached. Cannot create new attribute.', $e->getMessage());
         }
 
         try {
@@ -1045,7 +1045,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertSame('Row width limit reached. Cannot create new attribute.', $e->getMessage());
         }
     }
 
@@ -1061,7 +1061,7 @@ trait AttributeTests
 
         $database->createCollection('resize_test');
 
-        $this->assertEquals(true, $database->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));
         $document = $database->createDocument('resize_test', new Document([
             '$id' => ID::unique(),
             '$permissions' => [
@@ -1108,8 +1108,8 @@ trait AttributeTests
         if ($database->getAdapter()->getMaxIndexLength() > 0) {
             $length = intval($database->getAdapter()->getMaxIndexLength() / 2);
 
-            $this->assertEquals(true, $database->createAttribute('resize_test', 'attr1', Database::VAR_STRING, $length, true));
-            $this->assertEquals(true, $database->createAttribute('resize_test', 'attr2', Database::VAR_STRING, $length, true));
+            $this->assertSame(true, $database->createAttribute('resize_test', 'attr1', Database::VAR_STRING, $length, true));
+            $this->assertSame(true, $database->createAttribute('resize_test', 'attr2', Database::VAR_STRING, $length, true));
 
             /**
              * No index length provided, we are able to validate
@@ -1120,7 +1120,7 @@ trait AttributeTests
                 $database->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                $this->assertSame('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
             }
 
             $database->deleteIndex('resize_test', 'index1');
@@ -1133,14 +1133,14 @@ trait AttributeTests
 
             $collection = $database->getCollection('resize_test');
             $indexes = $collection->getAttribute('indexes', []);
-            $this->assertEquals(null, $indexes[0]['lengths'][0]);
-            $this->assertEquals(null, $indexes[0]['lengths'][1]);
+            $this->assertSame(null, $indexes[0]['lengths'][0]);
+            $this->assertSame(null, $indexes[0]['lengths'][1]);
 
             try {
                 $database->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                $this->assertSame('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
             }
 
             $database->deleteIndex('resize_test', 'index1');
@@ -1153,8 +1153,8 @@ trait AttributeTests
 
             $collection = $database->getCollection('resize_test');
             $indexes = $collection->getAttribute('indexes', []);
-            $this->assertEquals(50, $indexes[0]['lengths'][0]);
-            $this->assertEquals(50, $indexes[0]['lengths'][1]);
+            $this->assertSame(50, $indexes[0]['lengths'][0]);
+            $this->assertSame(50, $indexes[0]['lengths'][1]);
 
             $database->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
         }
@@ -1223,8 +1223,8 @@ trait AttributeTests
         $database->updateDocument('resize_test', $document->getId(), $document);
         $checkDoc = $database->getDocument('resize_test', $document->getId());
 
-        $this->assertEquals($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
-        $this->assertEquals($size, strlen($checkDoc->getAttribute('resize_me')));
+        $this->assertSame($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
+        $this->assertSame($size, strlen($checkDoc->getAttribute('resize_me')));
 
         return $checkDoc;
     }
@@ -1237,10 +1237,10 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->assertSame(true, $database->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
 
         try {
-            $this->assertEquals(true, $database->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+            $this->assertSame(true, $database->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
         } catch (Throwable $e) {
             self::assertTrue($e instanceof DuplicateException);
         }
@@ -1257,7 +1257,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $database->deleteCollection('attributes');
-        $this->assertEquals(1, 1);
+        $this->assertSame(1, 1);
     }
 
     /**
@@ -1281,7 +1281,7 @@ trait AttributeTests
             Permission::create(Role::any()),
         ]);
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'booleans',
             Database::VAR_BOOLEAN,
@@ -1290,7 +1290,7 @@ trait AttributeTests
             array: true
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'names',
             Database::VAR_STRING,
@@ -1299,7 +1299,7 @@ trait AttributeTests
             array: true
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'cards',
             Database::VAR_STRING,
@@ -1308,7 +1308,7 @@ trait AttributeTests
             array: true
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'numbers',
             Database::VAR_INTEGER,
@@ -1317,7 +1317,7 @@ trait AttributeTests
             array: true
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'age',
             Database::VAR_INTEGER,
@@ -1326,7 +1326,7 @@ trait AttributeTests
             signed: false
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'tv_show',
             Database::VAR_STRING,
@@ -1335,7 +1335,7 @@ trait AttributeTests
             signed: false,
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'short',
             Database::VAR_STRING,
@@ -1345,7 +1345,7 @@ trait AttributeTests
             array: true
         ));
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'pref',
             Database::VAR_STRING,
@@ -1360,7 +1360,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
+                $this->assertSame('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
             }
         }
 
@@ -1368,12 +1368,12 @@ trait AttributeTests
 
         $doc = $database->getCollection($collection);
         $attribute = $doc->getAttribute('attributes')[0];
-        $this->assertEquals('boolean', $attribute['type']);
-        $this->assertEquals(true, $attribute['signed']);
-        $this->assertEquals(0, $attribute['size']);
-        $this->assertEquals(null, $attribute['default']);
-        $this->assertEquals(true, $attribute['array']);
-        $this->assertEquals(false, $attribute['required']);
+        $this->assertSame('boolean', $attribute['type']);
+        $this->assertSame(true, $attribute['signed']);
+        $this->assertSame(0, $attribute['size']);
+        $this->assertSame(null, $attribute['default']);
+        $this->assertSame(true, $attribute['array']);
+        $this->assertSame(false, $attribute['required']);
 
         try {
             $database->createDocument($collection, new Document([
@@ -1382,7 +1382,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
             }
         }
 
@@ -1393,7 +1393,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
             }
         }
 
@@ -1404,7 +1404,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
             }
         }
 
@@ -1415,7 +1415,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
             }
         }
 
@@ -1437,9 +1437,9 @@ trait AttributeTests
 
         $document = $database->getDocument($collection, 'id1');
 
-        $this->assertEquals(false, $document->getAttribute('booleans')[0]);
-        $this->assertEquals('Antony', $document->getAttribute('names')[1]);
-        $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+        $this->assertSame(false, $document->getAttribute('booleans')[0]);
+        $this->assertSame('Antony', $document->getAttribute('names')[1]);
+        $this->assertSame(100, $document->getAttribute('numbers')[1]);
 
         if ($database->getAdapter()->getSupportForIndexArray()) {
             /**
@@ -1457,7 +1457,7 @@ trait AttributeTests
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+                $this->assertSame("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
             /**
@@ -1468,7 +1468,7 @@ trait AttributeTests
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+                $this->assertSame("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
             /**
@@ -1479,7 +1479,7 @@ trait AttributeTests
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+                $this->assertSame("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
         } else {
@@ -1495,9 +1495,9 @@ trait AttributeTests
                 }
             } catch (Throwable $e) {
                 if ($database->getAdapter()->getSupportForFulltextIndex()) {
-                    $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+                    $this->assertSame('"Fulltext" index is forbidden on array attributes', $e->getMessage());
                 } else {
-                    $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+                    $this->assertSame('Fulltext index is not supported', $e->getMessage());
                 }
             }
 
@@ -1508,14 +1508,14 @@ trait AttributeTests
                 }
             } catch (Throwable $e) {
                 if ($database->getAdapter()->getSupportForAttributes()) {
-                    $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                    $this->assertSame('An index may only contain one array attribute', $e->getMessage());
                 } else {
-                    $this->assertEquals('Index already exists', $e->getMessage());
+                    $this->assertSame('Index already exists', $e->getMessage());
                 }
             }
         }
 
-        $this->assertEquals(true, $database->createAttribute(
+        $this->assertSame(true, $database->createAttribute(
             $collection,
             'long_size',
             Database::VAR_STRING,
@@ -1535,7 +1535,7 @@ trait AttributeTests
                     $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                     $this->fail('Failed to throw exception');
                 } catch (Throwable $e) {
-                    $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                    $this->assertSame('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
                 }
             }
 
@@ -1545,7 +1545,7 @@ trait AttributeTests
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
+                $this->assertSame('Cannot set a length on "integer" attributes', $e->getMessage());
             }
 
             $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
@@ -1559,7 +1559,7 @@ trait AttributeTests
                 ]);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
+                $this->assertSame('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
             }
 
             try {
@@ -1568,7 +1568,7 @@ trait AttributeTests
                 ]);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
+                $this->assertSame('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
             }
 
             $documents = $database->find($collection, [
@@ -1611,8 +1611,8 @@ trait AttributeTests
 
         $database->createCollection('datetime');
         if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->assertEquals(true, $database->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
-            $this->assertEquals(true, $database->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+            $this->assertSame(true, $database->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
+            $this->assertSame(true, $database->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
         }
 
         try {
@@ -1639,10 +1639,10 @@ trait AttributeTests
             'date' => DateTime::now(),
         ]));
 
-        $this->assertEquals(29, strlen($doc->getCreatedAt()));
-        $this->assertEquals(29, strlen($doc->getUpdatedAt()));
-        $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));
-        $this->assertEquals('+00:00', substr($doc->getUpdatedAt(), -6));
+        $this->assertSame(29, strlen($doc->getCreatedAt()));
+        $this->assertSame(29, strlen($doc->getUpdatedAt()));
+        $this->assertSame('+00:00', substr($doc->getCreatedAt(), -6));
+        $this->assertSame('+00:00', substr($doc->getUpdatedAt(), -6));
         $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getCreatedAt());
         $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
 
@@ -1651,15 +1651,15 @@ trait AttributeTests
         $min = $database->getAdapter()->getMinDateTime();
         $max = $database->getAdapter()->getMaxDateTime();
         $dateValidator = new DatetimeValidator($min, $max);
-        $this->assertEquals(null, $document->getAttribute('date2'));
-        $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
-        $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));
+        $this->assertSame(null, $document->getAttribute('date2'));
+        $this->assertSame(true, $dateValidator->isValid($document->getAttribute('date')));
+        $this->assertSame(false, $dateValidator->isValid($document->getAttribute('date2')));
 
         $documents = $database->find('datetime', [
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
             Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
         ]);
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
 
         $documents = $database->find('datetime', [
             Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
@@ -1707,7 +1707,7 @@ trait AttributeTests
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertTrue($e instanceof QueryException);
-                $this->assertEquals('Invalid query: Query value is invalid for attribute "$createdAt"', $e->getMessage());
+                $this->assertSame('Invalid query: Query value is invalid for attribute "$createdAt"', $e->getMessage());
             }
 
             try {
@@ -1719,7 +1719,7 @@ trait AttributeTests
                 }
             } catch (Throwable $e) {
                 $this->assertTrue($e instanceof QueryException);
-                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
+                $this->assertSame('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
             }
         }
 
@@ -1763,11 +1763,11 @@ trait AttributeTests
         $database->createAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:['json']);
         $collection = $database->getCollection('datetime_auto_filter');
         $attribute = $collection->getAttribute('attributes')[0];
-        $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
+        $this->assertSame([Database::VAR_DATETIME,'json'], $attribute['filters']);
         $database->updateAttribute('datetime_auto', 'date_auto', Database::VAR_DATETIME, 0, false, filters:[]);
         $collection = $database->getCollection('datetime_auto_filter');
         $attribute = $collection->getAttribute('attributes')[0];
-        $this->assertEquals([Database::VAR_DATETIME,'json'], $attribute['filters']);
+        $this->assertSame([Database::VAR_DATETIME,'json'], $attribute['filters']);
         $database->deleteCollection('datetime_auto_filter');
     }
     /**
@@ -1780,7 +1780,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $this->expectException(\Exception::class);
-        $this->assertEquals(false, $database->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
+        $this->assertSame(false, $database->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
     }
 
 
@@ -2134,16 +2134,16 @@ trait AttributeTests
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(2, $attrs);
-        $this->assertEquals('a', $attrs[0]['$id']);
-        $this->assertEquals('b', $attrs[1]['$id']);
+        $this->assertSame('a', $attrs[0]['$id']);
+        $this->assertSame('b', $attrs[1]['$id']);
 
         $doc = $database->createDocument(__FUNCTION__, new Document([
             'a' => 'foo',
             'b' => 123,
         ]));
 
-        $this->assertEquals('foo', $doc->getAttribute('a'));
-        $this->assertEquals(123, $doc->getAttribute('b'));
+        $this->assertSame('foo', $doc->getAttribute('a'));
+        $this->assertSame(123, $doc->getAttribute('b'));
     }
 
     public function testCreateAttributesDelete(): void
@@ -2179,14 +2179,14 @@ trait AttributeTests
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(2, $attrs);
-        $this->assertEquals('a', $attrs[0]['$id']);
-        $this->assertEquals('b', $attrs[1]['$id']);
+        $this->assertSame('a', $attrs[0]['$id']);
+        $this->assertSame('b', $attrs[1]['$id']);
 
         $database->deleteAttribute(__FUNCTION__, 'a');
 
         $collection = $database->getCollection(__FUNCTION__);
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(1, $attrs);
-        $this->assertEquals('b', $attrs[0]['$id']);
+        $this->assertSame('b', $attrs[0]['$id']);
     }
 }

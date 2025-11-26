@@ -10,7 +10,7 @@ class IDTest extends TestCase
     public function testCustomID(): void
     {
         $id = ID::custom('test');
-        $this->assertEquals('test', $id);
+        $this->assertSame('test', $id);
     }
 
     public function testUniqueID(): void

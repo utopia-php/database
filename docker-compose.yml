@@ -20,15 +20,24 @@ services:
     environment:
       PHP_IDE_CONFIG: serverName=tests
     depends_on:
-      - postgres
-      - postgres-mirror
-      - mariadb
-      - mariadb-mirror
-      - mysql
-      - mysql-mirror
-      - redis
-      - redis-mirror
-      - mongo
+      postgres:
+        condition: service_healthy
+      postgres-mirror:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      mariadb-mirror:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mysql-mirror:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-mirror:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
 
   adminer:
     image: adminer

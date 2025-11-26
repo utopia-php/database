@@ -24,7 +24,7 @@ trait GeneralTests
 {
     public function testPing(): void
     {
-        $this->assertEquals(true, $this->getDatabase()->ping());
+        $this->assertSame(true, $this->getDatabase()->ping());
     }
 
     /**
@@ -47,7 +47,7 @@ trait GeneralTests
 
         $database->createCollection('global-timeouts');
 
-        $this->assertEquals(
+        $this->assertSame(
             true,
             $database->createAttribute(
                 collection: 'global-timeouts',
@@ -128,7 +128,7 @@ trait GeneralTests
 
         } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
         }
 
         try {
@@ -148,7 +148,7 @@ trait GeneralTests
 
         } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
         }
 
         // non empty dates
@@ -156,9 +156,9 @@ trait GeneralTests
 
         $doc1->setAttribute('$updatedAt', $newDate);
         $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
+        $this->assertSame($newDate, $doc1->getAttribute('$updatedAt'));
         $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
+        $this->assertSame($newDate, $doc1->getAttribute('$updatedAt'));
 
         $this->getDatabase()->updateDocuments(
             'preserve_update_dates',
@@ -175,8 +175,8 @@ trait GeneralTests
 
         $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
         $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
-        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
-        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
+        $this->assertSame($newDate, $doc2->getAttribute('$updatedAt'));
+        $this->assertSame($newDate, $doc3->getAttribute('$updatedAt'));
 
         $database->deleteCollection('preserve_update_dates');
 
@@ -215,7 +215,7 @@ trait GeneralTests
             $this->fail('Failed to throw structure exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
         }
 
         try {
@@ -236,7 +236,7 @@ trait GeneralTests
             $this->fail('Failed to throw structure exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
         }
 
         // non empty date
@@ -280,9 +280,9 @@ trait GeneralTests
         $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
         $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
         $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
-        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+        $this->assertSame($date, $doc1->getAttribute('$createdAt'));
+        $this->assertSame($date, $doc2->getAttribute('$createdAt'));
+        $this->assertSame($date, $doc3->getAttribute('$createdAt'));
         $this->assertNotEmpty($date, $doc4->getAttribute('$createdAt'));
         $this->assertNotEquals($date, $doc4->getAttribute('$createdAt'));
         $this->assertNotEmpty($date, $doc5->getAttribute('$createdAt'));
@@ -301,15 +301,15 @@ trait GeneralTests
     }
     public function testGetIndexLimit(): void
     {
-        $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());
+        $this->assertSame(58, $this->getDatabase()->getLimitForIndexes());
     }
 
     public function testGetId(): void
     {
-        $this->assertEquals(20, strlen(ID::unique()));
-        $this->assertEquals(13, strlen(ID::unique(0)));
-        $this->assertEquals(13, strlen(ID::unique(-1)));
-        $this->assertEquals(23, strlen(ID::unique(10)));
+        $this->assertSame(20, strlen(ID::unique()));
+        $this->assertSame(13, strlen(ID::unique(0)));
+        $this->assertSame(13, strlen(ID::unique(-1)));
+        $this->assertSame(23, strlen(ID::unique(10)));
 
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals(ID::unique(10), ID::unique(10));
@@ -353,7 +353,7 @@ trait GeneralTests
             ->setTenant(null)
             ->getDocument(Database::METADATA, __FUNCTION__);
 
-        $this->assertEquals('Scooby Doo', $doc['name']);
+        $this->assertSame('Scooby Doo', $doc['name']);
 
         // Reset state
         $database
@@ -423,7 +423,7 @@ trait GeneralTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(QueryException::class, $e);
-            $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
+            $this->assertSame('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
         }
     }
 
@@ -482,7 +482,7 @@ trait GeneralTests
             ->setTenant(1)
             ->getDocument(__FUNCTION__, $doc1Id);
 
-        $this->assertEquals('Spiderman', $doc['name']);
+        $this->assertSame('Spiderman', $doc['name']);
 
         $doc2Id = ID::unique();
 
@@ -502,8 +502,8 @@ trait GeneralTests
             ->setTenant(2)
             ->getDocument(__FUNCTION__, $doc2Id);
 
-        $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals(2, $doc->getTenant());
+        $this->assertSame('Batman', $doc['name']);
+        $this->assertSame(2, $doc->getTenant());
 
         // Ensure no read cross-tenant
         $docs = $database
@@ -511,8 +511,8 @@ trait GeneralTests
             ->setTenant(1)
             ->find(__FUNCTION__);
 
-        $this->assertEquals(1, \count($docs));
-        $this->assertEquals($doc1Id, $docs[0]->getId());
+        $this->assertSame(1, \count($docs));
+        $this->assertSame($doc1Id, $docs[0]->getId());
 
         if ($database->getAdapter()->getSupportForUpserts()) {
             // Test upsert with tenant per doc
@@ -532,9 +532,9 @@ trait GeneralTests
                 ->setTenant(3)
                 ->getDocument(__FUNCTION__, $doc3Id);
 
-            $this->assertEquals('Superman3', $doc['name']);
-            $this->assertEquals(3, $doc->getTenant());
-            $this->assertEquals($doc3Id, $doc->getId());
+            $this->assertSame('Superman3', $doc['name']);
+            $this->assertSame(3, $doc->getTenant());
+            $this->assertSame($doc3Id, $doc->getId());
 
             // Test no read from other tenants
             $docs = $database
@@ -542,7 +542,7 @@ trait GeneralTests
                 ->setTenant(1)
                 ->find(__FUNCTION__);
 
-            $this->assertEquals(1, \count($docs));
+            $this->assertSame(1, \count($docs));
 
             // Ensure no cross-tenant read from upsert
             $doc = $database
@@ -550,7 +550,7 @@ trait GeneralTests
                 ->setTenantPerDocument(false)
                 ->getDocument(__FUNCTION__, $doc3Id);
 
-            $this->assertEquals(true, $doc->isEmpty());
+            $this->assertSame(true, $doc->isEmpty());
 
             // Upsert new documents with different tenants
             $doc4Id = ID::unique();
@@ -574,8 +574,8 @@ trait GeneralTests
                 ->setTenant(4)
                 ->getDocument(__FUNCTION__, $doc4Id);
 
-            $this->assertEquals('Superman4', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
+            $this->assertSame('Superman4', $doc['name']);
+            $this->assertSame(4, $doc->getTenant());
 
             // Set to tenant 5 and read
             $doc = $database
@@ -583,8 +583,8 @@ trait GeneralTests
                 ->setTenant(5)
                 ->getDocument(__FUNCTION__, $doc5Id);
 
-            $this->assertEquals('Superman5', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
+            $this->assertSame('Superman5', $doc['name']);
+            $this->assertSame(5, $doc->getTenant());
 
             // Update names via upsert
             $database
@@ -606,8 +606,8 @@ trait GeneralTests
                 ->setTenant(4)
                 ->getDocument(__FUNCTION__, $doc4Id);
 
-            $this->assertEquals('Superman4 updated', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
+            $this->assertSame('Superman4 updated', $doc['name']);
+            $this->assertSame(4, $doc->getTenant());
 
             // Set to tenant 5 and read
             $doc = $database
@@ -615,8 +615,8 @@ trait GeneralTests
                 ->setTenant(5)
                 ->getDocument(__FUNCTION__, $doc5Id);
 
-            $this->assertEquals('Superman5 updated', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
+            $this->assertSame('Superman5 updated', $doc['name']);
+            $this->assertSame(5, $doc->getTenant());
         }
 
         // Reset instance
@@ -680,14 +680,14 @@ trait GeneralTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
         }
 
         try {
             $database->deleteDocument('testRedisFallback', 'doc1');
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
         }
 
         // Bring backup Redis

@@ -77,69 +77,69 @@ class DocumentTest extends TestCase
 
         $document = new Document($data);
 
-        $this->assertEquals(null, $document['cat']);
-        $this->assertEquals(false, isset($document['cat']));
-        $this->assertEquals('cat', $document->getAttribute('cat', 'cat'));
+        $this->assertSame(null, $document['cat']);
+        $this->assertSame(false, isset($document['cat']));
+        $this->assertSame('cat', $document->getAttribute('cat', 'cat'));
 
-        $this->assertEquals(null, $document['dog']);
-        $this->assertEquals(false, isset($document['dog']));
-        $this->assertEquals('dog', $document->getAttribute('dog', 'dog'));
+        $this->assertSame(null, $document['dog']);
+        $this->assertSame(false, isset($document['dog']));
+        $this->assertSame('dog', $document->getAttribute('dog', 'dog'));
     }
 
     public function testId(): void
     {
-        $this->assertEquals($this->id, $this->document->getId());
-        $this->assertEquals(null, $this->empty->getId());
+        $this->assertSame($this->id, $this->document->getId());
+        $this->assertSame(null, $this->empty->getId());
     }
 
     public function testCollection(): void
     {
-        $this->assertEquals($this->collection, $this->document->getCollection());
-        $this->assertEquals(null, $this->empty->getCollection());
+        $this->assertSame($this->collection, $this->document->getCollection());
+        $this->assertSame(null, $this->empty->getCollection());
     }
 
     public function testGetCreate(): void
     {
-        $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
-        $this->assertEquals([], $this->empty->getCreate());
+        $this->assertSame(['any', 'user:creator'], $this->document->getCreate());
+        $this->assertSame([], $this->empty->getCreate());
     }
 
     public function testGetRead(): void
     {
-        $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals([], $this->empty->getRead());
+        $this->assertSame(['user:123', 'team:123'], $this->document->getRead());
+        $this->assertSame([], $this->empty->getRead());
     }
 
     public function testGetUpdate(): void
     {
-        $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
-        $this->assertEquals([], $this->empty->getUpdate());
+        $this->assertSame(['any', 'user:updater'], $this->document->getUpdate());
+        $this->assertSame([], $this->empty->getUpdate());
     }
 
     public function testGetDelete(): void
     {
-        $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
-        $this->assertEquals([], $this->empty->getDelete());
+        $this->assertSame(['any', 'user:deleter'], $this->document->getDelete());
+        $this->assertSame([], $this->empty->getDelete());
     }
 
     public function testGetPermissionByType(): void
     {
-        $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
+        $this->assertSame(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
+        $this->assertSame([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
 
-        $this->assertEquals(['user:123','team:123'], $this->document->getPermissionsByType(Database::PERMISSION_READ));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_READ));
+        $this->assertSame(['user:123','team:123'], $this->document->getPermissionsByType(Database::PERMISSION_READ));
+        $this->assertSame([], $this->empty->getPermissionsByType(Database::PERMISSION_READ));
 
-        $this->assertEquals(['any','user:updater'], $this->document->getPermissionsByType(Database::PERMISSION_UPDATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_UPDATE));
+        $this->assertSame(['any','user:updater'], $this->document->getPermissionsByType(Database::PERMISSION_UPDATE));
+        $this->assertSame([], $this->empty->getPermissionsByType(Database::PERMISSION_UPDATE));
 
-        $this->assertEquals(['any','user:deleter'], $this->document->getPermissionsByType(Database::PERMISSION_DELETE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
+        $this->assertSame(['any','user:deleter'], $this->document->getPermissionsByType(Database::PERMISSION_DELETE));
+        $this->assertSame([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
     }
 
     public function testGetPermissions(): void
     {
-        $this->assertEquals([
+        $this->assertSame([
             Permission::read(Role::user(ID::custom('123'))),
             Permission::read(Role::team(ID::custom('123'))),
             Permission::create(Role::any()),
@@ -153,7 +153,7 @@ class DocumentTest extends TestCase
 
     public function testGetAttributes(): void
     {
-        $this->assertEquals([
+        $this->assertSame([
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -168,29 +168,29 @@ class DocumentTest extends TestCase
 
     public function testGetAttribute(): void
     {
-        $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
-        $this->assertEquals('', $this->document->getAttribute('titlex', ''));
+        $this->assertSame('This is a test.', $this->document->getAttribute('title', ''));
+        $this->assertSame('', $this->document->getAttribute('titlex', ''));
     }
 
     public function testSetAttribute(): void
     {
-        $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
-        $this->assertEquals(['one'], $this->document->getAttribute('list', []));
-        $this->assertEquals('', $this->document->getAttribute('titlex', ''));
+        $this->assertSame('This is a test.', $this->document->getAttribute('title', ''));
+        $this->assertSame(['one'], $this->document->getAttribute('list', []));
+        $this->assertSame('', $this->document->getAttribute('titlex', ''));
 
         $this->document->setAttribute('title', 'New title');
 
-        $this->assertEquals('New title', $this->document->getAttribute('title', ''));
-        $this->assertEquals('', $this->document->getAttribute('titlex', ''));
+        $this->assertSame('New title', $this->document->getAttribute('title', ''));
+        $this->assertSame('', $this->document->getAttribute('titlex', ''));
 
         $this->document->setAttribute('list', 'two', Document::SET_TYPE_APPEND);
-        $this->assertEquals(['one', 'two'], $this->document->getAttribute('list', []));
+        $this->assertSame(['one', 'two'], $this->document->getAttribute('list', []));
 
         $this->document->setAttribute('list', 'zero', Document::SET_TYPE_PREPEND);
-        $this->assertEquals(['zero', 'one', 'two'], $this->document->getAttribute('list', []));
+        $this->assertSame(['zero', 'one', 'two'], $this->document->getAttribute('list', []));
 
         $this->document->setAttribute('list', ['one'], Document::SET_TYPE_ASSIGN);
-        $this->assertEquals(['one'], $this->document->getAttribute('list', []));
+        $this->assertSame(['one'], $this->document->getAttribute('list', []));
     }
 
     public function testSetAttributes(): void
@@ -210,33 +210,33 @@ class DocumentTest extends TestCase
 
         $document->setAttributes($otherDocument->getArrayCopy());
 
-        $this->assertEquals($otherDocument->getId(), $document->getId());
-        $this->assertEquals('users', $document->getCollection());
-        $this->assertEquals($otherDocument->getPermissions(), $document->getPermissions());
-        $this->assertEquals($otherDocument->getAttribute('email'), $document->getAttribute('email'));
-        $this->assertEquals($otherDocument->getAttribute('prefs'), $document->getAttribute('prefs'));
+        $this->assertSame($otherDocument->getId(), $document->getId());
+        $this->assertSame('users', $document->getCollection());
+        $this->assertSame($otherDocument->getPermissions(), $document->getPermissions());
+        $this->assertSame($otherDocument->getAttribute('email'), $document->getAttribute('email'));
+        $this->assertSame($otherDocument->getAttribute('prefs'), $document->getAttribute('prefs'));
     }
 
     public function testRemoveAttribute(): void
     {
         $this->document->removeAttribute('list');
-        $this->assertEquals([], $this->document->getAttribute('list', []));
+        $this->assertSame([], $this->document->getAttribute('list', []));
     }
 
     public function testFind(): void
     {
-        $this->assertEquals(null, $this->document->find('find', 'one'));
+        $this->assertSame(null, $this->document->find('find', 'one'));
 
         $this->document->setAttribute('findString', 'demo');
-        $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
+        $this->assertSame($this->document, $this->document->find('findString', 'demo'));
 
         $this->document->setAttribute('findArray', ['demo']);
-        $this->assertEquals(null, $this->document->find('findArray', 'demo'));
-        $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
+        $this->assertSame(null, $this->document->find('findArray', 'demo'));
+        $this->assertSame($this->document, $this->document->find('findArray', ['demo']));
 
-        $this->assertEquals($this->document->getAttribute('children')[0], $this->document->find('name', 'x', 'children'));
-        $this->assertEquals($this->document->getAttribute('children')[2], $this->document->find('name', 'z', 'children'));
-        $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
+        $this->assertSame($this->document->getAttribute('children')[0], $this->document->find('name', 'x', 'children'));
+        $this->assertSame($this->document->getAttribute('children')[2], $this->document->find('name', 'z', 'children'));
+        $this->assertSame(null, $this->document->find('name', 'v', 'children'));
     }
 
     public function testFindAndReplace(): void
@@ -262,25 +262,25 @@ class DocumentTest extends TestCase
             ]
         ]);
 
-        $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
-        $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
+        $this->assertSame(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
+        $this->assertSame('1', $document->getAttribute('children')[0]['name']);
+        $this->assertSame(true, $document->getAttribute('children')[0]['test']);
 
         // Array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
+        $this->assertSame(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
 
         // Array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
+        $this->assertSame(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
 
         // No array
-        $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
-        $this->assertEquals('new', $document->getAttribute('title'));
+        $this->assertSame(true, $document->findAndReplace('title', 'This is a test.', 'new'));
+        $this->assertSame('new', $document->getAttribute('title'));
 
         // No array with wrong value
-        $this->assertEquals(false, $document->findAndReplace('title', 'test', 'new'));
+        $this->assertSame(false, $document->findAndReplace('title', 'test', 'new'));
 
         // No array with wrong key
-        $this->assertEquals(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
+        $this->assertSame(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
     }
 
     public function testFindAndRemove(): void
@@ -305,38 +305,38 @@ class DocumentTest extends TestCase
                 new Document(['name' => 'z']),
             ]
         ]);
-        $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
-        $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
+        $this->assertSame(true, $document->findAndRemove('name', 'x', 'children'));
+        $this->assertSame('y', $document->getAttribute('children')[1]['name']);
         $this->assertCount(2, $document->getAttribute('children'));
 
         // Array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
+        $this->assertSame(false, $document->findAndRemove('name', 'xy', 'children'));
 
         // Array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
+        $this->assertSame(false, $document->findAndRemove('namex', 'x', 'children'));
 
         // No array
-        $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
-        $this->assertEquals(false, $document->isset('title'));
+        $this->assertSame(true, $document->findAndRemove('title', 'This is a test.'));
+        $this->assertSame(false, $document->isset('title'));
 
         // No array with wrong value
-        $this->assertEquals(false, $document->findAndRemove('title', 'new'));
+        $this->assertSame(false, $document->findAndRemove('title', 'new'));
 
         // No array with wrong key
-        $this->assertEquals(false, $document->findAndRemove('titlex', 'This is a test.'));
+        $this->assertSame(false, $document->findAndRemove('titlex', 'This is a test.'));
     }
 
     public function testIsEmpty(): void
     {
-        $this->assertEquals(false, $this->document->isEmpty());
-        $this->assertEquals(true, $this->empty->isEmpty());
+        $this->assertSame(false, $this->document->isEmpty());
+        $this->assertSame(true, $this->empty->isEmpty());
     }
 
     public function testIsSet(): void
     {
-        $this->assertEquals(false, $this->document->isSet('titlex'));
-        $this->assertEquals(false, $this->empty->isSet('titlex'));
-        $this->assertEquals(true, $this->document->isSet('title'));
+        $this->assertSame(false, $this->document->isSet('titlex'));
+        $this->assertSame(false, $this->empty->isSet('titlex'));
+        $this->assertSame(true, $this->document->isSet('title'));
     }
 
     public function testClone(): void
@@ -375,16 +375,16 @@ class DocumentTest extends TestCase
         $before->getAttribute('children')[0]->getAttribute('document')->setAttribute('name', 'before_two');
         $before->getAttribute('children')[0]->getAttribute('children')[0]->setAttribute('name', 'before_x');
 
-        $this->assertEquals('_', $after->getAttribute('name'));
-        $this->assertEquals('zero', $after->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('a', $after->getAttribute('children')[0]->getAttribute('name'));
-        $this->assertEquals('one', $after->getAttribute('children')[0]->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('x', $after->getAttribute('children')[0]->getAttribute('children')[0]->getAttribute('name'));
+        $this->assertSame('_', $after->getAttribute('name'));
+        $this->assertSame('zero', $after->getAttribute('document')->getAttribute('name'));
+        $this->assertSame('a', $after->getAttribute('children')[0]->getAttribute('name'));
+        $this->assertSame('one', $after->getAttribute('children')[0]->getAttribute('document')->getAttribute('name'));
+        $this->assertSame('x', $after->getAttribute('children')[0]->getAttribute('children')[0]->getAttribute('name'));
     }
 
     public function testGetArrayCopy(): void
     {
-        $this->assertEquals([
+        $this->assertSame([
             '$id' => ID::custom($this->id),
             '$collection' => ID::custom($this->collection),
             '$permissions' => [
@@ -407,7 +407,7 @@ class DocumentTest extends TestCase
                 ['name' => 'z'],
             ]
         ], $this->document->getArrayCopy());
-        $this->assertEquals([], $this->empty->getArrayCopy());
+        $this->assertSame([], $this->empty->getArrayCopy());
     }
 
     public function testEmptyDocumentSequence(): void

@@ -21,161 +21,161 @@ class QueryTest extends TestCase
     {
         $query = new Query(Query::TYPE_EQUAL, 'title', ['Iron Man']);
 
-        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals('Iron Man', $query->getValues()[0]);
+        $this->assertSame(Query::TYPE_EQUAL, $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame('Iron Man', $query->getValues()[0]);
 
         $query = new Query(Query::TYPE_ORDER_DESC, 'score');
 
-        $this->assertEquals(Query::TYPE_ORDER_DESC, $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame(Query::TYPE_ORDER_DESC, $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = new Query(Query::TYPE_LIMIT, values: [10]);
 
-        $this->assertEquals(Query::TYPE_LIMIT, $query->getMethod());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(10, $query->getValues()[0]);
+        $this->assertSame(Query::TYPE_LIMIT, $query->getMethod());
+        $this->assertSame('', $query->getAttribute());
+        $this->assertSame(10, $query->getValues()[0]);
 
         $query = Query::equal('title', ['Iron Man']);
 
-        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals('Iron Man', $query->getValues()[0]);
+        $this->assertSame(Query::TYPE_EQUAL, $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame('Iron Man', $query->getValues()[0]);
 
         $query = Query::greaterThan('score', 10);
 
-        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals(10, $query->getValues()[0]);
+        $this->assertSame(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame(10, $query->getValues()[0]);
 
         // Test vector queries
         $vector = [0.1, 0.2, 0.3];
 
         $query = Query::vectorDot('embedding', $vector);
-        $this->assertEquals(Query::TYPE_VECTOR_DOT, $query->getMethod());
-        $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals([$vector], $query->getValues());
+        $this->assertSame(Query::TYPE_VECTOR_DOT, $query->getMethod());
+        $this->assertSame('embedding', $query->getAttribute());
+        $this->assertSame([$vector], $query->getValues());
 
         $query = Query::vectorCosine('embedding', $vector);
-        $this->assertEquals(Query::TYPE_VECTOR_COSINE, $query->getMethod());
-        $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals([$vector], $query->getValues());
+        $this->assertSame(Query::TYPE_VECTOR_COSINE, $query->getMethod());
+        $this->assertSame('embedding', $query->getAttribute());
+        $this->assertSame([$vector], $query->getValues());
 
         $query = Query::vectorEuclidean('embedding', $vector);
-        $this->assertEquals(Query::TYPE_VECTOR_EUCLIDEAN, $query->getMethod());
-        $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals([$vector], $query->getValues());
+        $this->assertSame(Query::TYPE_VECTOR_EUCLIDEAN, $query->getMethod());
+        $this->assertSame('embedding', $query->getAttribute());
+        $this->assertSame([$vector], $query->getValues());
 
         $query = Query::search('search', 'John Doe');
 
-        $this->assertEquals(Query::TYPE_SEARCH, $query->getMethod());
-        $this->assertEquals('search', $query->getAttribute());
-        $this->assertEquals('John Doe', $query->getValues()[0]);
+        $this->assertSame(Query::TYPE_SEARCH, $query->getMethod());
+        $this->assertSame('search', $query->getAttribute());
+        $this->assertSame('John Doe', $query->getValues()[0]);
 
         $query = Query::orderAsc('score');
 
-        $this->assertEquals(Query::TYPE_ORDER_ASC, $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame(Query::TYPE_ORDER_ASC, $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = Query::limit(10);
 
-        $this->assertEquals(Query::TYPE_LIMIT, $query->getMethod());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals([10], $query->getValues());
+        $this->assertSame(Query::TYPE_LIMIT, $query->getMethod());
+        $this->assertSame('', $query->getAttribute());
+        $this->assertSame([10], $query->getValues());
 
         $cursor = new Document();
         $query = Query::cursorAfter($cursor);
 
-        $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals([$cursor], $query->getValues());
+        $this->assertSame(Query::TYPE_CURSOR_AFTER, $query->getMethod());
+        $this->assertSame('', $query->getAttribute());
+        $this->assertSame([$cursor], $query->getValues());
 
         $query = Query::isNull('title');
 
-        $this->assertEquals(Query::TYPE_IS_NULL, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame(Query::TYPE_IS_NULL, $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = Query::isNotNull('title');
 
-        $this->assertEquals(Query::TYPE_IS_NOT_NULL, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame(Query::TYPE_IS_NOT_NULL, $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = Query::notContains('tags', ['test', 'example']);
 
-        $this->assertEquals(Query::TYPE_NOT_CONTAINS, $query->getMethod());
-        $this->assertEquals('tags', $query->getAttribute());
-        $this->assertEquals(['test', 'example'], $query->getValues());
+        $this->assertSame(Query::TYPE_NOT_CONTAINS, $query->getMethod());
+        $this->assertSame('tags', $query->getAttribute());
+        $this->assertSame(['test', 'example'], $query->getValues());
 
         $query = Query::notSearch('content', 'keyword');
 
-        $this->assertEquals(Query::TYPE_NOT_SEARCH, $query->getMethod());
-        $this->assertEquals('content', $query->getAttribute());
-        $this->assertEquals(['keyword'], $query->getValues());
+        $this->assertSame(Query::TYPE_NOT_SEARCH, $query->getMethod());
+        $this->assertSame('content', $query->getAttribute());
+        $this->assertSame(['keyword'], $query->getValues());
 
         $query = Query::notStartsWith('title', 'prefix');
 
-        $this->assertEquals(Query::TYPE_NOT_STARTS_WITH, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals(['prefix'], $query->getValues());
+        $this->assertSame(Query::TYPE_NOT_STARTS_WITH, $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame(['prefix'], $query->getValues());
 
         $query = Query::notEndsWith('url', '.html');
 
-        $this->assertEquals(Query::TYPE_NOT_ENDS_WITH, $query->getMethod());
-        $this->assertEquals('url', $query->getAttribute());
-        $this->assertEquals(['.html'], $query->getValues());
+        $this->assertSame(Query::TYPE_NOT_ENDS_WITH, $query->getMethod());
+        $this->assertSame('url', $query->getAttribute());
+        $this->assertSame(['.html'], $query->getValues());
 
         $query = Query::notBetween('score', 10, 20);
 
-        $this->assertEquals(Query::TYPE_NOT_BETWEEN, $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals([10, 20], $query->getValues());
+        $this->assertSame(Query::TYPE_NOT_BETWEEN, $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame([10, 20], $query->getValues());
 
         // Test new date query wrapper methods
         $query = Query::createdBefore('2023-01-01T00:00:00.000Z');
 
-        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z'], $query->getValues());
 
         $query = Query::createdAfter('2023-01-01T00:00:00.000Z');
 
-        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z'], $query->getValues());
 
         $query = Query::updatedBefore('2023-12-31T23:59:59.999Z');
 
-        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::updatedAfter('2023-12-31T23:59:59.999Z');
 
-        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
 
-        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
 
-        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
 
         // Test orderRandom query
         $query = Query::orderRandom();
-        $this->assertEquals(Query::TYPE_ORDER_RANDOM, $query->getMethod());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame(Query::TYPE_ORDER_RANDOM, $query->getMethod());
+        $this->assertSame('', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
     }
 
     /**
@@ -186,164 +186,164 @@ class QueryTest extends TestCase
     {
         $jsonString = Query::equal('title', ['Iron Man'])->toString();
         $query = Query::parse($jsonString);
-        $this->assertEquals('{"method":"equal","attribute":"title","values":["Iron Man"]}', $jsonString);
-        $this->assertEquals('equal', $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals('Iron Man', $query->getValues()[0]);
+        $this->assertSame('{"method":"equal","attribute":"title","values":["Iron Man"]}', $jsonString);
+        $this->assertSame('equal', $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame('Iron Man', $query->getValues()[0]);
 
         $query = Query::parse(Query::lessThan('year', 2001)->toString());
-        $this->assertEquals('lessThan', $query->getMethod());
-        $this->assertEquals('year', $query->getAttribute());
-        $this->assertEquals(2001, $query->getValues()[0]);
+        $this->assertSame('lessThan', $query->getMethod());
+        $this->assertSame('year', $query->getAttribute());
+        $this->assertSame(2001, $query->getValues()[0]);
 
         $query = Query::parse(Query::equal('published', [true])->toString());
-        $this->assertEquals('equal', $query->getMethod());
-        $this->assertEquals('published', $query->getAttribute());
+        $this->assertSame('equal', $query->getMethod());
+        $this->assertSame('published', $query->getAttribute());
         $this->assertTrue($query->getValues()[0]);
 
         $query = Query::parse(Query::equal('published', [false])->toString());
-        $this->assertEquals('equal', $query->getMethod());
-        $this->assertEquals('published', $query->getAttribute());
+        $this->assertSame('equal', $query->getMethod());
+        $this->assertSame('published', $query->getAttribute());
         $this->assertFalse($query->getValues()[0]);
 
         $query = Query::parse(Query::equal('actors', [' Johnny Depp ', ' Brad Pitt', 'Al Pacino '])->toString());
-        $this->assertEquals('equal', $query->getMethod());
-        $this->assertEquals('actors', $query->getAttribute());
-        $this->assertEquals(' Johnny Depp ', $query->getValues()[0]);
-        $this->assertEquals(' Brad Pitt', $query->getValues()[1]);
-        $this->assertEquals('Al Pacino ', $query->getValues()[2]);
+        $this->assertSame('equal', $query->getMethod());
+        $this->assertSame('actors', $query->getAttribute());
+        $this->assertSame(' Johnny Depp ', $query->getValues()[0]);
+        $this->assertSame(' Brad Pitt', $query->getValues()[1]);
+        $this->assertSame('Al Pacino ', $query->getValues()[2]);
 
         $query = Query::parse(Query::equal('actors', ['Brad Pitt', 'Johnny Depp'])->toString());
-        $this->assertEquals('equal', $query->getMethod());
-        $this->assertEquals('actors', $query->getAttribute());
-        $this->assertEquals('Brad Pitt', $query->getValues()[0]);
-        $this->assertEquals('Johnny Depp', $query->getValues()[1]);
+        $this->assertSame('equal', $query->getMethod());
+        $this->assertSame('actors', $query->getAttribute());
+        $this->assertSame('Brad Pitt', $query->getValues()[0]);
+        $this->assertSame('Johnny Depp', $query->getValues()[1]);
 
         $query = Query::parse(Query::contains('writers', ['Tim O\'Reilly'])->toString());
-        $this->assertEquals('contains', $query->getMethod());
-        $this->assertEquals('writers', $query->getAttribute());
-        $this->assertEquals('Tim O\'Reilly', $query->getValues()[0]);
+        $this->assertSame('contains', $query->getMethod());
+        $this->assertSame('writers', $query->getAttribute());
+        $this->assertSame('Tim O\'Reilly', $query->getValues()[0]);
 
         $query = Query::parse(Query::greaterThan('score', 8.5)->toString());
-        $this->assertEquals('greaterThan', $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals(8.5, $query->getValues()[0]);
+        $this->assertSame('greaterThan', $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame(8.5, $query->getValues()[0]);
 
         $query = Query::parse(Query::notContains('tags', ['unwanted', 'spam'])->toString());
-        $this->assertEquals('notContains', $query->getMethod());
-        $this->assertEquals('tags', $query->getAttribute());
-        $this->assertEquals(['unwanted', 'spam'], $query->getValues());
+        $this->assertSame('notContains', $query->getMethod());
+        $this->assertSame('tags', $query->getAttribute());
+        $this->assertSame(['unwanted', 'spam'], $query->getValues());
 
         $query = Query::parse(Query::notSearch('content', 'unwanted content')->toString());
-        $this->assertEquals('notSearch', $query->getMethod());
-        $this->assertEquals('content', $query->getAttribute());
-        $this->assertEquals(['unwanted content'], $query->getValues());
+        $this->assertSame('notSearch', $query->getMethod());
+        $this->assertSame('content', $query->getAttribute());
+        $this->assertSame(['unwanted content'], $query->getValues());
 
         $query = Query::parse(Query::notStartsWith('title', 'temp')->toString());
-        $this->assertEquals('notStartsWith', $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals(['temp'], $query->getValues());
+        $this->assertSame('notStartsWith', $query->getMethod());
+        $this->assertSame('title', $query->getAttribute());
+        $this->assertSame(['temp'], $query->getValues());
 
         $query = Query::parse(Query::notEndsWith('filename', '.tmp')->toString());
-        $this->assertEquals('notEndsWith', $query->getMethod());
-        $this->assertEquals('filename', $query->getAttribute());
-        $this->assertEquals(['.tmp'], $query->getValues());
+        $this->assertSame('notEndsWith', $query->getMethod());
+        $this->assertSame('filename', $query->getAttribute());
+        $this->assertSame(['.tmp'], $query->getValues());
 
         $query = Query::parse(Query::notBetween('score', 0, 50)->toString());
-        $this->assertEquals('notBetween', $query->getMethod());
-        $this->assertEquals('score', $query->getAttribute());
-        $this->assertEquals([0, 50], $query->getValues());
+        $this->assertSame('notBetween', $query->getMethod());
+        $this->assertSame('score', $query->getAttribute());
+        $this->assertSame([0, 50], $query->getValues());
 
         $query = Query::parse(Query::notEqual('director', 'null')->toString());
-        $this->assertEquals('notEqual', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals('null', $query->getValues()[0]);
+        $this->assertSame('notEqual', $query->getMethod());
+        $this->assertSame('director', $query->getAttribute());
+        $this->assertSame('null', $query->getValues()[0]);
 
         $query = Query::parse(Query::isNull('director')->toString());
-        $this->assertEquals('isNull', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame('isNull', $query->getMethod());
+        $this->assertSame('director', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = Query::parse(Query::isNotNull('director')->toString());
-        $this->assertEquals('isNotNull', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame('isNotNull', $query->getMethod());
+        $this->assertSame('director', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
 
         $query = Query::parse(Query::startsWith('director', 'Quentin')->toString());
-        $this->assertEquals('startsWith', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals(['Quentin'], $query->getValues());
+        $this->assertSame('startsWith', $query->getMethod());
+        $this->assertSame('director', $query->getAttribute());
+        $this->assertSame(['Quentin'], $query->getValues());
 
         $query = Query::parse(Query::endsWith('director', 'Tarantino')->toString());
-        $this->assertEquals('endsWith', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals(['Tarantino'], $query->getValues());
+        $this->assertSame('endsWith', $query->getMethod());
+        $this->assertSame('director', $query->getAttribute());
+        $this->assertSame(['Tarantino'], $query->getValues());
 
         $query = Query::parse(Query::select(['title', 'director'])->toString());
-        $this->assertEquals('select', $query->getMethod());
-        $this->assertEquals(null, $query->getAttribute());
-        $this->assertEquals(['title', 'director'], $query->getValues());
+        $this->assertSame('select', $query->getMethod());
+        $this->assertSame(null, $query->getAttribute());
+        $this->assertSame(['title', 'director'], $query->getValues());
 
         // Test new date query wrapper methods parsing
         $query = Query::parse(Query::createdBefore('2023-01-01T00:00:00.000Z')->toString());
-        $this->assertEquals('lessThan', $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+        $this->assertSame('lessThan', $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z'], $query->getValues());
 
         $query = Query::parse(Query::createdAfter('2023-01-01T00:00:00.000Z')->toString());
-        $this->assertEquals('greaterThan', $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+        $this->assertSame('greaterThan', $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z'], $query->getValues());
 
         $query = Query::parse(Query::updatedBefore('2023-12-31T23:59:59.999Z')->toString());
-        $this->assertEquals('lessThan', $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame('lessThan', $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::updatedAfter('2023-12-31T23:59:59.999Z')->toString());
-        $this->assertEquals('greaterThan', $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame('greaterThan', $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
-        $this->assertEquals('between', $query->getMethod());
-        $this->assertEquals('$createdAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame('between', $query->getMethod());
+        $this->assertSame('$createdAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
-        $this->assertEquals('between', $query->getMethod());
-        $this->assertEquals('$updatedAt', $query->getAttribute());
-        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+        $this->assertSame('between', $query->getMethod());
+        $this->assertSame('$updatedAt', $query->getAttribute());
+        $this->assertSame(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::between('age', 15, 18)->toString());
-        $this->assertEquals('between', $query->getMethod());
-        $this->assertEquals('age', $query->getAttribute());
-        $this->assertEquals([15, 18], $query->getValues());
+        $this->assertSame('between', $query->getMethod());
+        $this->assertSame('age', $query->getAttribute());
+        $this->assertSame([15, 18], $query->getValues());
 
         $query = Query::parse(Query::between('lastUpdate', 'DATE1', 'DATE2')->toString());
-        $this->assertEquals('between', $query->getMethod());
-        $this->assertEquals('lastUpdate', $query->getAttribute());
-        $this->assertEquals(['DATE1', 'DATE2'], $query->getValues());
+        $this->assertSame('between', $query->getMethod());
+        $this->assertSame('lastUpdate', $query->getAttribute());
+        $this->assertSame(['DATE1', 'DATE2'], $query->getValues());
 
         $query = Query::parse(Query::equal('attr', [1])->toString());
         $this->assertCount(1, $query->getValues());
-        $this->assertEquals('attr', $query->getAttribute());
-        $this->assertEquals([1], $query->getValues());
+        $this->assertSame('attr', $query->getAttribute());
+        $this->assertSame([1], $query->getValues());
 
         $query = Query::parse(Query::equal('attr', [0])->toString());
         $this->assertCount(1, $query->getValues());
-        $this->assertEquals('attr', $query->getAttribute());
-        $this->assertEquals([0], $query->getValues());
+        $this->assertSame('attr', $query->getAttribute());
+        $this->assertSame([0], $query->getValues());
 
         $query = Query::parse(Query::equal('1', ['[Hello] World'])->toString());
         $this->assertCount(1, $query->getValues());
-        $this->assertEquals('1', $query->getAttribute());
-        $this->assertEquals(['[Hello] World'], $query->getValues());
+        $this->assertSame('1', $query->getAttribute());
+        $this->assertSame(['[Hello] World'], $query->getValues());
 
         $query = Query::parse(Query::equal('1', ['Hello /\\ World'])->toString());
         $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals(['Hello /\ World'], $query->getValues());
+        $this->assertSame(1, $query->getAttribute());
+        $this->assertSame(['Hello /\ World'], $query->getValues());
 
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
@@ -355,44 +355,44 @@ class QueryTest extends TestCase
         /** @var array<Query> $queries */
         $queries = $query->getValues();
         $this->assertCount(2, $query->getValues());
-        $this->assertEquals(Query::TYPE_OR, $query->getMethod());
-        $this->assertEquals(Query::TYPE_EQUAL, $queries[0]->getMethod());
-        $this->assertEquals('actors', $queries[0]->getAttribute());
-        $this->assertEquals($json, '{"method":"or","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
+        $this->assertSame(Query::TYPE_OR, $query->getMethod());
+        $this->assertSame(Query::TYPE_EQUAL, $queries[0]->getMethod());
+        $this->assertSame('actors', $queries[0]->getAttribute());
+        $this->assertSame($json, '{"method":"or","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
 
         try {
             Query::parse('{"method":["equal"],"attribute":["title"],"values":["test"]}');
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
-            $this->assertEquals('Invalid query method. Must be a string, got array', $e->getMessage());
+            $this->assertSame('Invalid query method. Must be a string, got array', $e->getMessage());
         }
 
         try {
             Query::parse('{"method":"equal","attribute":["title"],"values":["test"]}');
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
-            $this->assertEquals('Invalid query attribute. Must be a string, got array', $e->getMessage());
+            $this->assertSame('Invalid query attribute. Must be a string, got array', $e->getMessage());
         }
 
         try {
             Query::parse('{"method":"equal","attribute":"title","values":"test"}');
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
-            $this->assertEquals('Invalid query values. Must be an array, got string', $e->getMessage());
+            $this->assertSame('Invalid query values. Must be an array, got string', $e->getMessage());
         }
 
         try {
             Query::parse('false');
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
-            $this->assertEquals('Invalid query. Must be an array, got boolean', $e->getMessage());
+            $this->assertSame('Invalid query. Must be an array, got boolean', $e->getMessage());
         }
 
         // Test orderRandom query parsing
         $query = Query::parse(Query::orderRandom()->toString());
-        $this->assertEquals('orderRandom', $query->getMethod());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals([], $query->getValues());
+        $this->assertSame('orderRandom', $query->getMethod());
+        $this->assertSame('', $query->getAttribute());
+        $this->assertSame([], $query->getValues());
     }
 
     public function testIsMethod(): void

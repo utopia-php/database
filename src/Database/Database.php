@@ -8109,7 +8109,7 @@ class Database
      * @param string $collectionId
      * @param string|null $documentId
      * @param array<string> $selects
-     * @return array{0: ?string, 1: ?string, 2: ?string}
+     * @return array{0: string, 1: string, 2: string}
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
     {
@@ -8142,8 +8142,8 @@ class Database
 
         return [
             $collectionKey,
-            $documentKey ?? null,
-            $documentHashKey ?? null
+            $documentKey ?? '',
+            $documentHashKey ?? ''
         ];
     }
 

@@ -7991,6 +7991,26 @@ class Database
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
+//        $queries = Query::getFilterQueries($queries);
+//
+//        if (\is_null($max)) {
+//            $max = PHP_INT_MAX;
+//        }
+//
+//        $queries[] = Query::limit($max);
+//        $queries[] = Query::select('$sequence');
+//
+//        $result = $this->withTenant()
+//        $result = $this->find($collection, $queries);
+//
+////        try {
+////            $result = $this->find($collection, $queries);
+////        } catch (DatabaseException\Authorization ){
+////            return 0;
+////        }
+//
+//        return \count($result);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $context = new QueryContext();

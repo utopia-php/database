@@ -44,6 +44,7 @@ class V2 extends Validator
     protected \DateTime $maxAllowedDate;
     protected string $idAttributeType;
     protected int $vectors = 0;
+    protected array $joinsAliasOrder = [Query::DEFAULT_ALIAS];
 
     /**
      * @throws Exception
@@ -297,7 +298,6 @@ class V2 extends Validator
         }
 
         $array = $attribute['array'] ?? false;
-        $filters = $attribute['filters'] ?? [];
         $size = $attribute['size'] ?? 0;
 
         if (Query::isSpatialQuery($method) && !in_array($attribute['type'], Database::SPATIAL_TYPES, true)) {
@@ -432,10 +432,6 @@ class V2 extends Validator
         ) {
             throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
         }
-
-        //        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
-        //            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
-        //        }
     }
 
     /**
@@ -473,9 +469,6 @@ class V2 extends Validator
      */
     public function isRelationExist(array $queries, string $alias): bool
     {
-        /**
-         * Do we want to validate only top lever or nesting as well?
-         */
         foreach ($queries as $query) {
             if ($query->isNested()) {
                 if ($this->isRelationExist($query->getValues(), $alias)) {
@@ -529,6 +522,12 @@ class V2 extends Validator
                 if ($query->isNested()) {
                     if (! $this->isValid($query->getValues(), $scope)) {
                         throw new \Exception($this->message);
+                    }
+                }
+
+                if ($scope === 'joins') {
+                    if (!in_array($query->getAlias(), $this->joinsAliasOrder) || !in_array($query->getRightAlias(), $this->joinsAliasOrder)){
+                        throw new \Exception('Invalid query: '.\ucfirst($query->getMethod()).' alias reference in join has not been defined.');
                     }
                 }
 
@@ -624,6 +623,8 @@ class V2 extends Validator
                     case Query::TYPE_INNER_JOIN:
                     case Query::TYPE_LEFT_JOIN:
                     case Query::TYPE_RIGHT_JOIN:
+                        $this->joinsAliasOrder[] = $query->getAlias();
+
                         $this->validateFilterQueries($query);
 
                         if (! $this->isValid($query->getValues(), 'joins')) {
@@ -634,9 +635,6 @@ class V2 extends Validator
                             throw new \Exception('Invalid query: At least one relation query is required on the joined collection.');
                         }
 
-                        /**
-                         * todo:to all queries which uses aliases check that it is available in context scope, not just exists
-                         */
                         break;
                     case Query::TYPE_RELATION_EQUAL:
                         if ($scope !== 'joins') {
@@ -742,5 +740,29 @@ class V2 extends Validator
         }
 
         return true;
+    }
+
+    protected function validateJoinAliasOrder(Query $joinQuery, array $knownAliases)
+    {
+        foreach ($joinQuery->getValues() as $nested) {
+            if (!$nested instanceof Query) continue;
+
+            if ($nested->getMethod() === Query::TYPE_RELATION_EQUAL) {
+
+                // LEFT SIDE alias
+                if (!in_array($nested->getAlias(), $knownAliases)) {
+                    throw new \Exception(
+                        'Invalid join: Alias "'.$nested->getAlias().'" used before it is declared.'
+                    );
+                }
+
+                // RIGHT SIDE alias
+                if (!in_array($nested->getRightAlias(), $knownAliases)) {
+                    throw new \Exception(
+                        'Invalid join: Alias "'.$nested->getRightAlias().'" used before it is declared.'
+                    );
+                }
+            }
+        }
     }
 }

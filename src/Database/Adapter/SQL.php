@@ -2303,7 +2303,8 @@ abstract class SQL extends Adapter
         string $collection,
         string $alias = '',
         int $tenantCount = 0,
-        string $condition = 'AND'
+        string $condition = 'AND',
+        bool $forceIsNull = false
     ): string {
         if (!$this->sharedTables) {
             return '';
@@ -2326,7 +2327,7 @@ abstract class SQL extends Adapter
         $bindings = \implode(',', $bindings);
 
         $orIsNull = '';
-        if ($collection === Database::METADATA) {
+        if ($collection === Database::METADATA || $forceIsNull) {
             $orIsNull = " OR {$alias}{$dot}_tenant IS NULL";
         }
 
@@ -2979,6 +2980,7 @@ abstract class SQL extends Adapter
      * @param array<Query> $selects
      * @param array<Query> $filters
      * @param array<Query> $joins
+     * @param array<Query> $vectors
      * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
@@ -3080,6 +3082,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
+        $rightJoins = false;
         $sqlJoin = '';
         foreach ($joins as $join) {
             $permissions = '';
@@ -3096,6 +3099,10 @@ abstract class SQL extends Adapter
             {$permissions}
             {$this->getTenantQuery($collection, $join->getAlias())}
             ";
+
+            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN){
+                $rightJoins = true;
+            }
         }
 
         $conditions = $this->getSQLConditions($filters, $binds);
@@ -3105,12 +3112,16 @@ abstract class SQL extends Adapter
 
         $skipAuth = $context->skipAuth($name, $forPermission, $this->authorization);
         if (! $skipAuth) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+            $permissionsCondition = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+            if($rightJoins){
+                $permissionsCondition = "($permissionsCondition OR {$alias}._uid IS NULL)";
+            }
+            $where[] = $permissionsCondition;
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '', forceIsNull: $rightJoins)}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';

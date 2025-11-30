@@ -44,15 +44,32 @@ trait JoinsTests
         //Authorization::setRole('user:bob');
 
         $db->createCollection('__users');
-        $db->createCollection('__sessions');
-
         $db->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
+        $db->createAttribute('__users', 'bank_internal_id', Database::VAR_INTEGER, 8, false);
+
+        $db->createCollection('__sessions');
         $db->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+        $db->createAttribute('__sessions', 'user_internal_id', Database::VAR_ID, 8, false);
         $db->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
         $db->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
 
+        $db->createCollection(
+            '__banks',
+            permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+            documentSecurity: false
+        );
+        $db->createAttribute('__banks', 'name', Database::VAR_STRING, 100, false);
+
+        $bank1 = $db->createDocument('__banks', new Document([
+            'name' => 'Chase'
+        ]));
+
         $user1 = $db->createDocument('__users', new Document([
             'username' => 'Donald',
+            'bank_internal_id' => (int)$bank1->getSequence(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user('bob')),
@@ -61,6 +78,7 @@ trait JoinsTests
 
         $sessionNoPermissions = $db->createDocument('__sessions', new Document([
             'user_id' => $user1->getId(),
+            'user_internal_id' => $user1->getSequence(),
             '$permissions' => [],
         ]));
 
@@ -84,6 +102,7 @@ trait JoinsTests
 
         $session2 = $db->createDocument('__sessions', new Document([
             'user_id' => $user1->getId(),
+            'user_internal_id' => $user1->getSequence(),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -93,6 +112,7 @@ trait JoinsTests
 
         $user2 = $db->createDocument('__users', new Document([
             'username' => 'Abraham',
+
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user('bob')),
@@ -101,6 +121,7 @@ trait JoinsTests
 
         $session3 = $db->createDocument('__sessions', new Document([
             'user_id' => $user2->getId(),
+            'user_internal_id' => $user2->getSequence(),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -616,20 +637,20 @@ trait JoinsTests
                         'B',
                         [
                             Query::relationEqual('', '$id', 'B', 'user_id'),
+                            Query::relationEqual('', '$sequence', 'B', 'user_internal_id'),
                         ]
                     ),
-                    Query::orderAsc('username'),
-                    Query::orderAsc('float', 'B')
+                    Query::orderAsc('$sequence', 'B')
                 ]
             );
         });
         $this->assertEquals(3, count($documents));
-        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[0]->getAttribute('username'));
         $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
-        $this->assertEquals('Donald', $documents[2]->getAttribute('username'));
-        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
-        $this->assertEquals(null, $documents[1]->getAttribute('float'));
-        $this->assertEquals(10.5, $documents[2]->getAttribute('float'));
+        $this->assertEquals('Abraham', $documents[2]->getAttribute('username'));
+        $this->assertEquals(null, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+        $this->assertEquals(5.5, $documents[2]->getAttribute('float'));
 
         /**
          * Left join with additional query in ON clause
@@ -741,13 +762,66 @@ trait JoinsTests
         );
 
         /**
-         * Issue because right join query return nulls and permissins query + tenant
+         * Issue because right join query return nulls and permissions query + tenant
+         * Since right join return null for main collection, which are filtered by the above
          */
-        var_dump($documents);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
-        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
-        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
-        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+    }
+
+    public function testJoinsOrder()
+    {
+        /**
+         * @var Database $db
+         */
+        $db = static::getDatabase();
+
+        if (!$db->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = $db->find(
+            '__sessions',
+            [
+                Query::select('username', 'B'),
+                Query::select('name', 'C', 'bank'),
+                Query::join(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                    ]
+                ),
+                Query::join(
+                    '__banks',
+                    'C',
+                    [
+                        Query::relationEqual('C', '$sequence', 'B', 'bank_internal_id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Donald', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Chase', $documents[0]->getAttribute('bank'));
+
+        try {
+            $db->find(
+                '__sessions',
+                [
+                    Query::join(
+                        '__banks',
+                        'A',
+                        [
+                            Query::relationEqual('A', '$sequence', 'BAD', 'bank_internal_id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: RelationEqual alias reference in join has not been defined.', $e->getMessage());
+        }
     }
 }

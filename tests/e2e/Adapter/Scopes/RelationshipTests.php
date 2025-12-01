@@ -3907,6 +3907,7 @@ trait RelationshipTests
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
 
+        var_dump('===============================================');
         // count with spatial relationship query
         $count = $database->count('restaurantsSpatial', [
             Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0)

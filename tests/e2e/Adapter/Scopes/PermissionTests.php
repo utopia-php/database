@@ -460,10 +460,12 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $count = $database->count(
-            $collection->getId()
-        );
-        $this->assertEmpty($count);
+        try {
+            $database->count($collection->getId());
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(AuthorizationException::class, $th);
+        }
     }
 
     /**

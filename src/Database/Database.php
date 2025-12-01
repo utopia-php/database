@@ -7697,7 +7697,7 @@ class Database
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
+    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ, string $method = ''): array
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -7810,7 +7810,8 @@ class Database
                 $orderTypes,
                 $cursor,
                 $cursorDirection,
-                $forPermission
+                $forPermission,
+                $method
             );
 
             $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
@@ -7941,51 +7942,25 @@ class Database
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        $filters = Query::groupByType($queries)['filters'];
 
-        $this->checkQueryTypes($queries);
-
-        if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
-            );
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
+        $queries = [];
+        foreach ($filters as $query) {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $queries[] = $query;
             }
         }
 
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
-        );
-
-        $queries = Query::groupByType($queries)['filters'];
-        $queries = $this->convertQueries($collection, $queries);
-
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
-
-        if ($queriesOrNull === null) {
-            return 0;
+        if ($max === null) {
+            $max = PHP_INT_MAX;
         }
 
-        $queries = $queriesOrNull;
+        $queries[] = Query::limit($max);
+        $queries[] = Query::select(['$id']);
 
-        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
-        $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
+        $result = $this->find($collection, $queries, method: 'count');
 
-        $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
-
-        return $count;
+        return $result[0]['$id'] ?? 0;
     }
 
     /**
@@ -8003,6 +7978,29 @@ class Database
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
+        $filters = Query::groupByType($queries)['filters'];
+
+        $queries = [];
+        foreach ($filters as $query) {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $queries[] = $query;
+            }
+        }
+
+        if ($max === null) {
+            $max = PHP_INT_MAX;
+        }
+
+        $queries[] = Query::limit($max);
+        $queries[] = Query::select(['$id']);
+
+        $result = $this->find($collection, $queries, method: 'count');
+
+        return $result[0]['$id'] ?? 0;
+
+
+
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);

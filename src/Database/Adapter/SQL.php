@@ -2961,9 +2961,8 @@ abstract class SQL extends Adapter
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, string $method = ''): array
     {
-        $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -3103,16 +3102,30 @@ abstract class SQL extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        $sql = "
+        if ($method === 'count'){
+            $sql = "
+			SELECT COUNT(1) as _uid FROM (
+				SELECT 1
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+                {$sqlWhere}
+                {$sqlLimit}
+			) table_count
+        ";
+        }
+        else {
+            $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
         ";
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
+        var_dump($sql);
+        var_dump($binds);
         try {
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -3166,102 +3179,6 @@ abstract class SQL extends Adapter
         }
 
         return $results;
-    }
-
-    /**
-     * Count Documents
-     *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     * @return int
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
-    {
-        $attributes = $collection->getAttribute("attributes", []);
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
-        $binds = [];
-        $where = [];
-        $alias = Query::DEFAULT_ALIAS;
-
-        $limit = '';
-        if (! \is_null($max)) {
-            $binds[':limit'] = $max;
-            $limit = 'LIMIT :limit';
-        }
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        // Extract vector queries (used for ORDER BY) and keep non-vector for WHERE
-        $vectorQueries = [];
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
-            }
-        }
-
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
-        }
-
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
-        }
-
-        if ($this->sharedTables) {
-            $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
-        }
-
-        $sqlWhere = !empty($where)
-            ? 'WHERE ' . \implode(' AND ', $where)
-            : '';
-
-        // Add vector distance calculations to ORDER BY (similarity-aware LIMIT)
-        $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
-            }
-        }
-        $sqlOrder = !empty($vectorOrders) ? 'ORDER BY ' . implode(', ', $vectorOrders) : '';
-
-        $sql = "
-			SELECT COUNT(1) as sum FROM (
-				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-                {$sqlWhere}
-                {$sqlOrder}
-                {$limit}
-			) table_count
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
-        }
-
-        $this->execute($stmt);
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($result)) {
-            $result = $result[0];
-        }
-
-        return $result['sum'] ?? 0;
     }
 
     /**

@@ -3276,13 +3276,9 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        // Extract vector queries (used for ORDER BY) and keep non-vector for WHERE
-        $vectorQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
                 $otherQueries[] = $query;
             }
         }
@@ -3305,22 +3301,11 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        // Add vector distance calculations to ORDER BY (similarity-aware LIMIT)
-        $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
-            }
-        }
-        $sqlOrder = !empty($vectorOrders) ? 'ORDER BY ' . implode(', ', $vectorOrders) : '';
-
         $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
-				{$sqlOrder}
 				{$limit}
 			) table_count
         ";

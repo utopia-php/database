@@ -768,7 +768,7 @@ trait JoinsTests
         $this->assertEquals(2, count($documents));
     }
 
-    public function testJoinsScopeOrder():void
+    public function testJoinsScopeOrder(): void
     {
         /**
          * @var Database $db
@@ -824,7 +824,7 @@ trait JoinsTests
         }
     }
 
-    public function testJoinsSum():void
+    public function testJoinsSum(): void
     {
         /**
          * @var Database $db

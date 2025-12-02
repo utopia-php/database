@@ -741,30 +741,4 @@ class V2 extends Validator
 
         return true;
     }
-
-    protected function validateJoinAliasOrder(Query $joinQuery, array $knownAliases)
-    {
-        foreach ($joinQuery->getValues() as $nested) {
-            if (!$nested instanceof Query) {
-                continue;
-            }
-
-            if ($nested->getMethod() === Query::TYPE_RELATION_EQUAL) {
-
-                // LEFT SIDE alias
-                if (!in_array($nested->getAlias(), $knownAliases)) {
-                    throw new \Exception(
-                        'Invalid join: Alias "'.$nested->getAlias().'" used before it is declared.'
-                    );
-                }
-
-                // RIGHT SIDE alias
-                if (!in_array($nested->getRightAlias(), $knownAliases)) {
-                    throw new \Exception(
-                        'Invalid join: Alias "'.$nested->getRightAlias().'" used before it is declared.'
-                    );
-                }
-            }
-        }
-    }
 }

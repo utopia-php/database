@@ -7993,7 +7993,7 @@ class Database
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         if (!is_null($max) && $max < 1) {
-            throw new QueryException('Invalid max value, must be a valid integer greater than 0');
+            throw new DatabaseException('Invalid max value, must be a valid integer and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));

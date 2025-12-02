@@ -3223,16 +3223,15 @@ abstract class SQL extends Adapter
      * Count Documents
      *
      * @param QueryContext $context
-     * @param int $limit
+     * @param int|null $max
      * @param array<Query> $filters
      * @param array<Query> $joins
      *
      * @return int
      *
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
-    public function count(QueryContext $context, int $limit, array $filters = [], array $joins = []): int
+    public function count(QueryContext $context, ?int $max, array $filters, array $joins): int
     {
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -3295,7 +3294,11 @@ abstract class SQL extends Adapter
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        $binds[':limit'] = $limit;
+        $sqlLimit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $sqlLimit = 'LIMIT :limit';
+        }
 
         $sql = "
 			SELECT COUNT(1) as sum FROM (
@@ -3303,7 +3306,7 @@ abstract class SQL extends Adapter
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 			    {$sqlJoin}
                 {$sqlWhere}
-                LIMIT :limit
+                {$sqlLimit}
 			) table_count
         ";
 

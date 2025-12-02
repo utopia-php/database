@@ -856,7 +856,7 @@ abstract class Adapter
      * Count Documents
      *
      * @param QueryContext $context
-     * @param int $limit
+     * @param int|null $max
      * @param array<Query> $filters
      * @param array<Query> $joins
      *
@@ -864,9 +864,9 @@ abstract class Adapter
      */
     abstract public function count(
         QueryContext $context,
-        int $limit,
-        array $filters = [],
-        array $joins = [],
+        ?int $max,
+        array $filters,
+        array $joins,
     ): int;
 
     /**

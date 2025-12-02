@@ -291,9 +291,9 @@ class Pool extends Adapter
 
     public function count(
         QueryContext $context,
-        int $limit,
-        array $filters = [],
-        array $joins = [],
+        ?int $max,
+        array $filters,
+        array $joins,
     ): int {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

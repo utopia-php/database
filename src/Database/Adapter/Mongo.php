@@ -2128,40 +2128,37 @@ class Mongo extends Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $max
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     *
      * @return int
-     * @throws Exception
+     *
+     * @throws DatabaseException
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(QueryContext $context, ?int $max, array $filters = [], array $joins = []): int
     {
+        $collection = $context->getCollectionByAlias(Query::DEFAULT_ALIAS);
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $filters = [];
-        $options = [];
-
-        if (!\is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
-
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
-        }
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         // Build filters from queries
-        $filters = $this->buildFilters($queries);
+        $filters = $this->buildFilters($filters);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-        // Add permissions filter if authorization is enabled
-        if ($this->authorization->getStatus()) {
+        // Permissions
+        $permission = Database::PERMISSION_READ;
+
+        // permissions
+        $skipAuth = $context->skipAuth($this->filter($collection->getId()), $permission, $this->authorization);
+        if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$permission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         /**
@@ -2174,6 +2171,11 @@ class Mongo extends Adapter
          **/
 
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2182,14 +2184,14 @@ class Mongo extends Adapter
         }
 
         // Add limit stage if specified
-        if (!\is_null($max) && $max > 0) {
+        if (!\is_null($max)) {
             $pipeline[] = ['$limit' => $max];
         }
 
         // Use $group and $sum when limit is specified, $count when no limit
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
-        if (!\is_null($max) && $max > 0) {
+        if (!\is_null($max)) {
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [

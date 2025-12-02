@@ -289,8 +289,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
-    {
+    public function count(
+        QueryContext $context,
+        int $limit,
+        array $filters = [],
+        array $joins = [],
+    ): int {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 

@@ -626,7 +626,7 @@ trait JoinsTests
         /**
          * Left join skip permissions
          */
-        $documents = $db->getAuthorization()->skip(function () use ($db){
+        $documents = $db->getAuthorization()->skip(function () use ($db) {
             return $db->find(
                 '__users',
                 [
@@ -716,7 +716,7 @@ trait JoinsTests
         /**
          * Right join skip permissions
          */
-        $documents = $db->getAuthorization()->skip(function () use ($db){
+        $documents = $db->getAuthorization()->skip(function () use ($db) {
             return $db->find(
                 '__sessions',
                 [

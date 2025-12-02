@@ -855,13 +855,19 @@ abstract class Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
+     * @param QueryContext $context
+     * @param int $limit
+     * @param array<Query> $filters
+     * @param array<Query> $joins
      *
      * @return int
      */
-    abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(
+        QueryContext $context,
+        int $limit,
+        array $filters = [],
+        array $joins = [],
+    ): int;
 
     /**
      * Get Collection Size of the raw data

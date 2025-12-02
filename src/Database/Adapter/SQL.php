@@ -3100,7 +3100,7 @@ abstract class SQL extends Adapter
             {$this->getTenantQuery($collection, $join->getAlias())}
             ";
 
-            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN){
+            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN) {
                 $rightJoins = true;
             }
         }
@@ -3113,7 +3113,7 @@ abstract class SQL extends Adapter
         $skipAuth = $context->skipAuth($name, $forPermission, $this->authorization);
         if (! $skipAuth) {
             $permissionsCondition = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
-            if($rightJoins){
+            if ($rightJoins) {
                 $permissionsCondition = "($permissionsCondition OR {$alias}._uid IS NULL)";
             }
             $where[] = $permissionsCondition;
@@ -3165,7 +3165,6 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {
-            var_dump($sql);
             $stmt = $this->getPDO()->prepare($sql);
 
             foreach ($binds as $key => $value) {
@@ -3223,97 +3222,113 @@ abstract class SQL extends Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
+     * @param QueryContext $context
+     * @param int $limit
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     *
      * @return int
+     *
      * @throws Exception
      * @throws PDOException
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(QueryContext $context, int $limit, array $filters = [], array $joins = []): int
     {
-        $attributes = $collection->getAttribute("attributes", []);
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
-        $binds = [];
-        $where = [];
         $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
 
-        $limit = '';
-        if (! \is_null($max)) {
-            $binds[':limit'] = $max;
-            $limit = 'LIMIT :limit';
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
+
+        $roles = $this->authorization->getRoles();
+        $where = [];
+
+        $filters = array_map(fn ($query) => clone $query, $filters);
+
+        $cursorWhere = [];
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $rightJoins = false;
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
 
-        // Extract vector queries (used for ORDER BY) and keep non-vector for WHERE
-        $vectorQueries = [];
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+            $skipAuth = $context->skipAuth($collection, Database::PERMISSION_READ, $this->authorization);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), Database::PERMISSION_READ);
+            }
+
+            $sqlJoin .= "{$this->getSQLOperator($join->getMethod())} {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+
+            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN) {
+                $rightJoins = true;
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        $skipAuth = $context->skipAuth($name, Database::PERMISSION_READ, $this->authorization);
+        if (! $skipAuth) {
+            $permissionsCondition = $this->getSQLPermissionsCondition($name, $roles, $alias, Database::PERMISSION_READ);
+            if ($rightJoins) {
+                $permissionsCondition = "($permissionsCondition OR {$alias}._uid IS NULL)";
+            }
+            $where[] = $permissionsCondition;
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '', forceIsNull: $rightJoins)}";
         }
 
-        $sqlWhere = !empty($where)
-            ? 'WHERE ' . \implode(' AND ', $where)
-            : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        // Add vector distance calculations to ORDER BY (similarity-aware LIMIT)
-        $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
-            }
-        }
-        $sqlOrder = !empty($vectorOrders) ? 'ORDER BY ' . implode(', ', $vectorOrders) : '';
+        $binds[':limit'] = $limit;
 
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			    {$sqlJoin}
                 {$sqlWhere}
-                {$sqlOrder}
-                {$limit}
+                LIMIT :limit
 			) table_count
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
+            $this->execute($stmt);
+            $result = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
-        $this->execute($stmt);
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($result)) {
-            $result = $result[0];
-        }
-
-        return $result['sum'] ?? 0;
+        return $result[0]['sum'] ?? 0;
     }
 
     /**

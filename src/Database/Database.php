@@ -7793,7 +7793,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $queries = self::convertQueries($context, $queries);
+        $queries = $this->convertQueries($context, $queries);
 
         $grouped = Query::groupByType($queries);
         $cursor = $grouped['cursor'];
@@ -7988,29 +7988,103 @@ class Database
      *
      * @return int
      * @throws DatabaseException
+     * @throws Exception
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
-//        $queries = Query::getFilterQueries($queries);
-//
-//        if (\is_null($max)) {
-//            $max = PHP_INT_MAX;
-//        }
-//
-//        $queries[] = Query::limit($max);
-//        $queries[] = Query::select('$sequence');
-//
-//        $result = $this->withTenant()
-//        $result = $this->find($collection, $queries);
-//
-////        try {
-////            $result = $this->find($collection, $queries);
-////        } catch (DatabaseException\Authorization ){
-////            return 0;
-////        }
-//
-//        return \count($result);
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $joins = Query::getJoinQueries($queries);
+
+        foreach ($joins as $join) {
+            $context->add(
+                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $join->getAlias()
+            );
+        }
+
+        foreach ($context->getCollections() as $_collection) {
+            $documentSecurity = $_collection->getAttribute('documentSecurity', false);
+            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $_collection->getRead()));
+
+            if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($this->authorization->getDescription());
+            }
+
+            $context->addSkipAuth($this->adapter->filter($_collection->getId()), self::PERMISSION_READ, $skipAuth);
+        }
+
+        $this->checkQueryTypes($queries);
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $context,
+                idAttributeType: $this->adapter->getIdAttributeType(),
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
+            );
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
+        $queries = $this->convertQueries($context, $queries);
+
+        $filters = Query::getFilterQueries($queries);
+
+        if ($max === null) {
+            $max = PHP_INT_MAX;
+        }
+
+        // Convert relationship filter queries to SQL-level subqueries
+        $filters = $this->convertRelationshipFiltersToSubqueries($relationships, $filters);
+
+        // If conversion returns null, it means no documents can match (relationship filter found no matches)
+        if ($filters === null) {
+            return 0;
+        }
+
+        $count = $this->adapter->count(
+            $context,
+            $max,
+            $filters,
+            $joins,
+        );
+
+        $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
+
+        return $count;
+    }
+
+    /**
+     * Count Documents
+     *
+     * Count the number of documents.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int|null $max
+     *
+     * @return int
+     * @throws DatabaseException
+     */
+    public function count_orginal(string $collection, array $queries = [], ?int $max = null): int
+    {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $context = new QueryContext();
@@ -8057,7 +8131,6 @@ class Database
 
         return $count;
     }
-
     /**
      * Sum an attribute
      *

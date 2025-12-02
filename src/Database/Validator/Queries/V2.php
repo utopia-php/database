@@ -526,7 +526,7 @@ class V2 extends Validator
                 }
 
                 if ($scope === 'joins') {
-                    if (!in_array($query->getAlias(), $this->joinsAliasOrder) || !in_array($query->getRightAlias(), $this->joinsAliasOrder)){
+                    if (!in_array($query->getAlias(), $this->joinsAliasOrder) || !in_array($query->getRightAlias(), $this->joinsAliasOrder)) {
                         throw new \Exception('Invalid query: '.\ucfirst($query->getMethod()).' alias reference in join has not been defined.');
                     }
                 }
@@ -745,7 +745,9 @@ class V2 extends Validator
     protected function validateJoinAliasOrder(Query $joinQuery, array $knownAliases)
     {
         foreach ($joinQuery->getValues() as $nested) {
-            if (!$nested instanceof Query) continue;
+            if (!$nested instanceof Query) {
+                continue;
+            }
 
             if ($nested->getMethod() === Query::TYPE_RELATION_EQUAL) {
 

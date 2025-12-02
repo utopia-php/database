@@ -19,6 +19,25 @@ services:
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
     environment:
       PHP_IDE_CONFIG: serverName=tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-mirror:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      mariadb-mirror:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mysql-mirror:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-mirror:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
 
   adminer:
     image: adminer
@@ -44,6 +63,12 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
       POSTGRES_DB: root
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   postgres-mirror:
     build:
@@ -60,6 +85,12 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
       POSTGRES_DB: root
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   mariadb:
     image: mariadb:10.11
@@ -71,6 +102,12 @@ services:
       - "8703:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   mariadb-mirror:
     image: mariadb:10.11
@@ -82,6 +119,12 @@ services:
       - "8704:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   mongo:
     image: mongo:8.0.14
@@ -110,10 +153,10 @@ services:
             \" 2>/dev/null || exit 1
           fi
         "
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 10s
 
   mongo-express:
     image: mongo-express
@@ -145,6 +188,12 @@ services:
       MYSQL_TCP_PORT: 3307
     cap_add:
       - SYS_NICE
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   mysql-mirror:
     image: mysql:8.0.43
@@ -161,6 +210,12 @@ services:
       MYSQL_TCP_PORT: 3307
     cap_add:
       - SYS_NICE
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   redis:
     image: redis:8.2.1-alpine3.22
@@ -169,6 +224,12 @@ services:
       - "8708:6379"
     networks:
       - database
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   redis-mirror:
     image: redis:8.2.1-alpine3.22
@@ -177,6 +238,12 @@ services:
       - "8709:6379"
     networks:
       - database
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   mongo-data:

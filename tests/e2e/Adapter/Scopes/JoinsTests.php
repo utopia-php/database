@@ -768,7 +768,7 @@ trait JoinsTests
         $this->assertEquals(2, count($documents));
     }
 
-    public function testJoinsOrder()
+    public function testJoinsScopeOrder()
     {
         /**
          * @var Database $db
@@ -779,7 +779,6 @@ trait JoinsTests
             $this->expectNotToPerformAssertions();
             return;
         }
-
         $documents = $db->find(
             '__sessions',
             [
@@ -823,5 +822,34 @@ trait JoinsTests
             $this->assertTrue($e instanceof QueryException);
             $this->assertEquals('Invalid query: RelationEqual alias reference in join has not been defined.', $e->getMessage());
         }
+    }
+
+    public function testJoinsSum()
+    {
+        /**
+         * @var Database $db
+         */
+        $db = static::getDatabase();
+
+        if (!$db->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $queries = [
+            Query::join(
+                '__users',
+                'B',
+                [
+                    Query::relationEqual('B', '$id', '', 'user_id'),
+                ]
+            )
+        ];
+
+        $documents = $db->find('__sessions', $queries);
+        $this->assertEquals(2, count($documents));
+
+        $count = $db->count('__sessions', $queries);
+        $this->assertEquals(2, $count);
     }
 }

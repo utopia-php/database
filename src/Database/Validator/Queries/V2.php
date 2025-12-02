@@ -44,6 +44,10 @@ class V2 extends Validator
     protected \DateTime $maxAllowedDate;
     protected string $idAttributeType;
     protected int $vectors = 0;
+
+    /**
+     * @var array<string>
+     */
     protected array $joinsAliasOrder = [Query::DEFAULT_ALIAS];
 
     /**

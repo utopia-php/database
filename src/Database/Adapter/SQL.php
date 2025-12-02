@@ -3244,12 +3244,6 @@ abstract class SQL extends Adapter
 
         $filters = array_map(fn ($query) => clone $query, $filters);
 
-        $cursorWhere = [];
-
-        if (!empty($cursorWhere)) {
-            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
-        }
-
         $rightJoins = false;
         $sqlJoin = '';
         foreach ($joins as $join) {

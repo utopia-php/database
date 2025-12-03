@@ -673,35 +673,6 @@ class V2 extends Validator
                             $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         }
 
-                        if ($query->getAttribute() === '*') {
-                            $collection = $this->context->getCollectionByAlias($query->getAlias());
-                            $attributes = $this->schema[$collection->getId()];
-                            foreach ($attributes as $attribute) {
-                                if (($duplications[$query->getAlias()][$attribute['$id']] ?? false) === true) {
-                                    //throw new \Exception('Ambiguous column using "*" for "'.$query->getAlias().'.'.$attribute['$id'].'"');
-                                }
-
-                                $duplications[$query->getAlias()][$attribute['$id']] = true;
-                            }
-                        } else {
-                            if (($duplications[$query->getAlias()][$query->getAttribute()] ?? false) === true) {
-                                //throw new \Exception('Duplicate Query Select on "'.$query->getAlias().'.'.$query->getAttribute().'"');
-                            }
-                            $duplications[$query->getAlias()][$query->getAttribute()] = true;
-                        }
-
-                        if (!empty($query->getAs())) {
-                            $needle = $query->getAs();
-                        } else {
-                            $needle = $query->getAttribute(); // todo: convert internal attribute from $id => _id
-                        }
-
-                        if (in_array($needle, $ambiguous)) {
-                            //throw new \Exception('Invalid Query Select: ambiguous column "'.$needle.'"');
-                        }
-
-                        $ambiguous[] = $needle;
-
                         break;
                     case Query::TYPE_ORDER_RANDOM:
 

@@ -5,6 +5,7 @@ namespace Tests\Unit\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
@@ -51,6 +52,22 @@ class FilterTest extends TestCase
                 'key' => 'integer',
                 'type' => Database::VAR_INTEGER,
                 'array' => false,
+            ]),
+            new Document([
+                '$id' => 'search',
+                'key' => 'search',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]),
+        ]);
+
+        $collection->setAttribute('indexes', [
+            new Document([
+                '$id' => ID::custom('ft'),
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['search'],
+                'lengths' => [],
+                'orders' => [],
             ]),
         ]);
 
@@ -150,8 +167,11 @@ class FilterTest extends TestCase
 
     public function testNotSearch(): void
     {
+        $this->assertTrue($this->validator->isValid([Query::notSearch('search', 'unwanted')]));
+
         // Test valid notSearch queries
-        $this->assertTrue($this->validator->isValid([Query::notSearch('string', 'unwanted')]));
+        $this->assertFalse($this->validator->isValid([Query::notSearch('string', 'unwanted')]));
+        $this->assertEquals('Searching by attribute "string" requires a fulltext index.', $this->validator->getDescription());
 
         // Test that arrays cannot use notSearch
         $this->assertFalse($this->validator->isValid([Query::notSearch('string_array', 'unwanted')]));
@@ -161,6 +181,24 @@ class FilterTest extends TestCase
         $query = Query::parse('{"method":"notSearch","attribute":"string","values":["word1", "word2"]}');
         $this->assertFalse($this->validator->isValid([$query]));
         $this->assertEquals('Invalid query: NotSearch queries require exactly one value.', $this->validator->getDescription());
+    }
+
+    public function testSearch(): void
+    {
+        $this->assertTrue($this->validator->isValid([Query::search('search', 'unwanted')]));
+
+        // Test valid notSearch queries
+        $this->assertFalse($this->validator->isValid([Query::search('string', 'unwanted')]));
+        $this->assertEquals('Searching by attribute "string" requires a fulltext index.', $this->validator->getDescription());
+
+        // Test that arrays cannot use notSearch
+        $this->assertFalse($this->validator->isValid([Query::search('string_array', 'unwanted')]));
+        $this->assertEquals('Invalid query: Cannot query search on attribute "string_array" because it is an array.', $this->validator->getDescription());
+
+        // Test multiple values not allowed
+        $query = Query::parse('{"method":"search","attribute":"string","values":["word1", "word2"]}');
+        $this->assertFalse($this->validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Search queries require exactly one value.', $this->validator->getDescription());
     }
 
     public function testNotStartsWith(): void

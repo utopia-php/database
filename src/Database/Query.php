@@ -1556,45 +1556,4 @@ class Query
     {
         return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
     }
-
-    /**
-     * @param array<Query> $queries
-     * @param Query $query
-     * @return array{array<Query>, bool}
-     * @throws \Exception
-     */
-    public static function addSelect(array $queries, Query $query): array
-    {
-        $merge = true;
-        $found = false;
-
-        foreach ($queries as $q) {
-            if ($q->getMethod() === self::TYPE_SELECT) {
-                $found = true;
-
-                if ($q->getAlias() === $query->getAlias()) {
-                    if ($q->getAttribute() === '*') {
-                        $merge = false;
-                    }
-
-                    if ($q->getAttribute() === $query->getAttribute()) {
-                        if ($q->getAs() === $query->getAs()) {
-                            $merge = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        if ($found && $merge) {
-            $queries = [
-                ...$queries,
-                $query
-            ];
-
-            return [$queries, true];
-        }
-
-        return [$queries, false];
-    }
 }

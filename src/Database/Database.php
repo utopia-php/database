@@ -4320,7 +4320,7 @@ class Database
 
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
-        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions', system: true));
+        [$selects, $permissionsAdded] = $context::addSelect($selects, Query::select('$permissions', system: true));
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
@@ -8708,6 +8708,7 @@ class Database
      * @param array<Document> $relationships
      * @param array<Query> $queries
      * @return array{0: array<Query>, 1: array<string, array<Query>>}
+     * @throws Exception
      */
     private function processRelationshipQueries(
         array $relationships,
@@ -8781,7 +8782,7 @@ class Database
          * In order to populateDocumentRelationships we need $id
          */
         if (!empty($relationships)) {
-            [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id', system: true));
+            [$queries, $idAdded] = QueryContext::addSelect($queries, Query::select('$id', system: true));
         }
 
         return [$queries, $nestedSelections];

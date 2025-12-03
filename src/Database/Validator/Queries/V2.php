@@ -510,8 +510,6 @@ class V2 extends Validator
                 throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
             }
 
-            $ambiguous = [];
-            $duplications = [];
             foreach ($value as $query) {
                 if (!$query instanceof Query) {
                     try {

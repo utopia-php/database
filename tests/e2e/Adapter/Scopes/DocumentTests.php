@@ -1952,6 +1952,12 @@ trait DocumentTests
 
             $this->assertEquals(2, count($documents));
 
+            $documents = $database->find('movies', [
+                Query::notSearch('name', 'captain'),
+            ]);
+
+            $this->assertEquals(4, count($documents));
+
             /**
              * Fulltext search (wildcard)
              */

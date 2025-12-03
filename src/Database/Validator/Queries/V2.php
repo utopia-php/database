@@ -443,7 +443,7 @@ class V2 extends Validator
      */
     public function validateFulltextIndex(Query $query): void
     {
-        if ($query->getMethod() !== Query::TYPE_SEARCH) {
+        if (!in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_NOT_SEARCH])) {
             return;
         }
 

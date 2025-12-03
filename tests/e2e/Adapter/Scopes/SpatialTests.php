@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 
 trait SpatialTests
 {
@@ -1592,17 +1593,25 @@ trait SpatialTests
             $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
         }
 
-        $results = $database->find($collectionName, [Query::select(["name"])]);
+        $results = $database->find($collectionName, [
+            Query::select('name')
+        ]);
         foreach ($results as $document) {
             $this->assertNotEmpty($document->getAttribute('name'));
         }
 
-        $results = $database->find($collectionName, [Query::select(["location"])]);
+        $results = $database->find($collectionName, [
+            Query::select('location')
+        ]);
         foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
         }
 
-        $results = $database->find($collectionName, [Query::select(["area","location"])]);
+        $results = $database->find($collectionName, [
+            Query::select('$sequence'),
+            Query::select('area'),
+            Query::select('location')
+        ]);
         foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
             $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
@@ -2477,20 +2486,23 @@ trait SpatialTests
         $this->assertEquals($result->getAttribute('line'), $line);
         $this->assertEquals($result->getAttribute('poly'), $poly);
 
+        $context = new QueryContext();
+        $context->add($collection);
 
-        $result = $database->decode($collection, $doc);
+        $result = $database->decode($context, $doc);
         $this->assertEquals($result->getAttribute('point'), $pointArr);
         $this->assertEquals($result->getAttribute('line'), $lineArr);
         $this->assertEquals($result->getAttribute('poly'), $polyArr);
 
         $stringDoc = new Document(['point' => $point,'line' => $line, 'poly' => $poly]);
-        $result = $database->decode($collection, $stringDoc);
+        $result = $database->decode($context, $stringDoc);
         $this->assertEquals($result->getAttribute('point'), $pointArr);
         $this->assertEquals($result->getAttribute('line'), $lineArr);
         $this->assertEquals($result->getAttribute('poly'), $polyArr);
 
         $nullDoc = new Document(['point' => null,'line' => null, 'poly' => null]);
-        $result = $database->decode($collection, $nullDoc);
+        $result = $database->decode($context, $nullDoc);
+
         $this->assertEquals($result->getAttribute('point'), null);
         $this->assertEquals($result->getAttribute('line'), null);
         $this->assertEquals($result->getAttribute('poly'), null);

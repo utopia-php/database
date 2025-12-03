@@ -3,20 +3,25 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Cursor;
 
 class CursorTest extends TestCase
 {
-    public function testValueSuccess(): void
+    /**
+     * @throws Exception
+     */
+    public function test_value_success(): void
     {
         $validator = new Cursor();
 
-        $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
-        $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
+        $this->assertTrue($validator->isValid(Query::cursorAfter(new Document(['$id' => 'asb']))));
+        $this->assertTrue($validator->isValid(Query::cursorBefore(new Document(['$id' => 'asb']))));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $validator = new Cursor();
 

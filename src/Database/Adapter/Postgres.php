@@ -1813,7 +1813,6 @@ class Postgres extends SQL
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
                         default => $value
                     };
 

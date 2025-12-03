@@ -737,9 +737,6 @@ class V2 extends Validator
 
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
-            //var_dump($this->message);
-            //var_dump($e);
-
             return false;
         }
 

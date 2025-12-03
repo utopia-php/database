@@ -34,6 +34,14 @@ class QueryContext
         return $this->collections;
     }
 
+    /**
+     * @return Document
+     */
+    public function getMainCollection(): Document
+    {
+        return $this->getCollections()[0];
+    }
+
     public function getCollectionByAlias(string $alias): Document
     {
         /**
@@ -84,6 +92,4 @@ class QueryContext
 
         return true;
     }
-
-
 }

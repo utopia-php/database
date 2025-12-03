@@ -1885,7 +1885,7 @@ class Mongo extends Adapter
         array $vectors = [],
         array $orderQueries = []
     ): array {
-        $collection = $context->getCollections()[0];
+        $collection = $context->getMainCollection();
 
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
@@ -2139,7 +2139,7 @@ class Mongo extends Adapter
      */
     public function count(QueryContext $context, ?int $max, array $filters = [], array $joins = []): int
     {
-        $collection = $context->getCollectionByAlias(Query::DEFAULT_ALIAS);
+        $collection = $context->getMainCollection();
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $filters = array_map(fn ($query) => clone $query, $filters);

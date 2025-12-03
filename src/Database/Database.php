@@ -8254,7 +8254,7 @@ class Database
             }
         }
 
-        $new = $this->createDocumentInstance($context->getCollections()[0]->getId(), []);
+        $new = $this->createDocumentInstance($context->getMainCollection()->getId(), []);
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
@@ -8356,7 +8356,7 @@ class Database
             }
         }
 
-        $new = $this->createDocumentInstance($context->getCollections()[0]->getId(), []);
+        $new = $this->createDocumentInstance($context->getMainCollection()->getId(), []);
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
@@ -8572,7 +8572,7 @@ class Database
         $collection = clone $context->getCollectionByAlias($query->getAlias());
 
         if ($collection->isEmpty()) {
-            throw new \Exception('Unknown Alias context');
+            throw new QueryException('Unknown Alias context');
         }
 
         /**

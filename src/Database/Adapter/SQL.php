@@ -2343,7 +2343,6 @@ abstract class SQL extends Adapter
      */
     protected function getAttributeProjection(array $selects): string
     {
-        //todo: fix this $spatialAttributes
 
         if (empty($selects)) {
             return $this->quote(Query::DEFAULT_ALIAS).'.*';
@@ -2357,17 +2356,9 @@ abstract class SQL extends Adapter
 
             $alias = $select->getAlias();
             $alias = $this->filter($alias);
-            $attribute = $select->getAttribute();
 
-            $attribute = match ($attribute) {
-                '$id' => '_uid',
-                '$sequence' => '_id',
-                '$tenant' => '_tenant',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                '$permissions' => '_permissions',
-                default => $attribute
-            };
+            $attribute = $this->getInternalKeyForAttribute($select->getAttribute());
+
 
             if ($attribute !== '*') {
                 $attribute = $this->filter($attribute);
@@ -3003,7 +2994,7 @@ abstract class SQL extends Adapter
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $name = $context->getCollections()[0]->getId();
+        $name = $context->getMainCollection()->getId();
         $name = $this->filter($name);
 
         $roles = $this->authorization->getRoles();
@@ -3236,7 +3227,7 @@ abstract class SQL extends Adapter
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $name = $context->getCollections()[0]->getId();
+        $name = $context->getMainCollection()->getId();
         $name = $this->filter($name);
 
         $roles = $this->authorization->getRoles();

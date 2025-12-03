@@ -358,6 +358,10 @@ class Query
             return Database::ORDER_DESC;
         }
 
+        if ($this->method === self::TYPE_ORDER_RANDOM) {
+            return Database::ORDER_RANDOM;
+        }
+
         throw new \Exception('Invalid method: Get order direction on "'.$this->method.'" Query');
     }
     /**
@@ -601,11 +605,7 @@ class Query
             $array['collection'] = $this->collection;
         }
 
-        if ($this->isNested()) {
-            foreach ($this->values as $index => $value) {
-                $array['values'][$index] = $value->toArray();
-            }
-        } elseif ($this->isJoin()) {
+        if ($this->isNested() || $this->isJoin()) {
             foreach ($this->values as $index => $value) {
                 $array['values'][$index] = $value->toArray();
             }
@@ -1154,6 +1154,7 @@ class Query
         return self::getByType($queries, [
             Query::TYPE_ORDER_ASC,
             Query::TYPE_ORDER_DESC,
+            Query::TYPE_ORDER_RANDOM,
         ]);
     }
 

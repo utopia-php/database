@@ -2093,4 +2093,161 @@ trait ManyToManyTests
         $database->deleteCollection('tags');
         $database->deleteCollection('articles');
     }
+
+    public function testManyToManyRelationshipWithArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Cleanup any leftover collections from previous runs
+        try {
+            $database->deleteCollection('library');
+        } catch (\Throwable $e) {
+        }
+        try {
+            $database->deleteCollection('book');
+        } catch (\Throwable $e) {
+        }
+
+        $database->createCollection('library');
+        $database->createCollection('book');
+
+        $database->createAttribute('library', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('book', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'library',
+            relatedCollection: 'book',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'books',
+            twoWayKey: 'libraries'
+        );
+
+        // Create some books
+        $book1 = $database->createDocument('book', new Document([
+            '$id' => 'book1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Book 1',
+        ]));
+
+        $book2 = $database->createDocument('book', new Document([
+            '$id' => 'book2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Book 2',
+        ]));
+
+        $book3 = $database->createDocument('book', new Document([
+            '$id' => 'book3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Book 3',
+        ]));
+
+        $book4 = $database->createDocument('book', new Document([
+            '$id' => 'book4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Book 4',
+        ]));
+
+        // Create library with one book
+        $library = $database->createDocument('library', new Document([
+            '$id' => 'library1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Library 1',
+            'books' => ['book1'],
+        ]));
+
+        $this->assertCount(1, $library->getAttribute('books'));
+        $this->assertEquals('book1', $library->getAttribute('books')[0]->getId());
+
+        // Test arrayAppend - add a single book
+        $library = $database->updateDocument('library', 'library1', new Document([
+            'books' => \Utopia\Database\Operator::arrayAppend(['book2']),
+        ]));
+
+        $library = $database->getDocument('library', 'library1');
+        $this->assertCount(2, $library->getAttribute('books'));
+        $bookIds = \array_map(fn ($book) => $book->getId(), $library->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertContains('book2', $bookIds);
+
+        // Test arrayAppend - add multiple books
+        $library = $database->updateDocument('library', 'library1', new Document([
+            'books' => \Utopia\Database\Operator::arrayAppend(['book3', 'book4']),
+        ]));
+
+        $library = $database->getDocument('library', 'library1');
+        $this->assertCount(4, $library->getAttribute('books'));
+        $bookIds = \array_map(fn ($book) => $book->getId(), $library->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertContains('book2', $bookIds);
+        $this->assertContains('book3', $bookIds);
+        $this->assertContains('book4', $bookIds);
+
+        // Test arrayRemove - remove a single book
+        $library = $database->updateDocument('library', 'library1', new Document([
+            'books' => \Utopia\Database\Operator::arrayRemove('book2'),
+        ]));
+
+        $library = $database->getDocument('library', 'library1');
+        $this->assertCount(3, $library->getAttribute('books'));
+        $bookIds = \array_map(fn ($book) => $book->getId(), $library->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertNotContains('book2', $bookIds);
+        $this->assertContains('book3', $bookIds);
+        $this->assertContains('book4', $bookIds);
+
+        // Test arrayRemove - remove multiple books at once
+        $library = $database->updateDocument('library', 'library1', new Document([
+            'books' => \Utopia\Database\Operator::arrayRemove(['book3', 'book4']),
+        ]));
+
+        $library = $database->getDocument('library', 'library1');
+        $this->assertCount(1, $library->getAttribute('books'));
+        $bookIds = \array_map(fn ($book) => $book->getId(), $library->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertNotContains('book3', $bookIds);
+        $this->assertNotContains('book4', $bookIds);
+
+        // Test arrayPrepend - add books
+        // Note: Order is not guaranteed for many-to-many relationships as they use junction tables
+        $library = $database->updateDocument('library', 'library1', new Document([
+            'books' => \Utopia\Database\Operator::arrayPrepend(['book2']),
+        ]));
+
+        $library = $database->getDocument('library', 'library1');
+        $this->assertCount(2, $library->getAttribute('books'));
+        $bookIds = \array_map(fn ($book) => $book->getId(), $library->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertContains('book2', $bookIds);
+
+        // Cleanup
+        $database->deleteCollection('library');
+        $database->deleteCollection('book');
+    }
 }

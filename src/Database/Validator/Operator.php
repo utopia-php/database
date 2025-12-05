@@ -37,6 +37,50 @@ class Operator extends Validator
     }
 
     /**
+     * Check if a value is a valid relationship reference (string ID or Document)
+     *
+     * @param mixed $item
+     * @return bool
+     */
+    private function isValidRelationshipValue(mixed $item): bool
+    {
+        return \is_string($item) || $item instanceof Document;
+    }
+
+    /**
+     * Check if a relationship attribute represents a "many" side (returns array of documents)
+     *
+     * @param Document|array<string, mixed> $attribute
+     * @return bool
+     */
+    private function isRelationshipArray(Document|array $attribute): bool
+    {
+        $options = $attribute instanceof Document
+            ? $attribute->getAttribute('options', [])
+            : ($attribute['options'] ?? []);
+
+        $relationType = $options['relationType'] ?? '';
+        $side = $options['side'] ?? '';
+
+        // Many-to-many is always an array on both sides
+        if ($relationType === Database::RELATION_MANY_TO_MANY) {
+            return true;
+        }
+
+        // One-to-many: array on parent side, single on child side
+        if ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) {
+            return true;
+        }
+
+        // Many-to-one: array on child side, single on parent side
+        if ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Get Description
      *
      * Returns validator description
@@ -165,7 +209,19 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_ARRAY_APPEND:
             case DatabaseOperator::TYPE_ARRAY_PREPEND:
-                if (!$isArray) {
+                // For relationships, check if it's a "many" side
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                    foreach ($values as $item) {
+                        if (!$this->isValidRelationshipValue($item)) {
+                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            return false;
+                        }
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -182,14 +238,24 @@ class Operator extends Validator
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_UNIQUE:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_INSERT:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -206,6 +272,14 @@ class Operator extends Validator
                 }
 
                 $insertValue = $values[1];
+
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isValidRelationshipValue($insertValue)) {
+                        $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                        return false;
+                    }
+                }
+
                 if ($type === Database::VAR_INTEGER && \is_numeric($insertValue)) {
                     if ($insertValue > Database::MAX_INT || $insertValue < Database::MIN_INT) {
                         $this->message = "Cannot apply {$method} operator: array items must be between " . Database::MIN_INT . " and " . Database::MAX_INT;
@@ -228,7 +302,19 @@ class Operator extends Validator
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_REMOVE:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                    $toValidate = \is_array($values[0]) ? $values[0] : $values;
+                    foreach ($toValidate as $item) {
+                        if (!$this->isValidRelationshipValue($item)) {
+                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            return false;
+                        }
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -240,7 +326,12 @@ class Operator extends Validator
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_INTERSECT:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -250,16 +341,41 @@ class Operator extends Validator
                     return false;
                 }
 
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    foreach ($values as $item) {
+                        if (!$this->isValidRelationshipValue($item)) {
+                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            return false;
+                        }
+                    }
+                }
+
                 break;
             case DatabaseOperator::TYPE_ARRAY_DIFF:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                    foreach ($values as $item) {
+                        if (!$this->isValidRelationshipValue($item)) {
+                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            return false;
+                        }
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_FILTER:
-                if (!$isArray) {
+                if ($type === Database::VAR_RELATIONSHIP) {
+                    if (!$this->isRelationshipArray($attribute)) {
+                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        return false;
+                    }
+                } elseif (!$isArray) {
                     $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }

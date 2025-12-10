@@ -3,8 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use PHPUnit\Framework\TestCase;
-use Redis;
-use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Clickhouse;
 use Utopia\Database\Database;
@@ -17,7 +16,6 @@ class ClickhouseTest extends TestCase
 {
     private static ?Database $database = null;
     private static ?Authorization $authorization = null;
-    private static string $namespace;
 
     protected function setUp(): void
     {
@@ -45,16 +43,13 @@ class ClickhouseTest extends TestCase
             database: 'utopiaTests'
         );
 
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache(new NoneCache());
 
         $database = new Database($adapter, $cache);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
-            ->setNamespace(self::$namespace = 'ch_' . uniqid());
+            ->setNamespace('ch_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();

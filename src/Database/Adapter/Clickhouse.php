@@ -915,6 +915,11 @@ class Clickhouse extends Adapter
             throw new DatabaseException('Clickhouse request failed: ' . $error);
         }
 
+        if (!\is_string($response)) {
+            curl_close($curl);
+            throw new DatabaseException('Clickhouse request returned non-string response');
+        }
+
         $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         curl_close($curl);
 
@@ -923,7 +928,7 @@ class Clickhouse extends Adapter
         }
 
         if (!$expectJson) {
-            return $response;
+            return (string)$response;
         }
 
         $trimmed = trim($response);

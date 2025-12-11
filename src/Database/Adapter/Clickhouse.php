@@ -74,7 +74,7 @@ class Clickhouse extends Adapter
 
     public function ping(): bool
     {
-        $this->run('SELECT 1 FORMAT JSON');
+        $this->run('SELECT 1 FORMAT JSON', useDatabase: false);
 
         return true;
     }
@@ -87,7 +87,7 @@ class Clickhouse extends Adapter
     public function create(string $name): bool
     {
         $name = $this->filter($name);
-        $this->run("CREATE DATABASE IF NOT EXISTS {$name}");
+        $this->run("CREATE DATABASE IF NOT EXISTS {$name}", useDatabase: false);
 
         return true;
     }
@@ -97,12 +97,12 @@ class Clickhouse extends Adapter
         $database = $this->filter($database);
 
         if (empty($collection)) {
-            $result = $this->run("
+        $result = $this->run("
                 SELECT name FROM system.databases
                 WHERE name = '{$database}'
                 LIMIT 1
                 FORMAT JSON
-            ");
+            ", useDatabase: false);
 
             return !empty($result['data']);
         }
@@ -115,14 +115,14 @@ class Clickhouse extends Adapter
             WHERE database = '{$database}' AND name = {$table}
             LIMIT 1
             FORMAT JSON
-        ");
+        ", useDatabase: false);
 
         return !empty($result['data']);
     }
 
     public function list(): array
     {
-        $result = $this->run('SHOW DATABASES FORMAT JSON');
+        $result = $this->run('SHOW DATABASES FORMAT JSON', useDatabase: false);
 
         $list = [];
         foreach ($result['data'] ?? [] as $row) {
@@ -135,7 +135,7 @@ class Clickhouse extends Adapter
     public function delete(string $name): bool
     {
         $name = $this->filter($name);
-        $this->run("DROP DATABASE IF EXISTS {$name}");
+        $this->run("DROP DATABASE IF EXISTS {$name}", useDatabase: false);
 
         return true;
     }
@@ -515,7 +515,7 @@ class Clickhouse extends Adapter
               AND database = '{$database}'
               AND table = '{$this->getNamespace()}_{$table}'
             FORMAT JSON
-        ");
+        ", useDatabase: false);
 
         return (int)($result['data'][0]['total'] ?? 0);
     }
@@ -883,10 +883,10 @@ class Clickhouse extends Adapter
      * @return array<string, mixed>|string
      * @throws DatabaseException
      */
-    private function run(string $sql, bool $expectJson = true): array|string
+    private function run(string $sql, bool $expectJson = true, bool $useDatabase = true): array|string
     {
         $params = [];
-        if (!empty($this->database)) {
+        if ($useDatabase && !empty($this->database)) {
             $params['database'] = $this->database;
         }
         if ($this->timeout > 0) {

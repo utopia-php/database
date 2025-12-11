@@ -108,11 +108,11 @@ class Clickhouse extends Adapter
         }
 
         $collection = $this->filter($collection);
-        $table = $this->quote($this->getNamespace() . '_' . $collection);
+        $table = $this->getNamespace() . '_' . $collection;
 
         $result = $this->run("
             SELECT name FROM system.tables
-            WHERE database = '{$database}' AND name = {$table}
+            WHERE database = '{$database}' AND name = '{$table}'
             LIMIT 1
             FORMAT JSON
         ", useDatabase: false);

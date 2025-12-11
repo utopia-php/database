@@ -97,7 +97,7 @@ class Clickhouse extends Adapter
         $database = $this->filter($database);
 
         if (empty($collection)) {
-        $result = $this->run("
+            $result = $this->run("
                 SELECT name FROM system.databases
                 WHERE name = '{$database}'
                 LIMIT 1

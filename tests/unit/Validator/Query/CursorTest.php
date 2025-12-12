@@ -21,7 +21,7 @@ class CursorTest extends TestCase
         $validator = new Cursor();
 
         $this->assertFalse($validator->isValid(Query::limit(-1)));
-        $this->assertEquals('Invalid query', $validator->getDescription());
+        $this->assertSame('Invalid query', $validator->getDescription());
         $this->assertFalse($validator->isValid(Query::limit(101)));
         $this->assertFalse($validator->isValid(Query::offset(-1)));
         $this->assertFalse($validator->isValid(Query::offset(5001)));

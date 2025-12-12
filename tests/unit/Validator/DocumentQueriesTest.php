@@ -66,10 +66,10 @@ class DocumentQueriesTest extends TestCase
             Query::select(['title']),
         ];
 
-        $this->assertEquals(true, $validator->isValid($queries));
+        $this->assertSame(true, $validator->isValid($queries));
 
         $queries[] = Query::select(['price.relation']);
-        $this->assertEquals(true, $validator->isValid($queries));
+        $this->assertSame(true, $validator->isValid($queries));
     }
 
     /**
@@ -79,6 +79,6 @@ class DocumentQueriesTest extends TestCase
     {
         $validator = new DocumentQueries($this->collection['attributes']);
         $queries = [Query::limit(1)];
-        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertSame(false, $validator->isValid($queries));
     }
 }

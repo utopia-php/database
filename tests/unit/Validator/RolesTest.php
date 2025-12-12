@@ -29,7 +29,7 @@ class RolesTest extends TestCase
     {
         $object = new Roles();
         $this->assertFalse($object->isValid('not an array'));
-        $this->assertEquals('Roles must be an array of strings.', $object->getDescription());
+        $this->assertSame('Roles must be an array of strings.', $object->getDescription());
     }
 
     public function testExceedLength(): void
@@ -40,7 +40,7 @@ class RolesTest extends TestCase
             Role::users()->toString(),
             Role::users()->toString()
         ]));
-        $this->assertEquals('You can only provide up to 2 roles.', $object->getDescription());
+        $this->assertSame('You can only provide up to 2 roles.', $object->getDescription());
     }
 
     public function testNotAllStrings(): void
@@ -50,28 +50,28 @@ class RolesTest extends TestCase
             Role::users()->toString(),
             123
         ]));
-        $this->assertEquals('Every role must be of type string.', $object->getDescription());
+        $this->assertSame('Every role must be of type string.', $object->getDescription());
     }
 
     public function testObsoleteWildcardRole(): void
     {
         $object = new Roles();
         $this->assertFalse($object->isValid(['*']));
-        $this->assertEquals('Wildcard role "*" has been replaced. Use "any" instead.', $object->getDescription());
+        $this->assertSame('Wildcard role "*" has been replaced. Use "any" instead.', $object->getDescription());
     }
 
     public function testObsoleteRolePrefix(): void
     {
         $object = new Roles();
         $this->assertFalse($object->isValid(['read("role:123")']));
-        $this->assertEquals('Roles using the "role:" prefix have been removed. Use "users", "guests", or "any" instead.', $object->getDescription());
+        $this->assertSame('Roles using the "role:" prefix have been removed. Use "users", "guests", or "any" instead.', $object->getDescription());
     }
 
     public function testDisallowedRoles(): void
     {
         $object = new Roles(allowed: [Roles::ROLE_USERS]);
         $this->assertFalse($object->isValid([Role::any()->toString()]));
-        $this->assertEquals('Role "any" is not allowed. Must be one of: users.', $object->getDescription());
+        $this->assertSame('Role "any" is not allowed. Must be one of: users.', $object->getDescription());
     }
 
     public function testLabels(): void

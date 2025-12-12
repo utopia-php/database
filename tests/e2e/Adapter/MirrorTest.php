@@ -112,7 +112,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
         $source = $database->getSource();
         $this->assertInstanceOf(Database::class, $source);
-        $this->assertEquals(self::$source, $source);
+        $this->assertSame(self::$source, $source);
     }
 
     /**
@@ -124,7 +124,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
         $destination = $database->getDestination();
         $this->assertInstanceOf(Database::class, $destination);
-        $this->assertEquals(self::$destination, $destination);
+        $this->assertSame(self::$destination, $destination);
     }
 
     /**
@@ -170,12 +170,12 @@ class MirrorTest extends Base
         );
 
         // Asset both databases have updated the collection
-        $this->assertEquals(
+        $this->assertSame(
             [Permission::read(Role::users())],
             $database->getSource()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
 
-        $this->assertEquals(
+        $this->assertSame(
             [Permission::read(Role::users())],
             $database->getDestination()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
@@ -224,12 +224,12 @@ class MirrorTest extends Base
         ]));
 
         // Assert document is created in both databases
-        $this->assertEquals(
+        $this->assertSame(
             $document,
             $database->getSource()->getDocument('testCreateMirroredDocument', $document->getId())
         );
 
-        $this->assertEquals(
+        $this->assertSame(
             $document,
             $database->getDestination()->getDocument('testCreateMirroredDocument', $document->getId())
         );
@@ -273,12 +273,12 @@ class MirrorTest extends Base
         );
 
         // Assert document is updated in both databases
-        $this->assertEquals(
+        $this->assertSame(
             $document,
             $database->getSource()->getDocument('testUpdateMirroredDocument', $document->getId())
         );
 
-        $this->assertEquals(
+        $this->assertSame(
             $document,
             $database->getDestination()->getDocument('testUpdateMirroredDocument', $document->getId())
         );

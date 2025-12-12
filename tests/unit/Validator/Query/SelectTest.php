@@ -46,7 +46,7 @@ class SelectTest extends TestCase
     public function testValueFailure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::limit(1)));
-        $this->assertEquals('Invalid query', $this->validator->getDescription());
+        $this->assertSame('Invalid query', $this->validator->getDescription());
         $this->assertFalse($this->validator->isValid(Query::select(['name.artist'])));
     }
 }

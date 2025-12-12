@@ -106,14 +106,14 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes using createAttribute method
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
 
             // Create spatial indexes
-            $this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'line_spatial', Database::INDEX_SPATIAL, ['lineAttr']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'line_spatial', Database::INDEX_SPATIAL, ['lineAttr']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
 
             $point = [5.0, 5.0];
             $linestring = [[1.0, 2.0], [3.0, 4.0]];
@@ -129,21 +129,21 @@ trait SpatialTests
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
             $this->assertInstanceOf(Document::class, $createdDoc);
-            $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
-            $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
-            $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
+            $this->assertSame($point, $createdDoc->getAttribute('pointAttr'));
+            $this->assertSame($linestring, $createdDoc->getAttribute('lineAttr'));
+            $this->assertSame($polygon, $createdDoc->getAttribute('polyAttr'));
 
             $createdDoc = $database->getDocument($collectionName, 'doc1');
             $this->assertInstanceOf(Document::class, $createdDoc);
-            $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
-            $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
-            $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
+            $this->assertSame($point, $createdDoc->getAttribute('pointAttr'));
+            $this->assertSame($linestring, $createdDoc->getAttribute('lineAttr'));
+            $this->assertSame($polygon, $createdDoc->getAttribute('polyAttr'));
 
             // Update spatial data
             $doc1->setAttribute('pointAttr', [6.0, 6.0]);
             $updatedDoc = $database->updateDocument($collectionName, 'doc1', $doc1);
 
-            $this->assertEquals([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
+            $this->assertSame([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
 
 
             // Test spatial queries with appropriate operations for each geometry type
@@ -160,7 +160,7 @@ trait SpatialTests
             foreach ($pointQueries as $queryType => $query) {
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on pointAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on pointAttr', $queryType));
+                $this->assertSame('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on pointAttr', $queryType));
             }
 
             // LineString attribute tests - use operations valid for linestrings
@@ -179,7 +179,7 @@ trait SpatialTests
                 }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
+                $this->assertSame('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
 
             // Distance queries for linestring attribute
@@ -193,7 +193,7 @@ trait SpatialTests
             foreach ($lineDistanceQueries as $queryType => $query) {
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed distance query: %s on lineAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on lineAttr', $queryType));
+                $this->assertSame('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on lineAttr', $queryType));
             }
 
             // Polygon attribute tests - use operations valid for polygons
@@ -222,7 +222,7 @@ trait SpatialTests
                 }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
+                $this->assertSame('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
 
             // Distance queries for polygon attribute
@@ -236,7 +236,7 @@ trait SpatialTests
             foreach ($polyDistanceQueries as $queryType => $query) {
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed distance query: %s on polyAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
+                $this->assertSame('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
             }
         } finally {
             $database->deleteCollection($collectionName);
@@ -298,15 +298,15 @@ trait SpatialTests
         ]));
 
         $this->assertInstanceOf(Document::class, $location1);
-        $this->assertEquals([40.7128, -74.0060], $location1->getAttribute('coordinates'));
+        $this->assertSame([40.7128, -74.0060], $location1->getAttribute('coordinates'));
 
         // Check if building attribute is populated (could be ID string or Document object)
         $buildingAttr = $location1->getAttribute('building');
         if (is_string($buildingAttr)) {
-            $this->assertEquals('building1', $buildingAttr);
+            $this->assertSame('building1', $buildingAttr);
         } else {
             $this->assertInstanceOf(Document::class, $buildingAttr);
-            $this->assertEquals('building1', $buildingAttr->getId());
+            $this->assertSame('building1', $buildingAttr->getId());
         }
 
         // Test spatial queries on related documents
@@ -315,13 +315,13 @@ trait SpatialTests
         ], Database::PERMISSION_READ);
 
         $this->assertNotEmpty($nearbyLocations);
-        $this->assertEquals('location1', $nearbyLocations[0]->getId());
+        $this->assertSame('location1', $nearbyLocations[0]->getId());
 
         // Test relationship with spatial data update
         $location1->setAttribute('coordinates', [40.7589, -73.9851]); // Times Square coordinates
         $updatedLocation = $database->updateDocument('location', 'location1', $location1);
 
-        $this->assertEquals([40.7589, -73.9851], $updatedLocation->getAttribute('coordinates'));
+        $this->assertSame([40.7589, -73.9851], $updatedLocation->getAttribute('coordinates'));
 
         // Test spatial query after update
         $timesSquareLocations = $database->find('location', [
@@ -329,19 +329,19 @@ trait SpatialTests
         ], Database::PERMISSION_READ);
 
         $this->assertNotEmpty($timesSquareLocations);
-        $this->assertEquals('location1', $timesSquareLocations[0]->getId());
+        $this->assertSame('location1', $timesSquareLocations[0]->getId());
 
         // Test relationship integrity with spatial data
         $building = $database->getDocument('building', 'building1');
         $this->assertInstanceOf(Document::class, $building);
-        $this->assertEquals('building1', $building->getId());
+        $this->assertSame('building1', $building->getId());
 
         // Test one-way relationship (building doesn't have location attribute)
         $this->assertArrayNotHasKey('location', $building->getArrayCopy());
 
         // Test basic relationship integrity
         $this->assertInstanceOf(Document::class, $building);
-        $this->assertEquals('Empire State Building', $building->getAttribute('name'));
+        $this->assertSame('Empire State Building', $building->getAttribute('name'));
 
         // Clean up
         $database->deleteCollection('location');
@@ -362,19 +362,19 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             $required = $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true;
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required));
 
             // Create spatial indexes
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
             if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
-                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+                $this->assertSame(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
             } else {
                 // Attribute was created as required above; directly create index once
-                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+                $this->assertSame(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
             }
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_poly', Database::INDEX_SPATIAL, ['polyAttr']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_poly', Database::INDEX_SPATIAL, ['polyAttr']));
 
             $collection = $database->getCollection($collectionName);
             $this->assertIsArray($collection->getAttribute('attributes'));
@@ -491,17 +491,17 @@ trait SpatialTests
                 Query::distanceEqual('coord', [10.0, 10.0], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
-            $this->assertEquals('p1', $equalZero[0]->getId());
+            $this->assertSame('p1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
                 Query::distanceNotEqual('coord', [10.0, 10.0], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
-            $this->assertEquals('p2', $notEqualZero[0]->getId());
+            $this->assertSame('p2', $notEqualZero[0]->getId());
 
             $region = $database->getDocument($parent, 'r1');
             $this->assertArrayHasKey('places', $region);
-            $this->assertEquals(2, \count($region['places']));
+            $this->assertSame(2, \count($region['places']));
         } finally {
             $database->deleteCollection($child);
             $database->deleteCollection($parent);
@@ -596,17 +596,17 @@ trait SpatialTests
                 Query::distanceEqual('coord', [20.0, 20.0], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
-            $this->assertEquals('s1', $equalZero[0]->getId());
+            $this->assertSame('s1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
                 Query::distanceNotEqual('coord', [20.0, 20.0], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
-            $this->assertEquals('s2', $notEqualZero[0]->getId());
+            $this->assertSame('s2', $notEqualZero[0]->getId());
 
             $city = $database->getDocument($parent, 'c1');
             $this->assertArrayHasKey('stops', $city);
-            $this->assertEquals(2, \count($city['stops']));
+            $this->assertSame(2, \count($city['stops']));
         } finally {
             $database->deleteCollection($child);
             $database->deleteCollection($parent);
@@ -701,7 +701,7 @@ trait SpatialTests
                 Query::distanceEqual('home', [30.0, 30.0], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
-            $this->assertEquals('d1', $equalZero[0]->getId());
+            $this->assertSame('d1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($a, [
                 Query::distanceNotEqual('home', [30.0, 30.0], 0.0)
@@ -711,7 +711,7 @@ trait SpatialTests
             // Ensure relationship present
             $d1 = $database->getDocument($a, 'd1');
             $this->assertArrayHasKey('routes', $d1);
-            $this->assertEquals(1, \count($d1['routes']));
+            $this->assertSame(1, \count($d1['routes']));
         } finally {
             $database->deleteCollection($b);
             $database->deleteCollection($a);
@@ -732,15 +732,15 @@ trait SpatialTests
         try {
             $database->createCollection($collectionName);
             $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
-            $this->assertEquals(true, $database->createIndex($collectionName, 'loc_spatial', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'loc_spatial', Database::INDEX_SPATIAL, ['loc']));
 
             $collection = $database->getCollection($collectionName);
             $this->assertIsArray($collection->getAttribute('indexes'));
             $this->assertCount(1, $collection->getAttribute('indexes'));
-            $this->assertEquals('loc_spatial', $collection->getAttribute('indexes')[0]['$id']);
-            $this->assertEquals(Database::INDEX_SPATIAL, $collection->getAttribute('indexes')[0]['type']);
+            $this->assertSame('loc_spatial', $collection->getAttribute('indexes')[0]['$id']);
+            $this->assertSame(Database::INDEX_SPATIAL, $collection->getAttribute('indexes')[0]['type']);
 
-            $this->assertEquals(true, $database->deleteIndex($collectionName, 'loc_spatial'));
+            $this->assertSame(true, $database->deleteIndex($collectionName, 'loc_spatial'));
             $collection = $database->getCollection($collectionName);
             $this->assertCount(0, $collection->getAttribute('indexes'));
         } finally {
@@ -773,7 +773,7 @@ trait SpatialTests
             if ($orderSupported) {
                 $database->createCollection($collOrderCreate, $attributes, $indexes);
                 $meta = $database->getCollection($collOrderCreate);
-                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+                $this->assertSame('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
             } else {
                 try {
                     $database->createCollection($collOrderCreate, $attributes, $indexes);
@@ -833,7 +833,7 @@ trait SpatialTests
             if ($nullSupported) {
                 $database->createCollection($collNullCreate, $attributes, $indexes);
                 $meta = $database->getCollection($collNullCreate);
-                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+                $this->assertSame('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
             } else {
                 try {
                     $database->createCollection($collNullCreate, $attributes, $indexes);
@@ -929,20 +929,20 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes for different geometric shapes
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'rectangle', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'square', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'triangle', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'circle_center', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'complex_polygon', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'multi_linestring', Database::VAR_LINESTRING, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'rectangle', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'square', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'triangle', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'circle_center', Database::VAR_POINT, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'complex_polygon', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'multi_linestring', Database::VAR_LINESTRING, 0, true));
 
             // Create spatial indexes
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_rectangle', Database::INDEX_SPATIAL, ['rectangle']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_square', Database::INDEX_SPATIAL, ['square']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_triangle', Database::INDEX_SPATIAL, ['triangle']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_circle_center', Database::INDEX_SPATIAL, ['circle_center']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_complex_polygon', Database::INDEX_SPATIAL, ['complex_polygon']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_multi_linestring', Database::INDEX_SPATIAL, ['multi_linestring']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_rectangle', Database::INDEX_SPATIAL, ['rectangle']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_square', Database::INDEX_SPATIAL, ['square']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_triangle', Database::INDEX_SPATIAL, ['triangle']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_circle_center', Database::INDEX_SPATIAL, ['circle_center']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_complex_polygon', Database::INDEX_SPATIAL, ['complex_polygon']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_multi_linestring', Database::INDEX_SPATIAL, ['multi_linestring']));
 
             // Create documents with different geometric shapes
             $doc1 = new Document([
@@ -979,7 +979,7 @@ trait SpatialTests
                     Query::contains('rectangle', [[5, 5]]) // Point inside first rectangle
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideRect1);
-                $this->assertEquals('rect1', $insideRect1[0]->getId());
+                $this->assertSame('rect1', $insideRect1[0]->getId());
             }
 
             // Test rectangle doesn't contain point outside
@@ -1022,7 +1022,7 @@ trait SpatialTests
                     Query::contains('square', [[10, 10]]) // Point inside first square
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideSquare1);
-                $this->assertEquals('rect1', $insideSquare1[0]->getId());
+                $this->assertSame('rect1', $insideSquare1[0]->getId());
             }
 
             // Test rectangle contains square (shape contains shape)
@@ -1031,7 +1031,7 @@ trait SpatialTests
                     Query::contains('rectangle', [[[5, 2], [5, 8], [15, 8], [15, 2], [5, 2]]]) // Square geometry that fits within rectangle
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($rectContainsSquare);
-                $this->assertEquals('rect1', $rectContainsSquare[0]->getId());
+                $this->assertSame('rect1', $rectContainsSquare[0]->getId());
             }
 
             // Test rectangle contains triangle (shape contains shape)
@@ -1040,7 +1040,7 @@ trait SpatialTests
                     Query::contains('rectangle', [[[10, 2], [18, 2], [14, 8], [10, 2]]]) // Triangle geometry that fits within rectangle
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($rectContainsTriangle);
-                $this->assertEquals('rect1', $rectContainsTriangle[0]->getId());
+                $this->assertSame('rect1', $rectContainsTriangle[0]->getId());
             }
 
             // Test L-shaped polygon contains smaller rectangle (shape contains shape)
@@ -1049,7 +1049,7 @@ trait SpatialTests
                     Query::contains('complex_polygon', [[[5, 5], [5, 10], [10, 10], [10, 5], [5, 5]]]) // Small rectangle inside L-shape
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($lShapeContainsRect);
-                $this->assertEquals('rect1', $lShapeContainsRect[0]->getId());
+                $this->assertSame('rect1', $lShapeContainsRect[0]->getId());
             }
 
             // Test T-shaped polygon contains smaller square (shape contains shape)
@@ -1058,7 +1058,7 @@ trait SpatialTests
                     Query::contains('complex_polygon', [[[35, 5], [35, 10], [40, 10], [40, 5], [35, 5]]]) // Small square inside T-shape
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($tShapeContainsSquare);
-                $this->assertEquals('rect2', $tShapeContainsSquare[0]->getId());
+                $this->assertSame('rect2', $tShapeContainsSquare[0]->getId());
             }
 
             // Test failure case: square should NOT contain rectangle (smaller shape cannot contain larger shape)
@@ -1120,7 +1120,7 @@ trait SpatialTests
                 ], Database::PERMISSION_READ);
             }
             $this->assertNotEmpty($exactSquare);
-            $this->assertEquals('rect1', $exactSquare[0]->getId());
+            $this->assertSame('rect1', $exactSquare[0]->getId());
 
             // Test square doesn't equal different square
             $differentSquare = $database->find($collectionName, [
@@ -1134,7 +1134,7 @@ trait SpatialTests
                     Query::contains('triangle', [[25, 10]]) // Point inside first triangle
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideTriangle1);
-                $this->assertEquals('rect1', $insideTriangle1[0]->getId());
+                $this->assertSame('rect1', $insideTriangle1[0]->getId());
             }
 
             // Test triangle doesn't contain point outside
@@ -1179,7 +1179,7 @@ trait SpatialTests
                     Query::contains('complex_polygon', [[10, 10]]) // Point inside L-shape
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideLShape);
-                $this->assertEquals('rect1', $insideLShape[0]->getId());
+                $this->assertSame('rect1', $insideLShape[0]->getId());
             }
 
             // Test L-shaped polygon doesn't contain point in "hole"
@@ -1212,7 +1212,7 @@ trait SpatialTests
                     Query::contains('complex_polygon', [[40, 5]]) // Point inside T-shape
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideTShape);
-                $this->assertEquals('rect2', $insideTShape[0]->getId());
+                $this->assertSame('rect2', $insideTShape[0]->getId());
             }
 
             // Test failure case: T-shaped polygon should NOT contain distant point
@@ -1270,28 +1270,28 @@ trait SpatialTests
                 Query::distanceLessThan('circle_center', [10, 5], 5.0) // Points within 5 units of first center
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nearCenter);
-            $this->assertEquals('rect1', $nearCenter[0]->getId());
+            $this->assertSame('rect1', $nearCenter[0]->getId());
 
             // Test distanceEqual queries to find nearby shapes
             $nearbyShapes = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [40, 4], 15.0) // Points within 15 units of second center
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nearbyShapes);
-            $this->assertEquals('rect2', $nearbyShapes[0]->getId());
+            $this->assertSame('rect2', $nearbyShapes[0]->getId());
 
             // Test distanceGreaterThan queries
             $farShapes = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [10, 5], 10.0) // Points more than 10 units from first center
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($farShapes);
-            $this->assertEquals('rect2', $farShapes[0]->getId());
+            $this->assertSame('rect2', $farShapes[0]->getId());
 
             // Test distanceLessThan queries
             $closeShapes = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [10, 5], 3.0) // Points less than 3 units from first center
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($closeShapes);
-            $this->assertEquals('rect1', $closeShapes[0]->getId());
+            $this->assertSame('rect1', $closeShapes[0]->getId());
 
             // Test distanceGreaterThan queries with various thresholds
             // Test: points more than 20 units from first center (should find rect2)
@@ -1299,14 +1299,14 @@ trait SpatialTests
                 Query::distanceGreaterThan('circle_center', [10, 5], 20.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($veryFarShapes);
-            $this->assertEquals('rect2', $veryFarShapes[0]->getId());
+            $this->assertSame('rect2', $veryFarShapes[0]->getId());
 
             // Test: points more than 5 units from second center (should find rect1)
             $farFromSecondCenter = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [40, 4], 5.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($farFromSecondCenter);
-            $this->assertEquals('rect1', $farFromSecondCenter[0]->getId());
+            $this->assertSame('rect1', $farFromSecondCenter[0]->getId());
 
             // Test: points more than 30 units from origin (should find only rect2)
             $farFromOrigin = $database->find($collectionName, [
@@ -1320,26 +1320,26 @@ trait SpatialTests
                 Query::distanceEqual('circle_center', [10, 5], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
-            $this->assertEquals('rect1', $equalZero[0]->getId());
+            $this->assertSame('rect1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($collectionName, [
                 Query::distanceNotEqual('circle_center', [10, 5], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
-            $this->assertEquals('rect2', $notEqualZero[0]->getId());
+            $this->assertSame('rect2', $notEqualZero[0]->getId());
 
             // Additional distance queries for complex shapes (polygon and linestring)
             $rectDistanceEqual = $database->find($collectionName, [
                 Query::distanceEqual('rectangle', [[[0, 0], [0, 10], [20, 10], [20, 0], [0, 0]]], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($rectDistanceEqual);
-            $this->assertEquals('rect1', $rectDistanceEqual[0]->getId());
+            $this->assertSame('rect1', $rectDistanceEqual[0]->getId());
 
             $lineDistanceEqual = $database->find($collectionName, [
                 Query::distanceEqual('multi_linestring', [[0, 0], [10, 10], [20, 0], [0, 20], [20, 20]], 0.0)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($lineDistanceEqual);
-            $this->assertEquals('rect1', $lineDistanceEqual[0]->getId());
+            $this->assertSame('rect1', $lineDistanceEqual[0]->getId());
 
         } finally {
             $database->deleteCollection($collectionName);
@@ -1360,15 +1360,15 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true));
 
             // Create spatial indexes
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_location', Database::INDEX_SPATIAL, ['location']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_area', Database::INDEX_SPATIAL, ['area']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_route', Database::INDEX_SPATIAL, ['route']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_location', Database::INDEX_SPATIAL, ['location']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_area', Database::INDEX_SPATIAL, ['area']));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_route', Database::INDEX_SPATIAL, ['route']));
 
             // Create test documents
             $doc1 = new Document([
@@ -1412,7 +1412,7 @@ trait SpatialTests
                     ])
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($nearbyAndInArea);
-                $this->assertEquals('park1', $nearbyAndInArea[0]->getId());
+                $this->assertSame('park1', $nearbyAndInArea[0]->getId());
             }
 
             // Test OR combination: parks near either location
@@ -1463,7 +1463,7 @@ trait SpatialTests
 
             $this->assertNotEmpty($orderedByDistance);
             // First result should be closest to the reference point
-            $this->assertEquals('park1', $orderedByDistance[0]->getId());
+            $this->assertSame('park1', $orderedByDistance[0]->getId());
 
             // Test spatial queries with limits
             $limitedResults = $database->find($collectionName, [
@@ -1555,8 +1555,8 @@ trait SpatialTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(5, $count);
-        $this->assertEquals(5, count($results));
+        $this->assertSame(5, $count);
+        $this->assertSame(5, count($results));
 
         // Verify created documents
         foreach ($results as $document) {
@@ -1584,7 +1584,7 @@ trait SpatialTests
             $document = $database->getDocument($collectionName, $doc->getId());
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getAttribute('name'));
-            $this->assertEquals($document->getAttribute('name'), $doc->getAttribute('name'));
+            $this->assertSame($document->getAttribute('name'), $doc->getAttribute('name'));
             $this->assertNotEmpty($document->getSequence());
             $this->assertIsArray($document->getAttribute('location'));
             $this->assertIsArray($document->getAttribute('area'));
@@ -1643,9 +1643,9 @@ trait SpatialTests
 
         // Verify updated documents
         foreach ($updateResults as $document) {
-            $this->assertEquals('Updated Location', $document->getAttribute('name'));
-            $this->assertEquals([15.0, 25.0], $document->getAttribute('location'));
-            $this->assertEquals([[
+            $this->assertSame('Updated Location', $document->getAttribute('name'));
+            $this->assertSame([15.0, 25.0], $document->getAttribute('location'));
+            $this->assertSame([[
                 [15.0, 25.0],
                 [16.0, 25.0],
                 [16.0, 26.0],
@@ -1699,8 +1699,8 @@ trait SpatialTests
             $upsertResults[] = $doc;
         });
 
-        $this->assertEquals(2, $upsertCount);
-        $this->assertEquals(2, count($upsertResults));
+        $this->assertSame(2, $upsertCount);
+        $this->assertSame(2, count($upsertResults));
 
         // Verify upserted documents
         foreach ($upsertResults as $document) {
@@ -1757,7 +1757,7 @@ trait SpatialTests
             Query::distanceGreaterThan('location', [15.0, 25.0], 100.0) // Find documents more than 100 units away
         ]);
 
-        $this->assertEquals(0, count($extremelyFarDocuments));
+        $this->assertSame(0, count($extremelyFarDocuments));
 
         // Test 11: Update specific spatial documents
         $specificUpdateCount = $database->updateDocuments($collectionName, new Document([
@@ -1766,7 +1766,7 @@ trait SpatialTests
             Query::equal('$id', ['upsert1'])
         ]);
 
-        $this->assertEquals(1, $specificUpdateCount);
+        $this->assertSame(1, $specificUpdateCount);
 
         // Verify the specific update
         $specificDoc = $database->find($collectionName, [
@@ -1774,7 +1774,7 @@ trait SpatialTests
         ]);
 
         $this->assertCount(1, $specificDoc);
-        $this->assertEquals('Specifically Updated', $specificDoc[0]->getAttribute('name'));
+        $this->assertSame('Specifically Updated', $specificDoc[0]->getAttribute('name'));
 
         // Cleanup
         $database->deleteCollection($collectionName);
@@ -1835,33 +1835,33 @@ trait SpatialTests
             $queries = [
                 Query::distanceLessThan('loc', [10.0, 10.0], 0.1)
             ];
-            $this->assertEquals(2, $database->count($collectionName, $queries));
+            $this->assertSame(2, $database->count($collectionName, $queries));
             $this->assertCount(2, $database->find($collectionName, $queries));
 
             // SUM with spatial distanceEqual filter
             $sumNear = $database->sum($collectionName, 'score', $queries);
-            $this->assertEquals(10 + 20, $sumNear);
+            $this->assertSame(10 + 20, $sumNear);
 
             // COUNT and SUM with distanceGreaterThan (should only include far point "c")
             $queriesFar = [
                 Query::distanceGreaterThan('loc', [10.0, 10.0], 10.0)
             ];
-            $this->assertEquals(1, $database->count($collectionName, $queriesFar));
-            $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesFar));
+            $this->assertSame(1, $database->count($collectionName, $queriesFar));
+            $this->assertSame(30, $database->sum($collectionName, 'score', $queriesFar));
 
             // COUNT and SUM with polygon contains filter (adapter-dependent boundary inclusivity)
             if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
                 $queriesContain = [
                     Query::contains('area', [[10.0, 10.0]])
                 ];
-                $this->assertEquals(2, $database->count($collectionName, $queriesContain));
-                $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesContain));
+                $this->assertSame(2, $database->count($collectionName, $queriesContain));
+                $this->assertSame(30, $database->sum($collectionName, 'score', $queriesContain));
 
                 $queriesNotContain = [
                     Query::notContains('area', [[10.0, 10.0]])
                 ];
-                $this->assertEquals(1, $database->count($collectionName, $queriesNotContain));
-                $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesNotContain));
+                $this->assertSame(1, $database->count($collectionName, $queriesNotContain));
+                $this->assertSame(30, $database->sum($collectionName, 'score', $queriesNotContain));
             }
         } finally {
             $database->deleteCollection($collectionName);
@@ -1897,8 +1897,8 @@ trait SpatialTests
             }
 
             // Create a single spatial attribute (required=true)
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_geom', Database::INDEX_SPATIAL, ['geom']));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_geom', Database::INDEX_SPATIAL, ['geom']));
 
             // 1) Disallow size and array updates on spatial attributes: expect DatabaseException
             try {
@@ -1921,7 +1921,7 @@ trait SpatialTests
                 // Should succeed on adapters that allow nullable spatial indexes
                 $database->updateAttribute($collectionName, 'geom', required: false);
                 $meta = $database->getCollection($collectionName);
-                $this->assertEquals(false, $meta->getAttribute('attributes')[0]['required']);
+                $this->assertSame(false, $meta->getAttribute('attributes')[0]['required']);
             } else {
                 // Should error (index constraint) when making required=false while spatial index exists
                 $threw = false;
@@ -1933,7 +1933,7 @@ trait SpatialTests
                 $this->assertTrue($threw, 'Expected error when setting required=false with existing spatial index and adapter not supporting nullable indexes');
                 // Ensure attribute remains required
                 $meta = $database->getCollection($collectionName);
-                $this->assertEquals(true, $meta->getAttribute('attributes')[0]['required']);
+                $this->assertSame(true, $meta->getAttribute('attributes')[0]['required']);
             }
 
             // 3) Spatial index order support: providing orders should fail if not supported
@@ -1969,15 +1969,15 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes with defaults and no indexes to avoid nullability/index constraints
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0]));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]]));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0]));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]]));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]));
 
             // Create non-spatial attributes (mix of defaults and no defaults)
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, false, 'Untitled'));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'count', Database::VAR_INTEGER, 0, false, 0));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'rating', Database::VAR_FLOAT, 0, false)); // no default
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'active', Database::VAR_BOOLEAN, 0, false, true));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, false, 'Untitled'));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'count', Database::VAR_INTEGER, 0, false, 0));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'rating', Database::VAR_FLOAT, 0, false)); // no default
+            $this->assertSame(true, $database->createAttribute($collectionName, 'active', Database::VAR_BOOLEAN, 0, false, true));
 
             // Create document without providing spatial values, expect defaults applied
             $doc = $database->createDocument($collectionName, new Document([
@@ -1985,12 +1985,12 @@ trait SpatialTests
                 '$permissions' => [Permission::read(Role::any())]
             ]));
             $this->assertInstanceOf(Document::class, $doc);
-            $this->assertEquals([1.0, 2.0], $doc->getAttribute('pt'));
-            $this->assertEquals([[0.0, 0.0], [1.0, 1.0]], $doc->getAttribute('ln'));
-            $this->assertEquals([[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]], $doc->getAttribute('pg'));
+            $this->assertSame([1.0, 2.0], $doc->getAttribute('pt'));
+            $this->assertSame([[0.0, 0.0], [1.0, 1.0]], $doc->getAttribute('ln'));
+            $this->assertSame([[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]], $doc->getAttribute('pg'));
             // Non-spatial defaults
-            $this->assertEquals('Untitled', $doc->getAttribute('title'));
-            $this->assertEquals(0, $doc->getAttribute('count'));
+            $this->assertSame('Untitled', $doc->getAttribute('title'));
+            $this->assertSame(0, $doc->getAttribute('count'));
             $this->assertNull($doc->getAttribute('rating'));
             $this->assertTrue($doc->getAttribute('active'));
 
@@ -2007,12 +2007,12 @@ trait SpatialTests
                 'active' => false
             ]));
             $this->assertInstanceOf(Document::class, $doc2);
-            $this->assertEquals([9.0, 9.0], $doc2->getAttribute('pt'));
-            $this->assertEquals([[2.0, 2.0], [3.0, 3.0]], $doc2->getAttribute('ln'));
-            $this->assertEquals([[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]], $doc2->getAttribute('pg'));
-            $this->assertEquals('Custom', $doc2->getAttribute('title'));
-            $this->assertEquals(5, $doc2->getAttribute('count'));
-            $this->assertEquals(4.5, $doc2->getAttribute('rating'));
+            $this->assertSame([9.0, 9.0], $doc2->getAttribute('pt'));
+            $this->assertSame([[2.0, 2.0], [3.0, 3.0]], $doc2->getAttribute('ln'));
+            $this->assertSame([[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]], $doc2->getAttribute('pg'));
+            $this->assertSame('Custom', $doc2->getAttribute('title'));
+            $this->assertSame(5, $doc2->getAttribute('count'));
+            $this->assertSame(4.5, $doc2->getAttribute('rating'));
             $this->assertFalse($doc2->getAttribute('active'));
 
             // Update defaults and ensure they are applied for new documents
@@ -2028,11 +2028,11 @@ trait SpatialTests
                 '$permissions' => [Permission::read(Role::any())]
             ]));
             $this->assertInstanceOf(Document::class, $doc3);
-            $this->assertEquals([5.0, 6.0], $doc3->getAttribute('pt'));
-            $this->assertEquals([[10.0, 10.0], [20.0, 20.0]], $doc3->getAttribute('ln'));
-            $this->assertEquals([[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]], $doc3->getAttribute('pg'));
-            $this->assertEquals('Updated', $doc3->getAttribute('title'));
-            $this->assertEquals(10, $doc3->getAttribute('count'));
+            $this->assertSame([5.0, 6.0], $doc3->getAttribute('pt'));
+            $this->assertSame([[10.0, 10.0], [20.0, 20.0]], $doc3->getAttribute('ln'));
+            $this->assertSame([[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]], $doc3->getAttribute('pg'));
+            $this->assertSame('Updated', $doc3->getAttribute('title'));
+            $this->assertSame(10, $doc3->getAttribute('count'));
             $this->assertNull($doc3->getAttribute('rating'));
             $this->assertFalse($doc3->getAttribute('active'));
 
@@ -2178,8 +2178,8 @@ trait SpatialTests
         $collectionName = 'spatial_distance_meters_';
         try {
             $database->createCollection($collectionName);
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertSame(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertSame(true, $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
 
             // Two points roughly ~1000 meters apart by latitude delta (~0.009 deg ≈ 1km)
             $p0 = $database->createDocument($collectionName, new Document([
@@ -2209,7 +2209,7 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($within500m);
             $this->assertCount(1, $within500m);
-            $this->assertEquals('p0', $within500m[0]->getId());
+            $this->assertSame('p0', $within500m[0]->getId());
 
             // distanceGreaterThan 500m should include only p1
             $greater500m = $database->find($collectionName, [
@@ -2217,21 +2217,21 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($greater500m);
             $this->assertCount(1, $greater500m);
-            $this->assertEquals('p1', $greater500m[0]->getId());
+            $this->assertSame('p1', $greater500m[0]->getId());
 
             // distanceEqual with 0m should return exact match p0
             $equalZero = $database->find($collectionName, [
                 Query::distanceEqual('loc', [0.0000, 0.0000], 0, true)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
-            $this->assertEquals('p0', $equalZero[0]->getId());
+            $this->assertSame('p0', $equalZero[0]->getId());
 
             // distanceNotEqual with 0m should return p1
             $notEqualZero = $database->find($collectionName, [
                 Query::distanceNotEqual('loc', [0.0000, 0.0000], 0, true)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
-            $this->assertEquals('p1', $notEqualZero[0]->getId());
+            $this->assertSame('p1', $notEqualZero[0]->getId());
         } finally {
             $database->deleteCollection($collectionName);
         }
@@ -2256,14 +2256,14 @@ trait SpatialTests
             $database->createCollection($multiCollection);
 
             // Create spatial attributes
-            $this->assertEquals(true, $database->createAttribute($multiCollection, 'loc', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createAttribute($multiCollection, 'line', Database::VAR_LINESTRING, 0, true));
-            $this->assertEquals(true, $database->createAttribute($multiCollection, 'poly', Database::VAR_POLYGON, 0, true));
+            $this->assertSame(true, $database->createAttribute($multiCollection, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertSame(true, $database->createAttribute($multiCollection, 'line', Database::VAR_LINESTRING, 0, true));
+            $this->assertSame(true, $database->createAttribute($multiCollection, 'poly', Database::VAR_POLYGON, 0, true));
 
             // Create indexes
-            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
-            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_line', Database::INDEX_SPATIAL, ['line']));
-            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_poly', Database::INDEX_SPATIAL, ['poly']));
+            $this->assertSame(true, $database->createIndex($multiCollection, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertSame(true, $database->createIndex($multiCollection, 'idx_line', Database::INDEX_SPATIAL, ['line']));
+            $this->assertSame(true, $database->createIndex($multiCollection, 'idx_poly', Database::INDEX_SPATIAL, ['poly']));
 
             // Geometry sets: near origin and far east
             $docNear = $database->createDocument($multiCollection, new Document([
@@ -2308,7 +2308,7 @@ trait SpatialTests
                 ]], 3000, true)
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $polyPolyWithin3km);
-            $this->assertEquals('near', $polyPolyWithin3km[0]->getId());
+            $this->assertSame('near', $polyPolyWithin3km[0]->getId());
 
             $polyPolyGreater3km = $database->find($multiCollection, [
                 Query::distanceGreaterThan('poly', [[
@@ -2320,7 +2320,7 @@ trait SpatialTests
                 ]], 3000, true)
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $polyPolyGreater3km);
-            $this->assertEquals('far', $polyPolyGreater3km[0]->getId());
+            $this->assertSame('far', $polyPolyGreater3km[0]->getId());
 
             // point vs polygon (~0 km near, ~22 km far)
             $ptPolyWithin500 = $database->find($multiCollection, [
@@ -2332,7 +2332,7 @@ trait SpatialTests
                 ]], 500, true)
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $ptPolyWithin500);
-            $this->assertEquals('near', $ptPolyWithin500[0]->getId());
+            $this->assertSame('near', $ptPolyWithin500[0]->getId());
 
             $ptPolyGreater500 = $database->find($multiCollection, [
                 Query::distanceGreaterThan('loc', [[
@@ -2343,14 +2343,14 @@ trait SpatialTests
                 ]], 500, true)
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $ptPolyGreater500);
-            $this->assertEquals('far', $ptPolyGreater500[0]->getId());
+            $this->assertSame('far', $ptPolyGreater500[0]->getId());
 
             // Zero-distance checks
             $lineEqualZero = $database->find($multiCollection, [
                 Query::distanceEqual('line', [[0.0000, 0.0000], [0.0010, 0.0000]], 0, true)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($lineEqualZero);
-            $this->assertEquals('near', $lineEqualZero[0]->getId());
+            $this->assertSame('near', $lineEqualZero[0]->getId());
 
             $polyEqualZero = $database->find($multiCollection, [
                 Query::distanceEqual('poly', [[
@@ -2362,7 +2362,7 @@ trait SpatialTests
                 ]], 0, true)
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($polyEqualZero);
-            $this->assertEquals('near', $polyEqualZero[0]->getId());
+            $this->assertSame('near', $polyEqualZero[0]->getId());
 
         } finally {
             $database->deleteCollection($multiCollection);
@@ -2385,9 +2385,9 @@ trait SpatialTests
 
         $collection = 'spatial_distance_error_test';
         $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'loc', Database::VAR_POINT, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'line', Database::VAR_LINESTRING, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'poly', Database::VAR_POLYGON, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'loc', Database::VAR_POINT, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'line', Database::VAR_LINESTRING, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'poly', Database::VAR_POLYGON, 0, true));
 
         $doc = $database->createDocument($collection, new Document([
             '$id' => 'doc1',
@@ -2473,27 +2473,27 @@ trait SpatialTests
 
         $result = $database->encode($collection, $doc);
 
-        $this->assertEquals($result->getAttribute('point'), $point);
-        $this->assertEquals($result->getAttribute('line'), $line);
-        $this->assertEquals($result->getAttribute('poly'), $poly);
+        $this->assertSame($result->getAttribute('point'), $point);
+        $this->assertSame($result->getAttribute('line'), $line);
+        $this->assertSame($result->getAttribute('poly'), $poly);
 
 
         $result = $database->decode($collection, $doc);
-        $this->assertEquals($result->getAttribute('point'), $pointArr);
-        $this->assertEquals($result->getAttribute('line'), $lineArr);
-        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+        $this->assertSame($result->getAttribute('point'), $pointArr);
+        $this->assertSame($result->getAttribute('line'), $lineArr);
+        $this->assertSame($result->getAttribute('poly'), $polyArr);
 
         $stringDoc = new Document(['point' => $point,'line' => $line, 'poly' => $poly]);
         $result = $database->decode($collection, $stringDoc);
-        $this->assertEquals($result->getAttribute('point'), $pointArr);
-        $this->assertEquals($result->getAttribute('line'), $lineArr);
-        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+        $this->assertSame($result->getAttribute('point'), $pointArr);
+        $this->assertSame($result->getAttribute('line'), $lineArr);
+        $this->assertSame($result->getAttribute('poly'), $polyArr);
 
         $nullDoc = new Document(['point' => null,'line' => null, 'poly' => null]);
         $result = $database->decode($collection, $nullDoc);
-        $this->assertEquals($result->getAttribute('point'), null);
-        $this->assertEquals($result->getAttribute('line'), null);
-        $this->assertEquals($result->getAttribute('poly'), null);
+        $this->assertSame($result->getAttribute('point'), null);
+        $this->assertSame($result->getAttribute('line'), null);
+        $this->assertSame($result->getAttribute('poly'), null);
     }
 
     public function testSpatialIndexSingleAttributeOnly(): void
@@ -2659,7 +2659,7 @@ trait SpatialTests
         $database->createCollection($collectionName);
 
         // Create spatial attributes using createAttribute method
-        $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+        $this->assertSame(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
 
         // Create test document
         $doc1 = new Document(
@@ -2672,8 +2672,8 @@ trait SpatialTests
         $database->createDocument($collectionName, $doc1);
 
         $result = $database->getDocument($collectionName, 'doc1');
-        $this->assertEquals($result->getAttribute('pointAttr')[0], 5.0);
-        $this->assertEquals($result->getAttribute('pointAttr')[1], 5.5);
+        $this->assertSame($result->getAttribute('pointAttr')[0], 5.0);
+        $this->assertSame($result->getAttribute('pointAttr')[1], 5.5);
         $database->deleteCollection($collectionName);
     }
 
@@ -2847,9 +2847,9 @@ trait SpatialTests
             ]));
 
             // Verify initial values
-            $this->assertEquals($initialPoint, $doc->getAttribute('location'));
-            $this->assertEquals($initialLine, $doc->getAttribute('route'));
-            $this->assertEquals($initialPolygon, $doc->getAttribute('area'));
+            $this->assertSame($initialPoint, $doc->getAttribute('location'));
+            $this->assertSame($initialLine, $doc->getAttribute('route'));
+            $this->assertSame($initialPolygon, $doc->getAttribute('area'));
 
             // Update document with NEW spatial arrays (this triggers the WKT conversion path)
             $newPoint = [30.0, 40.0];
@@ -2864,34 +2864,34 @@ trait SpatialTests
             ]));
 
             // Verify updated spatial values are correctly stored and retrieved
-            $this->assertEquals($newPoint, $updated->getAttribute('location'), 'Point should be updated correctly via WKT conversion');
-            $this->assertEquals($newLine, $updated->getAttribute('route'), 'LineString should be updated correctly via WKT conversion');
-            $this->assertEquals($newPolygon, $updated->getAttribute('area'), 'Polygon should be updated correctly via WKT conversion');
-            $this->assertEquals('Updated', $updated->getAttribute('name'));
+            $this->assertSame($newPoint, $updated->getAttribute('location'), 'Point should be updated correctly via WKT conversion');
+            $this->assertSame($newLine, $updated->getAttribute('route'), 'LineString should be updated correctly via WKT conversion');
+            $this->assertSame($newPolygon, $updated->getAttribute('area'), 'Polygon should be updated correctly via WKT conversion');
+            $this->assertSame('Updated', $updated->getAttribute('name'));
 
             // Refetch from database to ensure data was persisted correctly
             $refetched = $database->getDocument($collectionName, 'spatial_doc');
-            $this->assertEquals($newPoint, $refetched->getAttribute('location'), 'Point should persist correctly after WKT conversion');
-            $this->assertEquals($newLine, $refetched->getAttribute('route'), 'LineString should persist correctly after WKT conversion');
-            $this->assertEquals($newPolygon, $refetched->getAttribute('area'), 'Polygon should persist correctly after WKT conversion');
+            $this->assertSame($newPoint, $refetched->getAttribute('location'), 'Point should persist correctly after WKT conversion');
+            $this->assertSame($newLine, $refetched->getAttribute('route'), 'LineString should persist correctly after WKT conversion');
+            $this->assertSame($newPolygon, $refetched->getAttribute('area'), 'Polygon should persist correctly after WKT conversion');
 
             // Test spatial queries work with updated data
             $results = $database->find($collectionName, [
                 Query::equal('location', [$newPoint])
             ]);
             $this->assertCount(1, $results, 'Should find document by exact point match');
-            $this->assertEquals('spatial_doc', $results[0]->getId());
+            $this->assertSame('spatial_doc', $results[0]->getId());
 
             // Test mixed update (spatial + non-spatial attributes)
             $updated2 = $database->updateDocument($collectionName, 'spatial_doc', new Document([
                 'location' => [50.0, 60.0],
                 'name' => 'Mixed Update'
             ]));
-            $this->assertEquals([50.0, 60.0], $updated2->getAttribute('location'));
-            $this->assertEquals('Mixed Update', $updated2->getAttribute('name'));
+            $this->assertSame([50.0, 60.0], $updated2->getAttribute('location'));
+            $this->assertSame('Mixed Update', $updated2->getAttribute('name'));
             // Other spatial attributes should remain unchanged
-            $this->assertEquals($newLine, $updated2->getAttribute('route'));
-            $this->assertEquals($newPolygon, $updated2->getAttribute('area'));
+            $this->assertSame($newLine, $updated2->getAttribute('route'));
+            $this->assertSame($newPolygon, $updated2->getAttribute('area'));
 
         } finally {
             $database->deleteCollection($collectionName);

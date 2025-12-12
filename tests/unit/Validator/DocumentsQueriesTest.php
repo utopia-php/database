@@ -153,7 +153,7 @@ class DocumentsQueriesTest extends TestCase
             Query::orderDesc(),
         ];
 
-        $this->assertEquals(true, $validator->isValid($queries));
+        $this->assertSame(true, $validator->isValid($queries));
     }
 
     /**
@@ -168,24 +168,24 @@ class DocumentsQueriesTest extends TestCase
         );
 
         $queries = ['{"method":"notEqual","attribute":"title","values":["Iron Man","Ant Man"]}'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: NotEqual queries require exactly one value.', $validator->getDescription());
+        $this->assertSame(false, $validator->isValid($queries));
+        $this->assertSame('Invalid query: NotEqual queries require exactly one value.', $validator->getDescription());
 
         $queries = [Query::search('description', 'iron')];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
+        $this->assertSame(false, $validator->isValid($queries));
+        $this->assertSame('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
 
         $queries = [Query::equal('not_found', [4])];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
+        $this->assertSame(false, $validator->isValid($queries));
+        $this->assertSame('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
 
         $queries = [Query::limit(-1)];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
+        $this->assertSame(false, $validator->isValid($queries));
+        $this->assertSame('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
 
         $queries = [Query::equal('title', [])]; // empty array
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
+        $this->assertSame(false, $validator->isValid($queries));
+        $this->assertSame('Invalid query: Equal queries require at least one value.', $validator->getDescription());
 
 
     }

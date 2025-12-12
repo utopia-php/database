@@ -51,7 +51,7 @@ trait CustomDocumentTypeTests
 
         $database->setDocumentType('users', TestUser::class);
 
-        $this->assertEquals(
+        $this->assertSame(
             TestUser::class,
             $database->getDocumentType('users')
         );
@@ -98,7 +98,7 @@ trait CustomDocumentTypeTests
         $database = static::getDatabase();
 
         $database->setDocumentType('users', TestUser::class);
-        $this->assertEquals(TestUser::class, $database->getDocumentType('users'));
+        $this->assertSame(TestUser::class, $database->getDocumentType('users'));
 
         $database->clearDocumentType('users');
         $this->assertNull($database->getDocumentType('users'));
@@ -112,8 +112,8 @@ trait CustomDocumentTypeTests
         $database->setDocumentType('users', TestUser::class);
         $database->setDocumentType('posts', TestPost::class);
 
-        $this->assertEquals(TestUser::class, $database->getDocumentType('users'));
-        $this->assertEquals(TestPost::class, $database->getDocumentType('posts'));
+        $this->assertSame(TestUser::class, $database->getDocumentType('users'));
+        $this->assertSame(TestPost::class, $database->getDocumentType('posts'));
 
         $database->clearAllDocumentTypes();
 
@@ -134,8 +134,8 @@ trait CustomDocumentTypeTests
             ->setDocumentType('users', TestUser::class)
             ->setDocumentType('posts', TestPost::class);
 
-        $this->assertEquals(TestUser::class, $database->getDocumentType('users'));
-        $this->assertEquals(TestPost::class, $database->getDocumentType('posts'));
+        $this->assertSame(TestUser::class, $database->getDocumentType('users'));
+        $this->assertSame(TestPost::class, $database->getDocumentType('posts'));
 
         // Cleanup to prevent test pollution
         $database->clearAllDocumentTypes();
@@ -171,15 +171,15 @@ trait CustomDocumentTypeTests
 
         // Verify it's a TestUser instance
         $this->assertInstanceOf(TestUser::class, $created);
-        $this->assertEquals('test@example.com', $created->getEmail());
-        $this->assertEquals('Test User', $created->getName());
+        $this->assertSame('test@example.com', $created->getEmail());
+        $this->assertSame('Test User', $created->getName());
         $this->assertTrue($created->isActive());
 
         // Get document and verify type
         /** @var TestUser $fetched */
         $fetched = $database->getDocument('customUsers', $created->getId());
         $this->assertInstanceOf(TestUser::class, $fetched);
-        $this->assertEquals('test@example.com', $fetched->getEmail());
+        $this->assertSame('test@example.com', $fetched->getEmail());
         $this->assertTrue($fetched->isActive());
 
         // Cleanup
@@ -226,8 +226,8 @@ trait CustomDocumentTypeTests
         $this->assertCount(2, $posts);
         $this->assertInstanceOf(TestPost::class, $posts[0]);
         $this->assertInstanceOf(TestPost::class, $posts[1]);
-        $this->assertEquals('First Post', $posts[0]->getTitle());
-        $this->assertEquals('Second Post', $posts[1]->getTitle());
+        $this->assertSame('First Post', $posts[0]->getTitle());
+        $this->assertSame('Second Post', $posts[1]->getTitle());
 
         // Cleanup
         $database->deleteCollection('customPosts');
@@ -274,8 +274,8 @@ trait CustomDocumentTypeTests
 
         // Verify it's still TestUser and has updated values
         $this->assertInstanceOf(TestUser::class, $updated);
-        $this->assertEquals('updated@example.com', $updated->getEmail());
-        $this->assertEquals('Updated Name', $updated->getName());
+        $this->assertSame('updated@example.com', $updated->getEmail());
+        $this->assertSame('Updated Name', $updated->getName());
         $this->assertFalse($updated->isActive());
 
         // Cleanup

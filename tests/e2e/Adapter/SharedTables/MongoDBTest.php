@@ -75,9 +75,9 @@ class MongoDBTest extends Base
     {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
         $this->assertNotNull($this->getDatabase()->create());
-        $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, $this->getDatabase()->create());
-        $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
+        $this->assertSame(true, $this->getDatabase()->delete($this->testDatabase));
+        $this->assertSame(true, $this->getDatabase()->create());
+        $this->assertSame($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
     }
 
     public function testRenameAttribute(): void

@@ -51,37 +51,37 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'count' => Operator::increment(5)
         ]));
-        $this->assertEquals(15, $updated->getAttribute('count'));
+        $this->assertSame(15, $updated->getAttribute('count'));
 
         // Test decrement operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'count' => Operator::decrement(3)
         ]));
-        $this->assertEquals(12, $updated->getAttribute('count'));
+        $this->assertSame(12, $updated->getAttribute('count'));
 
         // Test increment with float
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'score' => Operator::increment(2.5)
         ]));
-        $this->assertEquals(18.0, $updated->getAttribute('score'));
+        $this->assertSame(18.0, $updated->getAttribute('score'));
 
         // Test append operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'tags' => Operator::arrayAppend(['new', 'appended'])
         ]));
-        $this->assertEquals(['initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
+        $this->assertSame(['initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
 
         // Test prepend operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'tags' => Operator::arrayPrepend(['first'])
         ]));
-        $this->assertEquals(['first', 'initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
+        $this->assertSame(['first', 'initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
 
         // Test insert operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'numbers' => Operator::arrayInsert(1, 99)
         ]));
-        $this->assertEquals([1, 99, 2, 3], $updated->getAttribute('numbers'));
+        $this->assertSame([1, 99, 2, 3], $updated->getAttribute('numbers'));
 
         // Test multiple operators in one update
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
@@ -91,10 +91,10 @@ trait OperatorTests
             'name' => 'Updated Name' // Regular update mixed with operators
         ]));
 
-        $this->assertEquals(20, $updated->getAttribute('count'));
-        $this->assertEquals(15.0, $updated->getAttribute('score'));
-        $this->assertEquals([1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
-        $this->assertEquals('Updated Name', $updated->getAttribute('name'));
+        $this->assertSame(20, $updated->getAttribute('count'));
+        $this->assertSame(15.0, $updated->getAttribute('score'));
+        $this->assertSame([1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
+        $this->assertSame('Updated Name', $updated->getAttribute('name'));
 
         // Test edge cases
 
@@ -102,13 +102,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'count' => Operator::increment() // Should increment by 1
         ]));
-        $this->assertEquals(21, $updated->getAttribute('count'));
+        $this->assertSame(21, $updated->getAttribute('count'));
 
         // Test insert at beginning (index 0)
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'numbers' => Operator::arrayInsert(0, 0)
         ]));
-        $this->assertEquals([0, 1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
+        $this->assertSame([0, 1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
 
         // Test insert at end
         $numbers = $updated->getAttribute('numbers');
@@ -116,7 +116,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'numbers' => Operator::arrayInsert($lastIndex, 100)
         ]));
-        $this->assertEquals([0, 1, 99, 2, 3, 4, 5, 100], $updated->getAttribute('numbers'));
+        $this->assertSame([0, 1, 99, 2, 3, 4, 5, 100], $updated->getAttribute('numbers'));
 
         $database->deleteCollection($collectionId);
     }
@@ -162,7 +162,7 @@ trait OperatorTests
             ])
         );
 
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         // Verify all documents were updated
         $updated = $database->find($collectionId);
@@ -170,9 +170,9 @@ trait OperatorTests
 
         foreach ($updated as $doc) {
             $originalCount = (int) str_replace('doc_', '', $doc->getId()) * 10;
-            $this->assertEquals($originalCount + 5, $doc->getAttribute('count'));
+            $this->assertSame($originalCount + 5, $doc->getAttribute('count'));
             $this->assertContains('batch_updated', $doc->getAttribute('tags'));
-            $this->assertEquals('updated', $doc->getAttribute('category'));
+            $this->assertSame('updated', $doc->getAttribute('category'));
         }
 
         // Test with query filters
@@ -184,16 +184,16 @@ trait OperatorTests
             [Query::equal('$id', ['doc_1', 'doc_2'])]
         );
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
         // Verify only filtered documents were updated
         $doc1 = $database->getDocument($collectionId, 'doc_1');
         $doc2 = $database->getDocument($collectionId, 'doc_2');
         $doc3 = $database->getDocument($collectionId, 'doc_3');
 
-        $this->assertEquals(25, $doc1->getAttribute('count')); // 10 + 5 + 10
-        $this->assertEquals(35, $doc2->getAttribute('count')); // 20 + 5 + 10
-        $this->assertEquals(35, $doc3->getAttribute('count')); // 30 + 5 (not updated in second batch)
+        $this->assertSame(25, $doc1->getAttribute('count')); // 10 + 5 + 10
+        $this->assertSame(35, $doc2->getAttribute('count')); // 20 + 5 + 10
+        $this->assertSame(35, $doc3->getAttribute('count')); // 30 + 5 (not updated in second batch)
 
         $database->deleteCollection($collectionId);
     }
@@ -290,7 +290,7 @@ trait OperatorTests
             ])
         );
 
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         // Verify all operators worked correctly
         $updated = $database->find($collectionId, [Query::orderAsc('$id')]);
@@ -298,47 +298,47 @@ trait OperatorTests
 
         // Check bulk_doc_1
         $doc1 = $updated[0];
-        $this->assertEquals(15, $doc1->getAttribute('counter'));          // 10 + 5
-        $this->assertEquals(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
-        $this->assertEquals(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
-        $this->assertEquals(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
-        $this->assertEquals(2, $doc1->getAttribute('remainder'));         // 7 % 5
-        $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
-        $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
-        $this->assertEquals('new content 1', $doc1->getAttribute('content'));
+        $this->assertSame(15, $doc1->getAttribute('counter'));          // 10 + 5
+        $this->assertSame(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
+        $this->assertSame(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
+        $this->assertSame(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
+        $this->assertSame(2, $doc1->getAttribute('remainder'));         // 7 % 5
+        $this->assertSame(4.0, $doc1->getAttribute('power_val'));       // 2^2
+        $this->assertSame('Title 1 - Updated', $doc1->getAttribute('title'));
+        $this->assertSame('new content 1', $doc1->getAttribute('content'));
         $this->assertContains('bulk', $doc1->getAttribute('tags'));
         $this->assertContains('priority', $doc1->getAttribute('categories'));
         $this->assertNotContains('shared', $doc1->getAttribute('items'));
         $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
-        $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
-        $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
-        $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
-        $this->assertEquals([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
-        $this->assertEquals(true, $doc1->getAttribute('active'));         // Was false, toggled to true
+        $this->assertSame([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
+        $this->assertSame(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
+        $this->assertSame(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
+        $this->assertSame([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
+        $this->assertSame(true, $doc1->getAttribute('active'));         // Was false, toggled to true
 
         // Check bulk_doc_2
         $doc2 = $updated[1];
-        $this->assertEquals(25, $doc2->getAttribute('counter'));          // 20 + 5
-        $this->assertEquals(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
-        $this->assertEquals(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
-        $this->assertEquals(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
-        $this->assertEquals(4, $doc2->getAttribute('remainder'));         // 14 % 5
-        $this->assertEquals(9.0, $doc2->getAttribute('power_val'));       // 3^2
-        $this->assertEquals('Title 2 - Updated', $doc2->getAttribute('title'));
-        $this->assertEquals('new content 2', $doc2->getAttribute('content'));
-        $this->assertEquals(false, $doc2->getAttribute('active'));        // Was true, toggled to false
+        $this->assertSame(25, $doc2->getAttribute('counter'));          // 20 + 5
+        $this->assertSame(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
+        $this->assertSame(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
+        $this->assertSame(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
+        $this->assertSame(4, $doc2->getAttribute('remainder'));         // 14 % 5
+        $this->assertSame(9.0, $doc2->getAttribute('power_val'));       // 3^2
+        $this->assertSame('Title 2 - Updated', $doc2->getAttribute('title'));
+        $this->assertSame('new content 2', $doc2->getAttribute('content'));
+        $this->assertSame(false, $doc2->getAttribute('active'));        // Was true, toggled to false
 
         // Check bulk_doc_3
         $doc3 = $updated[2];
-        $this->assertEquals(35, $doc3->getAttribute('counter'));          // 30 + 5
-        $this->assertEquals(4.0, $doc3->getAttribute('score'));           // 4.5 - 0.5
-        $this->assertEquals(6.0, $doc3->getAttribute('multiplier'));      // 3.0 * 2
-        $this->assertEquals(75.0, $doc3->getAttribute('divisor'));        // 150.0 / 2
-        $this->assertEquals(1, $doc3->getAttribute('remainder'));         // 21 % 5
-        $this->assertEquals(16.0, $doc3->getAttribute('power_val'));      // 4^2
-        $this->assertEquals('Title 3 - Updated', $doc3->getAttribute('title'));
-        $this->assertEquals('new content 3', $doc3->getAttribute('content'));
-        $this->assertEquals(true, $doc3->getAttribute('active'));         // Was false, toggled to true
+        $this->assertSame(35, $doc3->getAttribute('counter'));          // 30 + 5
+        $this->assertSame(4.0, $doc3->getAttribute('score'));           // 4.5 - 0.5
+        $this->assertSame(6.0, $doc3->getAttribute('multiplier'));      // 3.0 * 2
+        $this->assertSame(75.0, $doc3->getAttribute('divisor'));        // 150.0 / 2
+        $this->assertSame(1, $doc3->getAttribute('remainder'));         // 21 % 5
+        $this->assertSame(16.0, $doc3->getAttribute('power_val'));      // 4^2
+        $this->assertSame('Title 3 - Updated', $doc3->getAttribute('title'));
+        $this->assertSame('new content 3', $doc3->getAttribute('content'));
+        $this->assertSame(true, $doc3->getAttribute('active'));         // Was false, toggled to true
 
         // Verify date operations worked (just check they're not null and are strings)
         $this->assertNotNull($doc1->getAttribute('last_update'));
@@ -390,17 +390,17 @@ trait OperatorTests
             [Query::equal('category', ['A'])]
         );
 
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         // Verify only category A documents were updated
         $categoryA = $database->find($collectionId, [Query::equal('category', ['A']), Query::orderAsc('$id')]);
         $categoryB = $database->find($collectionId, [Query::equal('category', ['B']), Query::orderAsc('$id')]);
 
-        $this->assertEquals(110, $categoryA[0]->getAttribute('count')); // 10 + 100
-        $this->assertEquals(120, $categoryA[1]->getAttribute('count')); // 20 + 100
-        $this->assertEquals(130, $categoryA[2]->getAttribute('count')); // 30 + 100
-        $this->assertEquals(40, $categoryB[0]->getAttribute('count'));  // Not updated
-        $this->assertEquals(50, $categoryB[1]->getAttribute('count'));  // Not updated
+        $this->assertSame(110, $categoryA[0]->getAttribute('count')); // 10 + 100
+        $this->assertSame(120, $categoryA[1]->getAttribute('count')); // 20 + 100
+        $this->assertSame(130, $categoryA[2]->getAttribute('count')); // 30 + 100
+        $this->assertSame(40, $categoryB[0]->getAttribute('count'));  // Not updated
+        $this->assertSame(50, $categoryB[1]->getAttribute('count'));  // Not updated
 
         // Test 2: Update only documents with count < 50
         $count = $database->updateDocuments(
@@ -413,19 +413,19 @@ trait OperatorTests
         );
 
         // Only doc_4 (count=40) matches, doc_5 has count=50 which is not < 50
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
 
         $doc4 = $database->getDocument($collectionId, 'query_doc_4');
-        $this->assertEquals(false, $doc4->getAttribute('active')); // Was true, now false
+        $this->assertSame(false, $doc4->getAttribute('active')); // Was true, now false
         // Doc_4 initial score: 4*1.5 = 6.0
         // Category B so not updated in first batch
         // Second update: 6.0 * 10 = 60.0
-        $this->assertEquals(60.0, $doc4->getAttribute('score'));
+        $this->assertSame(60.0, $doc4->getAttribute('score'));
 
         // Verify doc_5 was not updated
         $doc5 = $database->getDocument($collectionId, 'query_doc_5');
-        $this->assertEquals(false, $doc5->getAttribute('active')); // Still false
-        $this->assertEquals(7.5, $doc5->getAttribute('score'));    // Still 5*1.5=7.5 (category B, not updated)
+        $this->assertSame(false, $doc5->getAttribute('active')); // Still false
+        $this->assertSame(7.5, $doc5->getAttribute('score'));    // Still 5*1.5=7.5 (category B, not updated)
 
         $database->deleteCollection($collectionId);
     }
@@ -678,13 +678,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
             'number' => Operator::divide(2)
         ]));
-        $this->assertEquals(50.0, $updated->getAttribute('number'));
+        $this->assertSame(50.0, $updated->getAttribute('number'));
 
         // Test: Valid modulo
         $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
             'number' => Operator::modulo(7)
         ]));
-        $this->assertEquals(1.0, $updated->getAttribute('number')); // 50 % 7 = 1
+        $this->assertSame(1.0, $updated->getAttribute('number')); // 50 % 7 = 1
 
         $database->deleteCollection($collectionId);
     }
@@ -724,13 +724,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
             'items' => Operator::arrayInsert(3, 'd') // Insert at end
         ]));
-        $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
+        $this->assertSame(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
 
         // Test: Insert at valid index (middle)
         $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
             'items' => Operator::arrayInsert(2, 'x') // Insert at index 2
         ]));
-        $this->assertEquals(['a', 'b', 'x', 'c', 'd'], $updated->getAttribute('items'));
+        $this->assertSame(['a', 'b', 'x', 'c', 'd'], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -762,13 +762,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'counter' => Operator::increment(100, 50) // Increment by 100 but max is 50
         ]));
-        $this->assertEquals(50, $updated->getAttribute('counter')); // Should be capped at 50
+        $this->assertSame(50, $updated->getAttribute('counter')); // Should be capped at 50
 
         // Test: Decrement with min limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'score' => Operator::decrement(10, 0) // Decrement score by 10 but min is 0
         ]));
-        $this->assertEquals(0, $updated->getAttribute('score')); // Should be capped at 0
+        $this->assertSame(0, $updated->getAttribute('score')); // Should be capped at 0
 
         // Test: Multiply with max limit
         $doc = $database->createDocument($collectionId, new Document([
@@ -781,13 +781,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'counter' => Operator::multiply(10, 75) // 10 * 10 = 100, but max is 75
         ]));
-        $this->assertEquals(75, $updated->getAttribute('counter')); // Should be capped at 75
+        $this->assertSame(75, $updated->getAttribute('counter')); // Should be capped at 75
 
         // Test: Power with max limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'score' => Operator::power(3, 100) // 5^3 = 125, but max is 100
         ]));
-        $this->assertEquals(100, $updated->getAttribute('score')); // Should be capped at 100
+        $this->assertSame(100, $updated->getAttribute('score')); // Should be capped at 100
 
         $database->deleteCollection($collectionId);
     }
@@ -819,13 +819,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
             'numbers' => Operator::arrayFilter('equal', 3) // Keep only 3
         ]));
-        $this->assertEquals([3], $updated->getAttribute('numbers'));
+        $this->assertSame([3], $updated->getAttribute('numbers'));
 
         // Test: Filter with not-equals condition on strings
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
             'tags' => Operator::arrayFilter('notEqual', 'banana') // Remove 'banana'
         ]));
-        $this->assertEquals(['apple', 'cherry'], $updated->getAttribute('tags'));
+        $this->assertSame(['apple', 'cherry'], $updated->getAttribute('tags'));
 
         $database->deleteCollection($collectionId);
     }
@@ -857,7 +857,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
             'text' => Operator::stringReplace('quick', 'slow')
         ]));
-        $this->assertEquals('The slow brown fox', $updated->getAttribute('text'));
+        $this->assertSame('The slow brown fox', $updated->getAttribute('text'));
 
         // Test: Replace on non-string field
         try {
@@ -873,7 +873,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
             'text' => Operator::stringReplace('slow', '')
         ]));
-        $this->assertEquals('The  brown fox', $updated->getAttribute('text')); // Two spaces where 'slow' was
+        $this->assertSame('The  brown fox', $updated->getAttribute('text')); // Two spaces where 'slow' was
 
         $database->deleteCollection($collectionId);
     }
@@ -907,30 +907,30 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
             'nullable_int' => Operator::increment(5)
         ]));
-        $this->assertEquals(5, $updated->getAttribute('nullable_int'));
+        $this->assertSame(5, $updated->getAttribute('nullable_int'));
 
         // Test: Concat on null string field (should treat as empty string)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
             'nullable_string' => Operator::stringConcat('hello')
         ]));
-        $this->assertEquals('hello', $updated->getAttribute('nullable_string'));
+        $this->assertSame('hello', $updated->getAttribute('nullable_string'));
 
         // Test: Toggle on null boolean field (should treat as false)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
             'nullable_bool' => Operator::toggle()
         ]));
-        $this->assertEquals(true, $updated->getAttribute('nullable_bool'));
+        $this->assertSame(true, $updated->getAttribute('nullable_bool'));
 
         // Test operators on non-null values
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
             'nullable_int' => Operator::multiply(2)  // 5 * 2 = 10
         ]));
-        $this->assertEquals(10, $updated->getAttribute('nullable_int'));
+        $this->assertSame(10, $updated->getAttribute('nullable_int'));
 
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
             'nullable_string' => Operator::stringReplace('hello', 'hi')
         ]));
-        $this->assertEquals('hi', $updated->getAttribute('nullable_string'));
+        $this->assertSame('hi', $updated->getAttribute('nullable_string'));
 
         $database->deleteCollection($collectionId);
     }
@@ -969,13 +969,13 @@ trait OperatorTests
         ]));
         $stats = $updated->getAttribute('stats');
         $this->assertCount(4, $stats); // [10, 20, 30, 40]
-        $this->assertEquals([10, 20, 30, 40], $stats);
+        $this->assertSame([10, 20, 30, 40], $stats);
 
         // Test: Array intersection
         $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
             'stats' => Operator::arrayIntersect([20, 30, 50]) // Keep only 20 and 30
         ]));
-        $this->assertEquals([20, 30], $updated->getAttribute('stats'));
+        $this->assertSame([20, 30], $updated->getAttribute('stats'));
 
         // Test: Array difference
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -990,7 +990,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'complex_test_doc2', new Document([
             'stats' => Operator::arrayDiff([2, 4, 6]) // Remove 2 and 4
         ]));
-        $this->assertEquals([1, 3, 5], $updated->getAttribute('stats'));
+        $this->assertSame([1, 3, 5], $updated->getAttribute('stats'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1020,7 +1020,7 @@ trait OperatorTests
             'count' => Operator::increment(3)
         ]));
 
-        $this->assertEquals(8, $updated->getAttribute('count'));
+        $this->assertSame(8, $updated->getAttribute('count'));
 
         // Edge case: null value
         $doc = $database->createDocument($collectionId, new Document([
@@ -1032,7 +1032,7 @@ trait OperatorTests
             'count' => Operator::increment(3)
         ]));
 
-        $this->assertEquals(3, $updated->getAttribute('count'));
+        $this->assertSame(3, $updated->getAttribute('count'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1062,7 +1062,7 @@ trait OperatorTests
             'title' => Operator::stringConcat(' World')
         ]));
 
-        $this->assertEquals('Hello World', $updated->getAttribute('title'));
+        $this->assertSame('Hello World', $updated->getAttribute('title'));
 
         // Edge case: null value
         $doc = $database->createDocument($collectionId, new Document([
@@ -1074,7 +1074,7 @@ trait OperatorTests
             'title' => Operator::stringConcat('Test')
         ]));
 
-        $this->assertEquals('Test', $updated->getAttribute('title'));
+        $this->assertSame('Test', $updated->getAttribute('title'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1104,7 +1104,7 @@ trait OperatorTests
             'number' => Operator::modulo(3)
         ]));
 
-        $this->assertEquals(1, $updated->getAttribute('number'));
+        $this->assertSame(1, $updated->getAttribute('number'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1134,14 +1134,14 @@ trait OperatorTests
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(true, $updated->getAttribute('active'));
+        $this->assertSame(true, $updated->getAttribute('active'));
 
         // Test toggle again
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(false, $updated->getAttribute('active'));
+        $this->assertSame(false, $updated->getAttribute('active'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1210,13 +1210,13 @@ trait OperatorTests
             'count' => Operator::increment(3)
         ]));
 
-        $this->assertEquals(8, $updated->getAttribute('count'));
+        $this->assertSame(8, $updated->getAttribute('count'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::increment(5, 10)
         ]));
-        $this->assertEquals(10, $updated->getAttribute('count')); // Should cap at 10
+        $this->assertSame(10, $updated->getAttribute('count')); // Should cap at 10
 
         // Success case - float
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1227,7 +1227,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
             'score' => Operator::increment(1.5)
         ]));
-        $this->assertEquals(4.0, $updated->getAttribute('score'));
+        $this->assertSame(4.0, $updated->getAttribute('score'));
 
         // Edge case: null value
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -1237,7 +1237,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
             'count' => Operator::increment(5)
         ]));
-        $this->assertEquals(5, $updated->getAttribute('count'));
+        $this->assertSame(5, $updated->getAttribute('count'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1266,13 +1266,13 @@ trait OperatorTests
             'count' => Operator::decrement(3)
         ]));
 
-        $this->assertEquals(7, $updated->getAttribute('count'));
+        $this->assertSame(7, $updated->getAttribute('count'));
 
         // Success case - with min limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::decrement(10, 5)
         ]));
-        $this->assertEquals(5, $updated->getAttribute('count')); // Should stop at min 5
+        $this->assertSame(5, $updated->getAttribute('count')); // Should stop at min 5
 
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1282,7 +1282,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
             'count' => Operator::decrement(3)
         ]));
-        $this->assertEquals(-3, $updated->getAttribute('count'));
+        $this->assertSame(-3, $updated->getAttribute('count'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1311,13 +1311,13 @@ trait OperatorTests
             'value' => Operator::multiply(2.5)
         ]));
 
-        $this->assertEquals(10.0, $updated->getAttribute('value'));
+        $this->assertSame(10.0, $updated->getAttribute('value'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::multiply(3, 20)
         ]));
-        $this->assertEquals(20.0, $updated->getAttribute('value')); // Should cap at 20
+        $this->assertSame(20.0, $updated->getAttribute('value')); // Should cap at 20
 
         $database->deleteCollection($collectionId);
     }
@@ -1346,13 +1346,13 @@ trait OperatorTests
             'value' => Operator::divide(2)
         ]));
 
-        $this->assertEquals(5.0, $updated->getAttribute('value'));
+        $this->assertSame(5.0, $updated->getAttribute('value'));
 
         // Success case - with min limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::divide(10, 2)
         ]));
-        $this->assertEquals(2.0, $updated->getAttribute('value')); // Should stop at min 2
+        $this->assertSame(2.0, $updated->getAttribute('value')); // Should stop at min 2
 
         $database->deleteCollection($collectionId);
     }
@@ -1381,7 +1381,7 @@ trait OperatorTests
             'number' => Operator::modulo(3)
         ]));
 
-        $this->assertEquals(1, $updated->getAttribute('number'));
+        $this->assertSame(1, $updated->getAttribute('number'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1410,13 +1410,13 @@ trait OperatorTests
             'number' => Operator::power(3)
         ]));
 
-        $this->assertEquals(8, $updated->getAttribute('number'));
+        $this->assertSame(8, $updated->getAttribute('number'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'number' => Operator::power(4, 50)
         ]));
-        $this->assertEquals(50, $updated->getAttribute('number')); // Should cap at 50
+        $this->assertSame(50, $updated->getAttribute('number')); // Should cap at 50
 
         $database->deleteCollection($collectionId);
     }
@@ -1445,7 +1445,7 @@ trait OperatorTests
             'text' => Operator::stringConcat(' World')
         ]));
 
-        $this->assertEquals('Hello World', $updated->getAttribute('text'));
+        $this->assertSame('Hello World', $updated->getAttribute('text'));
 
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1455,7 +1455,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
             'text' => Operator::stringConcat('Test')
         ]));
-        $this->assertEquals('Test', $updated->getAttribute('text'));
+        $this->assertSame('Test', $updated->getAttribute('text'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1484,7 +1484,7 @@ trait OperatorTests
             'text' => Operator::stringReplace('World', 'Universe')
         ]));
 
-        $this->assertEquals('Hello Universe', $updated->getAttribute('text'));
+        $this->assertSame('Hello Universe', $updated->getAttribute('text'));
 
         // Success case - multiple occurrences
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1496,7 +1496,7 @@ trait OperatorTests
             'text' => Operator::stringReplace('test', 'demo')
         ]));
 
-        $this->assertEquals('demo demo demo', $updated->getAttribute('text'));
+        $this->assertSame('demo demo demo', $updated->getAttribute('text'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1525,7 +1525,7 @@ trait OperatorTests
             'tags' => Operator::arrayAppend(['new', 'items'])
         ]));
 
-        $this->assertEquals(['initial', 'new', 'items'], $updated->getAttribute('tags'));
+        $this->assertSame(['initial', 'new', 'items'], $updated->getAttribute('tags'));
 
         // Edge case: empty array
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1535,7 +1535,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
             'tags' => Operator::arrayAppend(['first'])
         ]));
-        $this->assertEquals(['first'], $updated->getAttribute('tags'));
+        $this->assertSame(['first'], $updated->getAttribute('tags'));
 
         // Edge case: null array
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -1545,7 +1545,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
             'tags' => Operator::arrayAppend(['test'])
         ]));
-        $this->assertEquals(['test'], $updated->getAttribute('tags'));
+        $this->assertSame(['test'], $updated->getAttribute('tags'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1574,7 +1574,7 @@ trait OperatorTests
             'items' => Operator::arrayPrepend(['first', 'second'])
         ]));
 
-        $this->assertEquals(['first', 'second', 'existing'], $updated->getAttribute('items'));
+        $this->assertSame(['first', 'second', 'existing'], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1603,14 +1603,14 @@ trait OperatorTests
             'numbers' => Operator::arrayInsert(2, 3)
         ]));
 
-        $this->assertEquals([1, 2, 3, 4], $updated->getAttribute('numbers'));
+        $this->assertSame([1, 2, 3, 4], $updated->getAttribute('numbers'));
 
         // Success case - beginning insertion
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'numbers' => Operator::arrayInsert(0, 0)
         ]));
 
-        $this->assertEquals([0, 1, 2, 3, 4], $updated->getAttribute('numbers'));
+        $this->assertSame([0, 1, 2, 3, 4], $updated->getAttribute('numbers'));
 
         // Success case - end insertion
         $numbers = $updated->getAttribute('numbers');
@@ -1618,7 +1618,7 @@ trait OperatorTests
             'numbers' => Operator::arrayInsert(count($numbers), 5)
         ]));
 
-        $this->assertEquals([0, 1, 2, 3, 4, 5], $updated->getAttribute('numbers'));
+        $this->assertSame([0, 1, 2, 3, 4, 5], $updated->getAttribute('numbers'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1647,7 +1647,7 @@ trait OperatorTests
             'items' => Operator::arrayRemove('b')
         ]));
 
-        $this->assertEquals(['a', 'c'], $updated->getAttribute('items'));
+        $this->assertSame(['a', 'c'], $updated->getAttribute('items'));
 
         // Success case - multiple occurrences
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1659,14 +1659,14 @@ trait OperatorTests
             'items' => Operator::arrayRemove('x')
         ]));
 
-        $this->assertEquals(['y', 'z'], $updated->getAttribute('items'));
+        $this->assertSame(['y', 'z'], $updated->getAttribute('items'));
 
         // Success case - non-existent value
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'items' => Operator::arrayRemove('nonexistent')
         ]));
 
-        $this->assertEquals(['a', 'c'], $updated->getAttribute('items')); // Should remain unchanged
+        $this->assertSame(['a', 'c'], $updated->getAttribute('items')); // Should remain unchanged
 
         $database->deleteCollection($collectionId);
     }
@@ -1697,7 +1697,7 @@ trait OperatorTests
 
         $result = $updated->getAttribute('items');
         sort($result); // Sort for consistent comparison
-        $this->assertEquals(['a', 'b', 'c'], $result);
+        $this->assertSame(['a', 'b', 'c'], $result);
 
         // Success case - no duplicates
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1709,7 +1709,7 @@ trait OperatorTests
             'items' => Operator::arrayUnique()
         ]));
 
-        $this->assertEquals(['x', 'y', 'z'], $updated->getAttribute('items'));
+        $this->assertSame(['x', 'y', 'z'], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1740,14 +1740,14 @@ trait OperatorTests
 
         $result = $updated->getAttribute('items');
         sort($result);
-        $this->assertEquals(['b', 'c'], $result);
+        $this->assertSame(['b', 'c'], $result);
 
         // Success case - no intersection
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'items' => Operator::arrayIntersect(['x', 'y', 'z'])
         ]));
 
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1778,7 +1778,7 @@ trait OperatorTests
 
         $result = $updated->getAttribute('items');
         sort($result);
-        $this->assertEquals(['a', 'c'], $result);
+        $this->assertSame(['a', 'c'], $result);
 
         // Success case - empty diff array
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -1787,7 +1787,7 @@ trait OperatorTests
 
         $result = $updated->getAttribute('items');
         sort($result);
-        $this->assertEquals(['a', 'c'], $result); // Should remain unchanged
+        $this->assertSame(['a', 'c'], $result); // Should remain unchanged
 
         $database->deleteCollection($collectionId);
     }
@@ -1818,14 +1818,14 @@ trait OperatorTests
             'numbers' => Operator::arrayFilter('equal', 2)
         ]));
 
-        $this->assertEquals([2, 2], $updated->getAttribute('numbers'));
+        $this->assertSame([2, 2], $updated->getAttribute('numbers'));
 
         // Success case - isNotNull condition
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'mixed' => Operator::arrayFilter('isNotNull')
         ]));
 
-        $this->assertEquals(['a', 'b', 'c'], $updated->getAttribute('mixed'));
+        $this->assertSame(['a', 'b', 'c'], $updated->getAttribute('mixed'));
 
         // Success case - greaterThan condition (reset array first)
         $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -1836,7 +1836,7 @@ trait OperatorTests
             'numbers' => Operator::arrayFilter('greaterThan', 2)
         ]));
 
-        $this->assertEquals([3, 4], $updated->getAttribute('numbers'));
+        $this->assertSame([3, 4], $updated->getAttribute('numbers'));
 
         // Success case - lessThan condition (reset array first)
         $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -1847,7 +1847,7 @@ trait OperatorTests
             'numbers' => Operator::arrayFilter('lessThan', 3)
         ]));
 
-        $this->assertEquals([1, 2, 2], $updated->getAttribute('numbers'));
+        $this->assertSame([1, 2, 2], $updated->getAttribute('numbers'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1878,7 +1878,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'integers' => Operator::arrayFilter('greaterThan', 10)
         ]));
-        $this->assertEquals([15, 20, 25], $updated->getAttribute('integers'));
+        $this->assertSame([15, 20, 25], $updated->getAttribute('integers'));
 
         // Reset and test lessThan with integers
         $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -1888,13 +1888,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'integers' => Operator::arrayFilter('lessThan', 15)
         ]));
-        $this->assertEquals([1, 5, 10], $updated->getAttribute('integers'));
+        $this->assertSame([1, 5, 10], $updated->getAttribute('integers'));
 
         // Test greaterThan with floats
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'floats' => Operator::arrayFilter('greaterThan', 10.5)
         ]));
-        $this->assertEquals([15.5, 20.5, 25.5], $updated->getAttribute('floats'));
+        $this->assertSame([15.5, 20.5, 25.5], $updated->getAttribute('floats'));
 
         // Reset and test lessThan with floats
         $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -1904,7 +1904,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'floats' => Operator::arrayFilter('lessThan', 15.5)
         ]));
-        $this->assertEquals([1.5, 5.5, 10.5], $updated->getAttribute('floats'));
+        $this->assertSame([1.5, 5.5, 10.5], $updated->getAttribute('floats'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1933,14 +1933,14 @@ trait OperatorTests
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(false, $updated->getAttribute('active'));
+        $this->assertSame(false, $updated->getAttribute('active'));
 
         // Success case - false to true
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(true, $updated->getAttribute('active'));
+        $this->assertSame(true, $updated->getAttribute('active'));
 
         // Success case - null to true
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1952,7 +1952,7 @@ trait OperatorTests
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(true, $updated->getAttribute('active'));
+        $this->assertSame(true, $updated->getAttribute('active'));
 
         $database->deleteCollection($collectionId);
     }
@@ -1981,14 +1981,14 @@ trait OperatorTests
             'date' => Operator::dateAddDays(5)
         ]));
 
-        $this->assertEquals('2023-01-06T00:00:00.000+00:00', $updated->getAttribute('date'));
+        $this->assertSame('2023-01-06T00:00:00.000+00:00', $updated->getAttribute('date'));
 
         // Success case - negative days (subtracting)
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'date' => Operator::dateAddDays(-3)
         ]));
 
-        $this->assertEquals('2023-01-03T00:00:00.000+00:00', $updated->getAttribute('date'));
+        $this->assertSame('2023-01-03T00:00:00.000+00:00', $updated->getAttribute('date'));
 
         $database->deleteCollection($collectionId);
     }
@@ -2017,7 +2017,7 @@ trait OperatorTests
             'date' => Operator::dateSubDays(3)
         ]));
 
-        $this->assertEquals('2023-01-07T00:00:00.000+00:00', $updated->getAttribute('date'));
+        $this->assertSame('2023-01-07T00:00:00.000+00:00', $updated->getAttribute('date'));
 
         $database->deleteCollection($collectionId);
     }
@@ -2095,11 +2095,11 @@ trait OperatorTests
             'active' => Operator::toggle()
         ]));
 
-        $this->assertEquals(8, $updated->getAttribute('count'));
-        $this->assertEquals(15.0, $updated->getAttribute('score'));
-        $this->assertEquals(['initial', 'new', 'item'], $updated->getAttribute('tags'));
-        $this->assertEquals('Test Document', $updated->getAttribute('name'));
-        $this->assertEquals(true, $updated->getAttribute('active'));
+        $this->assertSame(8, $updated->getAttribute('count'));
+        $this->assertSame(15.0, $updated->getAttribute('score'));
+        $this->assertSame(['initial', 'new', 'item'], $updated->getAttribute('tags'));
+        $this->assertSame('Test Document', $updated->getAttribute('name'));
+        $this->assertSame(true, $updated->getAttribute('active'));
 
         $database->deleteCollection($collectionId);
     }
@@ -2136,7 +2136,7 @@ trait OperatorTests
             Query::equal('category', ['test'])
         ]);
 
-        $this->assertEquals(3, $updateCount);
+        $this->assertSame(3, $updateCount);
 
         // Fetch the updated documents to verify the operator worked
         $updated = $database->find($collectionId, [
@@ -2144,9 +2144,9 @@ trait OperatorTests
             Query::orderAsc('count')
         ]);
         $this->assertCount(3, $updated);
-        $this->assertEquals(15, $updated[0]->getAttribute('count')); // 5 + 10
-        $this->assertEquals(20, $updated[1]->getAttribute('count')); // 10 + 10
-        $this->assertEquals(25, $updated[2]->getAttribute('count')); // 15 + 10
+        $this->assertSame(15, $updated[0]->getAttribute('count')); // 5 + 10
+        $this->assertSame(20, $updated[1]->getAttribute('count')); // 10 + 10
+        $this->assertSame(25, $updated[2]->getAttribute('count')); // 15 + 10
 
         $database->deleteCollection($collectionId);
     }
@@ -2174,7 +2174,7 @@ trait OperatorTests
             'items' => ['second', 'third', 'fourth']
         ]));
 
-        $this->assertEquals(['second', 'third', 'fourth'], $doc->getAttribute('items'));
+        $this->assertSame(['second', 'third', 'fourth'], $doc->getAttribute('items'));
 
         // Attempt to insert at index 0
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -2185,7 +2185,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 'first' at index 0, shifting existing elements
-        $this->assertEquals(
+        $this->assertSame(
             ['first', 'second', 'third', 'fourth'],
             $refetched->getAttribute('items'),
             'ARRAY_INSERT should insert element at index 0'
@@ -2217,7 +2217,7 @@ trait OperatorTests
             'items' => [1, 2, 4, 5, 6]
         ]));
 
-        $this->assertEquals([1, 2, 4, 5, 6], $doc->getAttribute('items'));
+        $this->assertSame([1, 2, 4, 5, 6], $doc->getAttribute('items'));
 
         // Attempt to insert at index 2 (middle position)
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -2228,7 +2228,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 3 at index 2, shifting remaining elements
-        $this->assertEquals(
+        $this->assertSame(
             [1, 2, 3, 4, 5, 6],
             $refetched->getAttribute('items'),
             'ARRAY_INSERT should insert element at index 2'
@@ -2260,7 +2260,7 @@ trait OperatorTests
             'items' => ['apple', 'banana', 'cherry']
         ]));
 
-        $this->assertEquals(['apple', 'banana', 'cherry'], $doc->getAttribute('items'));
+        $this->assertSame(['apple', 'banana', 'cherry'], $doc->getAttribute('items'));
 
         // Attempt to insert at end (index = length)
         $items = $doc->getAttribute('items');
@@ -2272,7 +2272,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 'date' at end of array
-        $this->assertEquals(
+        $this->assertSame(
             ['apple', 'banana', 'cherry', 'date'],
             $refetched->getAttribute('items'),
             'ARRAY_INSERT should insert element at end of array'
@@ -2304,7 +2304,7 @@ trait OperatorTests
             'numbers' => [1, 3, 5]
         ]));
 
-        $this->assertEquals([1, 3, 5], $doc->getAttribute('numbers'));
+        $this->assertSame([1, 3, 5], $doc->getAttribute('numbers'));
 
         // First insert: add 2 at index 1
         $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -2315,7 +2315,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 2 at index 1
-        $this->assertEquals(
+        $this->assertSame(
             [1, 2, 3, 5],
             $refetched->getAttribute('numbers'),
             'First ARRAY_INSERT should work'
@@ -2330,7 +2330,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 4 at index 3
-        $this->assertEquals(
+        $this->assertSame(
             [1, 2, 3, 4, 5],
             $refetched->getAttribute('numbers'),
             'Second ARRAY_INSERT should work'
@@ -2345,7 +2345,7 @@ trait OperatorTests
         $refetched = $database->getDocument($collectionId, $doc->getId());
 
         // Should insert 0 at index 0
-        $this->assertEquals(
+        $this->assertSame(
             [0, 1, 2, 3, 4, 5],
             $refetched->getAttribute('numbers'),
             'Third ARRAY_INSERT should work'
@@ -2397,7 +2397,7 @@ trait OperatorTests
             'score' => 95
         ]));
 
-        $this->assertEquals(95, $doc->getAttribute('score'));
+        $this->assertSame(95, $doc->getAttribute('score'));
 
         // Test case 1: Small increment that stays within MAX_INT should work
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -2405,7 +2405,7 @@ trait OperatorTests
         ]));
         // Refetch to get the actual computed value
         $updated = $database->getDocument($collectionId, $doc->getId());
-        $this->assertEquals(100, $updated->getAttribute('score'));
+        $this->assertSame(100, $updated->getAttribute('score'));
 
         // Test case 2: Increment that would exceed Database::MAX_INT (2147483647)
         // This is the bug - the operator will create a value > MAX_INT which should be rejected
@@ -2415,7 +2415,7 @@ trait OperatorTests
             'score' => Database::MAX_INT - 10 // Start near the maximum
         ]));
 
-        $this->assertEquals(Database::MAX_INT - 10, $doc2->getAttribute('score'));
+        $this->assertSame(Database::MAX_INT - 10, $doc2->getAttribute('score'));
 
         // BUG EXPOSED: This increment will push the value beyond Database::MAX_INT
         // It should throw a StructureException for exceeding the integer range,
@@ -2473,8 +2473,8 @@ trait OperatorTests
             'title' => 'Hello World'  // 11 characters
         ]));
 
-        $this->assertEquals('Hello World', $doc->getAttribute('title'));
-        $this->assertEquals(11, strlen($doc->getAttribute('title')));
+        $this->assertSame('Hello World', $doc->getAttribute('title'));
+        $this->assertSame(11, strlen($doc->getAttribute('title')));
 
         // BUG EXPOSED: Concat a 15-character string to make total length 26 (exceeds max of 20)
         // This should throw a StructureException for exceeding max length,
@@ -2532,7 +2532,7 @@ trait OperatorTests
             'quantity' => 1000000000  // 1 billion
         ]));
 
-        $this->assertEquals(1000000000, $doc->getAttribute('quantity'));
+        $this->assertSame(1000000000, $doc->getAttribute('quantity'));
 
         // BUG EXPOSED: Multiply by 10 to get 10 billion, which exceeds MAX_INT (2.147 billion)
         // This should throw a StructureException for exceeding the integer range,
@@ -2596,7 +2596,7 @@ trait OperatorTests
         $updated1 = $database->updateDocument($collectionId, 'negative_multiply', new Document([
             'value' => Operator::multiply(-2)
         ]));
-        $this->assertEquals(-20.0, $updated1->getAttribute('value'), 'Multiply by negative should work correctly');
+        $this->assertSame(-20.0, $updated1->getAttribute('value'), 'Multiply by negative should work correctly');
 
         // Test negative multiplier WITH max limit - should not incorrectly cap
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -2608,7 +2608,7 @@ trait OperatorTests
         $updated2 = $database->updateDocument($collectionId, 'negative_with_max', new Document([
             'value' => Operator::multiply(-2, 100)  // max=100, but result will be -20
         ]));
-        $this->assertEquals(-20.0, $updated2->getAttribute('value'), 'Negative multiplier with max should not trigger overflow check');
+        $this->assertSame(-20.0, $updated2->getAttribute('value'), 'Negative multiplier with max should not trigger overflow check');
 
         // Test positive value * negative multiplier - result is negative, should not cap
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -2620,7 +2620,7 @@ trait OperatorTests
         $updated3 = $database->updateDocument($collectionId, 'pos_times_neg', new Document([
             'value' => Operator::multiply(-3, 100)  // 50 * -3 = -150, should not be capped at 100
         ]));
-        $this->assertEquals(-150.0, $updated3->getAttribute('value'), 'Positive * negative should compute correctly (result is negative, no cap)');
+        $this->assertSame(-150.0, $updated3->getAttribute('value'), 'Positive * negative should compute correctly (result is negative, no cap)');
 
         // Test negative value * negative multiplier that SHOULD hit max cap
         $doc4 = $database->createDocument($collectionId, new Document([
@@ -2632,7 +2632,7 @@ trait OperatorTests
         $updated4 = $database->updateDocument($collectionId, 'negative_overflow', new Document([
             'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, should be capped at 100
         ]));
-        $this->assertEquals(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
+        $this->assertSame(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
 
         // Test zero multiplier with max
         $doc5 = $database->createDocument($collectionId, new Document([
@@ -2644,7 +2644,7 @@ trait OperatorTests
         $updated5 = $database->updateDocument($collectionId, 'zero_multiply', new Document([
             'value' => Operator::multiply(0, 100)
         ]));
-        $this->assertEquals(0.0, $updated5->getAttribute('value'), 'Multiply by zero should result in zero');
+        $this->assertSame(0.0, $updated5->getAttribute('value'), 'Multiply by zero should result in zero');
 
         $database->deleteCollection($collectionId);
     }
@@ -2678,7 +2678,7 @@ trait OperatorTests
         $updated1 = $database->updateDocument($collectionId, 'negative_divide', new Document([
             'value' => Operator::divide(-2)
         ]));
-        $this->assertEquals(-10.0, $updated1->getAttribute('value'), 'Divide by negative should work correctly');
+        $this->assertSame(-10.0, $updated1->getAttribute('value'), 'Divide by negative should work correctly');
 
         // Test negative divisor WITH min limit - should not incorrectly cap
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -2690,7 +2690,7 @@ trait OperatorTests
         $updated2 = $database->updateDocument($collectionId, 'negative_with_min', new Document([
             'value' => Operator::divide(-2, -50)  // min=-50, result will be -10
         ]));
-        $this->assertEquals(-10.0, $updated2->getAttribute('value'), 'Negative divisor with min should not trigger underflow check');
+        $this->assertSame(-10.0, $updated2->getAttribute('value'), 'Negative divisor with min should not trigger underflow check');
 
         // Test positive value / negative divisor - result is negative, should not cap at min
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -2702,7 +2702,7 @@ trait OperatorTests
         $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
             'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so floor at -10
         ]));
-        $this->assertEquals(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertSame(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
 
         // Test negative value / negative divisor that would go below min
         $doc4 = $database->createDocument($collectionId, new Document([
@@ -2714,7 +2714,7 @@ trait OperatorTests
         $updated4 = $database->updateDocument($collectionId, 'negative_underflow', new Document([
             'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so floor at -10
         ]));
-        $this->assertEquals(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertSame(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
 
         $database->deleteCollection($collectionId);
     }
@@ -2749,7 +2749,7 @@ trait OperatorTests
             'numbers' => [10, 20, 30]
         ]));
 
-        $this->assertEquals([10, 20, 30], $doc->getAttribute('numbers'));
+        $this->assertSame([10, 20, 30], $doc->getAttribute('numbers'));
 
         // Test case 1: Append integers that exceed MAX_INT
         // BUG EXPOSED: These values exceed the constraint but validation is not applied post-operator
@@ -2864,7 +2864,7 @@ trait OperatorTests
         ]));
         // Should be capped at max
         $this->assertLessThanOrEqual(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
-        $this->assertEquals(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
+        $this->assertSame(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
 
         // Test decrement near min with limit
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
@@ -2872,7 +2872,7 @@ trait OperatorTests
         ]));
         // Should be capped at min
         $this->assertGreaterThanOrEqual(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
-        $this->assertEquals(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
+        $this->assertSame(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
 
         $database->deleteCollection($collectionId);
     }
@@ -2989,13 +2989,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
             'text' => Operator::stringConcat('hello')
         ]));
-        $this->assertEquals('hello', $updated->getAttribute('text'));
+        $this->assertSame('hello', $updated->getAttribute('text'));
 
         // Test concatenation of empty string
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
             'text' => Operator::stringConcat('')
         ]));
-        $this->assertEquals('hello', $updated->getAttribute('text'));
+        $this->assertSame('hello', $updated->getAttribute('text'));
 
         // Test replace with empty search string (should do nothing or replace all)
         $database->updateDocument($collectionId, 'empty_str_doc', new Document([
@@ -3006,13 +3006,13 @@ trait OperatorTests
             'text' => Operator::stringReplace('', 'X')
         ]));
         // Empty search should not change the string
-        $this->assertEquals('test', $updated->getAttribute('text'));
+        $this->assertSame('test', $updated->getAttribute('text'));
 
         // Test replace with empty replace string (deletion)
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
             'text' => Operator::stringReplace('t', '')
         ]));
-        $this->assertEquals('es', $updated->getAttribute('text'));
+        $this->assertSame('es', $updated->getAttribute('text'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3046,13 +3046,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
             'text' => Operator::stringConcat('👋🌍')
         ]));
-        $this->assertEquals('你好👋🌍', $updated->getAttribute('text'));
+        $this->assertSame('你好👋🌍', $updated->getAttribute('text'));
 
         // Test replace with Chinese characters
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
             'text' => Operator::stringReplace('你好', '再见')
         ]));
-        $this->assertEquals('再见👋🌍', $updated->getAttribute('text'));
+        $this->assertSame('再见👋🌍', $updated->getAttribute('text'));
 
         // Test with combining characters (é = e + ´)
         $database->updateDocument($collectionId, 'unicode_doc', new Document([
@@ -3096,7 +3096,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
             'items' => Operator::arrayAppend(['first'])
         ]));
-        $this->assertEquals(['first'], $updated->getAttribute('items'));
+        $this->assertSame(['first'], $updated->getAttribute('items'));
 
         // Reset and test prepend to empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
@@ -3106,7 +3106,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
             'items' => Operator::arrayPrepend(['prepended'])
         ]));
-        $this->assertEquals(['prepended'], $updated->getAttribute('items'));
+        $this->assertSame(['prepended'], $updated->getAttribute('items'));
 
         // Test insert at index 0 of empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
@@ -3116,7 +3116,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
             'items' => Operator::arrayInsert(0, 'zero')
         ]));
-        $this->assertEquals(['zero'], $updated->getAttribute('items'));
+        $this->assertSame(['zero'], $updated->getAttribute('items'));
 
         // Test unique on empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
@@ -3126,13 +3126,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
             'items' => Operator::arrayUnique()
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         // Test remove from empty array (should stay empty)
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
             'items' => Operator::arrayRemove('nonexistent')
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3180,7 +3180,7 @@ trait OperatorTests
             'mixed' => Operator::arrayRemove('')
         ]));
         $this->assertNotContains('', $updated->getAttribute('mixed'));
-        $this->assertEquals(['a', 'b'], $updated->getAttribute('mixed'));
+        $this->assertSame(['a', 'b'], $updated->getAttribute('mixed'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3216,7 +3216,7 @@ trait OperatorTests
         ]));
 
         // In PHP/MySQL: -17 % 5 = -2
-        $this->assertEquals(-2, $updated->getAttribute('value'));
+        $this->assertSame(-2, $updated->getAttribute('value'));
 
         // Test positive % negative
         $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
@@ -3228,7 +3228,7 @@ trait OperatorTests
         ]));
 
         // In PHP/MySQL: 17 % -5 = 2
-        $this->assertEquals(2, $updated->getAttribute('value'));
+        $this->assertSame(2, $updated->getAttribute('value'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3319,7 +3319,7 @@ trait OperatorTests
         ]));
 
         $result = $updated->getAttribute('text');
-        $this->assertEquals(20000, strlen($result));
+        $this->assertSame(20000, strlen($result));
         $this->assertStringStartsWith('AAA', $result);
         $this->assertStringEndsWith('BBB', $result);
 
@@ -3437,7 +3437,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'boundary_insert_doc', new Document([
             'items' => Operator::arrayInsert(3, 'd')
         ]));
-        $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
+        $this->assertSame(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
 
         // Test insert beyond length (should throw exception)
         try {
@@ -3483,38 +3483,38 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'counter' => Operator::increment(5)
         ]));
-        $this->assertEquals(15, $updated->getAttribute('counter'));
+        $this->assertSame(15, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'counter' => Operator::multiply(2)
         ]));
-        $this->assertEquals(30, $updated->getAttribute('counter'));
+        $this->assertSame(30, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'counter' => Operator::decrement(10)
         ]));
-        $this->assertEquals(20, $updated->getAttribute('counter'));
+        $this->assertSame(20, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'counter' => Operator::divide(2)
         ]));
-        $this->assertEquals(10, $updated->getAttribute('counter'));
+        $this->assertSame(10, $updated->getAttribute('counter'));
 
         // Sequential string operations
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'text' => Operator::stringConcat('-middle')
         ]));
-        $this->assertEquals('start-middle', $updated->getAttribute('text'));
+        $this->assertSame('start-middle', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'text' => Operator::stringConcat('-end')
         ]));
-        $this->assertEquals('start-middle-end', $updated->getAttribute('text'));
+        $this->assertSame('start-middle-end', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
             'text' => Operator::stringReplace('-', '_')
         ]));
-        $this->assertEquals('start_middle_end', $updated->getAttribute('text'));
+        $this->assertSame('start_middle_end', $updated->getAttribute('text'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3548,19 +3548,19 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
             'value' => Operator::increment(5)
         ]));
-        $this->assertEquals(5.0, $updated->getAttribute('value'));
+        $this->assertSame(5.0, $updated->getAttribute('value'));
 
         // Multiply by zero (should become zero)
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
             'value' => Operator::multiply(0)
         ]));
-        $this->assertEquals(0.0, $updated->getAttribute('value'));
+        $this->assertSame(0.0, $updated->getAttribute('value'));
 
         // Power with zero base: 0^5 = 0
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
             'value' => Operator::power(5)
         ]));
-        $this->assertEquals(0.0, $updated->getAttribute('value'));
+        $this->assertSame(0.0, $updated->getAttribute('value'));
 
         // Increment and test power with zero exponent: n^0 = 1
         $database->updateDocument($collectionId, 'zero_doc', new Document([
@@ -3570,7 +3570,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
             'value' => Operator::power(0)
         ]));
-        $this->assertEquals(1.0, $updated->getAttribute('value'));
+        $this->assertSame(1.0, $updated->getAttribute('value'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3604,7 +3604,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
             'items' => Operator::arrayIntersect(['x', 'y', 'z'])
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         // Reset and test diff that removes all elements
         $database->updateDocument($collectionId, 'empty_result_doc', new Document([
@@ -3614,13 +3614,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
             'items' => Operator::arrayDiff(['a', 'b', 'c'])
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         // Test intersect on empty array
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
             'items' => Operator::arrayIntersect(['x', 'y'])
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3654,7 +3654,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
             'text' => Operator::stringReplace('the', 'a')
         ]));
-        $this->assertEquals('a cat and a dog', $updated->getAttribute('text'));
+        $this->assertSame('a cat and a dog', $updated->getAttribute('text'));
 
         // Replace with overlapping patterns
         $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
@@ -3664,7 +3664,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
             'text' => Operator::stringReplace('aaa', 'X')
         ]));
-        $this->assertEquals('X bbb X ccc X', $updated->getAttribute('text'));
+        $this->assertSame('X bbb X ccc X', $updated->getAttribute('text'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3742,7 +3742,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
             'items' => Operator::arrayRemove('only')
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         // Reset and test unique on single element
         $database->updateDocument($collectionId, 'single_elem_doc', new Document([
@@ -3752,13 +3752,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
             'items' => Operator::arrayUnique()
         ]));
-        $this->assertEquals(['single'], $updated->getAttribute('items'));
+        $this->assertSame(['single'], $updated->getAttribute('items'));
 
         // Test intersect with single element (match)
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
             'items' => Operator::arrayIntersect(['single'])
         ]));
-        $this->assertEquals(['single'], $updated->getAttribute('items'));
+        $this->assertSame(['single'], $updated->getAttribute('items'));
 
         // Test intersect with single element (no match)
         $database->updateDocument($collectionId, 'single_elem_doc', new Document([
@@ -3768,7 +3768,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
             'items' => Operator::arrayIntersect(['other'])
         ]));
-        $this->assertEquals([], $updated->getAttribute('items'));
+        $this->assertSame([], $updated->getAttribute('items'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3799,19 +3799,19 @@ trait OperatorTests
         ]));
 
         // Verify default
-        $this->assertEquals(false, $doc->getAttribute('flag'));
+        $this->assertSame(false, $doc->getAttribute('flag'));
 
         // Toggle from default false to true
         $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
             'flag' => Operator::toggle()
         ]));
-        $this->assertEquals(true, $updated->getAttribute('flag'));
+        $this->assertSame(true, $updated->getAttribute('flag'));
 
         // Toggle back
         $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
             'flag' => Operator::toggle()
         ]));
-        $this->assertEquals(false, $updated->getAttribute('flag'));
+        $this->assertSame(false, $updated->getAttribute('flag'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3846,7 +3846,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::increment(50, 120)
         ]));
-        $this->assertEquals(120, $updated->getAttribute('small_int'));
+        $this->assertSame(120, $updated->getAttribute('small_int'));
 
         // Test multiply that would exceed without limit
         $database->updateDocument($collectionId, 'constraint_doc', new Document([
@@ -3856,7 +3856,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::multiply(1000, 5000)
         ]));
-        $this->assertEquals(5000, $updated->getAttribute('small_int'));
+        $this->assertSame(5000, $updated->getAttribute('small_int'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3912,17 +3912,17 @@ trait OperatorTests
                 $expectedScore = $old->getAttribute('score') * 2;
                 $expectedTags = array_merge($old->getAttribute('tags'), ['updated']);
 
-                $this->assertEquals($expectedCount, $doc->getAttribute('count'));
-                $this->assertEquals($expectedScore, $doc->getAttribute('score'));
-                $this->assertEquals($expectedTags, $doc->getAttribute('tags'));
+                $this->assertSame($expectedCount, $doc->getAttribute('count'));
+                $this->assertSame($expectedScore, $doc->getAttribute('score'));
+                $this->assertSame($expectedTags, $doc->getAttribute('tags'));
 
                 $callbackResults[] = $doc->getId();
             }
         );
 
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
         $this->assertCount(5, $callbackResults);
-        $this->assertEquals(['doc_1', 'doc_2', 'doc_3', 'doc_4', 'doc_5'], $callbackResults);
+        $this->assertSame(['doc_1', 'doc_2', 'doc_3', 'doc_4', 'doc_5'], $callbackResults);
 
         $database->deleteCollection($collectionId);
     }
@@ -4001,24 +4001,24 @@ trait OperatorTests
                 $this->assertIsArray($doc->getAttribute('items'));
 
                 if ($doc->getId() === 'existing_1' && $old !== null) {
-                    $this->assertEquals(150, $doc->getAttribute('count')); // 100 + 50
-                    $this->assertEquals(25.0, $doc->getAttribute('value')); // 50 / 2
-                    $this->assertEquals(['item1', 'new_item'], $doc->getAttribute('items'));
+                    $this->assertSame(150, $doc->getAttribute('count')); // 100 + 50
+                    $this->assertSame(25.0, $doc->getAttribute('value')); // 50 / 2
+                    $this->assertSame(['item1', 'new_item'], $doc->getAttribute('items'));
                 } elseif ($doc->getId() === 'existing_2' && $old !== null) {
-                    $this->assertEquals(175, $doc->getAttribute('count')); // 200 - 25
-                    $this->assertEquals(112.5, $doc->getAttribute('value')); // 75 * 1.5
-                    $this->assertEquals(['prepended', 'item2'], $doc->getAttribute('items'));
+                    $this->assertSame(175, $doc->getAttribute('count')); // 200 - 25
+                    $this->assertSame(112.5, $doc->getAttribute('value')); // 75 * 1.5
+                    $this->assertSame(['prepended', 'item2'], $doc->getAttribute('items'));
                 } elseif ($doc->getId() === 'new_doc' && $old === null) {
-                    $this->assertEquals(500, $doc->getAttribute('count'));
-                    $this->assertEquals(100.0, $doc->getAttribute('value'));
-                    $this->assertEquals(['new'], $doc->getAttribute('items'));
+                    $this->assertSame(500, $doc->getAttribute('count'));
+                    $this->assertSame(100.0, $doc->getAttribute('value'));
+                    $this->assertSame(['new'], $doc->getAttribute('items'));
                 }
 
                 $callbackResults[] = $doc->getId();
             }
         );
 
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
         $this->assertCount(3, $callbackResults);
 
         $database->deleteCollection($collectionId);
@@ -4052,9 +4052,9 @@ trait OperatorTests
             'tags' => ['tag1', 'tag2']
         ]));
 
-        $this->assertEquals(100, $doc->getAttribute('count'));
-        $this->assertEquals(50.0, $doc->getAttribute('score'));
-        $this->assertEquals(['tag1', 'tag2'], $doc->getAttribute('tags'));
+        $this->assertSame(100, $doc->getAttribute('count'));
+        $this->assertSame(50.0, $doc->getAttribute('score'));
+        $this->assertSame(['tag1', 'tag2'], $doc->getAttribute('tags'));
 
         // Test upsert with operators on existing document (update)
         $updated = $database->upsertDocument($collectionId, new Document([
@@ -4066,9 +4066,9 @@ trait OperatorTests
         ]));
 
         // Verify operators were applied correctly
-        $this->assertEquals(125, $updated->getAttribute('count')); // 100 + 25
-        $this->assertEquals(100.0, $updated->getAttribute('score')); // 50 * 2
-        $this->assertEquals(['tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
+        $this->assertSame(125, $updated->getAttribute('count')); // 100 + 25
+        $this->assertSame(100.0, $updated->getAttribute('score')); // 50 * 2
+        $this->assertSame(['tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
 
         // Verify values are not Operator objects
         $this->assertIsInt($updated->getAttribute('count'));
@@ -4084,9 +4084,9 @@ trait OperatorTests
             'tags' => Operator::arrayPrepend(['tag0'])
         ]));
 
-        $this->assertEquals(75, $updated->getAttribute('count')); // 125 - 50
-        $this->assertEquals(25.0, $updated->getAttribute('score')); // 100 / 4
-        $this->assertEquals(['tag0', 'tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
+        $this->assertSame(75, $updated->getAttribute('count')); // 125 - 50
+        $this->assertSame(25.0, $updated->getAttribute('score')); // 100 / 4
+        $this->assertSame(['tag0', 'tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
 
         $database->deleteCollection($collectionId);
     }
@@ -4120,7 +4120,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'counter' => Operator::increment(10),
         ]));
-        $this->assertEquals(10, $doc1->getAttribute('counter'), 'INCREMENT on new doc: 0 + 10 = 10');
+        $this->assertSame(10, $doc1->getAttribute('counter'), 'INCREMENT on new doc: 0 + 10 = 10');
 
         // Test 2: DECREMENT on new document (should use 0 as default)
         $doc2 = $database->upsertDocument($collectionId, new Document([
@@ -4128,7 +4128,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'counter' => Operator::decrement(5),
         ]));
-        $this->assertEquals(-5, $doc2->getAttribute('counter'), 'DECREMENT on new doc: 0 - 5 = -5');
+        $this->assertSame(-5, $doc2->getAttribute('counter'), 'DECREMENT on new doc: 0 - 5 = -5');
 
         // Test 3: MULTIPLY on new document (should use 0 as default)
         $doc3 = $database->upsertDocument($collectionId, new Document([
@@ -4136,7 +4136,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'score' => Operator::multiply(5),
         ]));
-        $this->assertEquals(0.0, $doc3->getAttribute('score'), 'MULTIPLY on new doc: 0 * 5 = 0');
+        $this->assertSame(0.0, $doc3->getAttribute('score'), 'MULTIPLY on new doc: 0 * 5 = 0');
 
         // Test 4: DIVIDE on new document (should use 0 as default, but may handle division carefully)
         // Note: 0 / n = 0, so this should work
@@ -4145,7 +4145,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'score' => Operator::divide(2),
         ]));
-        $this->assertEquals(0.0, $doc4->getAttribute('score'), 'DIVIDE on new doc: 0 / 2 = 0');
+        $this->assertSame(0.0, $doc4->getAttribute('score'), 'DIVIDE on new doc: 0 / 2 = 0');
 
         // Test 5: ARRAY_APPEND on new document (should use [] as default)
         $doc5 = $database->upsertDocument($collectionId, new Document([
@@ -4153,7 +4153,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'tags' => Operator::arrayAppend(['tag1', 'tag2']),
         ]));
-        $this->assertEquals(['tag1', 'tag2'], $doc5->getAttribute('tags'), 'ARRAY_APPEND on new doc: [] + [tag1, tag2]');
+        $this->assertSame(['tag1', 'tag2'], $doc5->getAttribute('tags'), 'ARRAY_APPEND on new doc: [] + [tag1, tag2]');
 
         // Test 6: ARRAY_PREPEND on new document (should use [] as default)
         $doc6 = $database->upsertDocument($collectionId, new Document([
@@ -4161,7 +4161,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'tags' => Operator::arrayPrepend(['first']),
         ]));
-        $this->assertEquals(['first'], $doc6->getAttribute('tags'), 'ARRAY_PREPEND on new doc: [first] + []');
+        $this->assertSame(['first'], $doc6->getAttribute('tags'), 'ARRAY_PREPEND on new doc: [first] + []');
 
         // Test 7: ARRAY_INSERT on new document (should use [] as default, insert at position 0)
         $doc7 = $database->upsertDocument($collectionId, new Document([
@@ -4169,7 +4169,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'numbers' => Operator::arrayInsert(0, 42),
         ]));
-        $this->assertEquals([42], $doc7->getAttribute('numbers'), 'ARRAY_INSERT on new doc: insert 42 at position 0');
+        $this->assertSame([42], $doc7->getAttribute('numbers'), 'ARRAY_INSERT on new doc: insert 42 at position 0');
 
         // Test 8: ARRAY_REMOVE on new document (should use [] as default, nothing to remove)
         $doc8 = $database->upsertDocument($collectionId, new Document([
@@ -4177,7 +4177,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'tags' => Operator::arrayRemove(['nonexistent']),
         ]));
-        $this->assertEquals([], $doc8->getAttribute('tags'), 'ARRAY_REMOVE on new doc: [] - [nonexistent] = []');
+        $this->assertSame([], $doc8->getAttribute('tags'), 'ARRAY_REMOVE on new doc: [] - [nonexistent] = []');
 
         // Test 9: ARRAY_UNIQUE on new document (should use [] as default)
         $doc9 = $database->upsertDocument($collectionId, new Document([
@@ -4185,7 +4185,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'tags' => Operator::arrayUnique(),
         ]));
-        $this->assertEquals([], $doc9->getAttribute('tags'), 'ARRAY_UNIQUE on new doc: unique([]) = []');
+        $this->assertSame([], $doc9->getAttribute('tags'), 'ARRAY_UNIQUE on new doc: unique([]) = []');
 
         // Test 10: CONCAT on new document (should use empty string as default)
         $doc10 = $database->upsertDocument($collectionId, new Document([
@@ -4193,7 +4193,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'name' => Operator::stringConcat(' World'),
         ]));
-        $this->assertEquals(' World', $doc10->getAttribute('name'), 'CONCAT on new doc: "" + " World" = " World"');
+        $this->assertSame(' World', $doc10->getAttribute('name'), 'CONCAT on new doc: "" + " World" = " World"');
 
         // Test 11: REPLACE on new document (should use empty string as default)
         $doc11 = $database->upsertDocument($collectionId, new Document([
@@ -4201,7 +4201,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any())],
             'name' => Operator::stringReplace('old', 'new'),
         ]));
-        $this->assertEquals('', $doc11->getAttribute('name'), 'REPLACE on new doc: replace("old", "new") in "" = ""');
+        $this->assertSame('', $doc11->getAttribute('name'), 'REPLACE on new doc: replace("old", "new") in "" = ""');
 
         // Test 12: Multiple operators on same new document
         $doc12 = $database->upsertDocument($collectionId, new Document([
@@ -4212,10 +4212,10 @@ trait OperatorTests
             'tags' => Operator::arrayAppend(['multi1', 'multi2']),
             'name' => Operator::stringConcat('MultiTest'),
         ]));
-        $this->assertEquals(100, $doc12->getAttribute('counter'));
-        $this->assertEquals(50.5, $doc12->getAttribute('score'));
-        $this->assertEquals(['multi1', 'multi2'], $doc12->getAttribute('tags'));
-        $this->assertEquals('MultiTest', $doc12->getAttribute('name'));
+        $this->assertSame(100, $doc12->getAttribute('counter'));
+        $this->assertSame(50.5, $doc12->getAttribute('score'));
+        $this->assertSame(['multi1', 'multi2'], $doc12->getAttribute('tags'));
+        $this->assertSame('MultiTest', $doc12->getAttribute('name'));
 
         // Cleanup
         $database->deleteCollection($collectionId);
@@ -4387,7 +4387,7 @@ trait OperatorTests
 
         // Execute bulk upsert
         $count = $database->upsertDocuments($collectionId, $documents);
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         // Verify all operators worked correctly on updated documents
         $updated = $database->find($collectionId, [Query::orderAsc('$id')]);
@@ -4395,58 +4395,58 @@ trait OperatorTests
 
         // Check upsert_doc_1 (was updated with operators)
         $doc1 = $updated[0];
-        $this->assertEquals(15, $doc1->getAttribute('counter'));          // 10 + 5
-        $this->assertEquals(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
-        $this->assertEquals(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
-        $this->assertEquals(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
-        $this->assertEquals(2, $doc1->getAttribute('remainder'));         // 7 % 5
-        $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
-        $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
-        $this->assertEquals('new content 1', $doc1->getAttribute('content'));
+        $this->assertSame(15, $doc1->getAttribute('counter'));          // 10 + 5
+        $this->assertSame(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
+        $this->assertSame(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
+        $this->assertSame(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
+        $this->assertSame(2, $doc1->getAttribute('remainder'));         // 7 % 5
+        $this->assertSame(4.0, $doc1->getAttribute('power_val'));       // 2^2
+        $this->assertSame('Title 1 - Updated', $doc1->getAttribute('title'));
+        $this->assertSame('new content 1', $doc1->getAttribute('content'));
         $this->assertContains('upsert', $doc1->getAttribute('tags'));
         $this->assertContains('priority', $doc1->getAttribute('categories'));
         $this->assertNotContains('shared', $doc1->getAttribute('items'));
         $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
-        $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
-        $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
-        $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
-        $this->assertEquals([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
-        $this->assertEquals(true, $doc1->getAttribute('active'));         // Was false, toggled to true
+        $this->assertSame([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
+        $this->assertSame(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
+        $this->assertSame(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
+        $this->assertSame([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
+        $this->assertSame(true, $doc1->getAttribute('active'));         // Was false, toggled to true
         $this->assertNotNull($doc1->getAttribute('date_field1'));         // dateAddDays
         $this->assertNotNull($doc1->getAttribute('date_field2'));         // dateSubDays
         $this->assertNotNull($doc1->getAttribute('date_field3'));         // dateSetNow
 
         // Check upsert_doc_2 (was updated with operators)
         $doc2 = $updated[1];
-        $this->assertEquals(25, $doc2->getAttribute('counter'));          // 20 + 5
-        $this->assertEquals(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
-        $this->assertEquals(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
-        $this->assertEquals(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
-        $this->assertEquals(4, $doc2->getAttribute('remainder'));         // 14 % 5
-        $this->assertEquals(9.0, $doc2->getAttribute('power_val'));       // 3^2
-        $this->assertEquals('Title 2 - Updated', $doc2->getAttribute('title'));
-        $this->assertEquals('new content 2', $doc2->getAttribute('content'));
-        $this->assertEquals(false, $doc2->getAttribute('active'));        // Was true, toggled to false
+        $this->assertSame(25, $doc2->getAttribute('counter'));          // 20 + 5
+        $this->assertSame(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
+        $this->assertSame(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
+        $this->assertSame(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
+        $this->assertSame(4, $doc2->getAttribute('remainder'));         // 14 % 5
+        $this->assertSame(9.0, $doc2->getAttribute('power_val'));       // 3^2
+        $this->assertSame('Title 2 - Updated', $doc2->getAttribute('title'));
+        $this->assertSame('new content 2', $doc2->getAttribute('content'));
+        $this->assertSame(false, $doc2->getAttribute('active'));        // Was true, toggled to false
 
         // Check upsert_doc_3 (was inserted without operators)
         $doc3 = $updated[2];
-        $this->assertEquals(100, $doc3->getAttribute('counter'));
-        $this->assertEquals(50.0, $doc3->getAttribute('score'));
-        $this->assertEquals(5.0, $doc3->getAttribute('multiplier'));
-        $this->assertEquals(200.0, $doc3->getAttribute('divisor'));
-        $this->assertEquals(30, $doc3->getAttribute('remainder'));
-        $this->assertEquals(4.0, $doc3->getAttribute('power_val'));
-        $this->assertEquals('New Title', $doc3->getAttribute('title'));
-        $this->assertEquals('new content', $doc3->getAttribute('content'));
-        $this->assertEquals(['new_tag'], $doc3->getAttribute('tags'));
-        $this->assertEquals(['new_cat'], $doc3->getAttribute('categories'));
-        $this->assertEquals(['new_item'], $doc3->getAttribute('items'));
-        $this->assertEquals(['x', 'y', 'z'], $doc3->getAttribute('duplicates'));
-        $this->assertEquals([10, 20, 30], $doc3->getAttribute('numbers'));
-        $this->assertEquals(['p', 'q'], $doc3->getAttribute('intersect_items'));
-        $this->assertEquals(['m', 'n'], $doc3->getAttribute('diff_items'));
-        $this->assertEquals([11, 12, 13], $doc3->getAttribute('filter_numbers'));
-        $this->assertEquals(true, $doc3->getAttribute('active'));
+        $this->assertSame(100, $doc3->getAttribute('counter'));
+        $this->assertSame(50.0, $doc3->getAttribute('score'));
+        $this->assertSame(5.0, $doc3->getAttribute('multiplier'));
+        $this->assertSame(200.0, $doc3->getAttribute('divisor'));
+        $this->assertSame(30, $doc3->getAttribute('remainder'));
+        $this->assertSame(4.0, $doc3->getAttribute('power_val'));
+        $this->assertSame('New Title', $doc3->getAttribute('title'));
+        $this->assertSame('new content', $doc3->getAttribute('content'));
+        $this->assertSame(['new_tag'], $doc3->getAttribute('tags'));
+        $this->assertSame(['new_cat'], $doc3->getAttribute('categories'));
+        $this->assertSame(['new_item'], $doc3->getAttribute('items'));
+        $this->assertSame(['x', 'y', 'z'], $doc3->getAttribute('duplicates'));
+        $this->assertSame([10, 20, 30], $doc3->getAttribute('numbers'));
+        $this->assertSame(['p', 'q'], $doc3->getAttribute('intersect_items'));
+        $this->assertSame(['m', 'n'], $doc3->getAttribute('diff_items'));
+        $this->assertSame([11, 12, 13], $doc3->getAttribute('filter_numbers'));
+        $this->assertSame(true, $doc3->getAttribute('active'));
 
         $database->deleteCollection($collectionId);
     }
@@ -4481,7 +4481,7 @@ trait OperatorTests
             'items' => Operator::arrayUnique()
         ]));
         $this->assertIsArray($updated1->getAttribute('items'), 'ARRAY_UNIQUE should return array not NULL');
-        $this->assertEquals([], $updated1->getAttribute('items'), 'ARRAY_UNIQUE on empty array should return []');
+        $this->assertSame([], $updated1->getAttribute('items'), 'ARRAY_UNIQUE on empty array should return []');
 
         // Test ARRAY_INTERSECT with no matches returns [] not NULL
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -4494,7 +4494,7 @@ trait OperatorTests
             'items' => Operator::arrayIntersect(['x', 'y', 'z'])
         ]));
         $this->assertIsArray($updated2->getAttribute('items'), 'ARRAY_INTERSECT should return array not NULL');
-        $this->assertEquals([], $updated2->getAttribute('items'), 'ARRAY_INTERSECT with no matches should return []');
+        $this->assertSame([], $updated2->getAttribute('items'), 'ARRAY_INTERSECT with no matches should return []');
 
         // Test ARRAY_DIFF removing all elements returns [] not NULL
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -4507,7 +4507,7 @@ trait OperatorTests
             'items' => Operator::arrayDiff(['a', 'b', 'c'])
         ]));
         $this->assertIsArray($updated3->getAttribute('items'), 'ARRAY_DIFF should return array not NULL');
-        $this->assertEquals([], $updated3->getAttribute('items'), 'ARRAY_DIFF removing all elements should return []');
+        $this->assertSame([], $updated3->getAttribute('items'), 'ARRAY_DIFF removing all elements should return []');
 
         // Cleanup
         $database->deleteCollection($collectionId);
@@ -4541,7 +4541,7 @@ trait OperatorTests
 
         // First read to potentially cache
         $fetched1 = $database->getDocument($collectionId, 'cache_test');
-        $this->assertEquals(10, $fetched1->getAttribute('counter'));
+        $this->assertSame(10, $fetched1->getAttribute('counter'));
 
         // Use updateDocuments with operator
         $count = $database->updateDocuments(
@@ -4552,11 +4552,11 @@ trait OperatorTests
             [Query::equal('$id', ['cache_test'])]
         );
 
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
 
         // Read again - should get fresh value, not cached old value
         $fetched2 = $database->getDocument($collectionId, 'cache_test');
-        $this->assertEquals(15, $fetched2->getAttribute('counter'), 'Cache should be invalidated after operator update');
+        $this->assertSame(15, $fetched2->getAttribute('counter'), 'Cache should be invalidated after operator update');
 
         // Do another operator update
         $database->updateDocuments(
@@ -4568,7 +4568,7 @@ trait OperatorTests
 
         // Verify cache was invalidated again
         $fetched3 = $database->getDocument($collectionId, 'cache_test');
-        $this->assertEquals(30, $fetched3->getAttribute('counter'), 'Cache should be invalidated after second operator update');
+        $this->assertSame(30, $fetched3->getAttribute('counter'), 'Cache should be invalidated after second operator update');
 
         $database->deleteCollection($collectionId);
     }

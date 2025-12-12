@@ -1,4 +1,4 @@
-<phpunit 
+<phpunit
     backupGlobals="false"
     backupStaticAttributes="false"
     bootstrap="vendor/autoload.php"

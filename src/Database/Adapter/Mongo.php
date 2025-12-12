@@ -16,7 +16,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\QueryContext;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
 
@@ -708,18 +708,18 @@ class Mongo extends Adapter
      * Rename Attribute.
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws DatabaseException
      * @throws MongoException
      */
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $from    = $this->filter($this->getInternalKeyForAttribute($id));
-        $to      = $this->filter($this->getInternalKeyForAttribute($name));
+        $from    = $this->filter($this->getInternalKeyForAttribute($old));
+        $to      = $this->filter($this->getInternalKeyForAttribute($new));
         $options = $this->getTransactionOptions();
 
         $this->getClient()->update(
@@ -1120,13 +1120,19 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-
         $options = $this->getTransactionOptions();
 
-        $selections = $this->getAttributeSelections($queries);
+        $removeSequence = false;
+        $projections = $this->getAttributeProjection($queries);
+        if (!empty($projections)) {
+            $options['projection'] = $projections;
 
-        if (!empty($selections) && !\in_array('*', $selections)) {
-            $options['projection'] = $this->getAttributeProjection($selections);
+            /**
+             * Hack for _id is always returned?
+             */
+            if (empty($options['projection']['_id'])) {
+                $removeSequence = true;
+            }
         }
 
         try {
@@ -1143,6 +1149,10 @@ class Mongo extends Adapter
         $result = $this->replaceChars('_', '$', $resultArray);
         $document = new Document($result);
         $document = $this->castingAfter($collection, $document);
+
+        if ($removeSequence) {
+            $document->removeAttribute('$sequence');
+        }
 
         return $document;
     }
@@ -1777,7 +1787,9 @@ class Mongo extends Adapter
             $sequences[$index] = $sequence;
         }
 
-        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
+        $filters = $this->buildFilters([
+            Query::equal('$sequence', $sequences),
+        ]);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection);
@@ -1844,33 +1856,50 @@ class Mongo extends Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $vectors
+     * @param array<Query> $orderQueries
      *
      * @return array<Document>
      * @throws Exception
      * @throws TimeoutException
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-        $queries = array_map(fn ($query) => clone $query, $queries);
+    public function find(
+        QueryContext $context,
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $vectors = [],
+        array $orderQueries = []
+    ): array {
+        $collection = $context->getMainCollection();
 
-        $filters = $this->buildFilters($queries);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+
+        $filters = array_map(fn ($query) => clone $query, $filters);
+
+        $filters = $this->buildFilters($filters);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         // permissions
-        if ($this->authorization->getStatus()) {
+        $skipAuth = $context->skipAuth($this->filter($collection->getId()), $forPermission, $this->authorization);
+        if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
@@ -1888,9 +1917,17 @@ class Mongo extends Adapter
             $options['maxTimeMS'] = $this->timeout;
         }
 
-        $selections = $this->getAttributeSelections($queries);
-        if (!empty($selections) && !\in_array('*', $selections)) {
-            $options['projection'] = $this->getAttributeProjection($selections);
+        $removeSequence = false;
+        $projections = $this->getAttributeProjection($selects);
+        if (!empty($projections)) {
+            $options['projection'] = $projections;
+
+            /**
+             * Hack for _id is always returned?
+             */
+            if (empty($options['projection']['_id'])) {
+                $removeSequence = true;
+            }
         }
 
         // Add transaction context to options
@@ -1898,34 +1935,27 @@ class Mongo extends Adapter
 
         $orFilters = [];
 
-        foreach ($orderAttributes as $i => $originalAttribute) {
+        foreach ($orderQueries as $i => $order) {
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $direction = $orderType;
+            $direction = $order->getOrderDirection();
 
-            /** Get sort direction  ASC || DESC **/
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
             $options['sort'][$attribute] = $this->getOrder($direction);
 
             /** Get operator sign  '$lt' ? '$gt' **/
-            $operator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-
-            $operator = $this->getQueryOperator($operator);
+            $operator = $this->getQueryOperator($direction === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER);
 
             if (!empty($cursor)) {
-
                 $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
-                    $originalPrev = $orderAttributes[$j];
+                    $originalPrev = $orderQueries[$j]->getAttribute();
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
                     $tmp = $cursor[$originalPrev];
                     $andConditions[] = [
@@ -1937,7 +1967,7 @@ class Mongo extends Adapter
 
                 if ($originalAttribute === '$sequence') {
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
-                    if (count($orderAttributes) === 1) {
+                    if (count($orderQueries) === 1) {
                         $filters[$attribute] = [
                             $operator => $tmp
                         ];
@@ -1976,7 +2006,13 @@ class Mongo extends Adapter
             // Process first batch
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
-                $found[] = new Document($record);
+
+                $doc = new Document($record);
+                if ($removeSequence) {
+                    $doc->removeAttribute('$sequence');
+                }
+
+                $found[] = $doc;
             }
 
             // Get cursor ID for subsequent batches
@@ -1993,7 +2029,13 @@ class Mongo extends Adapter
 
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
-                    $found[] = new Document($record);
+
+                    $doc = new Document($record);
+                    if ($removeSequence) {
+                        $doc->removeAttribute('$sequence');
+                    }
+
+                    $found[] = $doc;
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);
@@ -2086,40 +2128,37 @@ class Mongo extends Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $max
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     *
      * @return int
-     * @throws Exception
+     *
+     * @throws DatabaseException
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(QueryContext $context, ?int $max, array $filters = [], array $joins = []): int
     {
+        $collection = $context->getMainCollection();
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $filters = [];
-        $options = [];
-
-        if (!\is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
-
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
-        }
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         // Build filters from queries
-        $filters = $this->buildFilters($queries);
+        $filters = $this->buildFilters($filters);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-        // Add permissions filter if authorization is enabled
-        if ($this->authorization->getStatus()) {
+        // Permissions
+        $permission = Database::PERMISSION_READ;
+
+        // permissions
+        $skipAuth = $context->skipAuth($this->filter($collection->getId()), $permission, $this->authorization);
+        if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$permission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         /**
@@ -2132,6 +2171,11 @@ class Mongo extends Adapter
          **/
 
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2140,14 +2184,14 @@ class Mongo extends Adapter
         }
 
         // Add limit stage if specified
-        if (!\is_null($max) && $max > 0) {
+        if (!\is_null($max)) {
             $pipeline[] = ['$limit' => $max];
         }
 
         // Use $group and $sum when limit is specified, $count when no limit
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
-        if (!\is_null($max) && $max > 0) {
+        if (!\is_null($max)) {
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [
@@ -2514,33 +2558,41 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selects
+     *
+     * @return array<string, int>
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selects): array
     {
         $projection = [];
 
-        $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
-        );
+        if (empty($selects)) {
+            return [];
+        }
 
-        foreach ($selections as $selection) {
-            // Skip internal attributes since all are selected by default
-            if (\in_array($selection, $internalKeys)) {
+        foreach ($selects as $select) {
+            if ($select->getAttribute() === '$collection') {
                 continue;
             }
 
-            $projection[$selection] = 1;
-        }
+            $attribute = $select->getAttribute();
 
-        $projection['_uid'] = 1;
-        $projection['_id'] = 1;
-        $projection['_createdAt'] = 1;
-        $projection['_updatedAt'] = 1;
-        $projection['_permissions'] = 1;
+            if ($attribute === '*') {
+                return [];
+            }
+
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$sequence' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
+
+            $projection[$attribute] = 1;
+        }
 
         return $projection;
     }

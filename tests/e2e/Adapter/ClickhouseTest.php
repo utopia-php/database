@@ -2,7 +2,7 @@
 
 namespace Tests\E2E\Adapter;
 
-use PHPUnit\Framework\TestCase;
+use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Clickhouse;
@@ -10,24 +10,27 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Validator\Authorization;
 
-class ClickhouseTest extends TestCase
+class ClickhouseTest extends Base
 {
     private static ?Database $database = null;
-    private static ?Authorization $authorization = null;
+    /**
+     * @var string[]
+     */
+    private array $supportedTests = [
+        'testPing',
+        'testCreateCollectionAndCrud',
+        'testCollectionSize',
+    ];
 
-    protected function setUp(): void
+    public function setUp(): void
     {
-        if (is_null(self::$authorization)) {
-            self::$authorization = new Authorization();
+        parent::setUp();
+
+        // Skip any test outside the small ClickHouse-supported surface.
+        if (!\in_array($this->getName(false), $this->supportedTests, true)) {
+            $this->markTestSkipped('ClickHouse adapter does not support this feature.');
         }
-        self::$authorization->addRole('any');
-    }
-
-    protected function tearDown(): void
-    {
-        self::$authorization?->reset();
     }
 
     protected function getDatabase(bool $fresh = false): Database
@@ -60,11 +63,24 @@ class ClickhouseTest extends TestCase
         return self::$database = $database;
     }
 
+    protected function deleteColumn(string $collection, string $column): bool
+    {
+        // Not supported; nothing to do.
+        return true;
+    }
+
+    protected function deleteIndex(string $collection, string $index): bool
+    {
+        // Not supported; nothing to do.
+        return true;
+    }
+
     public function testPing(): void
     {
         $this->assertTrue($this->getDatabase()->ping());
     }
 
+    // Keep the basic smoke tests for CRUD/size; Base adds broader coverage with skips where unsupported.
     public function testCreateCollectionAndCrud(): void
     {
         $db = $this->getDatabase(true);

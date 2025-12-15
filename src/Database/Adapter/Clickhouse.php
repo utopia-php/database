@@ -377,6 +377,21 @@ class Clickhouse extends Adapter
 
         $this->run("ALTER TABLE {$table} DELETE WHERE {$condition}");
 
+        // Wait briefly for the asynchronous mutation to apply
+        for ($i = 0; $i < 10; $i++) {
+            $result = $this->run("
+                SELECT count() AS cnt
+                FROM {$table}
+                WHERE {$condition}
+                FORMAT JSON
+            ");
+            $count = (int)($result['data'][0]['cnt'] ?? 0);
+            if ($count === 0) {
+                break;
+            }
+            \usleep(50_000); // 50ms
+        }
+
         return true;
     }
 

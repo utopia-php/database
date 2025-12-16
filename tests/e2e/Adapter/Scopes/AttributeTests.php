@@ -957,7 +957,8 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
         }
 
         try {
@@ -965,7 +966,8 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
         }
     }
 
@@ -1035,7 +1037,9 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('bytes but the maximum is 65535 bytes', $e->getMessage());
+            $this->assertStringContainsString('Reduce the size of existing attributes or remove some attributes to free up space.', $e->getMessage());
         }
 
         try {
@@ -1043,7 +1047,9 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('bytes but the maximum is 65535 bytes', $e->getMessage());
+            $this->assertStringContainsString('Reduce the size of existing attributes or remove some attributes to free up space.', $e->getMessage());
         }
     }
 

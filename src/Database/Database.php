@@ -2712,7 +2712,7 @@ class Database
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit reached. Cannot update attribute.');
+                throw new LimitException('Row width limit reached. Cannot update attribute. Current row width is ' . $this->adapter->getAttributeWidth($collectionDoc) . ' bytes but the maximum is ' . $this->adapter->getDocumentSizeLimit() . ' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
             }
 
             if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
@@ -2829,14 +2829,14 @@ class Database
             $this->adapter->getLimitForAttributes() > 0 &&
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is ' . $this->adapter->getCountOfAttributes($collection) . ' but the maximum is ' . $this->adapter->getLimitForAttributes() . '. Remove some attributes to free up space.');
         }
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is ' . $this->adapter->getAttributeWidth($collection) . ' bytes but the maximum is ' . $this->adapter->getDocumentSizeLimit() . ' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
         }
 
         return true;

@@ -3221,4 +3221,9 @@ class Mongo extends Adapter
     {
         return false;
     }
+
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
 }

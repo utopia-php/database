@@ -2738,4 +2738,9 @@ class Postgres extends SQL
                 break;
         }
     }
+
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
 }

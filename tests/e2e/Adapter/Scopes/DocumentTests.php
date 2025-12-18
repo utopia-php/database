@@ -46,8 +46,6 @@ trait DocumentTests
             $this->assertTrue($e instanceof CharacterException);
         }
 
-        $nonUtfString = "Hello\x00World\xC3\x28\xFF\xFE\xA0Test\x00End";
-
         /**
          * Convert to UTF-8 and replace invalid bytes with empty string
          */

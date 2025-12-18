@@ -6,10 +6,10 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
-use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -23,6 +23,48 @@ use Utopia\Database\QueryContext;
 
 trait DocumentTests
 {
+    public function testNonUtfChars(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportNonUtfCharacters()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'title', Database::VAR_STRING, 128, true));
+
+        $nonUtfString = "Hello\x00World\xC3\x28\xFF\xFE\xA0Test\x00End";
+
+        try {
+            $database->createDocument(__FUNCTION__, new Document([
+                'title' => $nonUtfString,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof CharacterException);
+        }
+
+        /**
+         * Convert to UTF-8 and replace invalid bytes with empty string
+         */
+        $nonUtfString = mb_convert_encoding($nonUtfString, 'UTF-8', 'UTF-8');
+
+        /**
+         * Remove null bytes
+         */
+        $nonUtfString = str_replace("\0", '', $nonUtfString);
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            'title' => $nonUtfString,
+        ]));
+
+        $this->assertFalse($document->isEmpty());
+        $this->assertEquals('HelloWorld?(???TestEnd', $document->getAttribute('title'));
+    }
+
     public function testBigintSequence(): void
     {
         /** @var Database $database */

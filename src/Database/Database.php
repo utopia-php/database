@@ -9408,5 +9408,4 @@ class Database
         );
         $collection->setAttribute('attributes', \array_values($filteredAttributes));
     }
-
 }

@@ -1459,4 +1459,11 @@ abstract class Adapter
 
         return $this;
     }
+
+    /**
+     * Handle non utf characters supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportNonUtfCharacters(): bool;
 }

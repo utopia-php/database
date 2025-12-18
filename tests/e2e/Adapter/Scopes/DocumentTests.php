@@ -27,7 +27,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportNonUtcCharacters()) {
+        if (!$database->getAdapter()->getSupportNonUtfCharacters()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -46,15 +46,24 @@ trait DocumentTests
             $this->assertTrue($e instanceof CharacterException);
         }
 
-        $nonUtfString = iconv('UTF-8', 'UTF-8//IGNORE', $nonUtfString); // removes invalid UTF-8
-        $nonUtfString = str_replace("\0", '', $nonUtfString); // remove null bytes
+        $nonUtfString = "Hello\x00World\xC3\x28\xFF\xFE\xA0Test\x00End";
+
+        /**
+         * Convert to UTF-8 and replace invalid bytes with empty string
+         */
+        $nonUtfString = mb_convert_encoding($nonUtfString, 'UTF-8', 'UTF-8');
+
+        /**
+         * Remove null bytes
+         */
+        $nonUtfString = str_replace("\0", '', $nonUtfString);
 
         $document = $database->createDocument(__FUNCTION__, new Document([
             'title' => $nonUtfString,
         ]));
 
         $this->assertFalse($document->isEmpty());
-        $this->assertEquals('HelloWorld(TestEnd', $document->getAttribute('title'));
+        $this->assertEquals('HelloWorld?(???TestEnd', $document->getAttribute('title'));
     }
 
     public function testBigintSequence(): void

@@ -5,10 +5,10 @@ namespace Utopia\Database\Adapter;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 

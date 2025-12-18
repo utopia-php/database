@@ -2236,7 +2236,7 @@ class MariaDB extends SQL
         return true;
     }
 
-    public function getSupportNonUtcCharacters(): bool
+    public function getSupportNonUtfCharacters(): bool
     {
         return true;
     }

@@ -3222,7 +3222,7 @@ class Mongo extends Adapter
         return false;
     }
 
-    public function getSupportNonUtcCharacters(): bool
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }

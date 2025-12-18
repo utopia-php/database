@@ -1470,5 +1470,5 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportNonUtcCharacters(): bool;
+    abstract public function getSupportNonUtfCharacters(): bool;
 }

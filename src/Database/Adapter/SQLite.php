@@ -1877,7 +1877,7 @@ class SQLite extends MariaDB
         return false;
     }
 
-    public function getSupportNonUtcCharacters(): bool
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }

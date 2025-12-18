@@ -2739,7 +2739,7 @@ class Postgres extends SQL
         }
     }
 
-    public function getSupportNonUtcCharacters(): bool
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }

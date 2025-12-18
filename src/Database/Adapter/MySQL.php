@@ -8,6 +8,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -147,6 +148,10 @@ class MySQL extends MariaDB
 
     protected function processException(PDOException $e): \Exception
     {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
+        }
+
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);

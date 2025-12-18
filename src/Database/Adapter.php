@@ -1464,4 +1464,12 @@ abstract class Adapter
 
         return $this;
     }
+
+    /**
+     * Is schemas supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportNonUtcCharacters(): bool;
+
 }

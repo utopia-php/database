@@ -7,6 +7,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -1838,6 +1839,10 @@ class MariaDB extends SQL
 
     protected function processException(PDOException $e): \Exception
     {
+        if ($e->getCode() === '22007' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
+        }
+
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
@@ -2227,6 +2232,11 @@ class MariaDB extends SQL
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return true;
+    }
+
+    public function getSupportNonUtcCharacters(): bool
     {
         return true;
     }

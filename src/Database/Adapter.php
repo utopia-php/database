@@ -1466,7 +1466,7 @@ abstract class Adapter
     }
 
     /**
-     * Is schemas supported?
+     * Handle non utf characters supported?
      *
      * @return bool
      */

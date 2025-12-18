@@ -9358,14 +9358,4 @@ class Database
         );
         $collection->setAttribute('attributes', \array_values($filteredAttributes));
     }
-
-    /**
-     * @param string $string
-     * @return string
-     */
-    public function sanitizeNonUtf8(string $string): string
-    {
-        return $string;
-    }
-
 }

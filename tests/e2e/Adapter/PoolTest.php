@@ -14,8 +14,8 @@ use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\PDO;
-use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Pools\Adapter\Stack as StackPool;
+use Utopia\Pools\Pool as UtopiaPool;
 
 class PoolTest extends Base
 {

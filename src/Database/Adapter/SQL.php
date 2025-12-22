@@ -17,7 +17,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
@@ -248,7 +247,7 @@ abstract class SQL extends Adapter
     {
         $id = $this->quote($this->filter($id));
         $type = $this->getSQLType($type, $size, $signed, $array, $required);
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
@@ -285,7 +284,7 @@ abstract class SQL extends Adapter
 
         $columns = \implode(', ADD COLUMN ', $parts);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
@@ -1175,6 +1174,15 @@ abstract class SQL extends Adapter
                     $total += 7;
                     break;
 
+                case Database::VAR_OBJECT:
+                    /**
+                     * JSONB/JSON type
+                     * Only the pointer contributes 20 bytes to the row size
+                     * Data is stored externally
+                     */
+                    $total += 20;
+                    break;
+
                 case Database::VAR_POINT:
                     $total += $this->getMaxPointSize();
                     break;
@@ -1489,7 +1497,7 @@ abstract class SQL extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForNumericCasting(): bool
@@ -2955,10 +2963,9 @@ abstract class SQL extends Adapter
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3055,7 +3062,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
@@ -3172,10 +3179,9 @@ abstract class SQL extends Adapter
      */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        $attributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $binds = [];
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3188,12 +3194,19 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $conditions = $this->getSQLConditions($otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -3210,8 +3223,8 @@ abstract class SQL extends Adapter
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-				{$sqlWhere}
-				{$limit}
+                {$sqlWhere}
+                {$limit}
 			) table_count
         ";
 
@@ -3247,11 +3260,10 @@ abstract class SQL extends Adapter
      */
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
-        $collectionAttributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -3264,12 +3276,19 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $conditions = $this->getSQLConditions($otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -3514,5 +3533,19 @@ abstract class SQL extends Adapter
     public function setSupportForAttributes(bool $support): bool
     {
         return true;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getLockType(): string
+    {
+        if ($this->getSupportForAlterLocks() && $this->alterLocks) {
+            return ',LOCK=SHARED';
+        }
+
+        return '';
     }
 }

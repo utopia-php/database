@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -30,6 +31,8 @@ abstract class Adapter
 
     protected int $inTransaction = 0;
 
+    protected bool $alterLocks = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -47,6 +50,27 @@ abstract class Adapter
      */
     protected array $metadata = [];
 
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
+
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
+    }
     /**
      * @param string $key
      * @param mixed $value
@@ -1071,6 +1095,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialAttributes(): bool;
 
     /**
+     * Are object (JSON) attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForObject(): bool;
+
+    /**
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool
@@ -1412,4 +1443,32 @@ abstract class Adapter
      */
     abstract public function getSupportForIntegerBooleans(): bool;
 
+    /**
+     * Does the adapter have support for ALTER TABLE locking modes?
+     *
+     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
+     * during ALTER TABLE operations to control concurrent access.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAlterLocks(): bool;
+
+    /**
+     * @param bool $enable
+     *
+     * @return $this
+     */
+    public function enableAlterLocks(bool $enable): self
+    {
+        $this->alterLocks = $enable;
+
+        return $this;
+    }
+
+    /**
+     * Handle non utf characters supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportNonUtfCharacters(): bool;
 }

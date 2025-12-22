@@ -26,11 +26,47 @@ A list of the utopia/php concepts and their relevant equivalent using the differ
 - **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
 - **Attribute** - A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
 - **Index** - A simple collection index used to improve the performance of your database queries.
-- **Permissions** - Using permissions, you can decide which roles have read, create, update and delete access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `Authorization::setRole()` to delegate new roles to your users, once obtained a new role a user would gain read, create, update or delete access to a relevant document.
+- **Permissions** - Using permissions, you can decide which roles have read, create, update and delete access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `$authorization->addRole()` to delegate new roles to your users, once obtained a new role a user would gain read, create, update or delete access to a relevant document.
 
 ### Filters
 
 Attribute filters are functions that manipulate attributes before saving them to the database and after retrieving them from the database. You can add filters using the `Database::addFilter($name, $encode, $decode)` where `$name` is the name of the filter that we can add later to attribute `filters` array. `$encode` and `$decode` are the functions used to encode and decode the attribute, respectively. There are also instance-level filters that can only be defined while constructing the `Database` instance. Instance level filters override the static filters if they have the same name.
+
+### Custom Document Types
+
+The database library supports mapping custom document classes to specific collections, enabling a domain-driven design approach. This allows you to create collection-specific classes (like `User`, `Post`, `Product`) that extend the base `Document` class with custom methods and business logic.
+
+```php
+// Define a custom document class
+class User extends Document
+{
+    public function getEmail(): string
+    {
+        return $this->getAttribute('email', '');
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->getAttribute('role') === 'admin';
+    }
+}
+
+// Register the custom type
+$database->setDocumentType('users', User::class);
+
+// Now all documents from 'users' collection are User instances
+$user = $database->getDocument('users', 'user123');
+$email = $user->getEmail(); // Use custom methods
+if ($user->isAdmin()) {
+    // Domain logic
+}
+```
+
+**Benefits:**
+- ✅ Domain-driven design with business logic in domain objects
+- ✅ Type safety with IDE autocomplete for custom methods
+- ✅ Code organization and encapsulation
+- ✅ Fully backwards compatible
 
 ### Reserved Attributes
 

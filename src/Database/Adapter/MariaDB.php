@@ -7,6 +7,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -1312,12 +1313,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : '';
-        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : '';
+        $sqlMax = $max !== null ? " AND `{$attribute}` <= :max" : '';
+        $sqlMin = $min !== null ? " AND `{$attribute}` >= :min" : '';
 
         $sql = "
-			UPDATE {$this->getSQLTable($name)} 
-			SET 
+			UPDATE {$this->getSQLTable($name)}
+			SET
 			    `{$attribute}` = `{$attribute}` + :val,
 			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
@@ -1333,6 +1334,12 @@ class MariaDB extends SQL
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
 
+        if ($max !== null) {
+            $stmt->bindValue(':max', $max);
+        }
+        if ($min !== null) {
+            $stmt->bindValue(':min', $min);
+        }
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
@@ -1832,6 +1839,10 @@ class MariaDB extends SQL
 
     protected function processException(PDOException $e): \Exception
     {
+        if ($e->getCode() === '22007' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
+        }
+
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
@@ -2129,6 +2140,11 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForObject(): bool
+    {
+        return false;
+    }
+
     /**
      * Get Support for Null Values in Spatial Indexes
      *
@@ -2211,6 +2227,16 @@ class MariaDB extends SQL
      * @return bool
      */
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return true;
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return true;
     }

@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
@@ -29,6 +30,11 @@ class Pool extends Adapter
             }
 
             // Run setters in case the pooled adapter has its own config
+            try {
+                $this->setAuthorization($resource->getAuthorization());
+            } catch (\Error $e) {
+                // Authorization not initialized yet, so skip it.
+            }
             $this->setDatabase($resource->getDatabase());
             $this->setNamespace($resource->getNamespace());
             $this->setSharedTables($resource->getSharedTables());
@@ -66,6 +72,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -585,6 +592,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForObject(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function castingBefore(Document $collection, Document $document): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -616,6 +628,22 @@ class Pool extends Adapter
     }
 
     public function getSupportForIntegerBooleans(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

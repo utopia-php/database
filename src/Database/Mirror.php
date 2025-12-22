@@ -1084,7 +1084,7 @@ class Mirror extends Database
             return new Document();
         }
 
-        return Authorization::skip(function () use ($collection) {
+        return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
@@ -1099,4 +1099,61 @@ class Mirror extends Database
             $callback($action, $err);
         }
     }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+
+        parent::setAuthorization($authorization);
+
+        if (isset($this->source)) {
+            $this->source->setAuthorization($authorization);
+        }
+        if (isset($this->destination)) {
+            $this->destination->setAuthorization($authorization);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Set custom document class for a collection
+     *
+     * @param string $collection Collection ID
+     * @param class-string<Document> $className Fully qualified class name that extends Document
+     * @return static
+     */
+    public function setDocumentType(string $collection, string $className): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->documentTypes[$collection] = $className;
+        return $this;
+    }
+
+    /**
+     * Clear document type mapping for a collection
+     *
+     * @param string $collection Collection ID
+     * @return static
+     */
+    public function clearDocumentType(string $collection): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+        unset($this->documentTypes[$collection]);
+
+        return $this;
+    }
+
+    /**
+     * Clear all document type mappings
+     *
+     * @return static
+     */
+    public function clearAllDocumentTypes(): static
+    {
+        $this->delegate(__FUNCTION__);
+        $this->documentTypes = [];
+
+        return $this;
+    }
+
 }

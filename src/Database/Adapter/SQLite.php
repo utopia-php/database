@@ -1008,6 +1008,11 @@ class SQLite extends MariaDB
         return false; // SQLite doesn't have native spatial support
     }
 
+    public function getSupportForObject(): bool
+    {
+        return false;
+    }
+
     public function getSupportForSpatialIndexNull(): bool
     {
         return false; // SQLite doesn't have native spatial support
@@ -1865,5 +1870,15 @@ class SQLite extends MariaDB
         }
 
         return $stmt;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
     }
 }

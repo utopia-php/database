@@ -8312,7 +8312,7 @@ class Database
 
             foreach ($value as $index => $node) {
                 foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+                    $node = $this->decodeAttribute($filter, $node, $new, $key);
                 }
 
                 $value[$index] = $node;

@@ -8239,13 +8239,14 @@ class Database
      */
     public function decode(QueryContext $context, Document $document, array $selects = []): Document
     {
+        // Build internal attributes lookup
         $internals = [];
-        $schema = [];
-
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $internals[$attribute['$id']] = $attribute;
         }
 
+        // Build schema lookup per collection
+        $schema = [];
         foreach ($context->getCollections() as $collection) {
             foreach ($collection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
@@ -8258,6 +8259,7 @@ class Database
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
 
+            // Map select aliases
             foreach ($selects as $select) {
                 if ($select->getAs() === $key) {
                     $attributeKey = $key;
@@ -8266,8 +8268,7 @@ class Database
                     break;
                 }
 
-                if ($select->getAttribute() == $key ||
-                    $this->adapter->filter($select->getAttribute()) == $key) {
+                if ($select->getAttribute() === $key || $this->adapter->filter($select->getAttribute()) === $key) {
                     $alias = $select->getAlias();
                     break;
                 }
@@ -8278,13 +8279,15 @@ class Database
                 throw new \Exception('Invalid query: Unknown Alias context');
             }
 
+            // Find attribute definition
             $attribute = $internals[$key]
                 ?? $schema[$collection->getId()][$this->adapter->filter($key)]
                 ?? null;
 
+            // If attribute is not defined and schemaless is allowed
             if ($attribute === null) {
                 if (!$this->adapter->getSupportForAttributes()) {
-                    $document->setAttribute($key, $value); // schemaless
+                    $document->setAttribute($key, $value);
                 }
                 continue;
             }
@@ -8293,27 +8296,28 @@ class Database
                 $attributeKey = $attribute['$id'];
             }
 
-            $array   = $attribute['array'] ?? false;
+            $isArray = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
 
-            // Skip decoding for Operator objects
+            // Skip Operator objects
             if ($value instanceof Operator) {
                 continue;
             }
 
-            $value = $array ? $value : [$value];
-            $value = is_null($value) ? [] : $value;
+            // Normalize value to array for uniform filter processing
+            $values = $isArray ? $value : [$value];
 
-            foreach ($value as $index => $node) {
+            foreach ($values as $index => $item) {
                 foreach (array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+                    $item = $this->decodeAttribute($filter, $item, $document, $key);
                 }
-                $value[$index] = $node;
+                $values[$index] = $item;
             }
 
+            // Assign back to document, preserving null values
             $document->setAttribute(
                 $attributeKey,
-                $array ? $value : ($value[0] ?? null)
+                $isArray ? $values : ($values[0] ?? null)
             );
         }
 

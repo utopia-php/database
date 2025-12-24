@@ -8254,8 +8254,6 @@ class Database
             }
         }
 
-        $new = $this->createDocumentInstance($context->getMainCollection()->getId(), []);
-
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
@@ -8265,13 +8263,12 @@ class Database
                     $attributeKey = $key;
                     $key = $select->getAttribute();
                     $alias = $select->getAlias();
-
                     break;
                 }
 
-                if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
+                if ($select->getAttribute() == $key ||
+                    $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
-
                     break;
                 }
             }
@@ -8281,17 +8278,14 @@ class Database
                 throw new \Exception('Invalid query: Unknown Alias context');
             }
 
-            $attribute = $internals[$key] ?? null;
+            $attribute = $internals[$key]
+                ?? $schema[$collection->getId()][$this->adapter->filter($key)]
+                ?? null;
 
-            if (is_null($attribute)) {
-                $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
-            }
-
-            if (is_null($attribute)) {
+            if ($attribute === null) {
                 if (!$this->adapter->getSupportForAttributes()) {
-                    $new->setAttribute($key, $value);  /** Schemaless */
+                    $document->setAttribute($key, $value); // schemaless
                 }
-
                 continue;
             }
 
@@ -8299,32 +8293,121 @@ class Database
                 $attributeKey = $attribute['$id'];
             }
 
-            $array = $attribute['array'] ?? false;
+            $array   = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
 
-            // Skip decoding for Operator objects (shouldn't happen, but safety check)
+            // Skip decoding for Operator objects
             if ($value instanceof Operator) {
                 continue;
             }
 
-            $value = ($array) ? $value : [$value];
-            $value = (is_null($value)) ? [] : $value;
+            $value = $array ? $value : [$value];
+            $value = is_null($value) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $new, $key);
+                foreach (array_reverse($filters) as $filter) {
+                    $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
-
                 $value[$index] = $node;
             }
 
-            $value = ($array) ? $value : $value[0];
-
-            $new->setAttribute($attributeKey, $value);
+            $document->setAttribute(
+                $attributeKey,
+                $array ? $value : ($value[0] ?? null)
+            );
         }
 
-        return $new;
+        return $document;
     }
+
+//    public function decode(QueryContext $context, Document $document, array $selects = []): Document
+//    {
+//        $internals = [];
+//        $schema = [];
+//
+//        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+//            $internals[$attribute['$id']] = $attribute;
+//        }
+//
+//        foreach ($context->getCollections() as $collection) {
+//            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+//                $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+//                $key = $this->adapter->filter($key);
+//                $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
+//            }
+//        }
+//
+//        $new = $this->createDocumentInstance($context->getMainCollection()->getId(), []);
+//
+//        foreach ($document as $key => $value) {
+//            $alias = Query::DEFAULT_ALIAS;
+//            $attributeKey = '';
+//
+//            foreach ($selects as $select) {
+//                if ($select->getAs() === $key) {
+//                    $attributeKey = $key;
+//                    $key = $select->getAttribute();
+//                    $alias = $select->getAlias();
+//
+//                    break;
+//                }
+//
+//                if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
+//                    $alias = $select->getAlias();
+//
+//                    break;
+//                }
+//            }
+//
+//            $collection = $context->getCollectionByAlias($alias);
+//            if ($collection->isEmpty()) {
+//                throw new \Exception('Invalid query: Unknown Alias context');
+//            }
+//
+//            $attribute = $internals[$key] ?? null;
+//
+//            if (is_null($attribute)) {
+//                $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
+//            }
+//
+//            if (is_null($attribute)) {
+//                if (!$this->adapter->getSupportForAttributes()) {
+//                    $new->setAttribute($key, $value);  /** Schemaless */
+//                }
+//
+//                continue;
+//            }
+//
+//            if (empty($attributeKey)) {
+//                $attributeKey = $attribute['$id'];
+//            }
+//
+//            $array = $attribute['array'] ?? false;
+//            $filters = $attribute['filters'] ?? [];
+//
+//            // Skip decoding for Operator objects (shouldn't happen, but safety check)
+//            if ($value instanceof Operator) {
+//                continue;
+//            }
+//
+//            $value = ($array) ? $value : [$value];
+//            $value = (is_null($value)) ? [] : $value;
+//
+//            foreach ($value as $index => $node) {
+//                foreach (\array_reverse($filters) as $filter) {
+//                    $node = $this->decodeAttribute($filter, $node, $new, $key);
+//                }
+//
+//                $value[$index] = $node;
+//            }
+//
+//            $value = ($array) ? $value : $value[0];
+//
+//            $new->setAttribute($attributeKey, $value);
+//        }
+//
+//        return $new;
+//    }
 
     /**
      * Casting

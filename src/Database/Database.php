@@ -8188,7 +8188,7 @@ class Database
             }
 
             // Continue on optional param with no default
-            if (is_null($value) && is_null($default) && !$document->offsetExists($key)) {
+            if (is_null($value) && is_null($default)) {
                 continue;
             }
 

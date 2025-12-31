@@ -714,7 +714,7 @@ trait IndexTests
             $database->createCollection($collectionId);
 
             $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
-            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 512, false);
+            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 412, false);
             $database->createAttribute($collectionId, 'age', Database::VAR_INTEGER, 8, false);
 
             // Test: Trigram index on non-string attribute should fail

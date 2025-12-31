@@ -1642,6 +1642,7 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForTrigramIndex(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2786,7 +2787,8 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForObject()
+                        $this->adapter->getSupportForObject(),
+                        $this->adapter->getSupportForTrigramIndex()
                     );
 
                     foreach ($indexes as $index) {
@@ -3729,6 +3731,7 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForTrigramIndex(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

@@ -1883,7 +1883,7 @@ class SQLite extends MariaDB
      *
      * @return bool
      */
-    public function getSupportForPRCERegex(): bool
+    public function getSupportForPCRERegex(): bool
     {
         return false;
     }

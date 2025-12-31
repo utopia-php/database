@@ -2746,7 +2746,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function getSupportForPRCERegex(): bool
+    public function getSupportForPCRERegex(): bool
     {
         return true;
     }

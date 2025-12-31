@@ -6564,7 +6564,7 @@ trait DocumentTests
         }
 
         // Determine regex support type
-        $supportsPCRE = $database->getAdapter()->getSupportForPRCERegex();
+        $supportsPCRE = $database->getAdapter()->getSupportForPCRERegex();
         $supportsPOSIX = $database->getAdapter()->getSupportForPOSIXRegex();
 
         // Determine word boundary pattern based on support

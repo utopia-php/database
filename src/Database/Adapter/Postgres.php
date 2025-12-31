@@ -2119,7 +2119,7 @@ class Postgres extends SQL
         return true;
     }
 
-    public function getSupportForPRCERegex(): bool
+    public function getSupportForPCRERegex(): bool
     {
         return false;
     }

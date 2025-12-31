@@ -1456,7 +1456,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportForPRCERegex(): bool;
+    abstract public function getSupportForPCRERegex(): bool;
 
     /**
      * Is POSIX regex supported?
@@ -1474,6 +1474,6 @@ abstract class Adapter
      */
     public function getSupportForRegex(): bool
     {
-        return $this->getSupportForPRCERegex() || $this->getSupportForPOSIXRegex();
+        return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
     }
 }

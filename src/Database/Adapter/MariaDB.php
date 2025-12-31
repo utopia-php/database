@@ -2238,7 +2238,7 @@ class MariaDB extends SQL
 
     public function getSupportForPCRERegex(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForPOSIXRegex(): bool

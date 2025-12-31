@@ -121,7 +121,8 @@ class Queries extends Validator
                 Query::TYPE_NOT_TOUCHES,
                 Query::TYPE_VECTOR_DOT,
                 Query::TYPE_VECTOR_COSINE,
-                Query::TYPE_VECTOR_EUCLIDEAN => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_VECTOR_EUCLIDEAN,
+                Query::TYPE_REGEX => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 

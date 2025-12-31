@@ -3550,6 +3550,441 @@ trait DocumentTests
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
     }
 
+    public function testFindRegex(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('movies', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals(true, $database->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
+            $this->assertEquals(true, $database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
+            $this->assertEquals(true, $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
+        }
+
+        // Create test documents
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+        ]));
+
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Frozen II',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2019,
+        ]));
+
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Captain America: The First Avenger',
+            'director' => 'Joe Johnston',
+            'year' => 2011,
+        ]));
+
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Captain Marvel',
+            'director' => 'Anna Boden & Ryan Fleck',
+            'year' => 2019,
+        ]));
+
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Work in Progress',
+            'director' => 'TBD',
+            'year' => 2025,
+        ]));
+
+        $database->createDocument('movies', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Work in Progress 2',
+            'director' => 'TBD',
+            'year' => 2026,
+        ]));
+
+        // Helper function to verify regex query completeness
+        $verifyRegexQuery = function (string $attribute, string $regexPattern, array $queryResults) use ($database) {
+            // Convert regex pattern to PHP regex format
+            $phpPattern = '/' . str_replace('/', '\/', $regexPattern) . '/';
+
+            // Get all documents to manually verify
+            $allDocuments = $database->find('movies');
+
+            // Manually filter documents that match the pattern
+            $expectedMatches = [];
+            foreach ($allDocuments as $doc) {
+                $value = $doc->getAttribute($attribute);
+                if (preg_match($phpPattern, $value)) {
+                    $expectedMatches[] = $doc->getId();
+                }
+            }
+
+            // Get IDs from query results
+            $actualMatches = array_map(fn ($doc) => $doc->getId(), $queryResults);
+
+            // Verify no extra documents are returned
+            foreach ($queryResults as $doc) {
+                $value = $doc->getAttribute($attribute);
+                $this->assertTrue(
+                    (bool) preg_match($phpPattern, $value),
+                    "Document '{$doc->getId()}' with {$attribute}='{$value}' should match pattern '{$regexPattern}'"
+                );
+            }
+
+            // Verify all expected documents are returned (no missing)
+            sort($expectedMatches);
+            sort($actualMatches);
+            $this->assertEquals(
+                $expectedMatches,
+                $actualMatches,
+                "Query should return exactly the documents matching pattern '{$regexPattern}' on attribute '{$attribute}'"
+            );
+        };
+
+        // Test basic regex pattern - match movies starting with 'Captain'
+        // Note: Pattern format may vary by adapter (MongoDB uses regex strings, SQL uses REGEXP)
+        $pattern = '/^Captain/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '^Captain'),
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('name', '^Captain', $documents);
+
+        // Verify expected documents are included
+        $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
+        $this->assertTrue(in_array('Captain America: The First Avenger', $names));
+        $this->assertTrue(in_array('Captain Marvel', $names));
+
+        // Test regex pattern - match movies containing 'Frozen'
+        $pattern = '/Frozen/';
+        $documents = $database->find('movies', [
+            Query::regex('name', 'Frozen'),
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('name', 'Frozen', $documents);
+
+        // Verify expected documents are included
+        $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
+        $this->assertTrue(in_array('Frozen', $names));
+        $this->assertTrue(in_array('Frozen II', $names));
+
+        // Test regex pattern - match movies ending with 'Marvel'
+        $pattern = '/Marvel$/';
+        $documents = $database->find('movies', [
+            Query::regex('name', 'Marvel$'),
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('name', 'Marvel$', $documents);
+
+        $this->assertEquals(1, count($documents)); // Only Captain Marvel
+        $this->assertEquals('Captain Marvel', $documents[0]->getAttribute('name'));
+
+        // Test regex pattern - match movies with 'Work' in the name
+        $pattern = '/.*Work.*/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '.*Work.*'),
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('name', '.*Work.*', $documents);
+
+        // Verify expected documents are included
+        $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
+        $this->assertTrue(in_array('Work in Progress', $names));
+        $this->assertTrue(in_array('Work in Progress 2', $names));
+
+        // Test regex pattern - match movies with 'Buck' in director
+        $pattern = '/.*Buck.*/';
+        $documents = $database->find('movies', [
+            Query::regex('director', '.*Buck.*'),
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('director', '.*Buck.*', $documents);
+
+        // Verify expected documents are included
+        $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
+        $this->assertTrue(in_array('Frozen', $names));
+        $this->assertTrue(in_array('Frozen II', $names));
+
+        // Test regex with case-sensitive pattern
+        // Note: Adapters may support case-insensitive regex, but we test case-sensitive here
+        $pattern = '/captain/'; // Case-sensitive for verification
+        $documents = $database->find('movies', [
+            Query::regex('name', 'captain'), // lowercase
+        ]);
+
+        // Verify all returned documents match the pattern (case-sensitive)
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertTrue(
+                (bool) preg_match($pattern, $name),
+                "Document '{$name}' should match pattern 'captain' (case-sensitive)"
+            );
+        }
+
+        // Verify completeness: manually check all documents with case-sensitive matching
+        $allDocuments = $database->find('movies');
+        $expectedMatches = [];
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            // Use case-sensitive matching to determine expected results
+            if (preg_match($pattern, $name)) {
+                $expectedMatches[] = $doc->getId();
+            }
+        }
+        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+        sort($expectedMatches);
+        sort($actualMatches);
+        $this->assertEquals(
+            $expectedMatches,
+            $actualMatches,
+            "Query should return exactly the documents matching pattern 'captain' (case-sensitive)"
+        );
+
+        // Test regex with case-insensitive pattern (if adapter supports it via flags)
+        // Test with uppercase to verify case sensitivity
+        $pattern = '/Captain/';
+        $documents = $database->find('movies', [
+            Query::regex('name', 'Captain'), // uppercase
+        ]);
+
+        // Verify all returned documents match the pattern
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertTrue(
+                (bool) preg_match($pattern, $name),
+                "Document '{$name}' should match pattern 'Captain'"
+            );
+        }
+
+        // Verify completeness
+        $allDocuments = $database->find('movies');
+        $expectedMatches = [];
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            if (preg_match($pattern, $name)) {
+                $expectedMatches[] = $doc->getId();
+            }
+        }
+        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+        sort($expectedMatches);
+        sort($actualMatches);
+        $this->assertEquals(
+            $expectedMatches,
+            $actualMatches,
+            "Query should return exactly the documents matching pattern 'Captain'"
+        );
+
+        // Test regex combined with other queries
+        $pattern = '/^Captain/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '^Captain'),
+            Query::greaterThan('year', 2010),
+        ]);
+
+        // Verify all returned documents match both conditions
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $year = $doc->getAttribute('year');
+            $this->assertTrue(
+                (bool) preg_match($pattern, $name),
+                "Document '{$name}' should match pattern '{$pattern}'"
+            );
+            $this->assertGreaterThan(2010, $year, "Document '{$name}' should have year > 2010");
+        }
+
+        // Verify completeness: manually check all documents that match both conditions
+        $allDocuments = $database->find('movies');
+        $expectedMatches = [];
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            $year = $doc->getAttribute('year');
+            if (preg_match($pattern, $name) && $year > 2010) {
+                $expectedMatches[] = $doc->getId();
+            }
+        }
+        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+        sort($expectedMatches);
+        sort($actualMatches);
+        $this->assertEquals(
+            $expectedMatches,
+            $actualMatches,
+            "Query should return exactly the documents matching both regex '^Captain' and year > 2010"
+        );
+
+        // Test regex with limit
+        $pattern = '/.*/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '.*'), // Match all
+            Query::limit(3),
+        ]);
+
+        $this->assertEquals(3, count($documents));
+
+        // Verify all returned documents match the pattern (should match all)
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertTrue(
+                (bool) preg_match($pattern, $name),
+                "Document '{$name}' should match pattern '{$pattern}'"
+            );
+        }
+
+        // Note: With limit, we can't verify completeness, but we can verify all returned match
+
+        // Test regex with non-matching pattern
+        $pattern = '/^NonExistentPattern$/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '^NonExistentPattern$'),
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        // Verify no documents match (double-check by getting all and filtering)
+        $allDocuments = $database->find('movies');
+        $matchingCount = 0;
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            if (preg_match($pattern, $name)) {
+                $matchingCount++;
+            }
+        }
+        $this->assertEquals(0, $matchingCount, "No documents should match pattern '{$pattern}'");
+
+        // Verify completeness: no documents should be returned
+        $this->assertEquals([], array_map(fn ($doc) => $doc->getId(), $documents));
+
+        // Test regex with special characters (should be escaped or handled properly)
+        $pattern = '/.*:.*/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '.*:.*'), // Match movies with colon
+        ]);
+
+        // Verify completeness: all matching documents returned, no extra documents
+        $verifyRegexQuery('name', '.*:.*', $documents);
+
+        // Verify expected document is included
+        $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
+        $this->assertTrue(in_array('Captain America: The First Avenger', $names));
+
+        // Test regex search pattern - match movies with word boundaries
+        $pattern = '/\bWork\b/';
+        $documents = $database->find('movies', [
+            Query::regex('name', '\bWork\b'),
+        ]);
+
+        // Verify all returned documents match the pattern
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertTrue(
+                (bool) preg_match($pattern, $name),
+                "Document '{$name}' should match pattern '{$pattern}'"
+            );
+        }
+
+        // Verify completeness: manually check all documents
+        $allDocuments = $database->find('movies');
+        $expectedMatches = [];
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            if (preg_match($pattern, $name)) {
+                $expectedMatches[] = $doc->getId();
+            }
+        }
+        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+        sort($expectedMatches);
+        sort($actualMatches);
+        $this->assertEquals(
+            $expectedMatches,
+            $actualMatches,
+            "Query should return exactly the documents matching pattern '\\bWork\\b'"
+        );
+
+        // Test regex search with multiple patterns - match movies containing 'Captain' or 'Frozen'
+        $pattern1 = '/Captain/';
+        $pattern2 = '/Frozen/';
+        $documents = $database->find('movies', [
+            Query::or([
+                Query::regex('name', 'Captain'),
+                Query::regex('name', 'Frozen'),
+            ]),
+        ]);
+
+        // Verify all returned documents match at least one pattern
+        foreach ($documents as $doc) {
+            $name = $doc->getAttribute('name');
+            $matchesPattern1 = (bool) preg_match($pattern1, $name);
+            $matchesPattern2 = (bool) preg_match($pattern2, $name);
+            $this->assertTrue(
+                $matchesPattern1 || $matchesPattern2,
+                "Document '{$name}' should match either pattern 'Captain' or 'Frozen'"
+            );
+        }
+
+        // Verify completeness: manually check all documents
+        $allDocuments = $database->find('movies');
+        $expectedMatches = [];
+        foreach ($allDocuments as $doc) {
+            $name = $doc->getAttribute('name');
+            if (preg_match($pattern1, $name) || preg_match($pattern2, $name)) {
+                $expectedMatches[] = $doc->getId();
+            }
+        }
+        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+        sort($expectedMatches);
+        sort($actualMatches);
+        $this->assertEquals(
+            $expectedMatches,
+            $actualMatches,
+            "Query should return exactly the documents matching pattern 'Captain' OR 'Frozen'"
+        );
+    }
+
     public function testFindOrderRandom(): void
     {
         /** @var Database $database */

@@ -1876,4 +1876,26 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    /**
+     * Is PCRE regex supported?
+     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
+     *
+     * @return bool
+     */
+    public function getSupportForPRCERegex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is POSIX regex supported?
+     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
+     *
+     * @return bool
+     */
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
+    }
 }

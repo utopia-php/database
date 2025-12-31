@@ -3557,6 +3557,27 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        // Skip test if regex is not supported
+        if (!$database->getAdapter()->getSupportForRegex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Determine regex support type
+        $supportsPCRE = $database->getAdapter()->getSupportForPRCERegex();
+        $supportsPOSIX = $database->getAdapter()->getSupportForPOSIXRegex();
+
+        // Determine word boundary pattern based on support
+        $wordBoundaryPattern = null;
+        $wordBoundaryPatternPHP = null;
+        if ($supportsPCRE) {
+            $wordBoundaryPattern = '\\b'; // PCRE uses \b
+            $wordBoundaryPatternPHP = '\\b'; // PHP preg_match uses \b
+        } elseif ($supportsPOSIX) {
+            $wordBoundaryPattern = '\\y'; // POSIX uses \y
+            $wordBoundaryPatternPHP = '\\b'; // PHP preg_match still uses \b for verification
+        }
+
         $database->createCollection('movies', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -3930,37 +3951,41 @@ trait DocumentTests
         $this->assertTrue(in_array('Captain America: The First Avenger', $names));
 
         // Test regex search pattern - match movies with word boundaries
-        $pattern = '/\bWork\b/';
-        $documents = $database->find('movies', [
-            Query::regex('name', '\bWork\b'),
-        ]);
+        // Only test if word boundaries are supported (PCRE or POSIX)
+        if ($wordBoundaryPattern !== null) {
+            $dbPattern = $wordBoundaryPattern . 'Work' . $wordBoundaryPattern;
+            $phpPattern = '/' . $wordBoundaryPatternPHP . 'Work' . $wordBoundaryPatternPHP . '/';
+            $documents = $database->find('movies', [
+                Query::regex('name', $dbPattern),
+            ]);
 
-        // Verify all returned documents match the pattern
-        foreach ($documents as $doc) {
-            $name = $doc->getAttribute('name');
-            $this->assertTrue(
-                (bool) preg_match($pattern, $name),
-                "Document '{$name}' should match pattern '{$pattern}'"
+            // Verify all returned documents match the pattern
+            foreach ($documents as $doc) {
+                $name = $doc->getAttribute('name');
+                $this->assertTrue(
+                    (bool) preg_match($phpPattern, $name),
+                    "Document '{$name}' should match pattern '{$dbPattern}'"
+                );
+            }
+
+            // Verify completeness: manually check all documents
+            $allDocuments = $database->find('movies');
+            $expectedMatches = [];
+            foreach ($allDocuments as $doc) {
+                $name = $doc->getAttribute('name');
+                if (preg_match($phpPattern, $name)) {
+                    $expectedMatches[] = $doc->getId();
+                }
+            }
+            $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
+            sort($expectedMatches);
+            sort($actualMatches);
+            $this->assertEquals(
+                $expectedMatches,
+                $actualMatches,
+                "Query should return exactly the documents matching pattern '{$dbPattern}'"
             );
         }
-
-        // Verify completeness: manually check all documents
-        $allDocuments = $database->find('movies');
-        $expectedMatches = [];
-        foreach ($allDocuments as $doc) {
-            $name = $doc->getAttribute('name');
-            if (preg_match($pattern, $name)) {
-                $expectedMatches[] = $doc->getId();
-            }
-        }
-        $actualMatches = array_map(fn ($doc) => $doc->getId(), $documents);
-        sort($expectedMatches);
-        sort($actualMatches);
-        $this->assertEquals(
-            $expectedMatches,
-            $actualMatches,
-            "Query should return exactly the documents matching pattern '\\bWork\\b'"
-        );
 
         // Test regex search with multiple patterns - match movies containing 'Captain' or 'Frozen'
         $pattern1 = '/Captain/';

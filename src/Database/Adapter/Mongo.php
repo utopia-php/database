@@ -2742,6 +2742,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is PCRE regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPRCERegex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is POSIX regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is cache fallback supported?
      *
      * @return bool
@@ -3219,6 +3239,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForTrigramIndex(): bool
     {
         return false;
     }

@@ -154,6 +154,7 @@ class Postgres extends SQL
         // Enable extensions
         $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
         $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS pg_trgm')->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
@@ -2112,12 +2113,35 @@ class Postgres extends SQL
         return true;
     }
 
+    public function getSupportForPRCERegex(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return true;
+    }
+
     /**
      * @return string
      */
     public function getLikeOperator(): string
     {
         return 'ILIKE';
+    }
+
+    /**
+     * @return string
+     */
+    public function getRegexOperator(): string
+    {
+        return '~';
     }
 
     protected function processException(PDOException $e): \Exception

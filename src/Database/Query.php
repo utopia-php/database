@@ -101,6 +101,8 @@ class Query
         self::TYPE_VECTOR_DOT,
         self::TYPE_VECTOR_COSINE,
         self::TYPE_VECTOR_EUCLIDEAN,
+        self::TYPE_EXISTS,
+        self::TYPE_NOT_EXISTS,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,

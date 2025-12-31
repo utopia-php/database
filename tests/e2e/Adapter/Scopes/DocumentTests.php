@@ -4030,6 +4030,7 @@ trait DocumentTests
             $actualMatches,
             "Query should return exactly the documents matching pattern 'Captain' OR 'Frozen'"
         );
+        $database->deleteCollection('movies');
     }
 
     public function testFindOrderRandom(): void

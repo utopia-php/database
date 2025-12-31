@@ -29,6 +29,7 @@ class Index extends Validator
      * @param bool $supportForMultipleFulltextIndexes
      * @param bool $supportForIdenticalIndexes
      * @param bool $supportForObjectIndexes
+     * @param bool $supportForTrigramIndexes
      * @throws DatabaseException
      */
     public function __construct(
@@ -43,7 +44,8 @@ class Index extends Validator
         protected bool $supportForAttributes = true,
         protected bool $supportForMultipleFulltextIndexes = true,
         protected bool $supportForIdenticalIndexes = true,
-        protected bool $supportForObjectIndexes = false
+        protected bool $supportForObjectIndexes = false,
+        protected bool $supportForTrigramIndexes = false
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -135,6 +137,9 @@ class Index extends Validator
             return false;
         }
         if (!$this->checkObjectIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkTrigramIndexes($value)) {
             return false;
         }
         return true;
@@ -456,6 +461,44 @@ class Index extends Validator
         $lengths = $index->getAttribute('lengths', []);
         if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
             $this->message = 'Vector indexes do not support orders or lengths';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function checkTrigramIndexes(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if ($type !== Database::INDEX_TRIGRAM) {
+            return true;
+        }
+
+        if ($this->supportForTrigramIndexes === false) {
+            $this->message = 'Trigram indexes are not supported';
+            return false;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+
+        foreach ($attributes as $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+            if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
+                $this->message = 'Trigram index can only be created on string type attributes';
+                return false;
+            }
+        }
+
+        $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
+        if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
+            $this->message = 'Trigram indexes do not support orders or lengths';
             return false;
         }
 

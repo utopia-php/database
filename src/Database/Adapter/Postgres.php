@@ -900,9 +900,10 @@ class Postgres extends SQL
             Database::INDEX_SPATIAL,
             Database::INDEX_HNSW_EUCLIDEAN,
             Database::INDEX_HNSW_COSINE,
-            Database::INDEX_HNSW_DOT => 'INDEX',
+            Database::INDEX_HNSW_DOT,
+            Database::INDEX_OBJECT,
+            Database::INDEX_TRIGRAM => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_OBJECT => 'INDEX',
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
@@ -923,6 +924,11 @@ class Postgres extends SQL
             Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
             Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
             Database::INDEX_OBJECT => " USING GIN ({$attributes})",
+            Database::INDEX_TRIGRAM =>
+                " USING GIN (" . implode(', ', array_map(
+                    fn ($a) => "$a gin_trgm_ops",
+                    array_map('trim', explode(',', $attributes))
+                )) . ")",
             default => " ({$attributes})",
         };
 

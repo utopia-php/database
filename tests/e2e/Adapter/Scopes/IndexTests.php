@@ -173,7 +173,9 @@ trait IndexTests
             $database->getAdapter()->getSupportForVectors(),
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes()
+            $database->getAdapter()->getSupportForIdenticalIndexes(),
+            false,
+            $database->getAdapter()->getSupportForTrigramIndex()
         );
         if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -264,7 +266,9 @@ trait IndexTests
             $database->getAdapter()->getSupportForVectors(),
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes()
+            $database->getAdapter()->getSupportForIdenticalIndexes(),
+            false,
+            $database->getAdapter()->getSupportForTrigramIndex()
         );
 
         $this->assertFalse($validator->isValid($newIndex));
@@ -639,6 +643,128 @@ trait IndexTests
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different orders: ' . $e->getMessage());
             }
+        } finally {
+            // Clean up
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    public function testTrigramIndex(): void
+    {
+        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        if (!$trigramSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'trigram_test';
+        try {
+            $database->createCollection($collectionId);
+
+            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
+            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 512, false);
+
+            // Create trigram index on name attribute
+            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_name', Database::INDEX_TRIGRAM, ['name']));
+
+            $collection = $database->getCollection($collectionId);
+            $indexes = $collection->getAttribute('indexes');
+            $this->assertCount(1, $indexes);
+            $this->assertEquals('trigram_name', $indexes[0]['$id']);
+            $this->assertEquals(Database::INDEX_TRIGRAM, $indexes[0]['type']);
+            $this->assertEquals(['name'], $indexes[0]['attributes']);
+
+            // Create another trigram index on description
+            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_description', Database::INDEX_TRIGRAM, ['description']));
+
+            $collection = $database->getCollection($collectionId);
+            $indexes = $collection->getAttribute('indexes');
+            $this->assertCount(2, $indexes);
+
+            // Test that trigram index can be deleted
+            $this->assertEquals(true, $database->deleteIndex($collectionId, 'trigram_name'));
+            $this->assertEquals(true, $database->deleteIndex($collectionId, 'trigram_description'));
+
+            $collection = $database->getCollection($collectionId);
+            $indexes = $collection->getAttribute('indexes');
+            $this->assertCount(0, $indexes);
+
+        } finally {
+            // Clean up
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    public function testTrigramIndexValidation(): void
+    {
+        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        if (!$trigramSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'trigram_validation_test';
+        try {
+            $database->createCollection($collectionId);
+
+            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
+            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 512, false);
+            $database->createAttribute($collectionId, 'age', Database::VAR_INTEGER, 8, false);
+
+            // Test: Trigram index on non-string attribute should fail
+            try {
+                $database->createIndex($collectionId, 'trigram_invalid', Database::INDEX_TRIGRAM, ['age']);
+                $this->fail('Expected exception when creating trigram index on non-string attribute');
+            } catch (Exception $e) {
+                $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
+            }
+
+            // Test: Trigram index with multiple string attributes should succeed
+            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_multi', Database::INDEX_TRIGRAM, ['name', 'description']));
+
+            $collection = $database->getCollection($collectionId);
+            $indexes = $collection->getAttribute('indexes');
+            $trigramMultiIndex = null;
+            foreach ($indexes as $idx) {
+                if ($idx['$id'] === 'trigram_multi') {
+                    $trigramMultiIndex = $idx;
+                    break;
+                }
+            }
+            $this->assertNotNull($trigramMultiIndex);
+            $this->assertEquals(Database::INDEX_TRIGRAM, $trigramMultiIndex['type']);
+            $this->assertEquals(['name', 'description'], $trigramMultiIndex['attributes']);
+
+            // Test: Trigram index with mixed string and non-string attributes should fail
+            try {
+                $database->createIndex($collectionId, 'trigram_mixed', Database::INDEX_TRIGRAM, ['name', 'age']);
+                $this->fail('Expected exception when creating trigram index with mixed attribute types');
+            } catch (Exception $e) {
+                $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
+            }
+
+            // Test: Trigram index with orders should fail
+            try {
+                $database->createIndex($collectionId, 'trigram_order', Database::INDEX_TRIGRAM, ['name'], [], [Database::ORDER_ASC]);
+                $this->fail('Expected exception when creating trigram index with orders');
+            } catch (Exception $e) {
+                $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
+            }
+
+            // Test: Trigram index with lengths should fail
+            try {
+                $database->createIndex($collectionId, 'trigram_length', Database::INDEX_TRIGRAM, ['name'], [128]);
+                $this->fail('Expected exception when creating trigram index with lengths');
+            } catch (Exception $e) {
+                $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
+            }
+
         } finally {
             // Clean up
             $database->deleteCollection($collectionId);

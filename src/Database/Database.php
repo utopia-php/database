@@ -85,6 +85,7 @@ class Database
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
+    public const INDEX_TRIGRAM = 'trigram';
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -3665,8 +3666,14 @@ class Database
                 }
                 break;
 
+            case self::INDEX_TRIGRAM:
+                if (!$this->adapter->getSupportForTrigramIndex()) {
+                    throw new DatabaseException('Trigram indexes are not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM);
         }
 
         /** @var array<Document> $collectionAttributes */

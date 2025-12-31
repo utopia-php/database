@@ -3591,6 +3591,11 @@ trait DocumentTests
             $this->assertEquals(true, $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
         }
 
+        if ($database->getAdapter()->getSupportForTrigramIndex()) {
+            $database->createIndex('movies', 'trigram_name', Database::INDEX_TRIGRAM, ['name']);
+            $database->createIndex('movies', 'trigram_director', Database::INDEX_TRIGRAM, ['director']);
+        }
+
         // Create test documents
         $database->createDocument('movies', new Document([
             '$permissions' => [

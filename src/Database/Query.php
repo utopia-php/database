@@ -26,6 +26,8 @@ class Query
     public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
+    public const TYPE_EXISTS = 'exists';
+    public const TYPE_NOT_EXISTS = 'notExists';
 
     // Spatial methods
     public const TYPE_CROSSES = 'crosses';
@@ -294,7 +296,9 @@ class Query
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
-            self::TYPE_VECTOR_EUCLIDEAN => true,
+            self::TYPE_VECTOR_EUCLIDEAN,
+            self::TYPE_EXISTS,
+            self::TYPE_NOT_EXISTS => true,
             default => false,
         };
     }
@@ -1177,5 +1181,27 @@ class Query
     public static function vectorEuclidean(string $attribute, array $vector): self
     {
         return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
+    }
+
+    /**
+     * Helper method to create Query with exists method
+     *
+     * @param string $attribute
+     * @return Query
+     */
+    public static function exists(string $attribute): self
+    {
+        return new self(self::TYPE_EXISTS, $attribute);
+    }
+
+    /**
+     * Helper method to create Query with notExists method
+     *
+     * @param string $attribute
+     * @return Query
+     */
+    public static function notExists(string $attribute): self
+    {
+        return new self(self::TYPE_NOT_EXISTS, $attribute);
     }
 }

@@ -396,6 +396,56 @@ class Filter extends Base
 
                 return true;
 
+            case Query::TYPE_ELEM_MATCH:
+                // Validate that the attribute (array field) exists
+                if (!$this->isValidAttribute($attribute)) {
+                    return false;
+                }
+
+                // For schemaless mode, allow elemMatch on any attribute
+                if (!$this->supportForAttributes) {
+                    // Validate nested queries are filter queries
+                    $filters = Query::groupByType($value->getValues())['filters'];
+                    if (count($value->getValues()) !== count($filters)) {
+                        $this->message = 'elemMatch queries can only contain filter queries';
+                        return false;
+                    }
+                    if (count($filters) < 1) {
+                        $this->message = 'elemMatch queries require at least one query';
+                        return false;
+                    }
+                    return true;
+                }
+
+                // For schema mode, validate that the attribute is an array
+                if (!isset($this->schema[$attribute])) {
+                    $this->message = 'Attribute not found in schema: ' . $attribute;
+                    return false;
+                }
+
+                $attributeSchema = $this->schema[$attribute];
+                $isArray = $attributeSchema['array'] ?? false;
+
+                if (!$isArray) {
+                    $this->message = 'elemMatch can only be used on array attributes: ' . $attribute;
+                    return false;
+                }
+
+                // Validate nested queries are filter queries
+                $filters = Query::groupByType($value->getValues())['filters'];
+                if (count($value->getValues()) !== count($filters)) {
+                    $this->message = 'elemMatch queries can only contain filter queries';
+                    return false;
+                }
+                if (count($filters) < 1) {
+                    $this->message = 'elemMatch queries require at least one query';
+                    return false;
+                }
+
+                // Note: We don't validate the nested query attributes against the schema
+                // because they are attributes of objects within the array, not top-level attributes
+                return true;
+
             default:
                 // Handle spatial query types and any other query types
                 if ($value->isSpatialQuery()) {

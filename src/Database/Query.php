@@ -121,6 +121,7 @@ class Query
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
     ];
 
     protected string $method = '';
@@ -293,6 +294,7 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_ELEM_MATCH,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
@@ -1182,11 +1184,12 @@ class Query
     }
 
     /**
+     * @param string $attribute
      * @param array<Query> $queries
      * @return Query
      */
-    public static function elemMatch(array $queries): self
+    public static function elemMatch(string $attribute, array $queries): self
     {
-        return new self(self::TYPE_ELEM_MATCH, '', $queries);
+        return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
     }
 }

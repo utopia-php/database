@@ -1353,6 +1353,7 @@ class Mongo extends Adapter
                         break;
                     case Database::VAR_OBJECT:
                         $node = json_decode($node);
+                        $node = $this->convertStdClassToArray($node);
                         break;
                     default:
                         break;
@@ -2011,7 +2012,7 @@ class Mongo extends Adapter
             // Process first batch
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
-                $found[] = new Document($record);
+                $found[] = new Document($this->convertStdClassToArray($record));
             }
 
             // Get cursor ID for subsequent batches
@@ -2367,7 +2368,35 @@ class Mongo extends Adapter
 
         foreach ($queries as $query) {
             /* @var $query Query */
-            if ($query->isNested()) {
+            if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
+                // Handle elemMatch specially - it needs attribute and wraps nested queries
+                $attribute = $query->getAttribute();
+                if ($attribute === '$id') {
+                    $attribute = '_uid';
+                } elseif ($attribute === '$sequence') {
+                    $attribute = '_id';
+                } elseif ($attribute === '$createdAt') {
+                    $attribute = '_createdAt';
+                } elseif ($attribute === '$updatedAt') {
+                    $attribute = '_updatedAt';
+                }
+
+                // Process each nested query individually and merge conditions
+                $conditions = [];
+                foreach ($query->getValues() as $nestedQuery) {
+                    /* @var $nestedQuery Query */
+                    // Build filter for each nested query
+                    $nestedFilter = $this->buildFilter($nestedQuery);
+                    // Merge the conditions (nestedFilter is like ['sku' => ['$eq' => 'ABC']])
+                    $conditions = array_merge($conditions, $nestedFilter);
+                }
+
+                $filters[$separator][] = [
+                    $attribute => [
+                        '$elemMatch' => $conditions
+                    ]
+                ];
+            } elseif ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
 
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
@@ -2570,6 +2599,7 @@ class Mongo extends Adapter
             Query::TYPE_NOT_ENDS_WITH => '$regex',
             Query::TYPE_OR => '$or',
             Query::TYPE_AND => '$and',
+            Query::TYPE_ELEM_MATCH => '$elemMatch',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_NOT_BETWEEN . ', ' . Query::TYPE_STARTS_WITH . ', ' . Query::TYPE_NOT_STARTS_WITH . ', ' . Query::TYPE_ENDS_WITH . ', ' . Query::TYPE_NOT_ENDS_WITH . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_NOT_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_NOT_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }

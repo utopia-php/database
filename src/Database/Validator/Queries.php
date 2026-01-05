@@ -107,6 +107,7 @@ class Queries extends Validator
                 Query::TYPE_NOT_CONTAINS,
                 Query::TYPE_AND,
                 Query::TYPE_OR,
+                Query::TYPE_ELEM_MATCH,
                 Query::TYPE_CROSSES,
                 Query::TYPE_NOT_CROSSES,
                 Query::TYPE_DISTANCE_EQUAL,

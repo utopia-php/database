@@ -14,7 +14,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-
+use Utopia\Database\Helpers\ID;
 trait SchemalessTests
 {
     public function testSchemalessDocumentOperation(): void
@@ -1154,5 +1154,218 @@ trait SchemalessTests
         $this->assertTrue(is_string($afterDecFetched->getAttribute('$updatedAt')));
 
         $database->deleteCollection($col);
+    }
+
+    /**
+     * Test elemMatch query functionality
+     *
+     * @throws Exception
+     */
+    public function testElemMatch(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Create array attribute for items
+        $database->createAttribute($collectionId, 'items', Database::VAR_OBJECT, 0, false, null, true);
+
+        // Create documents with array of objects
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order1',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'ABC', 'qty' => 5, 'price' => 10.50],
+                ['sku' => 'XYZ', 'qty' => 2, 'price' => 20.00],
+            ]
+        ]));
+
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order2',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'ABC', 'qty' => 1, 'price' => 10.50],
+                ['sku' => 'DEF', 'qty' => 10, 'price' => 15.00],
+            ]
+        ]));
+
+        $doc3 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order3',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'XYZ', 'qty' => 3, 'price' => 20.00],
+            ]
+        ]));
+
+        // Test 1: elemMatch with equal and greaterThan - should match doc1
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order1', $results[0]->getId());
+
+        // Test 2: elemMatch with equal and greaterThan - should not match doc2 (qty is 1, not > 1)
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order1', $results[0]->getId());
+
+        // Test 3: elemMatch with equal only - should match doc1 and doc2
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order2', $ids);
+
+        // Elematch means at least ONE element in the array matches this condition.
+        // that means array having two docs qty -> 1 and qty -> 10  , it will be returned as it has atleast one doc with qty > 10
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(3, $results);
+        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order2', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Test 5: elemMatch with multiple conditions - should match doc2
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['DEF']),
+                Query::greaterThan('qty', 5),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order2', $results[0]->getId());
+
+        // Test 6: elemMatch with lessThan
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::lessThan('qty', 3),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order2', $results[0]->getId());
+
+        // Test 7: elemMatch with equal and greaterThanEqual
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThanEqual('qty', 1),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+
+        // Test 8: elemMatch with no matching conditions
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['NONEXISTENT']),
+            ])
+        ]);
+        $this->assertCount(0, $results);
+
+        // Test 9: elemMatch with price condition
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['XYZ']),
+                Query::equal('price', [20.00]),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Test 10: elemMatch with notEqual
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::notEqual('sku', ['ABC']),
+                Query::greaterThan('qty', 2),
+            ])
+        ]);
+        // order 1 has elements where sku == "ABC", qty: 5 => !=ABC fails and sku = XYZ ,qty: 2 => >2 fails
+        $this->assertCount(2, $results);
+        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $this->assertContains('order2', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Clean up
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test elemMatch with complex nested conditions
+     *
+     * @throws Exception
+     */
+    public function testElemMatchComplex(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Create array attribute
+        $database->createAttribute($collectionId, 'products', Database::VAR_OBJECT, 0, false, null, true);
+
+        // Create documents with complex nested structures
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'store1',
+            '$permissions' => [Permission::read(Role::any())],
+            'products' => [
+                ['name' => 'Widget', 'stock' => 100, 'category' => 'A', 'active' => true],
+                ['name' => 'Gadget', 'stock' => 50, 'category' => 'B', 'active' => false],
+            ]
+        ]));
+
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'store2',
+            '$permissions' => [Permission::read(Role::any())],
+            'products' => [
+                ['name' => 'Widget', 'stock' => 200, 'category' => 'A', 'active' => true],
+                ['name' => 'Thing', 'stock' => 25, 'category' => 'C', 'active' => true],
+            ]
+        ]));
+
+        // Test: elemMatch with multiple conditions including boolean
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::equal('name', ['Widget']),
+                Query::greaterThan('stock', 50),
+                Query::equal('category', ['A']),
+                Query::equal('active', [true]),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+
+        // Test: elemMatch with between
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::equal('category', ['A']),
+                Query::between('stock', 75, 150),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('store1', $results[0]->getId());
+
+        // Clean up
+        $database->deleteCollection($collectionId);
     }
 }

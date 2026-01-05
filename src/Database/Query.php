@@ -62,7 +62,7 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
-
+    public const TYPE_ELEM_MATCH = 'elemMatch';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -109,6 +109,7 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
     ];
 
     public const VECTOR_TYPES = [
@@ -126,6 +127,7 @@ class Query
     protected string $attribute = '';
     protected string $attributeType = '';
     protected bool $onArray = false;
+    protected bool $isObjectAttribute = false;
 
     /**
      * @var array<mixed>
@@ -1177,5 +1179,14 @@ class Query
     public static function vectorEuclidean(string $attribute, array $vector): self
     {
         return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return Query
+     */
+    public static function elemMatch(array $queries): self
+    {
+        return new self(self::TYPE_ELEM_MATCH, '', $queries);
     }
 }

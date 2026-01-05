@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
+use stdClass;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -42,6 +43,8 @@ class Mongo extends Adapter
         '$regex',
         '$not',
         '$nor',
+        '$elemMatch',
+        '$exists'
     ];
 
     protected Client $client;
@@ -414,7 +417,6 @@ class Mongo extends Adapter
         try {
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
-
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
@@ -1231,7 +1233,7 @@ class Mongo extends Adapter
                     case Database::VAR_INTEGER:
                         $node = (int)$node;
                         break;
-                    case Database::VAR_DATETIME :
+                    case Database::VAR_DATETIME:
                         if ($node instanceof UTCDateTime) {
                             // Handle UTCDateTime objects
                             $node = DateTime::format($node->toDateTime());
@@ -1257,6 +1259,12 @@ class Mongo extends Adapter
                             }
                         }
                         break;
+                    case Database::VAR_OBJECT:
+                        // Convert stdClass objects to arrays for object attributes
+                        if (is_object($node) && get_class($node) === stdClass::class) {
+                            $node = $this->convertStdClassToArray($node);
+                        }
+                        break;
                     default:
                         break;
                 }
@@ -1265,7 +1273,32 @@ class Mongo extends Adapter
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
+        if (!$this->getSupportForAttributes()) {
+            /** @var Document $doc */
+            foreach ($document->getArrayCopy() as $key => $value) {
+                // mongodb results out a stdclass for objects
+                if (is_object($value) && get_class($value) === stdClass::class) {
+                    $document->setAttribute($key, $this->convertStdClassToArray($value));
+                }
+            }
+        }
         return $document;
+    }
+
+    private function convertStdClassToArray(mixed $value)
+    {
+        if (is_object($value) && get_class($value) === stdClass::class) {
+            return array_map(fn ($v) => $this->convertStdClassToArray($v), get_object_vars($value));
+        }
+
+        if (is_array($value)) {
+            return array_map(
+                fn ($v) => $this->convertStdClassToArray($v),
+                $value
+            );
+        }
+
+        return $value;
     }
 
     /**
@@ -1317,6 +1350,9 @@ class Mongo extends Adapter
                         if (!($node instanceof UTCDateTime)) {
                             $node = new UTCDateTime(new \DateTime($node));
                         }
+                        break;
+                    case Database::VAR_OBJECT:
+                        $node = json_decode($node);
                         break;
                     default:
                         break;
@@ -1591,7 +1627,6 @@ class Mongo extends Adapter
                 $operations,
                 options: $options
             );
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1998,7 +2033,6 @@ class Mongo extends Adapter
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         } finally {
@@ -2382,6 +2416,10 @@ class Mongo extends Adapter
         };
 
         $filter = [];
+        if($query->isObjectAttribute() && in_array($query->getMethod(),[Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])){
+            $this->handleObjectFilters($query, $filter);
+            return $filter;
+        }
 
         if ($operator == '$eq' && \is_array($value)) {
             $filter[$attribute]['$in'] = $value;
@@ -2439,6 +2477,66 @@ class Mongo extends Adapter
         }
 
         return $filter;
+    }
+
+    private function handleObjectFilters(Query $query, array &$filter){
+        $conditions = [];
+        $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS,Query::TYPE_NOT_EQUAL]);
+        $values = $query->getValues();
+        foreach ($values as $attribute => $value) {
+            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute)?$attribute:'', $value);
+            $flattenedObjectKey = array_key_first($flattendQuery);
+            $queryValue = $flattendQuery[$flattenedObjectKey];
+            $flattenedObjectKey = $query->getAttribute() . '.' . array_key_first($flattendQuery);
+            switch ($query->getMethod()) {
+
+                case Query::TYPE_CONTAINS:
+                case Query::TYPE_NOT_CONTAINS: {
+                    $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
+                    $operator = $isNot ? '$nin' : '$in';
+                    $conditions[] = [ $flattenedObjectKey => [ $operator => $arrayValue] ];
+                    break;
+                }
+            
+                case Query::TYPE_EQUAL:
+                case Query::TYPE_NOT_EQUAL: {
+                    if (\is_array($queryValue)) {
+                        $operator = $isNot ? '$nin' : '$in';
+                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                    } else {
+                        $operator = $isNot ? '$ne' : '$eq';
+                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                    }
+            
+                    break;
+                }
+            }
+        }
+
+        $logicalOperator = $isNot? '$and' : '$or';
+        if (count($conditions) && isset($filter[$logicalOperator])) {
+            $filter[$logicalOperator] = array_merge($filter[$logicalOperator], $conditions);
+        } else {
+            $filter[$logicalOperator] = $conditions;
+        }
+    }
+
+    // TODO: check the condition for the multiple keys inside a query validator
+    // example -> [a=>[1,b=>[212]]] shouldn't be allowed
+    // allowed -> [a=>[1,2],b=>[212]]
+    // should be disallowed ->     $data = ['name' => 'doc','role' => ['name'=>['test1','test2'],'ex'=>['new'=>'test1']]];
+    private function flattenWithDotNotation(string $key, mixed $value, string $prefix=''):array{
+        $result = [];
+        $currentPref = $prefix === '' ? $key :$prefix.'.'.$key;
+        if(is_array($value) && !array_is_list($value)){
+            $nextKey = array_key_first($value);
+            $result += $this->flattenWithDotNotation($nextKey,$value[$nextKey],$currentPref);
+        } 
+        // at the leaf node
+        else{
+            $result[$currentPref] = $value;
+        }
+        return $result;
     }
 
     /**
@@ -2792,7 +2890,7 @@ class Mongo extends Adapter
 
     public function getSupportForObject(): bool
     {
-        return false;
+        return true;
     }
 
     /**

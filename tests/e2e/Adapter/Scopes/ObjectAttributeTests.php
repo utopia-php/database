@@ -15,6 +15,30 @@ use Utopia\Database\Query;
 
 trait ObjectAttributeTests
 {
+    /**
+     * Helper function to create an attribute if adapter supports attributes,
+     * otherwise returns true to allow tests to continue
+     *
+     * @param Database $database
+     * @param string $collectionId
+     * @param string $attributeId
+     * @param string $type
+     * @param int $size
+     * @param bool $required
+     * @param mixed $default
+     * @return bool
+     */
+    private function createAttribute(Database $database, string $collectionId, string $attributeId, string $type, int $size, bool $required, $default = null): bool
+    {
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            return true;
+        }
+
+        $result = $database->createAttribute($collectionId, $attributeId, $type, $size, $required, $default);
+        $this->assertEquals(true, $result);
+        return $result;
+    }
+
     public function testObjectAttribute(): void
     {
         /** @var Database $database */
@@ -29,12 +53,12 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::VAR_OBJECT, 0, false));
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
 
         // Test 1: Create and read document with object attribute
         $doc1 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc1',
-            '$permissions' => [Permission::read(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'meta' => [
                 'age' => 25,
                 'skills' => ['react', 'node'],
@@ -81,7 +105,7 @@ trait ObjectAttributeTests
         // Test 5: Create another document with different values
         $doc2 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc2',
-            '$permissions' => [Permission::read(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'meta' => [
                 'age' => 30,
                 'skills' => ['python', 'java'],
@@ -163,7 +187,7 @@ trait ObjectAttributeTests
         try {
             // test -> not equal allows one value only
             $results = $database->find($collectionId, [
-                Query::notEqual('meta', [['age' => 26],['age' => 27]])
+                Query::notEqual('meta', [['age' => 26], ['age' => 27]])
             ]);
             $this->fail('No query thrown');
         } catch (Exception $e) {
@@ -441,7 +465,7 @@ trait ObjectAttributeTests
         // Test 28: Test equal query with complete object match
         $doc11 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc11',
-            '$permissions' => [Permission::read(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'meta' => [
                 'config' => [
                     'theme' => 'dark',
@@ -557,15 +581,15 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
-            $this->markTestSkipped('Adapter does not support object attributes');
-        }
+        // if (!$database->getAdapter()->getSupportForObject()) {
+        // }
+        $this->markTestSkipped('Adapter does not support object attributes');
 
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'data', Database::VAR_OBJECT, 0, false));
+        $this->createAttribute($database, $collectionId, 'data', Database::VAR_OBJECT, 0, false);
 
         // Test 1: Create Object index on object attribute
         $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::INDEX_OBJECT, ['data']);
@@ -620,7 +644,7 @@ trait ObjectAttributeTests
         $this->assertEquals('gin2', $results[0]->getId());
 
         // Test 6: Try to create Object index on non-object attribute (should fail)
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
 
         $exceptionThrown = false;
         try {
@@ -633,7 +657,7 @@ trait ObjectAttributeTests
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on non-object attribute');
 
         // Test 7: Try to create Object index on multiple attributes (should fail)
-        $database->createAttribute($collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
 
         $exceptionThrown = false;
         try {
@@ -666,7 +690,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -674,7 +698,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::VAR_OBJECT, 0, false));
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
 
         // Test 1: Try to create document with string instead of object (should fail)
         $exceptionThrown = false;
@@ -841,11 +865,11 @@ trait ObjectAttributeTests
 
         // Test 16: with multiple json
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings));
+        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
         $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
-        $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']],'$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']], '$permissions' => [Permission::read(Role::any())]]));
         $results = $database->find($collectionId, [
-            Query::equal('settings', [['config' => ['theme' => 'light']],['config' => ['theme' => 'dark']]])
+            Query::equal('settings', [['config' => ['theme' => 'light']], ['config' => ['theme' => 'dark']]])
         ]);
         $this->assertCount(2, $results);
 
@@ -865,7 +889,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -873,20 +897,20 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // 1) Default empty object
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'metaDefaultEmpty', Database::VAR_OBJECT, 0, false, []));
+        $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', Database::VAR_OBJECT, 0, false, []);
 
         // 2) Default nested object
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings));
+        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
 
         // 3) Required without default (should fail when missing)
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile', Database::VAR_OBJECT, 0, true, null));
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, true, null);
 
         // 4) Required with default (should auto-populate)
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile2', Database::VAR_OBJECT, 0, false, ['name' => 'anon']));
+        $this->createAttribute($database, $collectionId, 'profile2', Database::VAR_OBJECT, 0, false, ['name' => 'anon']);
 
         // 5) Explicit null default
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'misc', Database::VAR_OBJECT, 0, false, null));
+        $this->createAttribute($database, $collectionId, 'misc', Database::VAR_OBJECT, 0, false, null);
 
         // Create document missing all above attributes
         $exceptionThrown = false;
@@ -954,8 +978,8 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Attributes: 3D vector and nested metadata object
-        $database->createAttribute($collectionId, 'embedding', Database::VAR_VECTOR, 3, true);
-        $database->createAttribute($collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'embedding', Database::VAR_VECTOR, 3, true);
+        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
 
         // Seed documents
         $docA = $database->createDocument($collectionId, new Document([

@@ -581,9 +581,9 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        // if (!$database->getAdapter()->getSupportForObject()) {
-        // }
-        $this->markTestSkipped('Adapter does not support object attributes');
+        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
 
         $collectionId = ID::unique();
         $database->createCollection($collectionId);

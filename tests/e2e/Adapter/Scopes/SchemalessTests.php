@@ -10,11 +10,12 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Helpers\ID;
+
 trait SchemalessTests
 {
     public function testSchemalessDocumentOperation(): void
@@ -1226,7 +1227,7 @@ trait SchemalessTests
             ])
         ]);
         $this->assertCount(2, $results);
-        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
         $this->assertContains('order1', $ids);
         $this->assertContains('order2', $ids);
 
@@ -1238,7 +1239,7 @@ trait SchemalessTests
             ])
         ]);
         $this->assertCount(3, $results);
-        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
         $this->assertContains('order1', $ids);
         $this->assertContains('order2', $ids);
         $this->assertContains('order3', $ids);
@@ -1288,7 +1289,7 @@ trait SchemalessTests
             ])
         ]);
         $this->assertCount(2, $results);
-        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
         $this->assertContains('order1', $ids);
         $this->assertContains('order3', $ids);
 
@@ -1301,7 +1302,7 @@ trait SchemalessTests
         ]);
         // order 1 has elements where sku == "ABC", qty: 5 => !=ABC fails and sku = XYZ ,qty: 2 => >2 fails
         $this->assertCount(2, $results);
-        $ids = array_map(fn($doc) => $doc->getId(), $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
         $this->assertContains('order2', $ids);
         $this->assertContains('order3', $ids);
 

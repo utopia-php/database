@@ -2368,35 +2368,16 @@ class Mongo extends Adapter
 
         foreach ($queries as $query) {
             /* @var $query Query */
-            if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
-                // Handle elemMatch specially - it needs attribute and wraps nested queries
-                $attribute = $query->getAttribute();
-                if ($attribute === '$id') {
-                    $attribute = '_uid';
-                } elseif ($attribute === '$sequence') {
-                    $attribute = '_id';
-                } elseif ($attribute === '$createdAt') {
-                    $attribute = '_createdAt';
-                } elseif ($attribute === '$updatedAt') {
-                    $attribute = '_updatedAt';
+            if ($query->isNested()) {
+                if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
+                    $filters[$separator][] = [
+                        $query->getAttribute() => [
+                            '$elemMatch' => $this->buildFilters($query->getValues(), $separator)
+                        ]
+                    ];
+                    continue;
                 }
 
-                // Process each nested query individually and merge conditions
-                $conditions = [];
-                foreach ($query->getValues() as $nestedQuery) {
-                    /* @var $nestedQuery Query */
-                    // Build filter for each nested query
-                    $nestedFilter = $this->buildFilter($nestedQuery);
-                    // Merge the conditions (nestedFilter is like ['sku' => ['$eq' => 'ABC']])
-                    $conditions = array_merge($conditions, $nestedFilter);
-                }
-
-                $filters[$separator][] = [
-                    $attribute => [
-                        '$elemMatch' => $conditions
-                    ]
-                ];
-            } elseif ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
 
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
@@ -2445,7 +2426,7 @@ class Mongo extends Adapter
         };
 
         $filter = [];
-        if($query->isObjectAttribute() && in_array($query->getMethod(),[Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])){
+        if ($query->isObjectAttribute() && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
             $this->handleObjectFilters($query, $filter);
             return $filter;
         }
@@ -2508,12 +2489,13 @@ class Mongo extends Adapter
         return $filter;
     }
 
-    private function handleObjectFilters(Query $query, array &$filter){
+    private function handleObjectFilters(Query $query, array &$filter)
+    {
         $conditions = [];
         $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS,Query::TYPE_NOT_EQUAL]);
         $values = $query->getValues();
         foreach ($values as $attribute => $value) {
-            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute)?$attribute:'', $value);
+            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
             $flattenedObjectKey = array_key_first($flattendQuery);
             $queryValue = $flattendQuery[$flattenedObjectKey];
             $flattenedObjectKey = $query->getAttribute() . '.' . array_key_first($flattendQuery);
@@ -2526,7 +2508,7 @@ class Mongo extends Adapter
                     $conditions[] = [ $flattenedObjectKey => [ $operator => $arrayValue] ];
                     break;
                 }
-            
+
                 case Query::TYPE_EQUAL:
                 case Query::TYPE_NOT_EQUAL: {
                     if (\is_array($queryValue)) {
@@ -2536,13 +2518,13 @@ class Mongo extends Adapter
                         $operator = $isNot ? '$ne' : '$eq';
                         $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
                     }
-            
+
                     break;
                 }
             }
         }
 
-        $logicalOperator = $isNot? '$and' : '$or';
+        $logicalOperator = $isNot ? '$and' : '$or';
         if (count($conditions) && isset($filter[$logicalOperator])) {
             $filter[$logicalOperator] = array_merge($filter[$logicalOperator], $conditions);
         } else {
@@ -2554,15 +2536,16 @@ class Mongo extends Adapter
     // example -> [a=>[1,b=>[212]]] shouldn't be allowed
     // allowed -> [a=>[1,2],b=>[212]]
     // should be disallowed ->     $data = ['name' => 'doc','role' => ['name'=>['test1','test2'],'ex'=>['new'=>'test1']]];
-    private function flattenWithDotNotation(string $key, mixed $value, string $prefix=''):array{
+    private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
+    {
         $result = [];
-        $currentPref = $prefix === '' ? $key :$prefix.'.'.$key;
-        if(is_array($value) && !array_is_list($value)){
+        $currentPref = $prefix === '' ? $key : $prefix.'.'.$key;
+        if (is_array($value) && !array_is_list($value)) {
             $nextKey = array_key_first($value);
-            $result += $this->flattenWithDotNotation($nextKey,$value[$nextKey],$currentPref);
-        } 
+            $result += $this->flattenWithDotNotation($nextKey, $value[$nextKey], $currentPref);
+        }
         // at the leaf node
-        else{
+        else {
             $result[$currentPref] = $value;
         }
         return $result;

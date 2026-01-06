@@ -655,7 +655,7 @@ class Database
              */
             function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
                 // can be non string in case of mongodb as it stores the value as object
                 if (!is_string($value)) {

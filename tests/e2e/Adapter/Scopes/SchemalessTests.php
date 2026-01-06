@@ -1166,12 +1166,12 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
-
-        // Create array attribute for items
-        $database->createAttribute($collectionId, 'items', Database::VAR_OBJECT, 0, false, null, true);
 
         // Create documents with array of objects
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1319,12 +1319,12 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
-
-        // Create array attribute
-        $database->createAttribute($collectionId, 'products', Database::VAR_OBJECT, 0, false, null, true);
 
         // Create documents with complex nested structures
         $doc1 = $database->createDocument($collectionId, new Document([

@@ -175,7 +175,11 @@ trait IndexTests
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes(),
             $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex()
+            $database->getAdapter()->getSupportForTrigramIndex(),
+            $database->getAdapter()->getSupportForSpatialAttributes(),
+            $database->getAdapter()->getSupportForIndex(),
+            $database->getAdapter()->getSupportForUniqueIndex(),
+            $database->getAdapter()->getSupportForFulltextIndex()
         );
         if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -268,12 +272,18 @@ trait IndexTests
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes(),
             $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex()
+            $database->getAdapter()->getSupportForTrigramIndex(),
+            $database->getAdapter()->getSupportForSpatialAttributes(),
+            $database->getAdapter()->getSupportForIndex(),
+            $database->getAdapter()->getSupportForUniqueIndex(),
+            $database->getAdapter()->getSupportForFulltextIndex()
         );
 
         $this->assertFalse($validator->isValid($newIndex));
 
-        if (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+            $this->assertEquals('Fulltext index is not supported', $validator->getDescription());
+        } elseif (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
             $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
         } elseif ($database->getAdapter()->getSupportForAttributes()) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
@@ -285,7 +295,11 @@ trait IndexTests
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+            if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+            } else {
+                $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
+            }
         }
 
 

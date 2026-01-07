@@ -306,15 +306,14 @@ class Filter extends Base
      */
     private function isValidObjectQueryValues(array $values): bool
     {
-        $validateNode = function (mixed $node) use (&$validateNode): bool {
+        $validateNode = function (mixed $node, bool $isInList = false) use (&$validateNode): bool {
             if (!\is_array($node)) {
                 return true;
             }
 
             if (\array_is_list($node)) {
-                // Indexed array: validate each element
                 foreach ($node as $item) {
-                    if (!$validateNode($item)) {
+                    if (!$validateNode($item, true)) {
                         return false;
                     }
                 }
@@ -322,17 +321,32 @@ class Filter extends Base
                 return true;
             }
 
-            // Associative array (object-like). Only one key is allowed at each level.
-            if (\count($node) !== 1) {
+            if (!$isInList && \count($node) !== 1) {
                 return false;
             }
 
+            if ($isInList) {
+                foreach ($node as $value) {
+                    // When in a list context, values of associative arrays are also object structures,
+                    // not navigation paths, so pass isInList=true for nested associative arrays
+                    $valueIsInList = \is_array($value) && !\array_is_list($value);
+                    if (!$validateNode($value, $valueIsInList)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
             $firstKey = \array_key_first($node);
-            return $validateNode($node[$firstKey]);
+            return $validateNode($node[$firstKey], false);
         };
 
+        // Check if values is an indexed array (list)
+        // If so, its elements should be validated with isInList=true
+        $valuesIsIndexed = \array_is_list($values);
+
         foreach ($values as $value) {
-            if (!$validateNode($value)) {
+            if (!$validateNode($value, $valuesIsIndexed)) {
                 return false;
             }
         }

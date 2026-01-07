@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PDOException;
 use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
@@ -14,6 +15,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -6597,82 +6599,81 @@ trait DocumentTests
         }
 
         // Create test documents
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Frozen',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2013,
-        ]));
-
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Frozen II',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2019,
-        ]));
-
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Captain America: The First Avenger',
-            'director' => 'Joe Johnston',
-            'year' => 2011,
-        ]));
-
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Captain Marvel',
-            'director' => 'Anna Boden & Ryan Fleck',
-            'year' => 2019,
-        ]));
-
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Work in Progress',
-            'director' => 'TBD',
-            'year' => 2025,
-        ]));
-
-        $database->createDocument('moviesRegex', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Work in Progress 2',
-            'director' => 'TBD',
-            'year' => 2026,
-        ]));
+        $database->createDocuments('moviesRegex', [
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Frozen',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2013,
+            ]),
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Frozen II',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2019,
+            ]),
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Captain America: The First Avenger',
+                'director' => 'Joe Johnston',
+                'year' => 2011,
+            ]),
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Captain Marvel',
+                'director' => 'Anna Boden & Ryan Fleck',
+                'year' => 2019,
+            ]),
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Work in Progress',
+                'director' => 'TBD',
+                'year' => 2025,
+            ]),
+            new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Work in Progress 2',
+                'director' => 'TBD',
+                'year' => 2026,
+            ]),
+        ]);
 
         // Helper function to verify regex query completeness
         $verifyRegexQuery = function (string $attribute, string $regexPattern, array $queryResults) use ($database) {
-            // Convert regex pattern to PHP regex format
-            $phpPattern = '/' . str_replace('/', '\/', $regexPattern) . '/';
+            // Convert database regex pattern to PHP regex format.
+            // POSIX-style word boundary (\y) is not supported by PHP PCRE, so map it to \b.
+            $normalizedPattern = str_replace('\y', '\b', $regexPattern);
+            $phpPattern = '/' . str_replace('/', '\/', $normalizedPattern) . '/';
 
             // Get all documents to manually verify
             $allDocuments = $database->find('moviesRegex');
@@ -6732,6 +6733,12 @@ trait DocumentTests
         // Verify completeness: all matching documents returned, no extra documents
         $verifyRegexQuery('name', 'Frozen', $documents);
 
+        // Test regex pattern - match exact title 'Frozen'
+        $exactFrozenDocuments = $database->find('moviesRegex', [
+            Query::regex('name', '^Frozen$'),
+        ]);
+        $verifyRegexQuery('name', '^Frozen$', $exactFrozenDocuments);
+        $this->assertCount(1, $exactFrozenDocuments, 'Exact ^Frozen$ regex should return only one document');
         // Verify expected documents are included
         $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
         $this->assertTrue(in_array('Frozen', $names));
@@ -6955,6 +6962,17 @@ trait DocumentTests
         $names = array_map(fn ($doc) => $doc->getAttribute('name'), $documents);
         $this->assertTrue(in_array('Captain America: The First Avenger', $names));
 
+        // ReDOS safety: ensure pathological patterns respond quickly and do not hang
+        $catastrophicPattern = '(a+)+$';
+        $start = microtime(true);
+        $redosDocs = $database->find('moviesRegex', [
+            Query::regex('name', $catastrophicPattern),
+        ]);
+        $elapsed = microtime(true) - $start;
+        $this->assertLessThan(1.0, $elapsed, 'Regex evaluation should not be slow or vulnerable to ReDOS');
+        $verifyRegexQuery('name', $catastrophicPattern, $redosDocs);
+        $this->assertCount(0, $redosDocs, 'Pathological regex should not match any movie titles');
+
         // Test regex search pattern - match movies with word boundaries
         // Only test if word boundaries are supported (PCRE or POSIX)
         if ($wordBoundaryPattern !== null) {
@@ -7031,5 +7049,382 @@ trait DocumentTests
             "Query should return exactly the documents matching pattern 'Captain' OR 'Frozen'"
         );
         $database->deleteCollection('moviesRegex');
+    }
+    public function testRegexInjection(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Skip test if regex is not supported
+        if (!$database->getAdapter()->getSupportForRegex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'injectionTest';
+        $database->createCollection($collectionName, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
+        }
+
+        // Create test documents - one that should match, one that shouldn't
+        $database->createDocument($collectionName, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'text' => 'target',
+        ]));
+
+        $database->createDocument($collectionName, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'text' => 'other',
+        ]));
+
+        // SQL injection attempts - these should NOT return the "other" document
+        $sqlInjectionPatterns = [
+            "target') OR '1'='1",           // SQL injection attempt
+            "target' OR 1=1--",            // SQL injection with comment
+            "target' OR 'x'='x",           // SQL injection attempt
+            "target' UNION SELECT *--",     // SQL UNION injection
+        ];
+
+        // MongoDB injection attempts - these should NOT return the "other" document
+        $mongoInjectionPatterns = [
+            'target" || "1"=="1',          // MongoDB injection attempt
+            'target" || true',              // MongoDB boolean injection
+            'target"} || {"text": "other"}', // MongoDB operator injection
+        ];
+
+        $allInjectionPatterns = array_merge($sqlInjectionPatterns, $mongoInjectionPatterns);
+
+        foreach ($allInjectionPatterns as $pattern) {
+            try {
+                $results = $database->find($collectionName, [
+                    Query::regex('text', $pattern),
+                ]);
+
+                // Critical check: if injection succeeded, we might get the "other" document
+                // which should NOT match a pattern starting with "target"
+                $foundOther = false;
+                foreach ($results as $doc) {
+                    $text = $doc->getAttribute('text');
+                    if ($text === 'other') {
+                        $foundOther = true;
+
+                        // Verify that "other" doesn't actually match the pattern as a regex
+                        $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                        if ($matches === 0 || $matches === false) {
+                            // "other" doesn't match the pattern but was returned
+                            // This indicates potential injection vulnerability
+                            $this->fail(
+                                "Potential injection detected: Pattern '{$pattern}' returned document 'other' " .
+                                "which doesn't match the pattern. This suggests SQL/MongoDB injection may have succeeded."
+                            );
+                        }
+                    }
+                }
+
+                // Additional verification: check that all returned documents actually match the pattern
+                foreach ($results as $doc) {
+                    $text = $doc->getAttribute('text');
+                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+
+                    // If pattern is invalid, skip validation
+                    if ($matches === false) {
+                        continue;
+                    }
+
+                    // If document doesn't match but was returned, it's suspicious
+                    if ($matches === 0) {
+                        $this->fail(
+                            "Potential injection: Document '{$text}' was returned for pattern '{$pattern}' " .
+                            "but doesn't match the regex pattern."
+                        );
+                    }
+                }
+
+            } catch (\Exception $e) {
+                // Exceptions are acceptable - they indicate the injection was blocked or caused an error
+                // This is actually good - it means the system rejected the malicious pattern
+                $this->assertInstanceOf(\Exception::class, $e);
+            }
+        }
+
+        // Test that legitimate regex patterns still work correctly
+        $legitimatePatterns = [
+            'target',      // Should match "target"
+            '^target',     // Should match "target" (anchored)
+            'other',       // Should match "other"
+        ];
+
+        foreach ($legitimatePatterns as $pattern) {
+            try {
+                $results = $database->find($collectionName, [
+                    Query::regex('text', $pattern),
+                ]);
+
+                $this->assertIsArray($results);
+
+                // Verify each result actually matches
+                foreach ($results as $doc) {
+                    $text = $doc->getAttribute('text');
+                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                    if ($matches !== false) {
+                        $this->assertEquals(
+                            1,
+                            $matches,
+                            "Document '{$text}' should match pattern '{$pattern}'"
+                        );
+                    }
+                }
+            } catch (\Exception $e) {
+                $this->fail("Legitimate pattern '{$pattern}' should not throw exception: " . $e->getMessage());
+            }
+        }
+
+        // Cleanup
+        $database->deleteCollection($collectionName);
+    }
+
+    /**
+     * Test ReDoS (Regular Expression Denial of Service) with timeout protection
+     * This test verifies that ReDoS patterns either timeout properly or complete quickly,
+     * preventing denial of service attacks.
+     */
+    public function testRegexRedos(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Skip test if regex is not supported
+        if (!$database->getAdapter()->getSupportForRegex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'redosTimeoutTest';
+        $database->createCollection($collectionName, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
+        }
+
+        // Create documents with strings designed to trigger ReDoS
+        // These strings have many 'a's but end with 'c' instead of 'b'
+        // This causes catastrophic backtracking with patterns like (a+)+b
+        $redosStrings = [];
+        for ($i = 15; $i <= 35; $i += 5) {
+            $redosStrings[] = str_repeat('a', $i) . 'c';
+        }
+
+        // Also add some normal strings
+        $normalStrings = [
+            'normal text',
+            'another string',
+            'test123',
+            'valid data',
+        ];
+
+        $documents = [];
+        foreach ($redosStrings as $text) {
+            $documents[] = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'text' => $text,
+            ]);
+        }
+
+        foreach ($normalStrings as $text) {
+            $documents[] = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'text' => $text,
+            ]);
+        }
+
+        $database->createDocuments($collectionName, $documents);
+
+        // ReDoS patterns that cause exponential backtracking
+        $redosPatterns = [
+            '(a+)+b',      // Classic ReDoS: nested quantifiers
+            '(a|a)*b',     // Alternation with quantifier
+            '(a+)+$',      // Anchored pattern
+            '(a*)*b',      // Nested star quantifiers
+            '(a+)+b+',     // Multiple nested quantifiers
+            '(.+)+b',      // Generic nested quantifiers
+            '(.*)+b',      // Generic nested quantifiers
+        ];
+
+        $supportsTimeout = $database->getAdapter()->getSupportForTimeouts();
+
+        if ($supportsTimeout) {
+            $database->setTimeout(2000);
+        }
+
+        foreach ($redosPatterns as $pattern) {
+            $startTime = microtime(true);
+
+            try {
+                $results = $database->find($collectionName, [
+                    Query::regex('text', $pattern),
+                ]);
+                $elapsed = microtime(true) - $startTime;
+                // If timeout is supported, the query should either:
+                // 1. Complete quickly (< 3 seconds) if ReDoS is mitigated
+                // 2. Throw TimeoutException if it takes too long
+                if ($supportsTimeout) {
+                    // If we got here without timeout, it should have completed quickly
+                    $this->assertLessThan(
+                        3.0,
+                        $elapsed,
+                        "Regex pattern '{$pattern}' should complete quickly or timeout. Took {$elapsed}s"
+                    );
+                } else {
+                    // Without timeout support, we just check it doesn't hang forever
+                    // Set a reasonable upper bound (15 seconds) for systems without timeout
+                    $this->assertLessThan(
+                        15.0,
+                        $elapsed,
+                        "Regex pattern '{$pattern}' should not cause excessive delay. Took {$elapsed}s"
+                    );
+                }
+
+                // Verify results: none of our ReDoS strings should match these patterns
+                // (they all end with 'c', not 'b')
+                foreach ($results as $doc) {
+                    $text = $doc->getAttribute('text');
+                    // If it matched, verify it's actually a valid match
+                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                    if ($matches !== false) {
+                        $this->assertEquals(
+                            1,
+                            $matches,
+                            "Document with text '{$text}' should actually match pattern '{$pattern}'"
+                        );
+                    }
+                }
+
+            } catch (TimeoutException $e) {
+                // Timeout is expected for ReDoS patterns if not properly mitigated
+                $elapsed = microtime(true) - $startTime;
+                $this->assertInstanceOf(
+                    TimeoutException::class,
+                    $e,
+                    "Regex pattern '{$pattern}' should timeout if it causes ReDoS. Elapsed: {$elapsed}s"
+                );
+
+                // Timeout should happen within reasonable time (not immediately, but not too late)
+                // Fast timeouts are actually good - they mean the system is protecting itself quickly
+                $this->assertGreaterThan(
+                    0.05,
+                    $elapsed,
+                    "Timeout should occur after some minimal processing time"
+                );
+
+                // Timeout should happen before the timeout limit (with some buffer)
+                if ($supportsTimeout) {
+                    $this->assertLessThan(
+                        5.0,
+                        $elapsed,
+                        "Timeout should occur within reasonable time (before 5 seconds)"
+                    );
+                }
+
+            } catch (\Exception $e) {
+                // Check if this is a query interruption/timeout from MySQL (error 1317)
+                // MySQL sometimes throws "Query execution was interrupted" instead of TimeoutException
+                $message = $e->getMessage();
+                $isQueryInterrupted = false;
+
+                // Check message for interruption keywords
+                if (strpos($message, 'Query execution was interrupted') !== false ||
+                    strpos($message, 'interrupted') !== false) {
+                    $isQueryInterrupted = true;
+                }
+
+                // Check if it's a PDOException with error code 1317
+                if ($e instanceof PDOException) {
+                    $errorInfo = $e->errorInfo ?? [];
+                    // Error 1317 is "Query execution was interrupted"
+                    if (isset($errorInfo[1]) && $errorInfo[1] === 1317) {
+                        $isQueryInterrupted = true;
+                    }
+                    // Also check SQLSTATE 70100
+                    if ($e->getCode() === '70100') {
+                        $isQueryInterrupted = true;
+                    }
+                }
+
+                if ($isQueryInterrupted) {
+                    // This is effectively a timeout - MySQL interrupted the query
+                    $elapsed = microtime(true) - $startTime;
+                    $this->assertGreaterThan(
+                        0.05,
+                        $elapsed,
+                        "Query interruption should occur after some minimal processing time"
+                    );
+                    // This is acceptable - the query was interrupted due to timeout
+                    continue;
+                }
+
+                // Other exceptions are unexpected
+                $this->fail("Unexpected exception for pattern '{$pattern}': " . get_class($e) . " - " . $e->getMessage());
+            }
+        }
+
+        // Test with a pattern that should match quickly (not ReDoS)
+        $safePattern = 'normal';
+        $startTime = microtime(true);
+        $results = $database->find($collectionName, [
+            Query::regex('text', $safePattern),
+        ]);
+        $elapsed = microtime(true) - $startTime;
+
+        // Safe patterns should complete very quickly
+        $this->assertLessThan(1.0, $elapsed, 'Safe regex pattern should complete quickly');
+        $this->assertGreaterThan(0, count($results), 'Safe pattern should match some documents');
+
+        // Verify safe pattern results are correct
+        foreach ($results as $doc) {
+            $text = $doc->getAttribute('text');
+            $this->assertStringContainsString('normal', $text, "Document '{$text}' should contain 'normal'");
+        }
+
+        // Cleanup
+        if ($supportsTimeout) {
+            $database->clearTimeout();
+        }
+        $database->deleteCollection($collectionName);
     }
 }

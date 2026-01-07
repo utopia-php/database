@@ -30,6 +30,10 @@ class Index extends Validator
      * @param bool $supportForIdenticalIndexes
      * @param bool $supportForObjectIndexes
      * @param bool $supportForTrigramIndexes
+     * @param bool $supportForSpatialIndexes
+     * @param bool $supportForKeyIndexes
+     * @param bool $supportForUniqueIndexes
+     * @param bool $supportForFulltextIndexes
      * @throws DatabaseException
      */
     public function __construct(
@@ -45,7 +49,11 @@ class Index extends Validator
         protected bool $supportForMultipleFulltextIndexes = true,
         protected bool $supportForIdenticalIndexes = true,
         protected bool $supportForObjectIndexes = false,
-        protected bool $supportForTrigramIndexes = false
+        protected bool $supportForTrigramIndexes = false,
+        protected bool $supportForSpatialIndexes = false,
+        protected bool $supportForKeyIndexes = true,
+        protected bool $supportForUniqueIndexes = true,
+        protected bool $supportForFulltextIndexes = true,
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -140,6 +148,9 @@ class Index extends Validator
             return false;
         }
         if (!$this->checkTrigramIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkKeyUniqueFulltextSupport($value)) {
             return false;
         }
         return true;
@@ -362,6 +373,11 @@ class Index extends Validator
             return true;
         }
 
+        if ($this->supportForSpatialIndexes === false) {
+            $this->message = 'Spatial indexes are not supported';
+            return false;
+        }
+
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
 
@@ -499,6 +515,32 @@ class Index extends Validator
         $lengths = $index->getAttribute('lengths', []);
         if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
             $this->message = 'Trigram indexes do not support orders or lengths';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkKeyUniqueFulltextSupport(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if ($type === Database::INDEX_KEY && $this->supportForKeyIndexes === false) {
+            $this->message = 'Key index is not supported';
+            return false;
+        }
+
+        if ($type === Database::INDEX_UNIQUE && $this->supportForUniqueIndexes === false) {
+            $this->message = 'Unique index is not supported';
+            return false;
+        }
+
+        if ($type === Database::INDEX_FULLTEXT && $this->supportForFulltextIndexes === false) {
+            $this->message = 'Fulltext index is not supported';
             return false;
         }
 

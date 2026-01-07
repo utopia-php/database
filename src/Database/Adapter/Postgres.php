@@ -926,8 +926,8 @@ class Postgres extends SQL
             Database::INDEX_OBJECT => " USING GIN ({$attributes})",
             Database::INDEX_TRIGRAM =>
                 " USING GIN (" . implode(', ', array_map(
-                    fn ($a) => "$a gin_trgm_ops",
-                    array_map('trim', explode(',', $attributes))
+                    fn ($attr) => "$attr gin_trgm_ops",
+                    array_map(fn ($attr) => trim($attr), explode(',', $attributes))
                 )) . ")",
             default => " ({$attributes})",
         };

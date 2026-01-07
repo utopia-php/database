@@ -174,7 +174,7 @@ trait IndexTests
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes(),
-            false,
+            $database->getAdapter()->getSupportForObject(),
             $database->getAdapter()->getSupportForTrigramIndex()
         );
         if ($database->getAdapter()->getSupportForIdenticalIndexes()) {

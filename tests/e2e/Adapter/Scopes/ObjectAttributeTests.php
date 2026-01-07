@@ -582,7 +582,6 @@ trait ObjectAttributeTests
 
         if (!$database->getAdapter()->getSupportForIndexObject()) {
             $this->markTestSkipped('Adapter does not support object indexes');
-            return;
         }
 
         $collectionId = ID::unique();

@@ -2536,18 +2536,33 @@ class Mongo extends Adapter
         }
     }
 
+    /**
+     * Flatten a nested associative array into Mongo-style dot notation.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param string $prefix
+     * @return array<string, mixed>
+     */
     private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
     {
+        /** @var array<string, mixed> $result */
         $result = [];
-        $currentPref = $prefix === '' ? $key : $prefix.'.'.$key;
-        if (is_array($value) && !array_is_list($value)) {
-            $nextKey = array_key_first($value);
-            $result += $this->flattenWithDotNotation($nextKey, $value[$nextKey], $currentPref);
-        }
-        // at the leaf node
-        else {
+        $currentPref = $prefix === '' ? $key : $prefix . '.' . $key;
+
+        if (\is_array($value) && !\array_is_list($value)) {
+            $nextKey = \array_key_first($value);
+            if ($nextKey === null) {
+                return $result;
+            }
+
+            $nextKeyString = (string) $nextKey;
+            $result += $this->flattenWithDotNotation($nextKeyString, $value[$nextKey], $currentPref);
+        } else {
+            // at the leaf node
             $result[$currentPref] = $value;
         }
+
         return $result;
     }
 

@@ -2438,7 +2438,9 @@ class Mongo extends Adapter
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
             $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '%s$')];
         } elseif ($operator === '$exists') {
-            $filter[$attribute][$operator] = $value;
+            foreach ($query->getValues() as $attribute) {
+                $filter['$or'][] = [$attribute => [$operator => $value]];
+            }
         } else {
             $filter[$attribute][$operator] = $value;
         }

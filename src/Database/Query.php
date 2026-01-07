@@ -1188,22 +1188,22 @@ class Query
     /**
      * Helper method to create Query with exists method
      *
-     * @param string $attribute
+     * @param array<string> $attribute
      * @return Query
      */
-    public static function exists(string $attribute): self
+    public static function exists(array $attributes): self
     {
-        return new self(self::TYPE_EXISTS, $attribute);
+        return new self(self::TYPE_EXISTS, '', $attributes);
     }
 
     /**
      * Helper method to create Query with notExists method
      *
-     * @param string $attribute
+     * @param string|int|float|bool|array<mixed,mixed> $attribute
      * @return Query
      */
-    public static function notExists(string $attribute): self
+    public static function notExists(string|int|float|bool|array $attribute): self
     {
-        return new self(self::TYPE_NOT_EXISTS, $attribute);
+        return new self(self::TYPE_NOT_EXISTS, '', is_array($attribute) ? $attribute : [$attribute]);
     }
 }

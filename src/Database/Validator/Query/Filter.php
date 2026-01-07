@@ -312,6 +312,8 @@ class Filter extends Base
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
+            case Query::TYPE_EXISTS:
+            case Query::TYPE_NOT_EXISTS:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;
@@ -358,8 +360,6 @@ class Filter extends Base
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-            case Query::TYPE_EXISTS:
-            case Query::TYPE_NOT_EXISTS:
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_VECTOR_DOT:

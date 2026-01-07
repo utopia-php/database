@@ -1422,6 +1422,43 @@ trait SchemalessTests
         $this->assertCount(1, $results);
         $this->assertEquals('store1', $results[0]->getId());
 
+        // Test: elemMatch with OR grouping on name and stock threshold
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::or([
+                    Query::equal('name', ['Widget']),
+                    Query::equal('name', ['Thing']),
+                ]),
+                Query::greaterThanEqual('stock', 25),
+            ])
+        ]);
+        // Both stores have at least one matching product:
+        // - store1: Widget (stock 100)
+        // - store2: Widget (stock 200) and Thing (stock 25)
+        $this->assertCount(2, $results);
+
+        // Test: elemMatch with nested AND/OR conditions
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::or([
+                    Query::and([
+                        Query::equal('name', ['Widget']),
+                        Query::greaterThan('stock', 150),
+                    ]),
+                    Query::and([
+                        Query::equal('name', ['Thing']),
+                        Query::greaterThan('stock', 20),
+                    ]),
+                ]),
+                Query::equal('active', [true]),
+            ])
+        ]);
+        // Only store2 matches:
+        // - Widget with stock 200 (>150) and active true
+        // - Thing with stock 25 (>20) and active true
+        $this->assertCount(1, $results);
+        $this->assertEquals('store2', $results[0]->getId());
+
         // Clean up
         $database->deleteCollection($collectionId);
     }

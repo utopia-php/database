@@ -108,6 +108,9 @@ class Index extends Validator
      */
     public function isValid($value): bool
     {
+        if (!$this->checkValidIndex($value)) {
+            return false;
+        }
         if (!$this->checkValidAttributes($value)) {
             return false;
         }
@@ -152,6 +155,76 @@ class Index extends Validator
         }
         if (!$this->checkKeyUniqueFulltextSupport($value)) {
             return false;
+        }
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+    */
+    public function checkValidIndex(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+        switch ($type) {
+            case Database::INDEX_KEY:
+                if (!$this->supportForKeyIndexes) {
+                    $this->message = 'Key index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_UNIQUE:
+                if (!$this->supportForUniqueIndexes) {
+                    $this->message = 'Unique index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_FULLTEXT:
+                if (!$this->supportForFulltextIndexes) {
+                    $this->message = 'Fulltext index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_SPATIAL:
+                if (!$this->supportForSpatialIndexes) {
+                    $this->message = 'Spatial indexes are not supported';
+                    return false;
+                }
+                if (!empty($index->getAttribute('orders')) && !$this->supportForSpatialIndexOrder) {
+                    $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_HNSW_EUCLIDEAN:
+            case Database::INDEX_HNSW_COSINE:
+            case Database::INDEX_HNSW_DOT:
+                if (!$this->supportForVectorIndexes) {
+                    $this->message = 'Vector indexes are not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_OBJECT:
+                if (!$this->supportForObjectIndexes) {
+                    $this->message = 'Object indexes are not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_TRIGRAM:
+                if (!$this->supportForTrigramIndexes) {
+                    $this->message = 'Trigram indexes are not supported';
+                    return false;
+                }
+                break;
+
+            default:
+                $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM;
+                return false;
         }
         return true;
     }
@@ -536,11 +609,6 @@ class Index extends Validator
 
         if ($type === Database::INDEX_UNIQUE && $this->supportForUniqueIndexes === false) {
             $this->message = 'Unique index is not supported';
-            return false;
-        }
-
-        if ($type === Database::INDEX_FULLTEXT && $this->supportForFulltextIndexes === false) {
-            $this->message = 'Fulltext index is not supported';
             return false;
         }
 

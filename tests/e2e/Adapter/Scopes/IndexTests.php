@@ -267,7 +267,7 @@ trait IndexTests
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes(),
-            false,
+            $database->getAdapter()->getSupportForObject(),
             $database->getAdapter()->getSupportForTrigramIndex()
         );
 
@@ -285,7 +285,7 @@ trait IndexTests
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
+            $this->assertEquals('Fulltext index is not supported', $e->getMessage());
         }
 
 

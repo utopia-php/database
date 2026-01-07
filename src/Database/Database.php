@@ -87,18 +87,6 @@ class Database
     public const INDEX_HNSW_DOT = 'hnsw_dot';
     public const INDEX_TRIGRAM = 'trigram';
 
-    public const VALID_INDEX_TYPES = [
-        self::INDEX_KEY,
-        self::INDEX_UNIQUE,
-        self::INDEX_FULLTEXT,
-        self::INDEX_SPATIAL,
-        self::INDEX_OBJECT,
-        self::INDEX_HNSW_EUCLIDEAN,
-        self::INDEX_HNSW_COSINE,
-        self::INDEX_HNSW_DOT,
-        self::INDEX_TRIGRAM,
-    ];
-
     // Max limits
     public const MAX_INT = 2147483647;
     public const MAX_BIG_INT = PHP_INT_MAX;
@@ -3644,13 +3632,6 @@ class Database
 
         if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
-        }
-
-        if (!\in_array($type, self::VALID_INDEX_TYPES, true)) {
-            throw new DatabaseException(
-                'Unknown index type: ' . $type . '. Must be one of ' .
-                \implode(', ', \array_map(fn ($t) => $t, self::VALID_INDEX_TYPES))
-            );
         }
 
         /** @var array<Document> $collectionAttributes */

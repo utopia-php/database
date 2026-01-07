@@ -91,6 +91,12 @@ class Filter extends Base
             $attribute = \explode('.', $attribute)[0];
         }
 
+        // exists and notExists queries don't require values, just attribute validation
+        if (in_array($method, [Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])) {
+            // Validate attribute (handles encrypted attributes, schemaless mode, etc.)
+            return $this->isValidAttribute($attribute);
+        }
+
         if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
             // First check maxValuesCount guard for any IN-style value arrays
             if (count($values) > $this->maxValuesCount) {
@@ -253,7 +259,7 @@ class Filter extends Base
 
         if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
@@ -372,6 +378,8 @@ class Filter extends Base
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
+            case Query::TYPE_EXISTS:
+            case Query::TYPE_NOT_EXISTS:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;

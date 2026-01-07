@@ -43,6 +43,7 @@ class Mongo extends Adapter
         '$regex',
         '$not',
         '$nor',
+        '$exists',
         '$elemMatch',
         '$exists'
     ];
@@ -2416,6 +2417,8 @@ class Mongo extends Adapter
         $value = match ($query->getMethod()) {
             Query::TYPE_IS_NULL,
             Query::TYPE_IS_NOT_NULL => null,
+            Query::TYPE_EXISTS => true,
+            Query::TYPE_NOT_EXISTS => false,
             default => $this->getQueryValue(
                 $query->getMethod(),
                 count($query->getValues()) > 1
@@ -2481,6 +2484,10 @@ class Mongo extends Adapter
             $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '^%s')];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
             $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '%s$')];
+        } elseif ($operator === '$exists') {
+            foreach ($query->getValues() as $attribute) {
+                $filter['$or'][] = [$attribute => [$operator => $value]];
+            }
         } else {
             $filter[$attribute][$operator] = $value;
         }
@@ -2597,6 +2604,8 @@ class Mongo extends Adapter
             Query::TYPE_NOT_ENDS_WITH => '$regex',
             Query::TYPE_OR => '$or',
             Query::TYPE_AND => '$and',
+            Query::TYPE_EXISTS,
+            Query::TYPE_NOT_EXISTS => '$exists',
             Query::TYPE_ELEM_MATCH => '$elemMatch',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_NOT_BETWEEN . ', ' . Query::TYPE_STARTS_WITH . ', ' . Query::TYPE_NOT_STARTS_WITH . ', ' . Query::TYPE_ENDS_WITH . ', ' . Query::TYPE_NOT_ENDS_WITH . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_NOT_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_NOT_SEARCH . ', ' . Query::TYPE_SELECT),
         };

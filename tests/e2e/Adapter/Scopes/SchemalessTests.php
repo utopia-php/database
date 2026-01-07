@@ -752,6 +752,62 @@ trait SchemalessTests
         $database->deleteCollection($col);
     }
 
+    public function testSchemalessObjectIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only run for schemaless adapters that support object attributes
+        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_obj_idx');
+        $database->createCollection($col);
+
+        // Define object attributes in metadata
+        $database->createAttribute($col, 'meta', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, 'meta2', Database::VAR_OBJECT, 0, false);
+
+        // Create regular key index on first object attribute
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_meta_key',
+                Database::INDEX_KEY,
+                ['meta'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        // Create unique index on second object attribute
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_meta_unique',
+                Database::INDEX_UNIQUE,
+                ['meta2'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        // Verify index metadata is stored on the collection
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $this->assertContains('idx_meta_key', $ids);
+        $this->assertContains('idx_meta_unique', $ids);
+
+        // Clean up indexes and collection
+        $this->assertTrue($database->deleteIndex($col, 'idx_meta_key'));
+        $this->assertTrue($database->deleteIndex($col, 'idx_meta_unique'));
+        $database->deleteCollection($col);
+    }
+
     public function testSchemalessPermissions(): void
     {
         /** @var Database $database */

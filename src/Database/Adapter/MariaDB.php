@@ -2141,6 +2141,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForIndexObject(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get Support for Null Values in Spatial Indexes
      *
      * @return bool

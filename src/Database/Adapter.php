@@ -1080,6 +1080,13 @@ abstract class Adapter
     abstract public function getSupportForObject(): bool;
 
     /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIndexObject(): bool;
+
+    /**
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool

@@ -2907,6 +2907,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForIndexObject(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

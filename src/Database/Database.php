@@ -1641,7 +1641,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForIndexObject(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2786,7 +2786,7 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForObject()
+                        $this->adapter->getSupportForIndexObject()
                     );
 
                     foreach ($indexes as $index) {
@@ -3661,7 +3661,7 @@ class Database
                 break;
 
             case self::INDEX_OBJECT:
-                if (!$this->adapter->getSupportForObject()) {
+                if (!$this->adapter->getSupportForIndexObject()) {
                     throw new DatabaseException('Object indexes are not supported');
                 }
                 break;
@@ -3722,7 +3722,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForIndexObject()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

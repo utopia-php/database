@@ -1188,7 +1188,7 @@ class Query
     /**
      * Helper method to create Query with exists method
      *
-     * @param array<string> $attribute
+     * @param array<string> $attributes
      * @return Query
      */
     public static function exists(array $attributes): self

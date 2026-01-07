@@ -57,7 +57,13 @@ class QueriesTest extends TestCase
                 'key' => 'name',
                 'type' => Database::VAR_STRING,
                 'array' => false,
-            ])
+            ]),
+            new Document([
+                '$id' => 'meta',
+                'key' => 'meta',
+                'type' => Database::VAR_OBJECT,
+                'array' => false,
+            ]),
         ];
 
         $validator = new Queries(
@@ -75,5 +81,39 @@ class QueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::limit(10)]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::offset(10)]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::orderAsc('name')]), $validator->getDescription());
+
+        // Object attribute query: allowed shape
+        $this->assertTrue(
+            $validator->isValid([
+                Query::equal('meta', [
+                    ['a' => [1, 2]],
+                    ['b' => [212]],
+                ]),
+            ]),
+            $validator->getDescription()
+        );
+
+        // Object attribute query: disallowed nested multiple keys in same level
+        $this->assertFalse(
+            $validator->isValid([
+                Query::equal('meta', [
+                    ['a' => [1, 'b' => [212]]],
+                ]),
+            ])
+        );
+
+        // Object attribute query: disallowed complex multi-key nested structure
+        $this->assertFalse(
+            $validator->isValid([
+                Query::contains('meta', [
+                    [
+                        'role' => [
+                            'name' => ['test1', 'test2'],
+                            'ex' => ['new' => 'test1'],
+                        ],
+                    ],
+                ]),
+            ])
+        );
     }
 }

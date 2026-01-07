@@ -1274,7 +1274,6 @@ class Mongo extends Adapter
         }
 
         if (!$this->getSupportForAttributes()) {
-            /** @var Document $doc */
             foreach ($document->getArrayCopy() as $key => $value) {
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {
@@ -1285,7 +1284,7 @@ class Mongo extends Adapter
         return $document;
     }
 
-    private function convertStdClassToArray(mixed $value)
+    private function convertStdClassToArray(mixed $value): mixed
     {
         if (is_object($value) && get_class($value) === stdClass::class) {
             return array_map(fn ($v) => $this->convertStdClassToArray($v), get_object_vars($value));
@@ -2489,7 +2488,12 @@ class Mongo extends Adapter
         return $filter;
     }
 
-    private function handleObjectFilters(Query $query, array &$filter)
+    /**
+     * @param Query $query
+     * @param array<string, mixed> $filter
+     * @return void
+     */
+    private function handleObjectFilters(Query $query, array &$filter): void
     {
         $conditions = [];
         $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS,Query::TYPE_NOT_EQUAL]);
@@ -2532,10 +2536,6 @@ class Mongo extends Adapter
         }
     }
 
-    // TODO: check the condition for the multiple keys inside a query validator
-    // example -> [a=>[1,b=>[212]]] shouldn't be allowed
-    // allowed -> [a=>[1,2],b=>[212]]
-    // should be disallowed ->     $data = ['name' => 'doc','role' => ['name'=>['test1','test2'],'ex'=>['new'=>'test1']]];
     private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
     {
         $result = [];

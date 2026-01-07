@@ -163,8 +163,11 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_OBJECT:
-                    // value for object can be of any type as its a hashmap
-                    // eg; ['key'=>value']
+                    if (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
+                        && !$this->isValidObjectQueryValues($values)) {
+                        $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
+                        return false;
+                    }
                     continue 2;
 
                 case Database::VAR_POINT:
@@ -286,6 +289,55 @@ class Filter extends Base
         }
 
         return false;
+    }
+
+    /**
+     * Validate object attribute query values.
+     *
+     * Disallows ambiguous nested structures like:
+     *   ['a' => [1, 'b' => [212]]]
+     *   ['role' => ['name' => [...], 'ex' => [...]]]
+     *
+     * but allows:
+     *   ['a' => [1, 2], 'b' => [212]]
+     *
+     * @param array<mixed> $values
+     * @return bool
+     */
+    private function isValidObjectQueryValues(array $values): bool
+    {
+        $validateNode = function (mixed $node) use (&$validateNode): bool {
+            if (!\is_array($node)) {
+                return true;
+            }
+
+            if (\array_is_list($node)) {
+                // Indexed array: validate each element
+                foreach ($node as $item) {
+                    if (!$validateNode($item)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // Associative array (object-like). Only one key is allowed at each level.
+            if (\count($node) !== 1) {
+                return false;
+            }
+
+            $firstKey = \array_key_first($node);
+            return $validateNode($node[$firstKey]);
+        };
+
+        foreach ($values as $value) {
+            if (!$validateNode($value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

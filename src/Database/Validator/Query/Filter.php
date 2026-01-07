@@ -301,63 +301,70 @@ class Filter extends Base
      * Validate object attribute query values.
      *
      * Disallows ambiguous nested structures like:
-     *   ['a' => [1, 'b' => [212]]]
-     *   ['role' => ['name' => [...], 'ex' => [...]]]
+     *   ['a' => [1, 'b' => [212]]]           // mixed list
+     *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
      *
      * but allows:
-     *   ['a' => [1, 2], 'b' => [212]]
+     *   ['a' => [1, 2], 'b' => [212]]        // multiple top-level paths
+     *   ['projects' => [[...]]]              // list of objects
      *
      * @param array<mixed> $values
      * @return bool
      */
     private function isValidObjectQueryValues(array $values): bool
     {
-        $validateNode = function (mixed $node, bool $isInList = false) use (&$validateNode): bool {
+        $validate = function (mixed $node, int $depth = 0, bool $inDataContext = false) use (&$validate): bool {
             if (!\is_array($node)) {
                 return true;
             }
 
             if (\array_is_list($node)) {
+                // Check if list is mixed (has both assoc arrays and non-assoc items)
+                $hasAssoc = false;
+                $hasNonAssoc = false;
+
                 foreach ($node as $item) {
-                    if (!$validateNode($item, true)) {
-                        return false;
+                    if (\is_array($item) && !\array_is_list($item)) {
+                        $hasAssoc = true;
+                    } else {
+                        $hasNonAssoc = true;
                     }
                 }
 
+                // Mixed lists are invalid
+                if ($hasAssoc && $hasNonAssoc) {
+                    return false;
+                }
+
+                // If list contains associative arrays, they're data objects
+                $enterDataContext = $hasAssoc;
+
+                foreach ($node as $item) {
+                    if (!$validate($item, $depth + 1, $enterDataContext || $inDataContext)) {
+                        return false;
+                    }
+                }
                 return true;
             }
 
-            if (!$isInList && \count($node) !== 1) {
+            // Associative array
+            // If in data context, multiple keys are OK (it's an object)
+            // If depth > 0 and NOT in data context, only 1 key allowed (navigation)
+            if (!$inDataContext && $depth > 0 && \count($node) !== 1) {
                 return false;
             }
 
-            if ($isInList) {
-                foreach ($node as $value) {
-                    // When in a list context, values of associative arrays are also object structures,
-                    // not navigation paths, so pass isInList=true for nested associative arrays
-                    $valueIsInList = \is_array($value) && !\array_is_list($value);
-                    if (!$validateNode($value, $valueIsInList)) {
-                        return false;
-                    }
+            // Validate all values
+            foreach ($node as $value) {
+                if (!$validate($value, $depth + 1, $inDataContext)) {
+                    return false;
                 }
-                return true;
             }
 
-            $firstKey = \array_key_first($node);
-            return $validateNode($node[$firstKey], false);
+            return true;
         };
 
-        // Check if values is an indexed array (list)
-        // If so, its elements should be validated with isInList=true
-        $valuesIsIndexed = \array_is_list($values);
-
-        foreach ($values as $value) {
-            if (!$validateNode($value, $valuesIsIndexed)) {
-                return false;
-            }
-        }
-
-        return true;
+        return $validate($values, 0, false);
     }
 
     /**

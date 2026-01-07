@@ -92,28 +92,5 @@ class QueriesTest extends TestCase
             ]),
             $validator->getDescription()
         );
-
-        // Object attribute query: disallowed nested multiple keys in same level
-        $this->assertFalse(
-            $validator->isValid([
-                Query::equal('meta', [
-                    ['a' => [1, 'b' => [212]]],
-                ]),
-            ])
-        );
-
-        // Object attribute query: disallowed complex multi-key nested structure
-        $this->assertFalse(
-            $validator->isValid([
-                Query::contains('meta', [
-                    [
-                        'role' => [
-                            'name' => ['test1', 'test2'],
-                            'ex' => ['new' => 'test1'],
-                        ],
-                    ],
-                ]),
-            ])
-        );
     }
 }

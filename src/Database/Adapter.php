@@ -1084,7 +1084,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportForIndexObject(): bool;
+    abstract public function getSupportForObjectIndexes(): bool;
 
     /**
      * Does the adapter support null values in spatial indexes?

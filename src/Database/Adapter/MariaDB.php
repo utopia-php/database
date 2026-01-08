@@ -2145,7 +2145,7 @@ class MariaDB extends SQL
      *
      * @return bool
      */
-    public function getSupportForIndexObject(): bool
+    public function getSupportForObjectIndexes(): bool
     {
         return false;
     }

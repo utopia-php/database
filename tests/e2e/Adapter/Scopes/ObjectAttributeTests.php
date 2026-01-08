@@ -580,7 +580,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForIndexObject()) {
+        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 

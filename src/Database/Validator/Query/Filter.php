@@ -170,7 +170,7 @@ class Filter extends Base
 
                 case Database::VAR_OBJECT:
                     if (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
-                        && !$this->isValidObjectQueryValues($values)) {
+                        && !$this->isValidObjectQueryValues($value)) {
                         $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
                         return false;
                     }
@@ -302,67 +302,43 @@ class Filter extends Base
      *
      * Disallows ambiguous nested structures like:
      *   ['a' => [1, 'b' => [212]]]           // mixed list
-     *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
      *
      * but allows:
      *   ['a' => [1, 2], 'b' => [212]]        // multiple top-level paths
      *   ['projects' => [[...]]]              // list of objects
+     *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
      *
-     * @param array<mixed> $values
+     * @param mixed $values
      * @return bool
      */
-    private function isValidObjectQueryValues(array $values): bool
+    private function isValidObjectQueryValues(mixed $values): bool
     {
-        $validate = function (mixed $node, int $depth = 0, bool $inDataContext = false) use (&$validate): bool {
-            if (!\is_array($node)) {
-                return true;
+        if (!is_array($values)) {
+            return true;
+        }
+
+        $hasInt = false;
+        $hasString = false;
+
+        foreach (array_keys($values) as $key) {
+            if (is_int($key)) {
+                $hasInt = true;
+            } else {
+                $hasString = true;
             }
+        }
 
-            if (\array_is_list($node)) {
-                // Check if list is mixed (has both assoc arrays and non-assoc items)
-                $hasAssoc = false;
-                $hasNonAssoc = false;
+        if ($hasInt && $hasString) {
+            return false;
+        }
 
-                foreach ($node as $item) {
-                    if (\is_array($item) && !\array_is_list($item)) {
-                        $hasAssoc = true;
-                    } else {
-                        $hasNonAssoc = true;
-                    }
-                }
-
-                // Mixed lists are invalid
-                if ($hasAssoc && $hasNonAssoc) {
-                    return false;
-                }
-
-                // If list contains associative arrays, they're data objects
-                $enterDataContext = $hasAssoc;
-
-                foreach ($node as $item) {
-                    if (!$validate($item, $depth + 1, $enterDataContext || $inDataContext)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            // Associative array
-            // If in data context, multiple keys are OK (it's an object)
-            // If depth > 0 and NOT in data context, only 1 key allowed (navigation)
-            if (!$inDataContext && $depth > 0 && \count($node) !== 1) {
+        foreach ($values as $value) {
+            if (!$this->isValidObjectQueryValues($value)) {
                 return false;
             }
+        }
 
-            // Validate all values
-            foreach ($node as $value) {
-                if (!$validate($value, $depth + 1, $inDataContext)) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
+        return true;
 
         return $validate($values, 0, false);
     }

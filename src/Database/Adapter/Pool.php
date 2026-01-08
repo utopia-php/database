@@ -605,7 +605,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getSupportForIndexObject(): bool
+    public function getSupportForObjectIndexes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

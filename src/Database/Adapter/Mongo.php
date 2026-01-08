@@ -1353,7 +1353,6 @@ class Mongo extends Adapter
                         break;
                     case Database::VAR_OBJECT:
                         $node = json_decode($node);
-                        $node = $this->convertStdClassToArray($node);
                         break;
                     default:
                         break;
@@ -2555,19 +2554,26 @@ class Mongo extends Adapter
     {
         /** @var array<string, mixed> $result */
         $result = [];
-        $currentPref = $prefix === '' ? $key : $prefix . '.' . $key;
 
-        if (\is_array($value) && !\array_is_list($value)) {
-            $nextKey = \array_key_first($value);
-            if ($nextKey === null) {
-                return $result;
+        $stack = [];
+
+        $initialKey = $prefix === '' ? $key : $prefix . '.' . $key;
+        $stack[] = [$initialKey, $value];
+        while (!empty($stack)) {
+            [$currentPath, $currentValue] = array_pop($stack);
+            if (is_array($currentValue) && !array_is_list($currentValue)) {
+                foreach ($currentValue as $nextKey => $nextValue) {
+                    if ($nextKey === null) {
+                        continue;
+                    }
+                    $nextKey = (string)$nextKey;
+                    $nextPath = $currentPath === '' ? $nextKey : $currentPath . '.' . $nextKey;
+                    $stack[] = [$nextPath,  $nextValue];
+                }
+            } else {
+                // leaf node
+                $result[$currentPath] = $currentValue;
             }
-
-            $nextKeyString = (string) $nextKey;
-            $result += $this->flattenWithDotNotation($nextKeyString, $value[$nextKey], $currentPref);
-        } else {
-            // at the leaf node
-            $result[$currentPref] = $value;
         }
 
         return $result;
@@ -2956,7 +2962,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function getSupportForIndexObject(): bool
+    public function getSupportForObjectIndexes(): bool
     {
         return false;
     }

@@ -253,7 +253,7 @@ class MySQL extends MariaDB
         return true;
     }
 
-    public function getSupportForIndexObject(): bool
+    public function getSupportForObjectIndexes(): bool
     {
         return false;
     }

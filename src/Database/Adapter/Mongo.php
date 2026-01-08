@@ -1288,7 +1288,7 @@ class Mongo extends Adapter
     private function convertStdClassToArray(mixed $value): mixed
     {
         if (is_object($value) && get_class($value) === stdClass::class) {
-            return array_map(fn ($v) => $this->convertStdClassToArray($v), get_object_vars($value));
+            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
         }
 
         if (is_array($value)) {

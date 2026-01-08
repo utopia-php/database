@@ -1643,6 +1643,11 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForObjectIndexes(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {

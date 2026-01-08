@@ -85,6 +85,7 @@ class Database
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
+    public const INDEX_TRIGRAM = 'trigram';
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -1641,6 +1642,11 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2785,7 +2791,12 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForObject()
+                        $this->adapter->getSupportForObject(),
+                        $this->adapter->getSupportForTrigramIndex(),
+                        $this->adapter->getSupportForSpatialAttributes(),
+                        $this->adapter->getSupportForIndex(),
+                        $this->adapter->getSupportForUniqueIndex(),
+                        $this->adapter->getSupportForFulltextIndex(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3623,52 +3634,6 @@ class Database
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        switch ($type) {
-            case self::INDEX_KEY:
-                if (!$this->adapter->getSupportForIndex()) {
-                    throw new DatabaseException('Key index is not supported');
-                }
-                break;
-
-            case self::INDEX_UNIQUE:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new DatabaseException('Unique index is not supported');
-                }
-                break;
-
-            case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForFulltextIndex()) {
-                    throw new DatabaseException('Fulltext index is not supported');
-                }
-                break;
-
-            case self::INDEX_SPATIAL:
-                if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial indexes are not supported');
-                }
-                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
-                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
-                }
-                break;
-
-            case Database::INDEX_HNSW_EUCLIDEAN:
-            case Database::INDEX_HNSW_COSINE:
-            case Database::INDEX_HNSW_DOT:
-                if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector indexes are not supported');
-                }
-                break;
-
-            case self::INDEX_OBJECT:
-                if (!$this->adapter->getSupportForObject()) {
-                    throw new DatabaseException('Object indexes are not supported');
-                }
-                break;
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
-        }
-
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
@@ -3722,6 +3687,11 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

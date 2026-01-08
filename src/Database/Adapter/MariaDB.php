@@ -2230,4 +2230,19 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForPCRERegex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
+    }
 }

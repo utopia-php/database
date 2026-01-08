@@ -29,6 +29,11 @@ class Index extends Validator
      * @param bool $supportForMultipleFulltextIndexes
      * @param bool $supportForIdenticalIndexes
      * @param bool $supportForObjectIndexes
+     * @param bool $supportForTrigramIndexes
+     * @param bool $supportForSpatialIndexes
+     * @param bool $supportForKeyIndexes
+     * @param bool $supportForUniqueIndexes
+     * @param bool $supportForFulltextIndexes
      * @throws DatabaseException
      */
     public function __construct(
@@ -43,7 +48,12 @@ class Index extends Validator
         protected bool $supportForAttributes = true,
         protected bool $supportForMultipleFulltextIndexes = true,
         protected bool $supportForIdenticalIndexes = true,
-        protected bool $supportForObjectIndexes = false
+        protected bool $supportForObjectIndexes = false,
+        protected bool $supportForTrigramIndexes = false,
+        protected bool $supportForSpatialIndexes = false,
+        protected bool $supportForKeyIndexes = true,
+        protected bool $supportForUniqueIndexes = true,
+        protected bool $supportForFulltextIndexes = true,
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -98,6 +108,9 @@ class Index extends Validator
      */
     public function isValid($value): bool
     {
+        if (!$this->checkValidIndex($value)) {
+            return false;
+        }
         if (!$this->checkValidAttributes($value)) {
             return false;
         }
@@ -136,6 +149,82 @@ class Index extends Validator
         }
         if (!$this->checkObjectIndexes($value)) {
             return false;
+        }
+        if (!$this->checkTrigramIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkKeyUniqueFulltextSupport($value)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+    */
+    public function checkValidIndex(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+        switch ($type) {
+            case Database::INDEX_KEY:
+                if (!$this->supportForKeyIndexes) {
+                    $this->message = 'Key index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_UNIQUE:
+                if (!$this->supportForUniqueIndexes) {
+                    $this->message = 'Unique index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_FULLTEXT:
+                if (!$this->supportForFulltextIndexes) {
+                    $this->message = 'Fulltext index is not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_SPATIAL:
+                if (!$this->supportForSpatialIndexes) {
+                    $this->message = 'Spatial indexes are not supported';
+                    return false;
+                }
+                if (!empty($index->getAttribute('orders')) && !$this->supportForSpatialIndexOrder) {
+                    $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_HNSW_EUCLIDEAN:
+            case Database::INDEX_HNSW_COSINE:
+            case Database::INDEX_HNSW_DOT:
+                if (!$this->supportForVectorIndexes) {
+                    $this->message = 'Vector indexes are not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_OBJECT:
+                if (!$this->supportForObjectIndexes) {
+                    $this->message = 'Object indexes are not supported';
+                    return false;
+                }
+                break;
+
+            case Database::INDEX_TRIGRAM:
+                if (!$this->supportForTrigramIndexes) {
+                    $this->message = 'Trigram indexes are not supported';
+                    return false;
+                }
+                break;
+
+            default:
+                $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM;
+                return false;
         }
         return true;
     }
@@ -357,6 +446,11 @@ class Index extends Validator
             return true;
         }
 
+        if ($this->supportForSpatialIndexes === false) {
+            $this->message = 'Spatial indexes are not supported';
+            return false;
+        }
+
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
 
@@ -456,6 +550,65 @@ class Index extends Validator
         $lengths = $index->getAttribute('lengths', []);
         if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
             $this->message = 'Vector indexes do not support orders or lengths';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function checkTrigramIndexes(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if ($type !== Database::INDEX_TRIGRAM) {
+            return true;
+        }
+
+        if ($this->supportForTrigramIndexes === false) {
+            $this->message = 'Trigram indexes are not supported';
+            return false;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+
+        foreach ($attributes as $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+            if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
+                $this->message = 'Trigram index can only be created on string type attributes';
+                return false;
+            }
+        }
+
+        $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
+        if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
+            $this->message = 'Trigram indexes do not support orders or lengths';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkKeyUniqueFulltextSupport(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if ($type === Database::INDEX_KEY && $this->supportForKeyIndexes === false) {
+            $this->message = 'Key index is not supported';
+            return false;
+        }
+
+        if ($type === Database::INDEX_UNIQUE && $this->supportForUniqueIndexes === false) {
+            $this->message = 'Unique index is not supported';
             return false;
         }
 

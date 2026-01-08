@@ -2476,7 +2476,8 @@ class Mongo extends Adapter
             Query::TYPE_STARTS_WITH,
             Query::TYPE_NOT_STARTS_WITH,
             Query::TYPE_ENDS_WITH,
-            Query::TYPE_NOT_ENDS_WITH => '$regex',
+            Query::TYPE_NOT_ENDS_WITH,
+            Query::TYPE_REGEX => '$regex',
             Query::TYPE_OR => '$or',
             Query::TYPE_AND => '$and',
             Query::TYPE_EXISTS,
@@ -2745,6 +2746,26 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is PCRE regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPCRERegex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is POSIX regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPOSIXRegex(): bool
     {
         return false;
     }
@@ -3227,6 +3248,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForTrigramIndex(): bool
     {
         return false;
     }

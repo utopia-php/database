@@ -477,4 +477,123 @@ class IndexTest extends TestCase
         $index = $collection->getAttribute('indexes')[0];
         $this->assertTrue($validator->isValid($index));
     }
+
+    /**
+     * @throws Exception
+     */
+    public function testTrigramIndexValidation(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('description'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 512,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('age'),
+                    'type' => Database::VAR_INTEGER,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => []
+        ]);
+
+        // Validator with supportForTrigramIndexes enabled
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, supportForTrigramIndexes: true);
+
+        // Valid: Trigram index on single VAR_STRING attribute
+        $validIndex = new Document([
+            '$id' => ID::custom('idx_trigram_valid'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['name'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validIndex));
+
+        // Valid: Trigram index on multiple string attributes
+        $validIndexMulti = new Document([
+            '$id' => ID::custom('idx_trigram_multi_valid'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['name', 'description'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validIndexMulti));
+
+        // Invalid: Trigram index on non-string attribute
+        $invalidIndexType = new Document([
+            '$id' => ID::custom('idx_trigram_invalid_type'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['age'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexType));
+        $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
+
+        // Invalid: Trigram index with mixed string and non-string attributes
+        $invalidIndexMixed = new Document([
+            '$id' => ID::custom('idx_trigram_mixed'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['name', 'age'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexMixed));
+        $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
+
+        // Invalid: Trigram index with orders
+        $invalidIndexOrder = new Document([
+            '$id' => ID::custom('idx_trigram_order'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['name'],
+            'lengths' => [],
+            'orders' => ['asc'],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexOrder));
+        $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
+
+        // Invalid: Trigram index with lengths
+        $invalidIndexLength = new Document([
+            '$id' => ID::custom('idx_trigram_length'),
+            'type' => Database::INDEX_TRIGRAM,
+            'attributes' => ['name'],
+            'lengths' => [128],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexLength));
+        $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
+
+        // Validator with supportForTrigramIndexes disabled should reject trigram
+        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);
+        $this->assertFalse($validatorNoSupport->isValid($validIndex));
+        $this->assertEquals('Trigram indexes are not supported', $validatorNoSupport->getDescription());
+    }
 }

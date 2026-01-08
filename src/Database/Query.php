@@ -26,6 +26,7 @@ class Query
     public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
+    public const TYPE_REGEX = 'regex';
     public const TYPE_EXISTS = 'exists';
     public const TYPE_NOT_EXISTS = 'notExists';
 
@@ -114,6 +115,7 @@ class Query
         self::TYPE_AND,
         self::TYPE_OR,
         self::TYPE_ELEM_MATCH,
+        self::TYPE_REGEX
     ];
 
     public const VECTOR_TYPES = [
@@ -1187,6 +1189,18 @@ class Query
     public static function vectorEuclidean(string $attribute, array $vector): self
     {
         return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
+    }
+
+    /**
+     * Helper method to create Query with regex method
+     *
+     * @param string $attribute
+     * @param string $pattern
+     * @return Query
+     */
+    public static function regex(string $attribute, string $pattern): self
+    {
+        return new self(self::TYPE_REGEX, $attribute, [$pattern]);
     }
 
     /**

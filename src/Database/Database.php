@@ -85,6 +85,7 @@ class Database
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
+    public const INDEX_TRIGRAM = 'trigram';
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -1642,6 +1643,11 @@ class Database
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
                 $this->adapter->getSupportForIndexObject(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2786,7 +2792,12 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForIndexObject()
+                        $this->adapter->getSupportForIndexObject(),
+                        $this->adapter->getSupportForTrigramIndex(),
+                        $this->adapter->getSupportForSpatialAttributes(),
+                        $this->adapter->getSupportForIndex(),
+                        $this->adapter->getSupportForUniqueIndex(),
+                        $this->adapter->getSupportForFulltextIndex(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3661,7 +3672,7 @@ class Database
                 break;
 
             case self::INDEX_OBJECT:
-                if (!$this->adapter->getSupportForIndexObject()) {
+                if (!$this->adapter->getSupportForObject()) {
                     throw new DatabaseException('Object indexes are not supported');
                 }
                 break;
@@ -3722,7 +3733,12 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForIndexObject()
+                $this->adapter->getSupportForIndexObject(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

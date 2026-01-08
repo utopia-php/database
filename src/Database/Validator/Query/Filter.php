@@ -415,6 +415,7 @@ class Filter extends Base
             case Query::TYPE_NOT_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_NOT_ENDS_WITH:
+            case Query::TYPE_REGEX:
                 if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;

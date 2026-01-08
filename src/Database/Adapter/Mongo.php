@@ -2563,9 +2563,6 @@ class Mongo extends Adapter
             [$currentPath, $currentValue] = array_pop($stack);
             if (is_array($currentValue) && !array_is_list($currentValue)) {
                 foreach ($currentValue as $nextKey => $nextValue) {
-                    if ($nextKey === null) {
-                        continue;
-                    }
                     $nextKey = (string)$nextKey;
                     $nextPath = $currentPath === '' ? $nextKey : $currentPath . '.' . $nextKey;
                     $stack[] = [$nextPath,  $nextValue];

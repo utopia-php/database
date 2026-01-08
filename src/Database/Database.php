@@ -3003,14 +3003,14 @@ class Database
             $this->adapter->getLimitForAttributes() > 0 &&
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is ' . $this->adapter->getCountOfAttributes($collection) . ' but the maximum is ' . $this->adapter->getLimitForAttributes() . '. Remove some attributes to free up space.');
         }
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is ' . $this->adapter->getAttributeWidth($collection) . ' bytes but the maximum is ' . $this->adapter->getDocumentSizeLimit() . ' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
         }
 
         return true;
@@ -5671,6 +5671,11 @@ class Database
                                     break;
                                 }
 
+                                if (Operator::isOperator($value)) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+
                                 if (!\is_array($value) || !\array_is_list($value)) {
                                     throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                                 }
@@ -6079,6 +6084,24 @@ class Database
             $twoWayKey = (string)$relationship['options']['twoWayKey'];
             $side = (string)$relationship['options']['side'];
 
+            if (Operator::isOperator($value)) {
+                $operator = $value;
+                if ($operator->isArrayOperation()) {
+                    $existingIds = [];
+                    if (\is_array($oldValue)) {
+                        $existingIds = \array_map(function ($item) {
+                            if ($item instanceof Document) {
+                                return $item->getId();
+                            }
+                            return $item;
+                        }, $oldValue);
+                    }
+
+                    $value = $this->applyRelationshipOperator($operator, $existingIds);
+                    $document->setAttribute($key, $value);
+                }
+            }
+
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE
@@ -6436,6 +6459,63 @@ class Database
         return $side === Database::RELATION_SIDE_PARENT
             ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
             : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+    }
+
+    /**
+     * Apply an operator to a relationship array of IDs
+     *
+     * @param Operator $operator
+     * @param array<string> $existingIds
+     * @return array<string|Document>
+     */
+    private function applyRelationshipOperator(Operator $operator, array $existingIds): array
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        // Extract IDs from operator values (could be strings or Documents)
+        $valueIds = \array_filter(\array_map(fn ($item) => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null), $values));
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+                return \array_values(\array_merge($existingIds, $valueIds));
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                return \array_values(\array_merge($valueIds, $existingIds));
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $index = $values[0] ?? 0;
+                $item = $values[1] ?? null;
+                $itemId = $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null);
+                if ($itemId !== null) {
+                    \array_splice($existingIds, $index, 0, [$itemId]);
+                }
+                return \array_values($existingIds);
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $toRemove = $values[0] ?? null;
+                if (\is_array($toRemove)) {
+                    $toRemoveIds = \array_filter(\array_map(fn ($item) => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null), $toRemove));
+                    return \array_values(\array_diff($existingIds, $toRemoveIds));
+                }
+                $toRemoveId = $toRemove instanceof Document ? $toRemove->getId() : (\is_string($toRemove) ? $toRemove : null);
+                if ($toRemoveId !== null) {
+                    return \array_values(\array_diff($existingIds, [$toRemoveId]));
+                }
+                return $existingIds;
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return \array_values(\array_unique($existingIds));
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                return \array_values(\array_intersect($existingIds, $valueIds));
+
+            case Operator::TYPE_ARRAY_DIFF:
+                return \array_values(\array_diff($existingIds, $valueIds));
+
+            default:
+                return $existingIds;
+        }
     }
 
     /**

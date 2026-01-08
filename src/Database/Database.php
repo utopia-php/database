@@ -3635,52 +3635,6 @@ class Database
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        switch ($type) {
-            case self::INDEX_KEY:
-                if (!$this->adapter->getSupportForIndex()) {
-                    throw new DatabaseException('Key index is not supported');
-                }
-                break;
-
-            case self::INDEX_UNIQUE:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new DatabaseException('Unique index is not supported');
-                }
-                break;
-
-            case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForFulltextIndex()) {
-                    throw new DatabaseException('Fulltext index is not supported');
-                }
-                break;
-
-            case self::INDEX_SPATIAL:
-                if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial indexes are not supported');
-                }
-                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
-                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
-                }
-                break;
-
-            case Database::INDEX_HNSW_EUCLIDEAN:
-            case Database::INDEX_HNSW_COSINE:
-            case Database::INDEX_HNSW_DOT:
-                if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector indexes are not supported');
-                }
-                break;
-
-            case self::INDEX_OBJECT:
-                if (!$this->adapter->getSupportForObjectIndexes()) {
-                    throw new DatabaseException('Object indexes are not supported');
-                }
-                break;
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
-        }
-
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];

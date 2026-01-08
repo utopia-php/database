@@ -339,8 +339,6 @@ class Filter extends Base
         }
 
         return true;
-
-        return $validate($values, 0, false);
     }
 
     /**

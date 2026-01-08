@@ -2752,6 +2752,11 @@ class Postgres extends SQL
         }
     }
 
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
     /**
      * Ensure index key length stays within PostgreSQL's 63 character limit.
      *

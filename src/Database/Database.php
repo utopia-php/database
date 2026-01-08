@@ -7809,7 +7809,6 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
@@ -8043,7 +8042,13 @@ class Database
             }
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -8105,7 +8110,12 @@ class Database
             }
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -8344,7 +8354,7 @@ class Database
      */
     public function casting(Document $collection, Document $document): Document
     {
-        if ($this->adapter->getSupportForCasting()) {
+        if (!$this->adapter->getSupportForCasting()) {
             return $document;
         }
 
@@ -8662,7 +8672,7 @@ class Database
      * @param string $collectionId
      * @param string|null $documentId
      * @param array<string> $selects
-     * @return array{0: ?string, 1: ?string, 2: ?string}
+     * @return array{0: string, 1: string, 2: string}
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
     {
@@ -8695,8 +8705,8 @@ class Database
 
         return [
             $collectionKey,
-            $documentKey ?? null,
-            $documentHashKey ?? null
+            $documentKey ?? '',
+            $documentHashKey ?? ''
         ];
     }
 
@@ -9428,5 +9438,4 @@ class Database
         );
         $collection->setAttribute('attributes', \array_values($filteredAttributes));
     }
-
 }

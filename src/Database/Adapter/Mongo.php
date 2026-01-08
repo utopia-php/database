@@ -2882,7 +2882,7 @@ class Mongo extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -3227,6 +3227,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }

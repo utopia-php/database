@@ -22,7 +22,7 @@ class OffsetTest extends TestCase
         $validator = new Offset(5000);
 
         $this->assertFalse($validator->isValid(Query::offset(-1)));
-        $this->assertEquals('Invalid offset: Value must be a valid range between 0 and 5,000', $validator->getDescription());
+        $this->assertSame('Invalid offset: Value must be a valid range between 0 and 5,000', $validator->getDescription());
         $this->assertFalse($validator->isValid(Query::offset(5001)));
         $this->assertFalse($validator->isValid(Query::equal('attr', ['v'])));
         $this->assertFalse($validator->isValid(Query::orderAsc('attr')));

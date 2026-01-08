@@ -54,7 +54,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Invalid index attribute "not_exist" not found', $validator->getDescription());
+        $this->assertSame('Invalid index attribute "not_exist" not found', $validator->getDescription());
     }
 
     /**
@@ -103,7 +103,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Attribute "date" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
+        $this->assertSame('Attribute "date" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
     }
 
     /**
@@ -141,7 +141,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
+        $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
     /**
@@ -197,7 +197,7 @@ class IndexTest extends TestCase
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
+        $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
     /**
@@ -235,7 +235,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('No attributes provided for index', $validator->getDescription());
+        $this->assertSame('No attributes provided for index', $validator->getDescription());
     }
 
     /**
@@ -322,7 +322,7 @@ class IndexTest extends TestCase
         // Validator with supportForObjectIndexes disabled should reject GIN
         $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
-        $this->assertEquals('Object indexes are not supported', $validatorNoSupport->getDescription());
+        $this->assertSame('Object indexes are not supported', $validatorNoSupport->getDescription());
     }
 
     /**
@@ -360,7 +360,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Duplicate attributes provided', $validator->getDescription());
+        $this->assertSame('Duplicate attributes provided', $validator->getDescription());
     }
 
     /**

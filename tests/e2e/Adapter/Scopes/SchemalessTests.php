@@ -39,7 +39,7 @@ trait SchemalessTests
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
             new Document(['$id' => 'doc3', '$permissions' => $permissions]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertSame(3, $database->createDocuments($colName, $docs));
 
         // Any extra attributes should be allowed (fully schemaless)
         $docs = [
@@ -49,24 +49,24 @@ trait SchemalessTests
         ];
 
         $createdDocs = $database->createDocuments($colName, $docs);
-        $this->assertEquals(3, $createdDocs);
+        $this->assertSame(3, $createdDocs);
 
         // Create a single document with extra attribute as well
         $single = $database->createDocument($colName, new Document(['$id' => 'docS', 'extra' => 'yes', '$permissions' => $permissions]));
-        $this->assertEquals('docS', $single->getId());
-        $this->assertEquals('yes', $single->getAttribute('extra'));
+        $this->assertSame('docS', $single->getId());
+        $this->assertSame('yes', $single->getAttribute('extra'));
 
         $found = $database->find($colName);
         $this->assertCount(7, $found);
         $doc11 = $database->getDocument($colName, 'doc11');
-        $this->assertEquals('doc1', $doc11->getAttribute('title'));
+        $this->assertSame('doc1', $doc11->getAttribute('title'));
 
         $doc21 = $database->getDocument($colName, 'doc21');
-        $this->assertEquals('doc2', $doc21->getAttribute('moviename'));
-        $this->assertEquals('test', $doc21->getAttribute('moviedescription'));
+        $this->assertSame('doc2', $doc21->getAttribute('moviename'));
+        $this->assertSame('test', $doc21->getAttribute('moviedescription'));
 
         $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']));
-        $this->assertEquals('updated', $updated->getAttribute('moviename'));
+        $this->assertSame('updated', $updated->getAttribute('moviename'));
 
         $this->assertTrue($database->deleteDocument($colName, 'doc21'));
         $deleted = $database->getDocument($colName, 'doc21');
@@ -76,10 +76,10 @@ trait SchemalessTests
 
         // Bulk update: set a new extra attribute on all remaining docs
         $modified = $database->updateDocuments($colName, new Document(['bulkExtra' => 'yes']));
-        $this->assertEquals(6, $modified);
+        $this->assertSame(6, $modified);
         $all = $database->find($colName);
         foreach ($all as $doc) {
-            $this->assertEquals('yes', $doc->getAttribute('bulkExtra'));
+            $this->assertSame('yes', $doc->getAttribute('bulkExtra'));
         }
 
         // Upsert: create new and update existing with extra attributes preserved
@@ -88,25 +88,25 @@ trait SchemalessTests
             new Document(['$id' => 'doc1', 'extraU' => 2, '$permissions' => $permissions]),
         ];
         $countUpserts = $database->upsertDocuments($colName, $upserts);
-        $this->assertEquals(2, $countUpserts);
+        $this->assertSame(2, $countUpserts);
         $docU1 = $database->getDocument($colName, 'docU1');
-        $this->assertEquals(1, $docU1->getAttribute('extraU'));
+        $this->assertSame(1, $docU1->getAttribute('extraU'));
         $doc1AfterUpsert = $database->getDocument($colName, 'doc1');
-        $this->assertEquals(2, $doc1AfterUpsert->getAttribute('extraU'));
+        $this->assertSame(2, $doc1AfterUpsert->getAttribute('extraU'));
 
         // Increase/Decrease numeric attribute: add numeric attribute and mutate it
         $docS = $database->getDocument($colName, 'docS');
-        $this->assertEquals(0, $docS->getAttribute('counter'));
+        $this->assertSame(0, $docS->getAttribute('counter'));
         $docS = $database->increaseDocumentAttribute($colName, 'docS', 'counter', 5);
-        $this->assertEquals(5, $docS->getAttribute('counter'));
+        $this->assertSame(5, $docS->getAttribute('counter'));
         $docS = $database->decreaseDocumentAttribute($colName, 'docS', 'counter', 3);
-        $this->assertEquals(2, $docS->getAttribute('counter'));
+        $this->assertSame(2, $docS->getAttribute('counter'));
 
         $deletedByCounter = $database->deleteDocuments($colName, [Query::equal('counter', [2])]);
-        $this->assertEquals(1, $deletedByCounter);
+        $this->assertSame(1, $deletedByCounter);
 
         $deletedCount = $database->deleteDocuments($colName, [Query::startsWith('$id', 'doc')]);
-        $this->assertEquals(6, $deletedCount);
+        $this->assertSame(6, $deletedCount);
         $postDelete = $database->find($colName);
         $this->assertCount(0, $postDelete);
 
@@ -170,10 +170,10 @@ trait SchemalessTests
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
             new Document(['$id' => 'doc3', '$permissions' => $permissions]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertSame(3, $database->createDocuments($colName, $docs));
 
         $docA = $database->getDocument($colName, 'doc1', [Query::select(['freeA'])]);
-        $this->assertEquals('doc1', $docA->getAttribute('freeA'));
+        $this->assertSame('doc1', $docA->getAttribute('freeA'));
 
         $docC = $database->getDocument($colName, 'doc1', [Query::select(['freeC'])]);
         $this->assertNull($docC->getAttribute('freeC'));
@@ -190,7 +190,7 @@ trait SchemalessTests
             Query::equal('$id', ['doc1']),
             Query::select(['freeA'])
         ]);
-        $this->assertEquals('doc1', $docA[0]->getAttribute('freeA'));
+        $this->assertSame('doc1', $docA[0]->getAttribute('freeA'));
 
         $docC = $database->find($colName, [
             Query::equal('$id', ['doc1']),
@@ -224,25 +224,25 @@ trait SchemalessTests
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'counter' => 20, 'points' => 100]),
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'value' => 0]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertSame(3, $database->createDocuments($colName, $docs));
 
         $doc1 = $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 5);
-        $this->assertEquals(15, $doc1->getAttribute('counter'));
-        $this->assertEquals(5.5, $doc1->getAttribute('score'));
+        $this->assertSame(15, $doc1->getAttribute('counter'));
+        $this->assertSame(5.5, $doc1->getAttribute('score'));
 
         $doc1 = $database->increaseDocumentAttribute($colName, 'doc1', 'score', 2.3);
-        $this->assertEquals(7.8, $doc1->getAttribute('score'));
+        $this->assertSame(7.8, $doc1->getAttribute('score'));
 
         $doc2 = $database->increaseDocumentAttribute($colName, 'doc2', 'points', 50);
-        $this->assertEquals(150, $doc2->getAttribute('points'));
+        $this->assertSame(150, $doc2->getAttribute('points'));
 
         $doc3 = $database->increaseDocumentAttribute($colName, 'doc3', 'newCounter', 1);
-        $this->assertEquals(1, $doc3->getAttribute('newCounter'));
-        $this->assertEquals(0, $doc3->getAttribute('value'));
+        $this->assertSame(1, $doc3->getAttribute('newCounter'));
+        $this->assertSame(0, $doc3->getAttribute('value'));
 
         try {
             $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 10, 20);
-            $this->assertEquals(20, $database->getDocument($colName, 'doc1')->getAttribute('counter'));
+            $this->assertSame(20, $database->getDocument($colName, 'doc1')->getAttribute('counter'));
         } catch (\Exception $e) {
             $this->assertInstanceOf(LimitException::class, $e);
         }
@@ -277,18 +277,18 @@ trait SchemalessTests
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'counter' => 100, 'balance' => 250.75]),
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'score' => 50, 'extraData' => 'preserved']),
         ];
-        $this->assertEquals(2, $database->createDocuments($colName, $docs));
+        $this->assertSame(2, $database->createDocuments($colName, $docs));
 
         $doc1 = $database->decreaseDocumentAttribute($colName, 'doc1', 'counter', 25);
-        $this->assertEquals(75, $doc1->getAttribute('counter'));
-        $this->assertEquals(250.75, $doc1->getAttribute('balance'));
+        $this->assertSame(75, $doc1->getAttribute('counter'));
+        $this->assertSame(250.75, $doc1->getAttribute('balance'));
 
         $doc1 = $database->decreaseDocumentAttribute($colName, 'doc1', 'balance', 50.25);
-        $this->assertEquals(200.5, $doc1->getAttribute('balance'));
+        $this->assertSame(200.5, $doc1->getAttribute('balance'));
 
         $doc2 = $database->decreaseDocumentAttribute($colName, 'doc2', 'score', 15);
-        $this->assertEquals(35, $doc2->getAttribute('score'));
-        $this->assertEquals('preserved', $doc2->getAttribute('extraData'));
+        $this->assertSame(35, $doc2->getAttribute('score'));
+        $this->assertSame('preserved', $doc2->getAttribute('extraData'));
 
         try {
             $database->decreaseDocumentAttribute($colName, 'doc2', 'score', 40, 0);
@@ -298,11 +298,11 @@ trait SchemalessTests
         }
 
         $doc2 = $database->decreaseDocumentAttribute($colName, 'doc2', 'score', 50);
-        $this->assertEquals(-15, $doc2->getAttribute('score'));
+        $this->assertSame(-15, $doc2->getAttribute('score'));
 
         $retrievedDoc1 = $database->getDocument($colName, 'doc1');
-        $this->assertEquals(75, $retrievedDoc1->getAttribute('counter'));
-        $this->assertEquals(200.5, $retrievedDoc1->getAttribute('balance'));
+        $this->assertSame(75, $retrievedDoc1->getAttribute('counter'));
+        $this->assertSame(200.5, $retrievedDoc1->getAttribute('balance'));
 
         $database->deleteCollection($colName);
     }
@@ -333,7 +333,7 @@ trait SchemalessTests
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'type' => 'user', 'status' => 'inactive', 'score' => 50]),
             new Document(['$id' => 'doc4', '$permissions' => $permissions, 'type' => 'user', 'status' => 'pending', 'newField' => 'test']),
         ];
-        $this->assertEquals(4, $database->createDocuments($colName, $docs));
+        $this->assertSame(4, $database->createDocuments($colName, $docs));
 
         $updatedDoc = $database->updateDocument($colName, 'doc1', new Document([
             'status' => 'updated',
@@ -341,15 +341,15 @@ trait SchemalessTests
             'newAttribute' => 'added'
         ]));
 
-        $this->assertEquals('updated', $updatedDoc->getAttribute('status'));
-        $this->assertEquals('2023-01-01', $updatedDoc->getAttribute('lastModified'));
-        $this->assertEquals('added', $updatedDoc->getAttribute('newAttribute'));
-        $this->assertEquals('user', $updatedDoc->getAttribute('type')); // Existing attributes preserved
-        $this->assertEquals(100, $updatedDoc->getAttribute('score'));
+        $this->assertSame('updated', $updatedDoc->getAttribute('status'));
+        $this->assertSame('2023-01-01', $updatedDoc->getAttribute('lastModified'));
+        $this->assertSame('added', $updatedDoc->getAttribute('newAttribute'));
+        $this->assertSame('user', $updatedDoc->getAttribute('type')); // Existing attributes preserved
+        $this->assertSame(100, $updatedDoc->getAttribute('score'));
 
         $retrievedDoc = $database->getDocument($colName, 'doc1');
-        $this->assertEquals('updated', $retrievedDoc->getAttribute('status'));
-        $this->assertEquals('added', $retrievedDoc->getAttribute('newAttribute'));
+        $this->assertSame('updated', $retrievedDoc->getAttribute('status'));
+        $this->assertSame('added', $retrievedDoc->getAttribute('newAttribute'));
 
         $updatedDoc2 = $database->updateDocument($colName, 'doc2', new Document([
             'customField1' => 'value1',
@@ -357,10 +357,10 @@ trait SchemalessTests
             'customField3' => ['array', 'of', 'values']
         ]));
 
-        $this->assertEquals('value1', $updatedDoc2->getAttribute('customField1'));
-        $this->assertEquals(42, $updatedDoc2->getAttribute('customField2'));
-        $this->assertEquals(['array', 'of', 'values'], $updatedDoc2->getAttribute('customField3'));
-        $this->assertEquals('admin', $updatedDoc2->getAttribute('type')); // Original attributes preserved
+        $this->assertSame('value1', $updatedDoc2->getAttribute('customField1'));
+        $this->assertSame(42, $updatedDoc2->getAttribute('customField2'));
+        $this->assertSame(['array', 'of', 'values'], $updatedDoc2->getAttribute('customField3'));
+        $this->assertSame('admin', $updatedDoc2->getAttribute('type')); // Original attributes preserved
 
         $database->deleteCollection($colName);
     }
@@ -390,7 +390,7 @@ trait SchemalessTests
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'category' => 'permanent', 'priority' => 5]),
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'category' => 'temp', 'priority' => 3]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertSame(3, $database->createDocuments($colName, $docs));
 
         $result = $database->deleteDocument($colName, 'doc1');
         $this->assertTrue($result);
@@ -403,7 +403,7 @@ trait SchemalessTests
 
         $tempDocs = $database->find($colName, [Query::equal('category', ['temp'])]);
         $this->assertCount(1, $tempDocs);
-        $this->assertEquals('doc3', $tempDocs[0]->getId());
+        $this->assertSame('doc3', $tempDocs[0]->getId());
 
         $database->deleteCollection($colName);
     }
@@ -444,7 +444,7 @@ trait SchemalessTests
                 'customField' => "value{$i}"
             ]);
         }
-        $this->assertEquals(10, $database->createDocuments($colName, $docs));
+        $this->assertSame(10, $database->createDocuments($colName, $docs));
 
         $updatedCount = $database->updateDocuments($colName, new Document([
             'status' => 'processed',
@@ -452,16 +452,16 @@ trait SchemalessTests
             'newBulkField' => 'bulk_value'
         ]), [Query::equal('type', ['typeA'])]);
 
-        $this->assertEquals(5, $updatedCount);
+        $this->assertSame(5, $updatedCount);
 
         $processedDocs = $database->find($colName, [Query::equal('status', ['processed'])]);
         $this->assertCount(5, $processedDocs);
 
         foreach ($processedDocs as $doc) {
-            $this->assertEquals('typeA', $doc->getAttribute('type'));
-            $this->assertEquals('processed', $doc->getAttribute('status'));
-            $this->assertEquals('2023-01-01', $doc->getAttribute('processedAt'));
-            $this->assertEquals('bulk_value', $doc->getAttribute('newBulkField'));
+            $this->assertSame('typeA', $doc->getAttribute('type'));
+            $this->assertSame('processed', $doc->getAttribute('status'));
+            $this->assertSame('2023-01-01', $doc->getAttribute('processedAt'));
+            $this->assertSame('bulk_value', $doc->getAttribute('newBulkField'));
             $this->assertNotNull($doc->getAttribute('score'));
             $this->assertNotNull($doc->getAttribute('customField'));
         }
@@ -470,8 +470,8 @@ trait SchemalessTests
         $this->assertCount(5, $pendingDocs);
 
         foreach ($pendingDocs as $doc) {
-            $this->assertEquals('typeB', $doc->getAttribute('type'));
-            $this->assertEquals('pending', $doc->getAttribute('status'));
+            $this->assertSame('typeB', $doc->getAttribute('type'));
+            $this->assertSame('pending', $doc->getAttribute('status'));
             $this->assertNull($doc->getAttribute('processedAt'));
             $this->assertNull($doc->getAttribute('newBulkField'));
         }
@@ -480,7 +480,7 @@ trait SchemalessTests
             'tier' => 'premium'
         ]), [Query::greaterThan('score', 70)]);
 
-        $this->assertEquals(3, $highScoreCount); // docs 8, 9, 10
+        $this->assertSame(3, $highScoreCount); // docs 8, 9, 10
 
         $premiumDocs = $database->find($colName, [Query::equal('tier', ['premium'])]);
         $this->assertCount(3, $premiumDocs);
@@ -490,14 +490,14 @@ trait SchemalessTests
             'lastUpdate' => '2023-12-31'
         ]));
 
-        $this->assertEquals(10, $allUpdateCount);
+        $this->assertSame(10, $allUpdateCount);
 
         $allDocs = $database->find($colName);
         $this->assertCount(10, $allDocs);
 
         foreach ($allDocs as $doc) {
             $this->assertTrue($doc->getAttribute('globalFlag'));
-            $this->assertEquals('2023-12-31', $doc->getAttribute('lastUpdate'));
+            $this->assertSame('2023-12-31', $doc->getAttribute('lastUpdate'));
         }
 
         $database->deleteCollection($colName);
@@ -540,10 +540,10 @@ trait SchemalessTests
                 'metadata' => ['created' => "2023-01-{$i}"]
             ]);
         }
-        $this->assertEquals(15, $database->createDocuments($colName, $docs));
+        $this->assertSame(15, $database->createDocuments($colName, $docs));
 
         $deletedCount = $database->deleteDocuments($colName, [Query::equal('category', ['temp'])]);
-        $this->assertEquals(5, $deletedCount);
+        $this->assertSame(5, $deletedCount);
 
         $remainingDocs = $database->find($colName);
         $this->assertCount(10, $remainingDocs);
@@ -552,32 +552,32 @@ trait SchemalessTests
         $this->assertCount(0, $tempDocs);
 
         $highScoreDeleted = $database->deleteDocuments($colName, [Query::greaterThan('score', 50)]);
-        $this->assertEquals(5, $highScoreDeleted); // docs 11-15
+        $this->assertSame(5, $highScoreDeleted); // docs 11-15
 
         $remainingAfterScore = $database->find($colName);
         $this->assertCount(5, $remainingAfterScore); // docs 6-10 remain
 
         foreach ($remainingAfterScore as $doc) {
             $this->assertLessThanOrEqual(50, $doc->getAttribute('score'));
-            $this->assertEquals('archive', $doc->getAttribute('category'));
+            $this->assertSame('archive', $doc->getAttribute('category'));
         }
 
         $multiConditionDeleted = $database->deleteDocuments($colName, [
             Query::equal('category', ['archive']),
             Query::equal('priority', [1])
         ]);
-        $this->assertEquals(2, $multiConditionDeleted); // docs 7 and 10
+        $this->assertSame(2, $multiConditionDeleted); // docs 7 and 10
 
         $finalRemaining = $database->find($colName);
         $this->assertCount(3, $finalRemaining); // docs 6, 8, 9
 
         foreach ($finalRemaining as $doc) {
-            $this->assertEquals('archive', $doc->getAttribute('category'));
+            $this->assertSame('archive', $doc->getAttribute('category'));
             $this->assertNotEquals(1, $doc->getAttribute('priority'));
         }
 
         $allDeleted = $database->deleteDocuments($colName);
-        $this->assertEquals(3, $allDeleted);
+        $this->assertSame(3, $allDeleted);
 
         $emptyResult = $database->find($colName);
         $this->assertCount(0, $emptyResult);
@@ -620,7 +620,7 @@ trait SchemalessTests
                 'customData' => "data{$i}"
             ]);
         }
-        $this->assertEquals(8, $database->createDocuments($colName, $docs));
+        $this->assertSame(8, $database->createDocuments($colName, $docs));
 
         $updateResults = [];
         $updateCount = $database->updateDocuments(
@@ -632,7 +632,7 @@ trait SchemalessTests
             }
         );
 
-        $this->assertEquals(4, $updateCount);
+        $this->assertSame(4, $updateCount);
         $this->assertCount(4, $updateResults);
         $this->assertContains('doc1', $updateResults);
         $this->assertContains('doc2', $updateResults);
@@ -655,7 +655,7 @@ trait SchemalessTests
             }
         );
 
-        $this->assertEquals(3, $deleteCount); // docs 6, 7, 8
+        $this->assertSame(3, $deleteCount); // docs 6, 7, 8
         $this->assertCount(3, $deleteResults);
 
         foreach ($deleteResults as $result) {
@@ -713,7 +713,7 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_rank_key'));
         $collection = $database->getCollection($col);
         $this->assertCount(1, $collection->getAttribute('indexes'));
-        $this->assertEquals('idx_title_unique', $collection->getAttribute('indexes')[0]['$id']);
+        $this->assertSame('idx_title_unique', $collection->getAttribute('indexes')[0]['$id']);
 
         $this->assertTrue($database->deleteIndex($col, 'idx_title_unique'));
         $database->deleteCollection($col);
@@ -782,7 +782,7 @@ trait SchemalessTests
         // With any role, can read
         $database->getAuthorization()->addRole(Role::any()->toString());
         $fetched = $database->getDocument($col, 'd1');
-        $this->assertEquals('value', $fetched->getAttribute('field'));
+        $this->assertSame('value', $fetched->getAttribute('field'));
 
         // Attempt update without update permission
         $database->getAuthorization()->cleanRoles();
@@ -805,7 +805,7 @@ trait SchemalessTests
         });
 
         $updated = $database->updateDocument($col, 'd1', new Document(['field' => 'updated']));
-        $this->assertEquals('updated', $updated->getAttribute('field'));
+        $this->assertSame('updated', $updated->getAttribute('field'));
 
         // Creating without any roles should fail
         $database->getAuthorization()->cleanRoles();
@@ -848,8 +848,8 @@ trait SchemalessTests
             'name' => 'alpha',
         ]));
 
-        $this->assertEquals('i1', $doc->getId());
-        $this->assertEquals($col, $doc->getCollection());
+        $this->assertSame('i1', $doc->getId());
+        $this->assertSame($col, $doc->getCollection());
         $this->assertNotEmpty($doc->getSequence());
         $this->assertNotEmpty($doc->getAttribute('$createdAt'));
         $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
@@ -862,7 +862,7 @@ trait SchemalessTests
         $selected = $database->getDocument($col, 'i1', [
             Query::select(['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'])
         ]);
-        $this->assertEquals('alpha', $selected->getAttribute('name'));
+        $this->assertSame('alpha', $selected->getAttribute('name'));
         $this->assertArrayHasKey('$id', $selected);
         $this->assertArrayHasKey('$sequence', $selected);
         $this->assertArrayHasKey('$collection', $selected);
@@ -885,19 +885,19 @@ trait SchemalessTests
         $seq = $doc->getSequence();
         $bySeq = $database->find($col, [Query::equal('$sequence', [$seq])]);
         $this->assertCount(1, $bySeq);
-        $this->assertEquals('i1', $bySeq[0]->getId());
+        $this->assertSame('i1', $bySeq[0]->getId());
 
         $createdAtBefore = $doc->getAttribute('$createdAt');
         $updatedAtBefore = $doc->getAttribute('$updatedAt');
         $updated = $database->updateDocument($col, 'i1', new Document(['name' => 'beta']));
-        $this->assertEquals('beta', $updated->getAttribute('name'));
-        $this->assertEquals($createdAtBefore, $updated->getAttribute('$createdAt'));
+        $this->assertSame('beta', $updated->getAttribute('name'));
+        $this->assertSame($createdAtBefore, $updated->getAttribute('$createdAt'));
         $this->assertNotEquals($updatedAtBefore, $updated->getAttribute('$updatedAt'));
 
         $changed = $database->updateDocument($col, 'i1', new Document(['$id' => 'i1-new']));
-        $this->assertEquals('i1-new', $changed->getId());
+        $this->assertSame('i1-new', $changed->getId());
         $refetched = $database->getDocument($col, 'i1-new');
-        $this->assertEquals('i1-new', $refetched->getId());
+        $this->assertSame('i1-new', $refetched->getId());
 
         try {
             $database->updateDocument($col, 'i1-new', new Document(['$permissions' => 'invalid']));
@@ -916,16 +916,16 @@ trait SchemalessTests
             '$updatedAt' => $customUpdated,
             'v' => 1
         ]));
-        $this->assertEquals($customCreated, $d2->getAttribute('$createdAt'));
-        $this->assertEquals($customUpdated, $d2->getAttribute('$updatedAt'));
+        $this->assertSame($customCreated, $d2->getAttribute('$createdAt'));
+        $this->assertSame($customUpdated, $d2->getAttribute('$updatedAt'));
 
         $newUpdated = '2000-01-03T00:00:00.000+00:00';
         $d2u = $database->updateDocument($col, 'i2', new Document([
             'v' => 2,
             '$updatedAt' => $newUpdated
         ]));
-        $this->assertEquals($customCreated, $d2u->getAttribute('$createdAt'));
-        $this->assertEquals($newUpdated, $d2u->getAttribute('$updatedAt'));
+        $this->assertSame($customCreated, $d2u->getAttribute('$createdAt'));
+        $this->assertSame($newUpdated, $d2u->getAttribute('$updatedAt'));
         $database->setPreserveDates(false);
 
         $database->deleteCollection($col);
@@ -969,21 +969,21 @@ trait SchemalessTests
             ]));
         });
 
-        $this->assertEquals('d1', $doc1->getId());
+        $this->assertSame('d1', $doc1->getId());
         $this->assertTrue(is_string($doc1->getAttribute('curDate')));
-        $this->assertEquals($curDate1, $doc1->getAttribute('curDate'));
+        $this->assertSame($curDate1, $doc1->getAttribute('curDate'));
         $this->assertTrue(is_string($doc1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($doc1->getAttribute('$updatedAt')));
-        $this->assertEquals($createdAt1, $doc1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt1, $doc1->getAttribute('$updatedAt'));
+        $this->assertSame($createdAt1, $doc1->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt1, $doc1->getAttribute('$updatedAt'));
 
         $fetched1 = $database->getDocument($col, 'd1');
-        $this->assertEquals($curDate1, $fetched1->getAttribute('curDate'));
+        $this->assertSame($curDate1, $fetched1->getAttribute('curDate'));
         $this->assertTrue(is_string($fetched1->getAttribute('curDate')));
         $this->assertTrue(is_string($fetched1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($fetched1->getAttribute('$updatedAt')));
-        $this->assertEquals($createdAt1, $fetched1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt1, $fetched1->getAttribute('$updatedAt'));
+        $this->assertSame($createdAt1, $fetched1->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt1, $fetched1->getAttribute('$updatedAt'));
 
         // createDocuments with preserved dates
         $createdAt2 = '2001-02-03T04:05:06.000+00:00';
@@ -1012,17 +1012,17 @@ trait SchemalessTests
                 ]),
             ]);
         });
-        $this->assertEquals(2, $countCreated);
+        $this->assertSame(2, $countCreated);
 
         $fetched2 = $database->getDocument($col, 'd2');
-        $this->assertEquals($curDate2, $fetched2->getAttribute('curDate'));
-        $this->assertEquals($createdAt2, $fetched2->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt2, $fetched2->getAttribute('$updatedAt'));
+        $this->assertSame($curDate2, $fetched2->getAttribute('curDate'));
+        $this->assertSame($createdAt2, $fetched2->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt2, $fetched2->getAttribute('$updatedAt'));
 
         $fetched3 = $database->getDocument($col, 'd3');
-        $this->assertEquals($curDate3, $fetched3->getAttribute('curDate'));
-        $this->assertEquals($createdAt3, $fetched3->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt3, $fetched3->getAttribute('$updatedAt'));
+        $this->assertSame($curDate3, $fetched3->getAttribute('curDate'));
+        $this->assertSame($createdAt3, $fetched3->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt3, $fetched3->getAttribute('$updatedAt'));
 
         // updateDocument with preserved $updatedAt and custom date field
         $newCurDate1   = '2000-02-01T00:00:00.000+00:00';
@@ -1033,11 +1033,11 @@ trait SchemalessTests
                 '$updatedAt' => $newUpdatedAt1,
             ]));
         });
-        $this->assertEquals($newCurDate1, $updated1->getAttribute('curDate'));
-        $this->assertEquals($newUpdatedAt1, $updated1->getAttribute('$updatedAt'));
+        $this->assertSame($newCurDate1, $updated1->getAttribute('curDate'));
+        $this->assertSame($newUpdatedAt1, $updated1->getAttribute('$updatedAt'));
         $refetched1 = $database->getDocument($col, 'd1');
-        $this->assertEquals($newCurDate1, $refetched1->getAttribute('curDate'));
-        $this->assertEquals($newUpdatedAt1, $refetched1->getAttribute('$updatedAt'));
+        $this->assertSame($newCurDate1, $refetched1->getAttribute('curDate'));
+        $this->assertSame($newUpdatedAt1, $refetched1->getAttribute('$updatedAt'));
 
         // updateDocuments with preserved $updatedAt over a subset
         $bulkCurDate   = '2001-01-01T00:00:00.000+00:00';
@@ -1052,13 +1052,13 @@ trait SchemalessTests
                 [Query::equal('$id', ['d2', 'd3'])]
             );
         });
-        $this->assertEquals(2, $updatedCount);
+        $this->assertSame(2, $updatedCount);
         $afterBulk2 = $database->getDocument($col, 'd2');
         $afterBulk3 = $database->getDocument($col, 'd3');
-        $this->assertEquals($bulkCurDate, $afterBulk2->getAttribute('curDate'));
-        $this->assertEquals($bulkUpdatedAt, $afterBulk2->getAttribute('$updatedAt'));
-        $this->assertEquals($bulkCurDate, $afterBulk3->getAttribute('curDate'));
-        $this->assertEquals($bulkUpdatedAt, $afterBulk3->getAttribute('$updatedAt'));
+        $this->assertSame($bulkCurDate, $afterBulk2->getAttribute('curDate'));
+        $this->assertSame($bulkUpdatedAt, $afterBulk2->getAttribute('$updatedAt'));
+        $this->assertSame($bulkCurDate, $afterBulk3->getAttribute('curDate'));
+        $this->assertSame($bulkUpdatedAt, $afterBulk3->getAttribute('$updatedAt'));
 
         // upsertDocument: create new then update existing with preserved dates
         $createdAt4 = '2003-03-03T03:03:03.000+00:00';
@@ -1073,10 +1073,10 @@ trait SchemalessTests
                 'curDate' => $curDate4,
             ]));
         });
-        $this->assertEquals('d4', $up1->getId());
-        $this->assertEquals($curDate4, $up1->getAttribute('curDate'));
-        $this->assertEquals($createdAt4, $up1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt4, $up1->getAttribute('$updatedAt'));
+        $this->assertSame('d4', $up1->getId());
+        $this->assertSame($curDate4, $up1->getAttribute('curDate'));
+        $this->assertSame($createdAt4, $up1->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt4, $up1->getAttribute('$updatedAt'));
 
         $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
         $curDate4b   = '2003-03-07T07:07:07.000+00:00';
@@ -1087,11 +1087,11 @@ trait SchemalessTests
                 '$updatedAt' => $updatedAt4b,
             ]));
         });
-        $this->assertEquals($curDate4b, $up2->getAttribute('curDate'));
-        $this->assertEquals($updatedAt4b, $up2->getAttribute('$updatedAt'));
+        $this->assertSame($curDate4b, $up2->getAttribute('curDate'));
+        $this->assertSame($updatedAt4b, $up2->getAttribute('$updatedAt'));
         $refetched4 = $database->getDocument($col, 'd4');
-        $this->assertEquals($curDate4b, $refetched4->getAttribute('curDate'));
-        $this->assertEquals($updatedAt4b, $refetched4->getAttribute('$updatedAt'));
+        $this->assertSame($curDate4b, $refetched4->getAttribute('curDate'));
+        $this->assertSame($updatedAt4b, $refetched4->getAttribute('$updatedAt'));
 
         // upsertDocuments: mix create and update with preserved dates
         $createdAt5 = '2004-04-01T01:01:01.000+00:00';
@@ -1116,38 +1116,38 @@ trait SchemalessTests
                 ]),
             ]);
         });
-        $this->assertEquals(2, $upCount);
+        $this->assertSame(2, $upCount);
 
         $fetched5 = $database->getDocument($col, 'd5');
-        $this->assertEquals($curDate5, $fetched5->getAttribute('curDate'));
-        $this->assertEquals($createdAt5, $fetched5->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt5, $fetched5->getAttribute('$updatedAt'));
+        $this->assertSame($curDate5, $fetched5->getAttribute('curDate'));
+        $this->assertSame($createdAt5, $fetched5->getAttribute('$createdAt'));
+        $this->assertSame($updatedAt5, $fetched5->getAttribute('$updatedAt'));
 
         $fetched2b = $database->getDocument($col, 'd2');
-        $this->assertEquals($curDate2b, $fetched2b->getAttribute('curDate'));
-        $this->assertEquals($updatedAt2b, $fetched2b->getAttribute('$updatedAt'));
+        $this->assertSame($curDate2b, $fetched2b->getAttribute('curDate'));
+        $this->assertSame($updatedAt2b, $fetched2b->getAttribute('$updatedAt'));
 
         // increase/decrease should not affect date types; ensure they remain strings
         $afterInc = $database->increaseDocumentAttribute($col, 'd1', 'counter', 5);
-        $this->assertEquals(5, $afterInc->getAttribute('counter'));
+        $this->assertSame(5, $afterInc->getAttribute('counter'));
         $this->assertTrue(is_string($afterInc->getAttribute('curDate')));
         $this->assertTrue(is_string($afterInc->getAttribute('$createdAt')));
         $this->assertTrue(is_string($afterInc->getAttribute('$updatedAt')));
 
         $afterIncFetched = $database->getDocument($col, 'd1');
-        $this->assertEquals(5, $afterIncFetched->getAttribute('counter'));
+        $this->assertSame(5, $afterIncFetched->getAttribute('counter'));
         $this->assertTrue(is_string($afterIncFetched->getAttribute('curDate')));
         $this->assertTrue(is_string($afterIncFetched->getAttribute('$createdAt')));
         $this->assertTrue(is_string($afterIncFetched->getAttribute('$updatedAt')));
 
         $afterDec = $database->decreaseDocumentAttribute($col, 'd1', 'counter', 2);
-        $this->assertEquals(3, $afterDec->getAttribute('counter'));
+        $this->assertSame(3, $afterDec->getAttribute('counter'));
         $this->assertTrue(is_string($afterDec->getAttribute('curDate')));
         $this->assertTrue(is_string($afterDec->getAttribute('$createdAt')));
         $this->assertTrue(is_string($afterDec->getAttribute('$updatedAt')));
 
         $afterDecFetched = $database->getDocument($col, 'd1');
-        $this->assertEquals(3, $afterDecFetched->getAttribute('counter'));
+        $this->assertSame(3, $afterDecFetched->getAttribute('counter'));
         $this->assertTrue(is_string($afterDecFetched->getAttribute('curDate')));
         $this->assertTrue(is_string($afterDecFetched->getAttribute('$createdAt')));
         $this->assertTrue(is_string($afterDecFetched->getAttribute('$updatedAt')));

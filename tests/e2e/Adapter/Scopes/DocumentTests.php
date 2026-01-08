@@ -83,13 +83,13 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
     }
 
     public function testCreateDocument(): Document
@@ -99,18 +99,18 @@ trait DocumentTests
 
         $database->createCollection('documents');
 
-        $this->assertEquals(true, $database->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'integer_signed', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'integer_unsigned', Database::VAR_INTEGER, 4, true, signed: false));
-        $this->assertEquals(true, $database->createAttribute('documents', 'bigint_signed', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'bigint_unsigned', Database::VAR_INTEGER, 9, true, signed: false));
-        $this->assertEquals(true, $database->createAttribute('documents', 'float_signed', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'float_unsigned', Database::VAR_FLOAT, 0, true, signed: false));
-        $this->assertEquals(true, $database->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
-        $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
+        $this->assertSame(true, $database->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'integer_signed', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'integer_unsigned', Database::VAR_INTEGER, 4, true, signed: false));
+        $this->assertSame(true, $database->createAttribute('documents', 'bigint_signed', Database::VAR_INTEGER, 8, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'bigint_unsigned', Database::VAR_INTEGER, 9, true, signed: false));
+        $this->assertSame(true, $database->createAttribute('documents', 'float_signed', Database::VAR_FLOAT, 0, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'float_unsigned', Database::VAR_FLOAT, 0, true, signed: false));
+        $this->assertSame(true, $database->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
+        $this->assertSame(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertSame(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
         $sequence = '1000000';
         if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
@@ -148,27 +148,27 @@ trait DocumentTests
 
         $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
-        $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertSame('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertIsInt($document->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::MAX_INT, $document->getAttribute('integer_unsigned'));
+        $this->assertSame(Database::MAX_INT, $document->getAttribute('integer_unsigned'));
         $this->assertIsInt($document->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
+        $this->assertSame(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
         $this->assertIsInt($document->getAttribute('bigint_signed'));
-        $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
+        $this->assertSame(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($document->getAttribute('float_signed'));
-        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertSame(-5.55, $document->getAttribute('float_signed'));
         $this->assertIsFloat($document->getAttribute('float_unsigned'));
-        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
+        $this->assertSame(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
-        $this->assertEquals(true, $document->getAttribute('boolean'));
+        $this->assertSame(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
-        $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-        $this->assertEquals([], $document->getAttribute('empty'));
-        $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertSame(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+        $this->assertSame([], $document->getAttribute('empty'));
+        $this->assertSame('Works', $document->getAttribute('with-dash'));
         $this->assertIsString($document->getAttribute('id'));
-        $this->assertEquals($sequence, $document->getAttribute('id'));
+        $this->assertSame($sequence, $document->getAttribute('id'));
 
 
         $sequence = '56000';
@@ -207,54 +207,54 @@ trait DocumentTests
             'with-dash' => 'Works',
         ]));
 
-        $this->assertEquals($sequence, $manualIdDocument->getSequence());
+        $this->assertSame($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty($manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
-        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertSame('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertSame(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertSame(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
-        $this->assertEquals(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertSame(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
-        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertSame(-5.55, $manualIdDocument->getAttribute('float_signed'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertSame(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
-        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertSame(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
-        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
-        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
-        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
-        $this->assertEquals(null, $manualIdDocument->getAttribute('id'));
+        $this->assertSame(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertSame([], $manualIdDocument->getAttribute('empty'));
+        $this->assertSame('Works', $manualIdDocument->getAttribute('with-dash'));
+        $this->assertSame(null, $manualIdDocument->getAttribute('id'));
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
-        $this->assertEquals($sequence, $manualIdDocument->getSequence());
+        $this->assertSame($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty($manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
-        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertSame('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertSame(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertSame(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
-        $this->assertEquals(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertSame(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
-        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertSame(-5.55, $manualIdDocument->getAttribute('float_signed'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertSame(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
-        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertSame(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
-        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
-        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
-        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+        $this->assertSame(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertSame([], $manualIdDocument->getAttribute('empty'));
+        $this->assertSame('Works', $manualIdDocument->getAttribute('with-dash'));
 
         try {
             $database->createDocument('documents', new Document([
@@ -294,7 +294,7 @@ trait DocumentTests
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
                 $this->assertTrue($e instanceof StructureException);
-                $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
             }
         }
 
@@ -318,7 +318,7 @@ trait DocumentTests
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
                 $this->assertTrue($e instanceof StructureException);
-                $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+                $this->assertSame('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
             }
         }
 
@@ -380,19 +380,19 @@ trait DocumentTests
         $this->assertNotEmpty($documentId0->getSequence());
 
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertSame($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
         $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertSame($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
             query::equal('id', [$sequence])
         ]);
         $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertSame($sequence, $documentId0->getAttribute('id'));
 
 
         return $document;
@@ -405,7 +405,7 @@ trait DocumentTests
 
         $database->createCollection('numericalIds');
 
-        $this->assertEquals(true, $database->createAttribute('numericalIds', 'name', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('numericalIds', 'name', Database::VAR_STRING, 128, true));
 
         // Test creating a document with an entirely numerical ID
         $numericalIdDocument = $database->createDocument('numericalIds', new Document([
@@ -417,14 +417,14 @@ trait DocumentTests
         ]));
 
         $this->assertIsString($numericalIdDocument->getId());
-        $this->assertEquals('123456789', $numericalIdDocument->getId());
-        $this->assertEquals('Test Document with Numerical ID', $numericalIdDocument->getAttribute('name'));
+        $this->assertSame('123456789', $numericalIdDocument->getId());
+        $this->assertSame('Test Document with Numerical ID', $numericalIdDocument->getAttribute('name'));
 
         // Verify we can retrieve the document
         $retrievedDocument = $database->getDocument('numericalIds', '123456789');
         $this->assertIsString($retrievedDocument->getId());
-        $this->assertEquals('123456789', $retrievedDocument->getId());
-        $this->assertEquals('Test Document with Numerical ID', $retrievedDocument->getAttribute('name'));
+        $this->assertSame('123456789', $retrievedDocument->getId());
+        $this->assertSame('Test Document with Numerical ID', $retrievedDocument->getAttribute('name'));
     }
 
     public function testCreateDocuments(): void
@@ -437,9 +437,9 @@ trait DocumentTests
 
         $database->createCollection($collection);
 
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
 
         // Create an array of documents with random attributes. Don't use the createDocument function
         $documents = [];
@@ -464,32 +464,32 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals($count, \count($results));
+        $this->assertSame($count, \count($results));
 
         foreach ($results as $document) {
             $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertSame(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+            $this->assertSame(9223372036854775807, $document->getAttribute('bigint'));
         }
 
         $documents = $database->find($collection, [
             Query::orderAsc()
         ]);
 
-        $this->assertEquals($count, \count($documents));
+        $this->assertSame($count, \count($documents));
 
         foreach ($documents as $document) {
             $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertSame(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+            $this->assertSame(9223372036854775807, $document->getAttribute('bigint'));
         }
     }
 
@@ -500,7 +500,7 @@ trait DocumentTests
 
         $database->createCollection(__FUNCTION__);
 
-        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true));
 
         /** @var array<Document> $documents */
         $documents = [];
@@ -528,16 +528,16 @@ trait DocumentTests
         }
 
         $count = $database->createDocuments(__FUNCTION__, $documents, 6);
-        $this->assertEquals($count, \count($documents));
+        $this->assertSame($count, \count($documents));
 
         $documents = $database->find(__FUNCTION__, [
             Query::orderAsc()
         ]);
 
         foreach ($documents as $index => $document) {
-            $this->assertEquals($hash[$index + $offset], $document->getSequence());
+            $this->assertSame($hash[$index + $offset], $document->getSequence());
             $this->assertNotEmpty($document->getId());
-            $this->assertEquals('text', $document->getAttribute('string'));
+            $this->assertSame('text', $document->getAttribute('string'));
         }
     }
 
@@ -550,10 +550,10 @@ trait DocumentTests
 
         $database->createCollection($collection);
 
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false));
-        $this->assertEquals(true, $database->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, false));
-        $this->assertEquals(true, $database->createAttribute($collection, 'string_default', Database::VAR_STRING, 128, false, 'default'));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'string_default', Database::VAR_STRING, 128, false, 'default'));
 
         $documents = [
             new Document([
@@ -573,14 +573,14 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
-        $this->assertEquals('text📝', $results[0]->getAttribute('string'));
-        $this->assertEquals(5, $results[0]->getAttribute('integer'));
-        $this->assertEquals('not_default', $results[0]->getAttribute('string_default'));
-        $this->assertEquals('text📝', $results[1]->getAttribute('string'));
-        $this->assertEquals(null, $results[1]->getAttribute('integer'));
-        $this->assertEquals('default', $results[1]->getAttribute('string_default'));
+        $this->assertSame('text📝', $results[0]->getAttribute('string'));
+        $this->assertSame(5, $results[0]->getAttribute('integer'));
+        $this->assertSame('not_default', $results[0]->getAttribute('string_default'));
+        $this->assertSame('text📝', $results[1]->getAttribute('string'));
+        $this->assertSame(null, $results[1]->getAttribute('integer'));
+        $this->assertSame('default', $results[1]->getAttribute('string_default'));
 
         /**
          * Expect fail, mix of sequence and no sequence
@@ -641,8 +641,8 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals($count, \count($results));
-        $this->assertEquals(10, \count($results));
+        $this->assertSame($count, \count($results));
+        $this->assertSame(10, \count($results));
 
         /**
          * Update 1 row
@@ -672,12 +672,12 @@ trait DocumentTests
 
         $this->getDatabase()->getAuthorization()->reset();
 
-        $this->assertEquals(2, \count($results));
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, \count($results));
+        $this->assertSame(2, $count);
 
         foreach ($results as $result) {
             $this->assertArrayHasKey('$permissions', $result);
-            $this->assertEquals([], $result->getAttribute('$permissions'));
+            $this->assertSame([], $result->getAttribute('$permissions'));
         }
     }
 
@@ -732,7 +732,7 @@ trait DocumentTests
             }
         );
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
         $createdAt = [];
         foreach ($results as $index => $document) {
@@ -740,25 +740,25 @@ trait DocumentTests
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertSame(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+            $this->assertSame(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents = $database->find(__FUNCTION__);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         foreach ($documents as $document) {
             $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertSame(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+            $this->assertSame(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents[0]->setAttribute('string', 'new text📝');
@@ -771,32 +771,32 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
         foreach ($results as $document) {
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertSame(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+            $this->assertSame(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents = $database->find(__FUNCTION__);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         foreach ($documents as $index => $document) {
-            $this->assertEquals($createdAt[$index], $document->getCreatedAt());
+            $this->assertSame($createdAt[$index], $document->getCreatedAt());
             $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertSame('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertSame(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+            $this->assertSame(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
     }
 
@@ -853,7 +853,7 @@ trait DocumentTests
         $documents = $database->find(__FUNCTION__);
 
         foreach ($documents as $document) {
-            $this->assertEquals(6, $document->getAttribute('integer'));
+            $this->assertSame(6, $document->getAttribute('integer'));
         }
 
         $documents[0]->setAttribute('integer', -1);
@@ -868,7 +868,7 @@ trait DocumentTests
         $documents = $database->find(__FUNCTION__);
 
         foreach ($documents as $document) {
-            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertSame(5, $document->getAttribute('integer'));
         }
     }
 
@@ -923,8 +923,8 @@ trait DocumentTests
             }
         );
 
-        $this->assertEquals(1, $count);
-        $this->assertEquals('updated', $results[0]->getAttribute('string'));
+        $this->assertSame(1, $count);
+        $this->assertSame('updated', $results[0]->getAttribute('string'));
 
         $document = new Document([
             '$id' => 'third',
@@ -953,12 +953,12 @@ trait DocumentTests
             }
         );
 
-        $this->assertEquals(1, $count);
-        $this->assertEquals($newPermissions, $results[0]->getPermissions());
+        $this->assertSame(1, $count);
+        $this->assertSame($newPermissions, $results[0]->getPermissions());
 
         $document = $database->getDocument(__FUNCTION__, 'third');
 
-        $this->assertEquals($newPermissions, $document->getPermissions());
+        $this->assertSame($newPermissions, $document->getPermissions());
     }
 
     public function testUpsertDocumentsAttributeMismatch(): void
@@ -997,11 +997,11 @@ trait DocumentTests
             $newDocument,
         ]);
 
-        $this->assertEquals(2, $docs);
-        $this->assertEquals('updated', $existingDocument->getAttribute('first'));
-        $this->assertEquals('last', $existingDocument->getAttribute('last'));
-        $this->assertEquals('second', $newDocument->getAttribute('first'));
-        $this->assertEquals('', $newDocument->getAttribute('last'));
+        $this->assertSame(2, $docs);
+        $this->assertSame('updated', $existingDocument->getAttribute('first'));
+        $this->assertSame('last', $existingDocument->getAttribute('last'));
+        $this->assertSame('second', $newDocument->getAttribute('first'));
+        $this->assertSame('', $newDocument->getAttribute('last'));
 
         try {
             $database->upsertDocuments(__FUNCTION__, [
@@ -1024,11 +1024,11 @@ trait DocumentTests
                 ->setAttribute('last', 'last')
         ]);
 
-        $this->assertEquals(2, $docs);
-        $this->assertEquals('first', $existingDocument->getAttribute('first'));
-        $this->assertEquals('last', $existingDocument->getAttribute('last'));
-        $this->assertEquals('second', $newDocument->getAttribute('first'));
-        $this->assertEquals('last', $newDocument->getAttribute('last'));
+        $this->assertSame(2, $docs);
+        $this->assertSame('first', $existingDocument->getAttribute('first'));
+        $this->assertSame('last', $existingDocument->getAttribute('last'));
+        $this->assertSame('second', $newDocument->getAttribute('first'));
+        $this->assertSame('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
         $docs = $database->upsertDocuments(__FUNCTION__, [
@@ -1039,11 +1039,11 @@ trait DocumentTests
                 ->setAttribute('last', 'last')
         ]);
 
-        $this->assertEquals(1, $docs);
-        $this->assertEquals('first', $existingDocument->getAttribute('first'));
-        $this->assertEquals(null, $existingDocument->getAttribute('last'));
-        $this->assertEquals('second', $newDocument->getAttribute('first'));
-        $this->assertEquals('last', $newDocument->getAttribute('last'));
+        $this->assertSame(1, $docs);
+        $this->assertSame('first', $existingDocument->getAttribute('first'));
+        $this->assertSame(null, $existingDocument->getAttribute('last'));
+        $this->assertSame('second', $newDocument->getAttribute('first'));
+        $this->assertSame('last', $newDocument->getAttribute('last'));
 
         $doc3 = new Document([
             '$id' => 'third',
@@ -1063,19 +1063,19 @@ trait DocumentTests
             $doc4
         ]);
 
-        $this->assertEquals(2, $docs);
-        $this->assertEquals('third', $doc3->getAttribute('first'));
-        $this->assertEquals('last', $doc3->getAttribute('last'));
-        $this->assertEquals('fourth', $doc4->getAttribute('first'));
-        $this->assertEquals('last', $doc4->getAttribute('last'));
+        $this->assertSame(2, $docs);
+        $this->assertSame('third', $doc3->getAttribute('first'));
+        $this->assertSame('last', $doc3->getAttribute('last'));
+        $this->assertSame('fourth', $doc4->getAttribute('first'));
+        $this->assertSame('last', $doc4->getAttribute('last'));
 
         $doc3 = $database->getDocument(__FUNCTION__, 'third');
         $doc4 = $database->getDocument(__FUNCTION__, 'fourth');
 
-        $this->assertEquals('third', $doc3->getAttribute('first'));
-        $this->assertEquals('last', $doc3->getAttribute('last'));
-        $this->assertEquals('fourth', $doc4->getAttribute('first'));
-        $this->assertEquals('last', $doc4->getAttribute('last'));
+        $this->assertSame('third', $doc3->getAttribute('first'));
+        $this->assertSame('last', $doc3->getAttribute('last'));
+        $this->assertSame('fourth', $doc4->getAttribute('first'));
+        $this->assertSame('last', $doc4->getAttribute('last'));
     }
 
     public function testUpsertDocumentsNoop(): void
@@ -1100,11 +1100,11 @@ trait DocumentTests
         ]);
 
         $count = $this->getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
 
         // No changes, should return 0
         $count = $this->getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
-        $this->assertEquals(0, $count);
+        $this->assertSame(0, $count);
     }
 
     public function testUpsertDuplicateIds(): void
@@ -1166,12 +1166,12 @@ trait DocumentTests
 
         $db->upsertDocuments(__FUNCTION__, [$d1, $d2]);
 
-        $this->assertEquals([
+        $this->assertSame([
             Permission::read(Role::any()),
             Permission::update(Role::any()),
         ], $db->getDocument(__FUNCTION__, 'a')->getPermissions());
 
-        $this->assertEquals([
+        $this->assertSame([
             Permission::read(Role::any()),
         ], $db->getDocument(__FUNCTION__, 'b')->getPermissions());
     }
@@ -1183,11 +1183,11 @@ trait DocumentTests
 
         $database->createCollection('documents_nulls');
 
-        $this->assertEquals(true, $database->createAttribute('documents_nulls', 'string', Database::VAR_STRING, 128, false));
-        $this->assertEquals(true, $database->createAttribute('documents_nulls', 'integer', Database::VAR_INTEGER, 0, false));
-        $this->assertEquals(true, $database->createAttribute('documents_nulls', 'bigint', Database::VAR_INTEGER, 8, false));
-        $this->assertEquals(true, $database->createAttribute('documents_nulls', 'float', Database::VAR_FLOAT, 0, false));
-        $this->assertEquals(true, $database->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
+        $this->assertSame(true, $database->createAttribute('documents_nulls', 'string', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute('documents_nulls', 'integer', Database::VAR_INTEGER, 0, false));
+        $this->assertSame(true, $database->createAttribute('documents_nulls', 'bigint', Database::VAR_INTEGER, 8, false));
+        $this->assertSame(true, $database->createAttribute('documents_nulls', 'float', Database::VAR_FLOAT, 0, false));
+        $this->assertSame(true, $database->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
 
         $document = $database->createDocument('documents_nulls', new Document([
             '$permissions' => [
@@ -1222,12 +1222,12 @@ trait DocumentTests
 
         $database->createCollection('defaults');
 
-        $this->assertEquals(true, $database->createAttribute('defaults', 'string', Database::VAR_STRING, 128, false, 'default'));
-        $this->assertEquals(true, $database->createAttribute('defaults', 'integer', Database::VAR_INTEGER, 0, false, 1));
-        $this->assertEquals(true, $database->createAttribute('defaults', 'float', Database::VAR_FLOAT, 0, false, 1.5));
-        $this->assertEquals(true, $database->createAttribute('defaults', 'boolean', Database::VAR_BOOLEAN, 0, false, true));
-        $this->assertEquals(true, $database->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, false, ['red', 'green', 'blue'], true, true));
-        $this->assertEquals(true, $database->createAttribute('defaults', 'datetime', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
+        $this->assertSame(true, $database->createAttribute('defaults', 'string', Database::VAR_STRING, 128, false, 'default'));
+        $this->assertSame(true, $database->createAttribute('defaults', 'integer', Database::VAR_INTEGER, 0, false, 1));
+        $this->assertSame(true, $database->createAttribute('defaults', 'float', Database::VAR_FLOAT, 0, false, 1.5));
+        $this->assertSame(true, $database->createAttribute('defaults', 'boolean', Database::VAR_BOOLEAN, 0, false, true));
+        $this->assertSame(true, $database->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, false, ['red', 'green', 'blue'], true, true));
+        $this->assertSame(true, $database->createAttribute('defaults', 'datetime', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
         $document = $database->createDocument('defaults', new Document([
             '$permissions' => [
@@ -1240,24 +1240,24 @@ trait DocumentTests
 
         $document2 = $database->getDocument('defaults', $document->getId());
         $this->assertCount(4, $document2->getPermissions());
-        $this->assertEquals('read("any")', $document2->getPermissions()[0]);
-        $this->assertEquals('create("any")', $document2->getPermissions()[1]);
-        $this->assertEquals('update("any")', $document2->getPermissions()[2]);
-        $this->assertEquals('delete("any")', $document2->getPermissions()[3]);
+        $this->assertSame('read("any")', $document2->getPermissions()[0]);
+        $this->assertSame('create("any")', $document2->getPermissions()[1]);
+        $this->assertSame('update("any")', $document2->getPermissions()[2]);
+        $this->assertSame('delete("any")', $document2->getPermissions()[3]);
 
         $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
-        $this->assertEquals('default', $document->getAttribute('string'));
+        $this->assertSame('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(1, $document->getAttribute('integer'));
+        $this->assertSame(1, $document->getAttribute('integer'));
         $this->assertIsFloat($document->getAttribute('float'));
-        $this->assertEquals(1.5, $document->getAttribute('float'));
+        $this->assertSame(1.5, $document->getAttribute('float'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertCount(3, $document->getAttribute('colors'));
-        $this->assertEquals('red', $document->getAttribute('colors')[0]);
-        $this->assertEquals('green', $document->getAttribute('colors')[1]);
-        $this->assertEquals('blue', $document->getAttribute('colors')[2]);
-        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $document->getAttribute('datetime'));
+        $this->assertSame('red', $document->getAttribute('colors')[0]);
+        $this->assertSame('green', $document->getAttribute('colors')[1]);
+        $this->assertSame('blue', $document->getAttribute('colors')[2]);
+        $this->assertSame('2000-06-12T14:12:55.000+00:00', $document->getAttribute('datetime'));
 
         // cleanup collection
         $database->deleteCollection('defaults');
@@ -1271,11 +1271,11 @@ trait DocumentTests
         $collection = 'increase_decrease';
         $database->createCollection($collection);
 
-        $this->assertEquals(true, $database->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'increase_text', Database::VAR_STRING, 255, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'increase_float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, $database->createAttribute($collection, 'sizes', Database::VAR_INTEGER, 8, required: false, array: true));
+        $this->assertSame(true, $database->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'increase_text', Database::VAR_STRING, 255, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'increase_float', Database::VAR_FLOAT, 0, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'sizes', Database::VAR_INTEGER, 8, required: false, array: true));
 
         $document = $database->createDocument($collection, new Document([
             'increase' => 100,
@@ -1294,26 +1294,26 @@ trait DocumentTests
         $updatedAt = $document->getUpdatedAt();
 
         $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
-        $this->assertEquals(101, $doc->getAttribute('increase'));
+        $this->assertSame(101, $doc->getAttribute('increase'));
 
         $document = $database->getDocument($collection, $document->getId());
-        $this->assertEquals(101, $document->getAttribute('increase'));
+        $this->assertSame(101, $document->getAttribute('increase'));
         $this->assertNotEquals($updatedAt, $document->getUpdatedAt());
 
         $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
-        $this->assertEquals(99, $doc->getAttribute('decrease'));
+        $this->assertSame(99, $doc->getAttribute('decrease'));
         $document = $database->getDocument($collection, $document->getId());
-        $this->assertEquals(99, $document->getAttribute('decrease'));
+        $this->assertSame(99, $document->getAttribute('decrease'));
 
         $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
-        $this->assertEquals(105.5, $doc->getAttribute('increase_float'));
+        $this->assertSame(105.5, $doc->getAttribute('increase_float'));
         $document = $database->getDocument($collection, $document->getId());
-        $this->assertEquals(105.5, $document->getAttribute('increase_float'));
+        $this->assertSame(105.5, $document->getAttribute('increase_float'));
 
         $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
-        $this->assertEquals(104.4, $doc->getAttribute('increase_float'));
+        $this->assertSame(104.4, $doc->getAttribute('increase_float'));
         $document = $database->getDocument($collection, $document->getId());
-        $this->assertEquals(104.4, $document->getAttribute('increase_float'));
+        $this->assertSame(104.4, $document->getAttribute('increase_float'));
 
         return $document;
     }
@@ -1327,7 +1327,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $this->expectException(Exception::class);
-        $this->assertEquals(true, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
+        $this->assertSame(true, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
     }
 
     /**
@@ -1374,7 +1374,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+            $this->assertSame(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e, $e->getMessage());
@@ -1390,7 +1390,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'sizes'));
+            $this->assertSame(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'sizes'));
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e);
@@ -1409,18 +1409,18 @@ trait DocumentTests
 
         $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
-        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertSame('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertIsFloat($document->getAttribute('float_signed'));
-        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertSame(-5.55, $document->getAttribute('float_signed'));
         $this->assertIsFloat($document->getAttribute('float_unsigned'));
-        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
+        $this->assertSame(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
-        $this->assertEquals(true, $document->getAttribute('boolean'));
+        $this->assertSame(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
-        $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-        $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertSame(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+        $this->assertSame('Works', $document->getAttribute('with-dash'));
 
         return $document;
     }
@@ -1441,9 +1441,9 @@ trait DocumentTests
 
         $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
-        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertSame('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
@@ -1486,20 +1486,20 @@ trait DocumentTests
             Permission::update(Role::users())
         ]);
 
-        $this->assertEquals(true, $database->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, null, true, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
         try {
             $database->createDocument('movies', new Document(['$id' => ['id_as_array']]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('$id must be of type string', $e->getMessage());
+            $this->assertSame('$id must be of type string', $e->getMessage());
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
@@ -1666,7 +1666,7 @@ trait DocumentTests
         ]);
 
         $this->assertFalse($document->isEmpty());
-        $this->assertEquals('Frozen', $document->getAttribute('name'));
+        $this->assertSame('Frozen', $document->getAttribute('name'));
 
         $document = $database->findOne('movies', [
             Query::offset(10)
@@ -1682,23 +1682,23 @@ trait DocumentTests
         $documents = $database->find('movies');
         $movieDocuments = $documents;
 
-        $this->assertEquals(5, count($documents));
+        $this->assertSame(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
-        $this->assertEquals('movies', $documents[0]->getCollection());
-        $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getRead());
-        $this->assertEquals(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
-        $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
-        $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
+        $this->assertSame('movies', $documents[0]->getCollection());
+        $this->assertSame(['any', 'user:1', 'user:2'], $documents[0]->getRead());
+        $this->assertSame(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
+        $this->assertSame('Frozen', $documents[0]->getAttribute('name'));
+        $this->assertSame('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
         $this->assertIsString($documents[0]->getAttribute('director'));
-        $this->assertEquals(2013, $documents[0]->getAttribute('year'));
+        $this->assertSame(2013, $documents[0]->getAttribute('year'));
         $this->assertIsInt($documents[0]->getAttribute('year'));
-        $this->assertEquals(39.50, $documents[0]->getAttribute('price'));
+        $this->assertSame(39.50, $documents[0]->getAttribute('price'));
         $this->assertIsFloat($documents[0]->getAttribute('price'));
-        $this->assertEquals(true, $documents[0]->getAttribute('active'));
+        $this->assertSame(true, $documents[0]->getAttribute('active'));
         $this->assertIsBool($documents[0]->getAttribute('active'));
-        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('genres'));
+        $this->assertSame(['animation', 'kids'], $documents[0]->getAttribute('genres'));
         $this->assertIsArray($documents[0]->getAttribute('genres'));
-        $this->assertEquals('Works', $documents[0]->getAttribute('with-dash'));
+        $this->assertSame('Works', $documents[0]->getAttribute('with-dash'));
 
         // Alphabetical order
         $sortedDocuments = $movieDocuments;
@@ -1717,13 +1717,13 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('$id'),
         ]);
-        $this->assertEquals($lastDocumentId, $documents[0]->getId());
+        $this->assertSame($lastDocumentId, $documents[0]->getId());
         $documents = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
             Query::orderAsc('$id'),
         ]);
-        $this->assertEquals($firstDocumentId, $documents[0]->getId());
+        $this->assertSame($firstDocumentId, $documents[0]->getId());
 
         /**
          * Check internal numeric ID sorting
@@ -1733,13 +1733,13 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc(''),
         ]);
-        $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
+        $this->assertSame($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
         $documents = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
             Query::orderAsc(''),
         ]);
-        $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
+        $this->assertSame($movieDocuments[0]->getId(), $documents[0]->getId());
     }
 
     public function testFindCheckPermissions(): void
@@ -1753,7 +1753,7 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole('user:x');
         $documents = $database->find('movies');
 
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
     }
 
     public function testFindCheckInteger(): void
@@ -1768,13 +1768,13 @@ trait DocumentTests
             Query::equal('with-dash', ['Works']),
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         $documents = $database->find('movies', [
             Query::equal('with-dash', ['Works2', 'Works3']),
         ]);
 
-        $this->assertEquals(4, count($documents));
+        $this->assertSame(4, count($documents));
 
         /**
          * Check an Integer condition
@@ -1783,9 +1783,9 @@ trait DocumentTests
             Query::equal('year', [2019]),
         ]);
 
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals('Frozen II', $documents[0]['name']);
-        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame('Frozen II', $documents[0]['name']);
+        $this->assertSame('Captain Marvel', $documents[1]['name']);
     }
 
     public function testFindBoolean(): void
@@ -1800,7 +1800,7 @@ trait DocumentTests
             Query::equal('active', [true]),
         ]);
 
-        $this->assertEquals(4, count($documents));
+        $this->assertSame(4, count($documents));
     }
 
     public function testFindStringQueryEqual(): void
@@ -1815,13 +1815,13 @@ trait DocumentTests
             Query::equal('director', ['TBD']),
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         $documents = $database->find('movies', [
             Query::equal('director', ['']),
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
 
@@ -1849,7 +1849,7 @@ trait DocumentTests
 
         $total = $database->count('movies');
 
-        $this->assertEquals($total, count($documents));
+        $this->assertSame($total, count($documents));
     }
 
     public function testFindBetween(): void
@@ -1860,22 +1860,22 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::between('price', 25.94, 25.99),
         ]);
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         $documents = $database->find('movies', [
             Query::between('price', 30, 35),
         ]);
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
 
         $documents = $database->find('movies', [
             Query::between('$createdAt', '1975-12-06', '2050-12-06'),
         ]);
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         $documents = $database->find('movies', [
             Query::between('$updatedAt', '1975-12-06T07:08:49.733+02:00', '2050-02-05T10:15:21.825+00:00'),
         ]);
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
     }
 
     public function testFindFloat(): void
@@ -1891,7 +1891,7 @@ trait DocumentTests
             Query::greaterThan('price', 25.98),
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     public function testFindContains(): void
@@ -1908,7 +1908,7 @@ trait DocumentTests
             Query::contains('genres', ['comics'])
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         /**
          * Array contains OR condition
@@ -1917,13 +1917,13 @@ trait DocumentTests
             Query::contains('genres', ['comics', 'kids']),
         ]);
 
-        $this->assertEquals(4, count($documents));
+        $this->assertSame(4, count($documents));
 
         $documents = $database->find('movies', [
             Query::contains('genres', ['non-existent']),
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
 
         try {
             $database->find('movies', [
@@ -1931,7 +1931,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
+            $this->assertSame('Invalid query: Cannot query contains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }
@@ -1946,13 +1946,13 @@ trait DocumentTests
          */
         if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $success = $database->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
-            $this->assertEquals(true, $success);
+            $this->assertSame(true, $success);
 
             $documents = $database->find('movies', [
                 Query::search('name', 'captain'),
             ]);
 
-            $this->assertEquals(2, count($documents));
+            $this->assertSame(2, count($documents));
 
             /**
              * Fulltext search (wildcard)
@@ -1966,11 +1966,11 @@ trait DocumentTests
                     Query::search('name', 'cap'),
                 ]);
 
-                $this->assertEquals(2, count($documents));
+                $this->assertSame(2, count($documents));
             }
         }
 
-        $this->assertEquals(true, true); // Test must do an assertion
+        $this->assertSame(true, true); // Test must do an assertion
     }
     public function testFindFulltextSpecialChars(): void
     {
@@ -1999,7 +1999,7 @@ trait DocumentTests
         $documents = $database->find($collection, [
             Query::search('ft', 'chapter_4'),
         ]);
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
@@ -2011,9 +2011,9 @@ trait DocumentTests
         ]);
 
         if ($database->getAdapter()->getSupportForFulltextWildcardIndex()) {
-            $this->assertEquals(0, count($documents));
+            $this->assertSame(0, count($documents));
         } else {
-            $this->assertEquals(1, count($documents));
+            $this->assertSame(1, count($documents));
         }
 
         $database->createDocument($collection, new Document([
@@ -2030,13 +2030,13 @@ trait DocumentTests
             Query::search('ft', 'donald trump'),
             Query::orderAsc('ft'),
         ]);
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         $documents = $database->find($collection, [
             Query::search('ft', '"donald trump"'), // Exact match
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     public function testFindMultipleConditions(): void
@@ -2052,7 +2052,7 @@ trait DocumentTests
             Query::equal('year', [2026]),
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
 
         /**
          * Multiple conditions and OR values
@@ -2061,9 +2061,9 @@ trait DocumentTests
             Query::equal('name', ['Frozen II', 'Captain Marvel']),
         ]);
 
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals('Frozen II', $documents[0]['name']);
-        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame('Frozen II', $documents[0]['name']);
+        $this->assertSame('Captain Marvel', $documents[1]['name']);
     }
 
     public function testFindByID(): void
@@ -2078,8 +2078,8 @@ trait DocumentTests
             Query::equal('$id', ['frozen']),
         ]);
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame('Frozen', $documents[0]['name']);
     }
     /**
      * @depends testFind
@@ -2099,7 +2099,7 @@ trait DocumentTests
             Query::equal('$sequence', [$data['$sequence']]),
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     public function testFindOrderBy(): void
@@ -2117,13 +2117,13 @@ trait DocumentTests
             Query::orderAsc('name')
         ]);
 
-        $this->assertEquals(6, count($documents));
-        $this->assertEquals('Frozen', $documents[0]['name']);
-        $this->assertEquals('Frozen II', $documents[1]['name']);
-        $this->assertEquals('Captain Marvel', $documents[2]['name']);
-        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
-        $this->assertEquals('Work in Progress', $documents[4]['name']);
-        $this->assertEquals('Work in Progress 2', $documents[5]['name']);
+        $this->assertSame(6, count($documents));
+        $this->assertSame('Frozen', $documents[0]['name']);
+        $this->assertSame('Frozen II', $documents[1]['name']);
+        $this->assertSame('Captain Marvel', $documents[2]['name']);
+        $this->assertSame('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertSame('Work in Progress', $documents[4]['name']);
+        $this->assertSame('Work in Progress 2', $documents[5]['name']);
     }
     public function testFindOrderByNatural(): void
     {
@@ -2143,13 +2143,13 @@ trait DocumentTests
             Query::orderDesc(''),
         ]);
 
-        $this->assertEquals(6, count($documents));
-        $this->assertEquals($base[0]['name'], $documents[0]['name']);
-        $this->assertEquals($base[1]['name'], $documents[1]['name']);
-        $this->assertEquals($base[2]['name'], $documents[2]['name']);
-        $this->assertEquals($base[3]['name'], $documents[3]['name']);
-        $this->assertEquals($base[4]['name'], $documents[4]['name']);
-        $this->assertEquals($base[5]['name'], $documents[5]['name']);
+        $this->assertSame(6, count($documents));
+        $this->assertSame($base[0]['name'], $documents[0]['name']);
+        $this->assertSame($base[1]['name'], $documents[1]['name']);
+        $this->assertSame($base[2]['name'], $documents[2]['name']);
+        $this->assertSame($base[3]['name'], $documents[3]['name']);
+        $this->assertSame($base[4]['name'], $documents[4]['name']);
+        $this->assertSame($base[5]['name'], $documents[5]['name']);
     }
     public function testFindOrderByMultipleAttributes(): void
     {
@@ -2166,13 +2166,13 @@ trait DocumentTests
             Query::orderDesc('name')
         ]);
 
-        $this->assertEquals(6, count($documents));
-        $this->assertEquals('Frozen II', $documents[0]['name']);
-        $this->assertEquals('Frozen', $documents[1]['name']);
-        $this->assertEquals('Captain Marvel', $documents[2]['name']);
-        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
-        $this->assertEquals('Work in Progress 2', $documents[4]['name']);
-        $this->assertEquals('Work in Progress', $documents[5]['name']);
+        $this->assertSame(6, count($documents));
+        $this->assertSame('Frozen II', $documents[0]['name']);
+        $this->assertSame('Frozen', $documents[1]['name']);
+        $this->assertSame('Captain Marvel', $documents[2]['name']);
+        $this->assertSame('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertSame('Work in Progress 2', $documents[4]['name']);
+        $this->assertSame('Work in Progress', $documents[5]['name']);
     }
 
     public function testFindOrderByCursorAfter(): void
@@ -2193,26 +2193,26 @@ trait DocumentTests
             Query::offset(0),
             Query::cursorAfter($movies[1])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[2]['name'], $documents[0]['name']);
+        $this->assertSame($movies[3]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[4]['name'], $documents[0]['name']);
+        $this->assertSame($movies[5]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[4])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[5]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2229,31 +2229,31 @@ trait DocumentTests
             Query::orderAsc('price'),
         ]);
 
-        $this->assertEquals(6, count($movies));
+        $this->assertSame(6, count($movies));
 
-        $this->assertEquals($movies[0]['name'], 'Captain America: The First Avenger');
-        $this->assertEquals($movies[0]['year'], 2011);
-        $this->assertEquals($movies[0]['price'], 25.94);
+        $this->assertSame($movies[0]['name'], 'Captain America: The First Avenger');
+        $this->assertSame($movies[0]['year'], 2011);
+        $this->assertSame($movies[0]['price'], 25.94);
 
-        $this->assertEquals($movies[1]['name'], 'Frozen');
-        $this->assertEquals($movies[1]['year'], 2013);
-        $this->assertEquals($movies[1]['price'], 39.5);
+        $this->assertSame($movies[1]['name'], 'Frozen');
+        $this->assertSame($movies[1]['year'], 2013);
+        $this->assertSame($movies[1]['price'], 39.5);
 
-        $this->assertEquals($movies[2]['name'], 'Captain Marvel');
-        $this->assertEquals($movies[2]['year'], 2019);
-        $this->assertEquals($movies[2]['price'], 25.99);
+        $this->assertSame($movies[2]['name'], 'Captain Marvel');
+        $this->assertSame($movies[2]['year'], 2019);
+        $this->assertSame($movies[2]['price'], 25.99);
 
-        $this->assertEquals($movies[3]['name'], 'Frozen II');
-        $this->assertEquals($movies[3]['year'], 2019);
-        $this->assertEquals($movies[3]['price'], 39.5);
+        $this->assertSame($movies[3]['name'], 'Frozen II');
+        $this->assertSame($movies[3]['year'], 2019);
+        $this->assertSame($movies[3]['price'], 39.5);
 
-        $this->assertEquals($movies[4]['name'], 'Work in Progress');
-        $this->assertEquals($movies[4]['year'], 2025);
-        $this->assertEquals($movies[4]['price'], 0);
+        $this->assertSame($movies[4]['name'], 'Work in Progress');
+        $this->assertSame($movies[4]['year'], 2025);
+        $this->assertSame($movies[4]['price'], 0);
 
-        $this->assertEquals($movies[5]['name'], 'Work in Progress 2');
-        $this->assertEquals($movies[5]['year'], 2026);
-        $this->assertEquals($movies[5]['price'], 0);
+        $this->assertSame($movies[5]['name'], 'Work in Progress 2');
+        $this->assertSame($movies[5]['year'], 2026);
+        $this->assertSame($movies[5]['price'], 0);
 
         $pos = 2;
         $documents = $database->find('movies', [
@@ -2262,12 +2262,12 @@ trait DocumentTests
             Query::cursorAfter($movies[$pos])
         ]);
 
-        $this->assertEquals(3, count($documents));
+        $this->assertSame(3, count($documents));
 
         foreach ($documents as $i => $document) {
-            $this->assertEquals($document['name'], $movies[$i + 1 + $pos]['name']);
-            $this->assertEquals($document['price'], $movies[$i + 1 + $pos]['price']);
-            $this->assertEquals($document['year'], $movies[$i + 1 + $pos]['year']);
+            $this->assertSame($document['name'], $movies[$i + 1 + $pos]['name']);
+            $this->assertSame($document['price'], $movies[$i + 1 + $pos]['price']);
+            $this->assertSame($document['year'], $movies[$i + 1 + $pos]['year']);
         }
     }
 
@@ -2290,35 +2290,35 @@ trait DocumentTests
             Query::offset(0),
             Query::cursorBefore($movies[5])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[3]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[4]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[3]['name'], $documents[0]['name']);
+        $this->assertSame($movies[4]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[1]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[2]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[1]['name'], $documents[0]['name']);
+        $this->assertSame($movies[2]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[2])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[1]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame($movies[1]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[1])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2347,9 +2347,9 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[1])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[2]['name'], $documents[0]['name']);
+        $this->assertSame($movies[3]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2357,9 +2357,9 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[4]['name'], $documents[0]['name']);
+        $this->assertSame($movies[5]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2367,8 +2367,8 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[4])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[5]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2398,9 +2398,9 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorBefore($movies[5])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[3]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[4]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[3]['name'], $documents[0]['name']);
+        $this->assertSame($movies[4]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2408,9 +2408,9 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorBefore($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[1]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[2]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[1]['name'], $documents[0]['name']);
+        $this->assertSame($movies[2]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2418,9 +2418,9 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorBefore($movies[2])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[1]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame($movies[1]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2428,8 +2428,8 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorBefore($movies[1])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2461,9 +2461,9 @@ trait DocumentTests
             Query::cursorAfter($movies[1])
         ]);
 
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[2]['name'], $documents[0]['name']);
+        $this->assertSame($movies[3]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2471,9 +2471,9 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorAfter($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[4]['name'], $documents[0]['name']);
+        $this->assertSame($movies[5]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2481,8 +2481,8 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorAfter($movies[4])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[5]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2514,9 +2514,9 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorBefore($movies[5])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[3]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[4]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[3]['name'], $documents[0]['name']);
+        $this->assertSame($movies[4]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2524,9 +2524,9 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorBefore($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[1]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[2]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[1]['name'], $documents[0]['name']);
+        $this->assertSame($movies[2]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2534,9 +2534,9 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorBefore($movies[2])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[1]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame($movies[1]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2544,8 +2544,8 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::cursorBefore($movies[1])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2578,9 +2578,9 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorAfter($movies[1])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[2]['name'], $documents[0]['name']);
+        $this->assertSame($movies[3]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2589,9 +2589,9 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorAfter($movies[3])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[4]['name'], $documents[0]['name']);
+        $this->assertSame($movies[5]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2600,8 +2600,8 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorAfter($movies[4])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[5]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2636,9 +2636,9 @@ trait DocumentTests
             Query::cursorBefore($movies[5])
         ]);
 
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[3]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[4]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[3]['name'], $documents[0]['name']);
+        $this->assertSame($movies[4]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2647,9 +2647,9 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorBefore($movies[4])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[2]['name'], $documents[0]['name']);
+        $this->assertSame($movies[3]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2658,9 +2658,9 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorBefore($movies[2])
         ]);
-        $this->assertEquals(2, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
-        $this->assertEquals($movies[1]['name'], $documents[1]['name']);
+        $this->assertSame(2, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame($movies[1]['name'], $documents[1]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2669,8 +2669,8 @@ trait DocumentTests
             Query::orderAsc('year'),
             Query::cursorBefore($movies[1])
         ]);
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($movies[0]['name'], $documents[0]['name']);
+        $this->assertSame(1, count($documents));
+        $this->assertSame($movies[0]['name'], $documents[0]['name']);
 
         $documents = $database->find('movies', [
             Query::limit(2),
@@ -2701,7 +2701,7 @@ trait DocumentTests
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+        $this->assertSame($documentsTest[1]['$id'], $documents[0]['$id']);
     }
     public function testFindOrderByIdAndCursor(): void
     {
@@ -2723,7 +2723,7 @@ trait DocumentTests
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+        $this->assertSame($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
     public function testFindOrderByCreateDateAndCursor(): void
@@ -2747,7 +2747,7 @@ trait DocumentTests
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+        $this->assertSame($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
     public function testFindOrderByUpdateDateAndCursor(): void
@@ -2770,7 +2770,7 @@ trait DocumentTests
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+        $this->assertSame($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
     public function testFindCreatedBefore(): void
@@ -2796,7 +2796,7 @@ trait DocumentTests
             Query::limit(1)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
     public function testFindCreatedAfter(): void
@@ -2822,7 +2822,7 @@ trait DocumentTests
             Query::limit(1)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
     public function testFindUpdatedBefore(): void
@@ -2848,7 +2848,7 @@ trait DocumentTests
             Query::limit(1)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
     public function testFindUpdatedAfter(): void
@@ -2874,7 +2874,7 @@ trait DocumentTests
             Query::limit(1)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
     public function testFindCreatedBetween(): void
@@ -2904,7 +2904,7 @@ trait DocumentTests
             Query::limit(25)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
 
         // Documents created between recent past and near future
         $documents = $database->find('movies', [
@@ -2950,7 +2950,7 @@ trait DocumentTests
             Query::limit(25)
         ]);
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
 
         // Documents updated between recent past and near future
         $documents = $database->find('movies', [
@@ -2983,11 +2983,11 @@ trait DocumentTests
             Query::orderAsc('name')
         ]);
 
-        $this->assertEquals(4, count($documents));
-        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
-        $this->assertEquals('Captain Marvel', $documents[1]['name']);
-        $this->assertEquals('Frozen', $documents[2]['name']);
-        $this->assertEquals('Frozen II', $documents[3]['name']);
+        $this->assertSame(4, count($documents));
+        $this->assertSame('Captain America: The First Avenger', $documents[0]['name']);
+        $this->assertSame('Captain Marvel', $documents[1]['name']);
+        $this->assertSame('Frozen', $documents[2]['name']);
+        $this->assertSame('Frozen II', $documents[3]['name']);
     }
 
 
@@ -3005,11 +3005,11 @@ trait DocumentTests
             Query::orderAsc('name')
         ]);
 
-        $this->assertEquals(4, count($documents));
-        $this->assertEquals('Frozen', $documents[0]['name']);
-        $this->assertEquals('Frozen II', $documents[1]['name']);
-        $this->assertEquals('Work in Progress', $documents[2]['name']);
-        $this->assertEquals('Work in Progress 2', $documents[3]['name']);
+        $this->assertSame(4, count($documents));
+        $this->assertSame('Frozen', $documents[0]['name']);
+        $this->assertSame('Frozen II', $documents[1]['name']);
+        $this->assertSame('Work in Progress', $documents[2]['name']);
+        $this->assertSame('Work in Progress 2', $documents[3]['name']);
     }
 
     public function testFindOrQueries(): void
@@ -3024,7 +3024,7 @@ trait DocumentTests
             Query::equal('director', ['TBD', 'Joe Johnston']),
             Query::equal('year', [2025]),
         ]);
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     /**
@@ -3039,7 +3039,7 @@ trait DocumentTests
 
         $database->createCollection($collection);
 
-        $this->assertEquals(true, $database->createAttribute($collection, 'value', Database::VAR_STRING, 256, true));
+        $this->assertSame(true, $database->createAttribute($collection, 'value', Database::VAR_STRING, 256, true));
 
         $values = [
             'NormalString',
@@ -3074,13 +3074,13 @@ trait DocumentTests
          */
         $documents = $database->find($collection);
 
-        $this->assertEquals(count($values), count($documents));
+        $this->assertSame(count($values), count($documents));
         $this->assertNotEmpty($documents[0]->getId());
-        $this->assertEquals($collection, $documents[0]->getCollection());
-        $this->assertEquals(['any'], $documents[0]->getRead());
-        $this->assertEquals(['any'], $documents[0]->getUpdate());
-        $this->assertEquals(['any'], $documents[0]->getDelete());
-        $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
+        $this->assertSame($collection, $documents[0]->getCollection());
+        $this->assertSame(['any'], $documents[0]->getRead());
+        $this->assertSame(['any'], $documents[0]->getUpdate());
+        $this->assertSame(['any'], $documents[0]->getDelete());
+        $this->assertSame($values[0], $documents[0]->getAttribute('value'));
 
         /**
          * Check `equals` query
@@ -3091,8 +3091,8 @@ trait DocumentTests
                 Query::equal('value', [$value])
             ]);
 
-            $this->assertEquals(1, count($documents));
-            $this->assertEquals($value, $documents[0]->getAttribute('value'));
+            $this->assertSame(1, count($documents));
+            $this->assertSame($value, $documents[0]->getAttribute('value'));
         }
     }
 
@@ -3109,7 +3109,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
+            $this->assertSame('Invalid query: Or queries require at least two queries', $e->getMessage());
         }
     }
 
@@ -3125,7 +3125,7 @@ trait DocumentTests
             ])
         ];
         $this->assertCount(4, $database->find('movies', $queries));
-        $this->assertEquals(4, $database->count('movies', $queries));
+        $this->assertSame(4, $database->count('movies', $queries));
 
         $queries = [
             Query::equal('active', [true]),
@@ -3137,7 +3137,7 @@ trait DocumentTests
         ];
 
         $this->assertCount(3, $database->find('movies', $queries));
-        $this->assertEquals(3, $database->count('movies', $queries));
+        $this->assertSame(3, $database->count('movies', $queries));
     }
 
     public function testOrNested(): void
@@ -3162,7 +3162,7 @@ trait DocumentTests
         $this->assertArrayNotHasKey('name', $documents[0]);
 
         $count = $database->count('movies', $queries);
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
     }
 
     public function testAndSingleQuery(): void
@@ -3178,7 +3178,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
+            $this->assertSame('Invalid query: And queries require at least two queries', $e->getMessage());
         }
     }
 
@@ -3194,7 +3194,7 @@ trait DocumentTests
             ])
         ];
         $this->assertCount(1, $database->find('movies', $queries));
-        $this->assertEquals(1, $database->count('movies', $queries));
+        $this->assertSame(1, $database->count('movies', $queries));
     }
 
     public function testAndNested(): void
@@ -3216,7 +3216,7 @@ trait DocumentTests
         $this->assertCount(3, $documents);
 
         $count = $database->count('movies', $queries);
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
     }
 
     public function testNestedIDQueries(): void
@@ -3231,7 +3231,7 @@ trait DocumentTests
             Permission::update(Role::users())
         ]);
 
-        $this->assertEquals(true, $database->createAttribute('movies_nested_id', 'name', Database::VAR_STRING, 128, true));
+        $this->assertSame(true, $database->createAttribute('movies_nested_id', 'name', Database::VAR_STRING, 128, true));
 
         $database->createDocument('movies_nested_id', new Document([
             '$id' => ID::custom('1'),
@@ -3277,10 +3277,10 @@ trait DocumentTests
         $this->assertCount(2, $documents);
 
         // Make sure the query was not modified by reference
-        $this->assertEquals($queries[0]->getValues()[0]->getAttribute(), '$id');
+        $this->assertSame($queries[0]->getValues()[0]->getAttribute(), '$id');
 
         $count = $database->count('movies_nested_id', $queries);
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
     }
 
     public function testFindNull(): void
@@ -3292,7 +3292,7 @@ trait DocumentTests
             Query::isNull('nullable'),
         ]);
 
-        $this->assertEquals(5, count($documents));
+        $this->assertSame(5, count($documents));
     }
 
     public function testFindNotNull(): void
@@ -3304,7 +3304,7 @@ trait DocumentTests
             Query::isNotNull('nullable'),
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     public function testFindStartsWith(): void
@@ -3316,7 +3316,7 @@ trait DocumentTests
             Query::startsWith('name', 'Work'),
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
 
         if ($this->getDatabase()->getAdapter() instanceof SQL) {
             $documents = $database->find('movies', [
@@ -3328,7 +3328,7 @@ trait DocumentTests
             ]);
         }
 
-        $this->assertEquals(0, count($documents));
+        $this->assertSame(0, count($documents));
     }
 
     public function testFindStartsWithWords(): void
@@ -3340,7 +3340,7 @@ trait DocumentTests
             Query::startsWith('name', 'Work in Progress'),
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertSame(2, count($documents));
     }
 
     public function testFindEndsWith(): void
@@ -3352,7 +3352,7 @@ trait DocumentTests
             Query::endsWith('name', 'Marvel'),
         ]);
 
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
     }
 
     public function testFindNotContains(): void
@@ -3370,27 +3370,27 @@ trait DocumentTests
             Query::notContains('genres', ['comics'])
         ]);
 
-        $this->assertEquals(4, count($documents)); // All movies except the 2 with 'comics' genre
+        $this->assertSame(4, count($documents)); // All movies except the 2 with 'comics' genre
 
         // Test notContains with multiple values (AND logic - exclude documents containing ANY of these)
         $documents = $database->find('movies', [
             Query::notContains('genres', ['comics', 'kids']),
         ]);
 
-        $this->assertEquals(2, count($documents)); // Movies that have neither 'comics' nor 'kids'
+        $this->assertSame(2, count($documents)); // Movies that have neither 'comics' nor 'kids'
 
         // Test notContains with non-existent genre - should return all documents
         $documents = $database->find('movies', [
             Query::notContains('genres', ['non-existent']),
         ]);
 
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         // Test notContains with string attribute (substring search)
         $documents = $database->find('movies', [
             Query::notContains('name', ['Captain'])
         ]);
-        $this->assertEquals(4, count($documents)); // All movies except those containing 'Captain'
+        $this->assertSame(4, count($documents)); // All movies except those containing 'Captain'
 
         // Test notContains combined with other queries (AND logic)
         $documents = $database->find('movies', [
@@ -3403,7 +3403,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::notContains('genres', ['COMICS']) // Different case
         ]);
-        $this->assertEquals(6, count($documents)); // All movies since case doesn't match
+        $this->assertSame(6, count($documents)); // All movies since case doesn't match
 
         // Test error handling for invalid attribute type
         try {
@@ -3412,7 +3412,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query notContains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
+            $this->assertSame('Invalid query: Cannot query notContains on attribute "price" because it is not an array, string, or object.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }
@@ -3439,14 +3439,14 @@ trait DocumentTests
                 Query::notSearch('name', 'captain'),
             ]);
 
-            $this->assertEquals(4, count($documents)); // All movies except the 2 with 'captain' in name
+            $this->assertSame(4, count($documents)); // All movies except the 2 with 'captain' in name
 
             // Test notSearch with term that doesn't exist - should return all documents
             $documents = $database->find('movies', [
                 Query::notSearch('name', 'nonexistent'),
             ]);
 
-            $this->assertEquals(6, count($documents));
+            $this->assertSame(6, count($documents));
 
             // Test notSearch with partial term
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
@@ -3454,14 +3454,14 @@ trait DocumentTests
                     Query::notSearch('name', 'cap'),
                 ]);
 
-                $this->assertEquals(4, count($documents)); // All movies except those matching 'cap'
+                $this->assertSame(4, count($documents)); // All movies except those matching 'cap'
             }
 
             // Test notSearch with empty string - should return all documents
             $documents = $database->find('movies', [
                 Query::notSearch('name', ''),
             ]);
-            $this->assertEquals(6, count($documents)); // All movies since empty search matches nothing
+            $this->assertSame(6, count($documents)); // All movies since empty search matches nothing
 
             // Test notSearch combined with other filters
             $documents = $database->find('movies', [
@@ -3474,10 +3474,10 @@ trait DocumentTests
             $documents = $database->find('movies', [
                 Query::notSearch('name', '@#$%'),
             ]);
-            $this->assertEquals(6, count($documents)); // All movies since special chars don't match
+            $this->assertSame(6, count($documents)); // All movies since special chars don't match
         }
 
-        $this->assertEquals(true, true); // Test must do an assertion
+        $this->assertSame(true, true); // Test must do an assertion
     }
 
     public function testFindNotStartsWith(): void
@@ -3490,14 +3490,14 @@ trait DocumentTests
             Query::notStartsWith('name', 'Work'),
         ]);
 
-        $this->assertEquals(4, count($documents)); // All movies except the 2 starting with 'Work'
+        $this->assertSame(4, count($documents)); // All movies except the 2 starting with 'Work'
 
         // Test notStartsWith with non-existent prefix - should return all documents
         $documents = $database->find('movies', [
             Query::notStartsWith('name', 'NonExistent'),
         ]);
 
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         // Test notStartsWith with wildcard characters (should treat them literally)
         if ($this->getDatabase()->getAdapter() instanceof SQL) {
@@ -3510,13 +3510,13 @@ trait DocumentTests
             ]);
         }
 
-        $this->assertEquals(6, count($documents)); // Should return all since no movie starts with these patterns
+        $this->assertSame(6, count($documents)); // Should return all since no movie starts with these patterns
 
         // Test notStartsWith with empty string - should return no documents (all strings start with empty)
         $documents = $database->find('movies', [
             Query::notStartsWith('name', ''),
         ]);
-        $this->assertEquals(0, count($documents)); // No documents since all strings start with empty string
+        $this->assertSame(0, count($documents)); // No documents since all strings start with empty string
 
         // Test notStartsWith with single character
         $documents = $database->find('movies', [
@@ -3548,27 +3548,27 @@ trait DocumentTests
             Query::notEndsWith('name', 'Marvel'),
         ]);
 
-        $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'Marvel'
+        $this->assertSame(5, count($documents)); // All movies except the 1 ending with 'Marvel'
 
         // Test notEndsWith with non-existent suffix - should return all documents
         $documents = $database->find('movies', [
             Query::notEndsWith('name', 'NonExistent'),
         ]);
 
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         // Test notEndsWith with partial suffix
         $documents = $database->find('movies', [
             Query::notEndsWith('name', 'vel'),
         ]);
 
-        $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'vel' (from 'Marvel')
+        $this->assertSame(5, count($documents)); // All movies except the 1 ending with 'vel' (from 'Marvel')
 
         // Test notEndsWith with empty string - should return no documents (all strings end with empty)
         $documents = $database->find('movies', [
             Query::notEndsWith('name', ''),
         ]);
-        $this->assertEquals(0, count($documents)); // No documents since all strings end with empty string
+        $this->assertSame(0, count($documents)); // No documents since all strings end with empty string
 
         // Test notEndsWith with single character
         $documents = $database->find('movies', [
@@ -3587,7 +3587,7 @@ trait DocumentTests
             Query::notEndsWith('name', 'Marvel'),
             Query::limit(3)
         ]);
-        $this->assertEquals(3, count($documents)); // Limited to 3 results
+        $this->assertSame(3, count($documents)); // Limited to 3 results
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
     }
 
@@ -3606,7 +3606,7 @@ trait DocumentTests
             Query::orderRandom(),
             Query::limit(1),
         ]);
-        $this->assertEquals(1, count($documents));
+        $this->assertSame(1, count($documents));
         $this->assertNotEmpty($documents[0]['name']); // Ensure we got a valid document
 
         // Test orderRandom with multiple documents
@@ -3614,7 +3614,7 @@ trait DocumentTests
             Query::orderRandom(),
             Query::limit(3),
         ]);
-        $this->assertEquals(3, count($documents));
+        $this->assertSame(3, count($documents));
 
         // Test that orderRandom returns different results (not guaranteed but highly likely)
         $firstSet = $database->find('movies', [
@@ -3633,8 +3633,8 @@ trait DocumentTests
         // While not guaranteed to be different, with 6 movies and selecting 3,
         // the probability of getting the same set in the same order is very low
         // We'll just check that we got valid results
-        $this->assertEquals(3, count($firstIds));
-        $this->assertEquals(3, count($secondIds));
+        $this->assertSame(3, count($firstIds));
+        $this->assertSame(3, count($secondIds));
 
         // Test orderRandom with more than available documents
         $documents = $database->find('movies', [
@@ -3671,31 +3671,31 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::notBetween('price', 25.94, 25.99),
         ]);
-        $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
+        $this->assertSame(4, count($documents)); // All movies except the 2 in the price range
 
         // Test notBetween with range that includes no documents - should return all documents
         $documents = $database->find('movies', [
             Query::notBetween('price', 30, 35),
         ]);
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         // Test notBetween with date range
         $documents = $database->find('movies', [
             Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
         ]);
-        $this->assertEquals(0, count($documents)); // No movies outside this wide date range
+        $this->assertSame(0, count($documents)); // No movies outside this wide date range
 
         // Test notBetween with narrower date range
         $documents = $database->find('movies', [
             Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
         ]);
-        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+        $this->assertSame(6, count($documents)); // All movies should be outside this narrow range
 
         // Test notBetween with updated date range
         $documents = $database->find('movies', [
             Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
         ]);
-        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+        $this->assertSame(6, count($documents)); // All movies should be outside this narrow range
 
         // Test notBetween with year range (integer values)
         $documents = $database->find('movies', [
@@ -3721,7 +3721,7 @@ trait DocumentTests
             Query::orderDesc('year'),
             Query::limit(2)
         ]);
-        $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
+        $this->assertSame(2, count($documents)); // Limited results, ordered, excluding price range
 
         // Test notBetween with extreme ranges
         $documents = $database->find('movies', [
@@ -3881,7 +3881,7 @@ trait DocumentTests
         $database->foreach('movies', queries: [Query::limit(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
-        $this->assertEquals(6, count($documents));
+        $this->assertSame(6, count($documents));
 
         /**
          * Test, foreach with initial cursor
@@ -3892,7 +3892,7 @@ trait DocumentTests
         $database->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
-        $this->assertEquals(5, count($documents));
+        $this->assertSame(5, count($documents));
 
         /**
          * Test, foreach with initial offset
@@ -3902,7 +3902,7 @@ trait DocumentTests
         $database->foreach('movies', queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
-        $this->assertEquals(4, count($documents));
+        $this->assertSame(4, count($documents));
 
         /**
          * Test, cursor before throws error
@@ -3914,7 +3914,7 @@ trait DocumentTests
 
         } catch (Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertEquals('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.', $e->getMessage());
+            $this->assertSame('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.', $e->getMessage());
         }
 
     }
@@ -3928,27 +3928,27 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $count = $database->count('movies');
-        $this->assertEquals(6, $count);
+        $this->assertSame(6, $count);
         $count = $database->count('movies', [Query::equal('year', [2019])]);
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
         $count = $database->count('movies', [Query::equal('with-dash', ['Works'])]);
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
         $count = $database->count('movies', [Query::equal('with-dash', ['Works2', 'Works3'])]);
-        $this->assertEquals(4, $count);
+        $this->assertSame(4, $count);
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
         $count = $database->count('movies');
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
 
         $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies');
-        $this->assertEquals(6, $count);
+        $this->assertSame(6, $count);
         $this->getDatabase()->getAuthorization()->reset();
 
         $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies', [], 3);
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
         $this->getDatabase()->getAuthorization()->reset();
 
         /**
@@ -3959,7 +3959,7 @@ trait DocumentTests
             Query::equal('director', ['TBD', 'Joe Johnston']),
             Query::equal('year', [2025]),
         ]);
-        $this->assertEquals(1, $count);
+        $this->assertSame(1, $count);
         $this->getDatabase()->getAuthorization()->reset();
     }
 
@@ -3974,27 +3974,27 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole('user:x');
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
-        $this->assertEquals(2019 + 2019, $sum);
+        $this->assertSame(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');
-        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
+        $this->assertSame(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
         $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
-        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $this->assertSame(round(39.50 + 25.99, 2), round($sum, 2));
         $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
-        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $this->assertSame(round(39.50 + 25.99, 2), round($sum, 2));
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])], 1);
-        $this->assertEquals(2019, $sum);
+        $this->assertSame(2019, $sum);
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
-        $this->assertEquals(2019 + 2019, $sum);
+        $this->assertSame(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');
-        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025, $sum);
+        $this->assertSame(2013 + 2019 + 2011 + 2019 + 2025, $sum);
         $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
-        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $this->assertSame(round(39.50 + 25.99, 2), round($sum, 2));
         $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
-        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $this->assertSame(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
     public function testEncodeDecode(): void
@@ -4193,51 +4193,51 @@ trait DocumentTests
 
         $result = $database->encode($collection, $document);
 
-        $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
+        $this->assertSame('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getAttribute('$permissions'));
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
         $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
         $this->assertContains('user:608fdbe51361a', $result->getCreate());
         $this->assertContains('user:608fdbe51361a', $result->getWrite());
-        $this->assertEquals('test@example.com', $result->getAttribute('email'));
-        $this->assertEquals(false, $result->getAttribute('emailVerification'));
-        $this->assertEquals(1, $result->getAttribute('status'));
-        $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
-        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
-        $this->assertEquals(false, $result->getAttribute('reset'));
-        $this->assertEquals('My Name', $result->getAttribute('name'));
-        $this->assertEquals('{}', $result->getAttribute('prefs'));
-        $this->assertEquals('[]', $result->getAttribute('sessions'));
-        $this->assertEquals('[]', $result->getAttribute('tokens'));
-        $this->assertEquals('[]', $result->getAttribute('memberships'));
-        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
-        $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
+        $this->assertSame('test@example.com', $result->getAttribute('email'));
+        $this->assertSame(false, $result->getAttribute('emailVerification'));
+        $this->assertSame(1, $result->getAttribute('status'));
+        $this->assertSame('randomhash', $result->getAttribute('password'));
+        $this->assertSame('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertSame('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
+        $this->assertSame(false, $result->getAttribute('reset'));
+        $this->assertSame('My Name', $result->getAttribute('name'));
+        $this->assertSame('{}', $result->getAttribute('prefs'));
+        $this->assertSame('[]', $result->getAttribute('sessions'));
+        $this->assertSame('[]', $result->getAttribute('tokens'));
+        $this->assertSame('[]', $result->getAttribute('memberships'));
+        $this->assertSame(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
+        $this->assertSame(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
         $result = $database->decode($collection, $document);
 
-        $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
+        $this->assertSame('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getAttribute('$permissions'));
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
         $this->assertContains(Permission::create(Role::user('608fdbe51361a')), $result->getPermissions());
         $this->assertContains('user:608fdbe51361a', $result->getCreate());
         $this->assertContains('user:608fdbe51361a', $result->getWrite());
-        $this->assertEquals('test@example.com', $result->getAttribute('email'));
-        $this->assertEquals(false, $result->getAttribute('emailVerification'));
-        $this->assertEquals(1, $result->getAttribute('status'));
-        $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $result->getAttribute('passwordUpdate'));
-        $this->assertEquals('1975-06-12T13:12:55.000+00:00', $result->getAttribute('registration'));
-        $this->assertEquals(false, $result->getAttribute('reset'));
-        $this->assertEquals('My Name', $result->getAttribute('name'));
-        $this->assertEquals([], $result->getAttribute('prefs'));
-        $this->assertEquals([], $result->getAttribute('sessions'));
-        $this->assertEquals([], $result->getAttribute('tokens'));
-        $this->assertEquals([], $result->getAttribute('memberships'));
-        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
-        $this->assertEquals([
+        $this->assertSame('test@example.com', $result->getAttribute('email'));
+        $this->assertSame(false, $result->getAttribute('emailVerification'));
+        $this->assertSame(1, $result->getAttribute('status'));
+        $this->assertSame('randomhash', $result->getAttribute('password'));
+        $this->assertSame('2000-06-12T14:12:55.000+00:00', $result->getAttribute('passwordUpdate'));
+        $this->assertSame('1975-06-12T13:12:55.000+00:00', $result->getAttribute('registration'));
+        $this->assertSame(false, $result->getAttribute('reset'));
+        $this->assertSame('My Name', $result->getAttribute('name'));
+        $this->assertSame([], $result->getAttribute('prefs'));
+        $this->assertSame([], $result->getAttribute('sessions'));
+        $this->assertSame([], $result->getAttribute('tokens'));
+        $this->assertSame([], $result->getAttribute('memberships'));
+        $this->assertSame(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
+        $this->assertSame([
             new Document(['$id' => '1', 'label' => 'x']),
             new Document(['$id' => '2', 'label' => 'y']),
             new Document(['$id' => '3', 'label' => 'z']),
@@ -4262,20 +4262,20 @@ trait DocumentTests
 
         $this->assertNotEmpty($new->getId());
         $this->assertIsString($new->getAttribute('string'));
-        $this->assertEquals('text📝 updated', $new->getAttribute('string'));
+        $this->assertSame('text📝 updated', $new->getAttribute('string'));
         $this->assertIsInt($new->getAttribute('integer_signed'));
-        $this->assertEquals(-6, $new->getAttribute('integer_signed'));
+        $this->assertSame(-6, $new->getAttribute('integer_signed'));
         $this->assertIsInt($new->getAttribute('integer_unsigned'));
-        $this->assertEquals(6, $new->getAttribute('integer_unsigned'));
+        $this->assertSame(6, $new->getAttribute('integer_unsigned'));
         $this->assertIsFloat($new->getAttribute('float_signed'));
-        $this->assertEquals(-5.56, $new->getAttribute('float_signed'));
+        $this->assertSame(-5.56, $new->getAttribute('float_signed'));
         $this->assertIsFloat($new->getAttribute('float_unsigned'));
-        $this->assertEquals(5.56, $new->getAttribute('float_unsigned'));
+        $this->assertSame(5.56, $new->getAttribute('float_unsigned'));
         $this->assertIsBool($new->getAttribute('boolean'));
-        $this->assertEquals(false, $new->getAttribute('boolean'));
+        $this->assertSame(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
-        $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
-        $this->assertEquals('Works', $new->getAttribute('with-dash'));
+        $this->assertSame(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+        $this->assertSame('Works', $new->getAttribute('with-dash'));
 
         $oldPermissions = $document->getPermissions();
 
@@ -4312,12 +4312,12 @@ trait DocumentTests
         $newId = 'new-id';
         $new->setAttribute('$id', $newId);
         $new = $this->getDatabase()->updateDocument($new->getCollection(), $id, $new);
-        $this->assertEquals($newId, $new->getId());
+        $this->assertSame($newId, $new->getId());
 
         // Reset ID
         $new->setAttribute('$id', $id);
         $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
-        $this->assertEquals($id, $new->getId());
+        $this->assertSame($id, $new->getId());
 
         return $document;
     }
@@ -4332,7 +4332,7 @@ trait DocumentTests
         $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
-        $this->assertEquals(7, $result->getAttribute('integer_signed'));
+        $this->assertSame(7, $result->getAttribute('integer_signed'));
 
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $document->setAttribute('integer_signed', 8);
@@ -4343,7 +4343,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertTrue($e instanceof ConflictException);
-            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+            $this->assertSame('Document was updated after the request timestamp', $e->getMessage());
         }
     }
 
@@ -4390,8 +4390,8 @@ trait DocumentTests
         $result = $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
         $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
 
-        $this->assertEquals(true, $result);
-        $this->assertEquals(true, $document->isEmpty());
+        $this->assertSame(true, $result);
+        $this->assertSame(true, $document->isEmpty());
     }
 
     public function testUpdateDocuments(): void
@@ -4456,10 +4456,10 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
 
         foreach ($results as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertSame('text📝 updated', $document->getAttribute('string'));
         }
 
         $updatedDocuments = $database->find($collection, [
@@ -4469,7 +4469,7 @@ trait DocumentTests
         $this->assertCount(5, $updatedDocuments);
 
         foreach ($updatedDocuments as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertSame('text📝 updated', $document->getAttribute('string'));
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
         }
 
@@ -4477,23 +4477,23 @@ trait DocumentTests
             Query::lessThan('integer', 5),
         ]);
 
-        $this->assertEquals(count($controlDocuments), 5);
+        $this->assertSame(count($controlDocuments), 5);
 
         foreach ($controlDocuments as $document) {
             $this->assertNotEquals('text📝 updated', $document->getAttribute('string'));
         }
 
         // Test Update all documents
-        $this->assertEquals(10, $database->updateDocuments($collection, new Document([
+        $this->assertSame(10, $database->updateDocuments($collection, new Document([
             'string' => 'text📝 updated all',
         ])));
 
         $updatedDocuments = $database->find($collection);
 
-        $this->assertEquals(count($updatedDocuments), 10);
+        $this->assertSame(count($updatedDocuments), 10);
 
         foreach ($updatedDocuments as $document) {
-            $this->assertEquals('text📝 updated all', $document->getAttribute('string'));
+            $this->assertSame('text📝 updated all', $document->getAttribute('string'));
         }
 
         // TEST: Can't delete documents in the past
@@ -4507,7 +4507,7 @@ trait DocumentTests
             });
             $this->fail('Failed to throw exception');
         } catch (ConflictException $e) {
-            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+            $this->assertSame('Document was updated after the request timestamp', $e->getMessage());
         }
 
         // Check collection level permissions
@@ -4574,14 +4574,14 @@ trait DocumentTests
         });
 
         // Test we can update more documents than batchSize
-        $this->assertEquals(10, $database->updateDocuments($collection, new Document([
+        $this->assertSame(10, $database->updateDocuments($collection, new Document([
             'string' => 'batchSize Test'
         ]), batchSize: 2));
 
         $documents = $database->find($collection);
 
         foreach ($documents as $document) {
-            $this->assertEquals('batchSize Test', $document->getAttribute('string'));
+            $this->assertSame('batchSize Test', $document->getAttribute('string'));
         }
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
@@ -4653,7 +4653,7 @@ trait DocumentTests
             });
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+            $this->assertSame("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         }
 
         // Test Update half of the documents
@@ -4667,13 +4667,13 @@ trait DocumentTests
             throw new Exception("Error thrown to test that update doesn't stop and error is caught");
         }, onError:function ($e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+            $this->assertSame("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         });
 
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
 
         foreach ($results as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertSame('text📝 updated', $document->getAttribute('string'));
         }
 
         $updatedDocuments = $database->find($collection, [
@@ -4712,12 +4712,12 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
         ]));
 
-        $this->assertEquals(false, $document->isEmpty());
+        $this->assertSame(false, $document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
 
         $document = $database->getDocument($document->getCollection(), $document->getId());
-        $this->assertEquals(true, $document->isEmpty());
+        $this->assertSame(true, $document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
@@ -4815,7 +4815,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
+        $this->assertSame(true, $database->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
         try {
             $database->createDocument('movies', new Document([
@@ -4968,10 +4968,10 @@ trait DocumentTests
             batchSize: 1
         );
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
         // TEST: Bulk Delete All Documents
-        $this->assertEquals(8, $database->deleteDocuments('bulk_delete'));
+        $this->assertSame(8, $database->deleteDocuments('bulk_delete'));
 
         $docs = $database->find('bulk_delete');
         $this->assertCount(0, $docs);
@@ -4986,14 +4986,14 @@ trait DocumentTests
             $results[] = $doc;
         });
 
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
 
         foreach ($results as $document) {
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
         }
 
         $docs = $database->find('bulk_delete');
-        $this->assertEquals(5, \count($docs));
+        $this->assertSame(5, \count($docs));
 
         // TEST (FAIL): Can't delete documents in the past
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
@@ -5004,7 +5004,7 @@ trait DocumentTests
             });
             $this->fail('Failed to throw exception');
         } catch (ConflictException $e) {
-            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+            $this->assertSame('Document was updated after the request timestamp', $e->getMessage());
         }
 
         // TEST (FAIL): Bulk delete all documents with invalid collection permission
@@ -5021,8 +5021,8 @@ trait DocumentTests
             Permission::delete(Role::any())
         ], false);
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete'));
-        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
+        $this->assertSame(5, $database->deleteDocuments('bulk_delete'));
+        $this->assertSame(0, \count($this->getDatabase()->find('bulk_delete')));
 
         // TEST: Make sure we can't delete documents we don't have permissions for
         $database->updateCollection('bulk_delete', [
@@ -5030,13 +5030,13 @@ trait DocumentTests
         ], true);
         $this->propagateBulkDocuments('bulk_delete', documentSecurity: true);
 
-        $this->assertEquals(0, $database->deleteDocuments('bulk_delete'));
+        $this->assertSame(0, $database->deleteDocuments('bulk_delete'));
 
         $documents = $this->getDatabase()->getAuthorization()->skip(function () use ($database) {
             return $database->find('bulk_delete');
         });
 
-        $this->assertEquals(10, \count($documents));
+        $this->assertSame(10, \count($documents));
 
         $database->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
@@ -5046,7 +5046,7 @@ trait DocumentTests
 
         $database->deleteDocuments('bulk_delete');
 
-        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
+        $this->assertSame(0, \count($this->getDatabase()->find('bulk_delete')));
 
         // Teardown
         $database->deleteCollection('bulk_delete');
@@ -5089,30 +5089,30 @@ trait DocumentTests
         // Test limit
         $this->propagateBulkDocuments('bulk_delete_queries');
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertEquals(5, \count($database->find('bulk_delete_queries')));
+        $this->assertSame(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertSame(5, \count($database->find('bulk_delete_queries')));
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertEquals(0, \count($database->find('bulk_delete_queries')));
+        $this->assertSame(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertSame(0, \count($database->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize
         $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
-        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, $database->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
+        $this->assertSame(Database::DELETE_BATCH_SIZE * 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertSame(Database::DELETE_BATCH_SIZE + 2, $database->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
+        $this->assertSame(Database::DELETE_BATCH_SIZE - 2, \count($database->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertSame(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         // Test Offset
         $this->propagateBulkDocuments('bulk_delete_queries', 100);
-        $this->assertEquals(50, $database->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
+        $this->assertSame(50, $database->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
 
         $docs = $database->find('bulk_delete_queries', [Query::limit(100)]);
-        $this->assertEquals(50, \count($docs));
+        $this->assertSame(50, \count($docs));
 
         $lastDoc = \end($docs);
         $this->assertNotEmpty($lastDoc);
-        $this->assertEquals('doc49', $lastDoc->getId());
-        $this->assertEquals(50, $database->deleteDocuments('bulk_delete_queries'));
+        $this->assertSame('doc49', $lastDoc->getId());
+        $this->assertSame(50, $database->deleteDocuments('bulk_delete_queries'));
 
         $database->deleteCollection('bulk_delete_queries');
     }
@@ -5179,7 +5179,7 @@ trait DocumentTests
             );
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            $this->assertSame("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }
 
         $docs = $database->find('bulk_delete_with_callback');
@@ -5202,14 +5202,14 @@ trait DocumentTests
             },
             onError:function ($e) {
                 $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+                $this->assertSame("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
             }
         );
 
-        $this->assertEquals(2, $count);
+        $this->assertSame(2, $count);
 
         // TEST: Bulk Delete All Documents without passing callbacks
-        $this->assertEquals(8, $database->deleteDocuments('bulk_delete_with_callback'));
+        $this->assertSame(8, $database->deleteDocuments('bulk_delete_with_callback'));
 
         $docs = $database->find('bulk_delete_with_callback');
         $this->assertCount(0, $docs);
@@ -5225,17 +5225,17 @@ trait DocumentTests
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            $this->assertSame("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
-        $this->assertEquals(5, $count);
+        $this->assertSame(5, $count);
 
         foreach ($results as $document) {
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
         }
 
         $docs = $database->find('bulk_delete_with_callback');
-        $this->assertEquals(5, \count($docs));
+        $this->assertSame(5, \count($docs));
 
         // Teardown
         $database->deleteCollection('bulk_delete_with_callback');
@@ -5276,17 +5276,17 @@ trait DocumentTests
         // Test limit
         $this->propagateBulkDocuments($collection, 100);
 
-        $this->assertEquals(10, $database->updateDocuments($collection, new Document([
+        $this->assertSame(10, $database->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
         ]), [Query::limit(10)]));
 
-        $this->assertEquals(10, \count($database->find($collection, [Query::equal('text', ['text📝 updated'])])));
-        $this->assertEquals(100, $database->deleteDocuments($collection));
-        $this->assertEquals(0, \count($database->find($collection)));
+        $this->assertSame(10, \count($database->find($collection, [Query::equal('text', ['text📝 updated'])])));
+        $this->assertSame(100, $database->deleteDocuments($collection));
+        $this->assertSame(0, \count($database->find($collection)));
 
         // Test Offset
         $this->propagateBulkDocuments($collection, 100);
-        $this->assertEquals(50, $database->updateDocuments($collection, new Document([
+        $this->assertSame(50, $database->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
         ]), [
             Query::offset(50),
@@ -5297,9 +5297,9 @@ trait DocumentTests
 
         $lastDoc = end($docs);
         $this->assertNotEmpty($lastDoc);
-        $this->assertEquals('doc99', $lastDoc->getId());
+        $this->assertSame('doc99', $lastDoc->getId());
 
-        $this->assertEquals(100, $database->deleteDocuments($collection));
+        $this->assertSame(100, $database->deleteDocuments($collection));
     }
 
     /**
@@ -5445,7 +5445,7 @@ trait DocumentTests
 
             $document = $documents[0];
             $doc = $database->getDocument($document->getCollection(), $document->getId());
-            $this->assertEquals($document->getTenant(), $doc->getTenant());
+            $this->assertSame($document->getTenant(), $doc->getTenant());
             return;
         }
 
@@ -5479,7 +5479,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
+            $this->assertSame('Invalid query: Equal queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -5489,7 +5489,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
+            $this->assertSame('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
     }
 
@@ -5501,8 +5501,8 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'create_modify_dates';
         $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
-        $this->assertEquals(true, $database->createAttribute($collection, 'datetime', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'datetime', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
 
         $date = '2000-01-01T10:00:00.000+00:00';
         // test - default behaviour of external datetime attribute not changed
@@ -5528,13 +5528,13 @@ trait DocumentTests
             '$createdAt' => $date
         ]));
 
-        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertSame($doc->getAttribute('$createdAt'), $date);
         $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
         $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
 
         $doc = $database->getDocument($collection, 'doc2');
 
-        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertSame($doc->getAttribute('$createdAt'), $date);
         $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
         $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
 
@@ -5548,7 +5548,7 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'normal_date_operations';
         $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
         $database->setPreserveDates(true);
 
@@ -5565,7 +5565,7 @@ trait DocumentTests
             '$createdAt' => $createDate
         ]));
 
-        $this->assertEquals($createDate, $doc->getAttribute('$createdAt'));
+        $this->assertSame($createDate, $doc->getAttribute('$createdAt'));
         $this->assertNotEquals($createDate, $doc->getAttribute('$updatedAt'));
 
         // Update with custom updatedAt
@@ -5573,8 +5573,8 @@ trait DocumentTests
         $doc->setAttribute('$updatedAt', $updateDate);
         $updatedDoc = $database->updateDocument($collection, 'doc1', $doc);
 
-        $this->assertEquals($createDate, $updatedDoc->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $updatedDoc->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $updatedDoc->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $updatedDoc->getAttribute('$updatedAt'));
 
         // Test 2: Create with both custom dates
         $doc2 = $database->createDocument($collection, new Document([
@@ -5585,8 +5585,8 @@ trait DocumentTests
             '$updatedAt' => $updateDate
         ]));
 
-        $this->assertEquals($createDate, $doc2->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $doc2->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $doc2->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $doc2->getAttribute('$updatedAt'));
 
         // Test 3: Create without dates, then update with custom dates
         $doc3 = $database->createDocument($collection, new Document([
@@ -5601,8 +5601,8 @@ trait DocumentTests
         $doc3->setAttribute('$updatedAt', $updateDate);
         $updatedDoc3 = $database->updateDocument($collection, 'doc3', $doc3);
 
-        $this->assertEquals($createDate, $updatedDoc3->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $updatedDoc3->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $updatedDoc3->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $updatedDoc3->getAttribute('$updatedAt'));
 
         // Test 4: Update only createdAt
         $doc4 = $database->createDocument($collection, new Document([
@@ -5618,7 +5618,7 @@ trait DocumentTests
         $doc4->setAttribute('$createdAt', null);
         $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);
 
-        $this->assertEquals($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));
+        $this->assertSame($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));
         $this->assertNotEquals($originalUpdatedAt4, $updatedDoc4->getAttribute('$updatedAt'));
 
         // Test 5: Update only updatedAt
@@ -5626,8 +5626,8 @@ trait DocumentTests
         $updatedDoc4->setAttribute('$createdAt', $createDate);
         $finalDoc4 = $database->updateDocument($collection, 'doc4', $updatedDoc4);
 
-        $this->assertEquals($createDate, $finalDoc4->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $finalDoc4->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $finalDoc4->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $finalDoc4->getAttribute('$updatedAt'));
 
         // Test 6: Create with updatedAt, update with createdAt
         $doc5 = $database->createDocument($collection, new Document([
@@ -5638,14 +5638,14 @@ trait DocumentTests
         ]));
 
         $this->assertNotEquals($date2, $doc5->getAttribute('$createdAt'));
-        $this->assertEquals($date2, $doc5->getAttribute('$updatedAt'));
+        $this->assertSame($date2, $doc5->getAttribute('$updatedAt'));
 
         $doc5->setAttribute('string', 'doc5_updated');
         $doc5->setAttribute('$createdAt', $date1);
         $updatedDoc5 = $database->updateDocument($collection, 'doc5', $doc5);
 
-        $this->assertEquals($date1, $updatedDoc5->getAttribute('$createdAt'));
-        $this->assertEquals($date2, $updatedDoc5->getAttribute('$updatedAt'));
+        $this->assertSame($date1, $updatedDoc5->getAttribute('$createdAt'));
+        $this->assertSame($date2, $updatedDoc5->getAttribute('$updatedAt'));
 
         // Test 7: Create with both dates, update with different dates
         $doc6 = $database->createDocument($collection, new Document([
@@ -5656,16 +5656,16 @@ trait DocumentTests
             '$updatedAt' => $date2
         ]));
 
-        $this->assertEquals($date1, $doc6->getAttribute('$createdAt'));
-        $this->assertEquals($date2, $doc6->getAttribute('$updatedAt'));
+        $this->assertSame($date1, $doc6->getAttribute('$createdAt'));
+        $this->assertSame($date2, $doc6->getAttribute('$updatedAt'));
 
         $doc6->setAttribute('string', 'doc6_updated');
         $doc6->setAttribute('$createdAt', $date3);
         $doc6->setAttribute('$updatedAt', $date3);
         $updatedDoc6 = $database->updateDocument($collection, 'doc6', $doc6);
 
-        $this->assertEquals($date3, $updatedDoc6->getAttribute('$createdAt'));
-        $this->assertEquals($date3, $updatedDoc6->getAttribute('$updatedAt'));
+        $this->assertSame($date3, $updatedDoc6->getAttribute('$createdAt'));
+        $this->assertSame($date3, $updatedDoc6->getAttribute('$updatedAt'));
 
         // Test 8: Preserve dates disabled
         $database->setPreserveDates(false);
@@ -5719,7 +5719,7 @@ trait DocumentTests
         $database = $this->getDatabase();
         $collection = 'bulk_date_operations';
         $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
         $database->setPreserveDates(true);
 
@@ -5772,12 +5772,12 @@ trait DocumentTests
         // Verify initial state
         foreach (['doc1', 'doc3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertSame($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
         }
 
         foreach (['doc2', 'doc3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertSame($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
         }
 
         foreach (['doc4', 'doc5', 'doc6'] as $id) {
@@ -5799,19 +5799,19 @@ trait DocumentTests
         $count = $database->updateDocuments($collection, $updateDoc, [
             Query::equal('$id', $ids)
         ]);
-        $this->assertEquals(6, $count);
+        $this->assertSame(6, $count);
 
         foreach (['doc1', 'doc3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
-            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
-            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+            $this->assertSame($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertSame($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertSame('updated', $doc->getAttribute('string'), "string mismatch for $id");
         }
 
         foreach (['doc2', 'doc4','doc5','doc6'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
-            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+            $this->assertSame($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertSame('updated', $doc->getAttribute('string'), "string mismatch for $id");
         }
 
         // Test 3: Bulk update with preserve dates disabled
@@ -5825,7 +5825,7 @@ trait DocumentTests
         ]);
 
         $countDisabled = $database->updateDocuments($collection, $updateDocDisabled);
-        $this->assertEquals(6, $countDisabled);
+        $this->assertSame(6, $countDisabled);
 
         // Test 4: Bulk update with preserve dates re-enabled
         $database->setPreserveDates(true);
@@ -5838,7 +5838,7 @@ trait DocumentTests
         ]);
 
         $countEnabled = $database->updateDocuments($collection, $updateDocEnabled);
-        $this->assertEquals(6, $countEnabled);
+        $this->assertSame(6, $countEnabled);
 
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);
@@ -5856,7 +5856,7 @@ trait DocumentTests
 
         $collection = 'upsert_date_operations';
         $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertSame(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
         $database->setPreserveDates(true);
 
@@ -5881,7 +5881,7 @@ trait DocumentTests
         });
         $upsertDoc1 = $upsertResults[0];
 
-        $this->assertEquals($createDate, $upsertDoc1->getAttribute('$createdAt'));
+        $this->assertSame($createDate, $upsertDoc1->getAttribute('$createdAt'));
         $this->assertNotEquals($createDate, $upsertDoc1->getAttribute('$updatedAt'));
 
         // Test 2: Upsert existing document with custom updatedAt
@@ -5893,8 +5893,8 @@ trait DocumentTests
         });
         $updatedUpsertDoc1 = $updatedUpsertResults[0];
 
-        $this->assertEquals($createDate, $updatedUpsertDoc1->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $updatedUpsertDoc1->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $updatedUpsertDoc1->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $updatedUpsertDoc1->getAttribute('$updatedAt'));
 
         // Test 3: Upsert new document with both custom dates
         $upsertResults2 = [];
@@ -5911,8 +5911,8 @@ trait DocumentTests
         });
         $upsertDoc2 = $upsertResults2[0];
 
-        $this->assertEquals($createDate, $upsertDoc2->getAttribute('$createdAt'));
-        $this->assertEquals($updateDate, $upsertDoc2->getAttribute('$updatedAt'));
+        $this->assertSame($createDate, $upsertDoc2->getAttribute('$createdAt'));
+        $this->assertSame($updateDate, $upsertDoc2->getAttribute('$updatedAt'));
 
         // Test 4: Upsert existing document with different dates
         $upsertDoc2->setAttribute('string', 'upsert2_updated');
@@ -5924,8 +5924,8 @@ trait DocumentTests
         });
         $updatedUpsertDoc2 = $updatedUpsertResults2[0];
 
-        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$createdAt'));
-        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$updatedAt'));
+        $this->assertSame($date3, $updatedUpsertDoc2->getAttribute('$createdAt'));
+        $this->assertSame($date3, $updatedUpsertDoc2->getAttribute('$updatedAt'));
 
         // Test 5: Upsert with preserve dates disabled
         $database->setPreserveDates(false);
@@ -6000,12 +6000,12 @@ trait DocumentTests
         // Test 8: Verify initial bulk upsert state
         foreach (['bulk_upsert1', 'bulk_upsert3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertSame($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
         }
 
         foreach (['bulk_upsert2', 'bulk_upsert3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertSame($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
         }
 
         foreach (['bulk_upsert4'] as $id) {
@@ -6033,9 +6033,9 @@ trait DocumentTests
 
         foreach ($upsertIds as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
-            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
-            $this->assertEquals('bulk_upsert_updated', $doc->getAttribute('string'), "string mismatch for $id");
+            $this->assertSame($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertSame($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertSame('bulk_upsert_updated', $doc->getAttribute('string'), "string mismatch for $id");
         }
 
         // Test 10: checking by passing null to each
@@ -6074,12 +6074,12 @@ trait DocumentTests
         $countUpsertUpdate = $database->upsertDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
             $upsertUpdateResults[] = $doc;
         });
-        $this->assertEquals(4, $countUpsertUpdate);
+        $this->assertSame(4, $countUpsertUpdate);
 
         foreach ($upsertUpdateResults as $doc) {
-            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for upsert update");
-            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for upsert update");
-            $this->assertEquals('bulk_upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
+            $this->assertSame($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for upsert update");
+            $this->assertSame($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for upsert update");
+            $this->assertSame('bulk_upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
         }
 
         // Test 12: Bulk upsert with preserve dates disabled
@@ -6099,12 +6099,12 @@ trait DocumentTests
         $countUpsertDisabled = $database->upsertDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
             $upsertDisabledResults[] = $doc;
         });
-        $this->assertEquals(4, $countUpsertDisabled);
+        $this->assertSame(4, $countUpsertDisabled);
 
         foreach ($upsertDisabledResults as $doc) {
             $this->assertNotEquals($customDate, $doc->getAttribute('$createdAt'), "createdAt should not be custom date when disabled");
             $this->assertNotEquals($customDate, $doc->getAttribute('$updatedAt'), "updatedAt should not be custom date when disabled");
-            $this->assertEquals('bulk_upsert_disabled', $doc->getAttribute('string'), "string mismatch for disabled upsert");
+            $this->assertSame('bulk_upsert_disabled', $doc->getAttribute('string'), "string mismatch for disabled upsert");
         }
 
         $database->setPreserveDates(false);
@@ -6156,7 +6156,7 @@ trait DocumentTests
             $upsertUpdateResults[] = $doc;
         });
         $this->assertCount(4, $upsertUpdateResults);
-        $this->assertEquals(4, $count);
+        $this->assertSame(4, $count);
 
         $updates = new Document(['value' => 'test']);
         $newDocs = [];
@@ -6165,7 +6165,7 @@ trait DocumentTests
         });
 
         $this->assertCount(4, $newDocs);
-        $this->assertEquals(4, $count);
+        $this->assertSame(4, $count);
 
         $database->deleteCollection($collectionName);
     }
@@ -6197,12 +6197,12 @@ trait DocumentTests
                 'key' => 'doc3'
             ]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertSame(3, $database->createDocuments($colName, $docs));
         // we should get only one document as read permission provided to the last document only
         $addedDocs = $database->find($colName);
         $this->assertCount(1, $addedDocs);
         $doc = $addedDocs[0];
-        $this->assertEquals('doc3', $doc->getId());
+        $this->assertSame('doc3', $doc->getId());
         $this->assertNotEmpty($doc->getPermissions());
         $this->assertCount(3, $doc->getPermissions());
 
@@ -6212,17 +6212,17 @@ trait DocumentTests
             'key' => 'doc4'
         ]));
 
-        $this->assertEquals(2, $database->updateDocuments($colName, new Document(['key' => 'new doc'])));
+        $this->assertSame(2, $database->updateDocuments($colName, new Document(['key' => 'new doc'])));
         $doc = $database->getDocument($colName, 'doc4');
-        $this->assertEquals('doc4', $doc->getId());
-        $this->assertEquals('value', $doc->getAttribute('value'));
+        $this->assertSame('doc4', $doc->getId());
+        $this->assertSame('value', $doc->getAttribute('value'));
 
         $addedDocs = $database->find($colName);
         $this->assertCount(2, $addedDocs);
         foreach ($addedDocs as $doc) {
             $this->assertNotEmpty($doc->getPermissions());
             $this->assertCount(3, $doc->getPermissions());
-            $this->assertEquals('value', $doc->getAttribute('value'));
+            $this->assertSame('value', $doc->getAttribute('value'));
         }
         $database->deleteCollection($colName);
     }
@@ -6255,7 +6255,7 @@ trait DocumentTests
         foreach ($docs as $doc) {
             $this->assertArrayHasKey('attrA', $doc->getAttributes());
             $this->assertNull($doc->getAttribute('attrA'));
-            $this->assertEquals('B', $doc->getAttribute('attrB'));
+            $this->assertSame('B', $doc->getAttribute('attrB'));
         }
         // reset
         $database->enableValidation();
@@ -6313,7 +6313,7 @@ trait DocumentTests
             'name' => null,
             'age' => null,
         ]));
-        $this->assertEquals('created-null', $doc->getId());
+        $this->assertSame('created-null', $doc->getId());
         $database->enableValidation();
 
         // Seed a valid document for updates
@@ -6323,7 +6323,7 @@ trait DocumentTests
             'name' => 'ok',
             'age' => 10,
         ]));
-        $this->assertEquals('valid', $valid->getId());
+        $this->assertSame('valid', $valid->getId());
 
         // 2) updateDocument set required to null should fail when validation enabled, pass when disabled
         try {
@@ -6398,7 +6398,7 @@ trait DocumentTests
                     'value' => 1,
                 ])]
             );
-            $this->assertEquals(1, $ucount);
+            $this->assertSame(1, $ucount);
             $database->enableValidation();
         }
 
@@ -6452,11 +6452,11 @@ trait DocumentTests
             '$permissions' => $permissions,
         ]));
 
-        $this->assertEquals($docId1, $document1->getId());
-        $this->assertEquals('Initial Document', $document1->getAttribute('name'));
+        $this->assertSame($docId1, $document1->getId());
+        $this->assertSame('Initial Document', $document1->getAttribute('name'));
         $this->assertIsArray($document1->getAttribute('metadata'));
-        $this->assertEquals('1.0.0', $document1->getAttribute('metadata')['version']);
-        $this->assertEquals(['php', 'database'], $document1->getAttribute('metadata')['tags']);
+        $this->assertSame('1.0.0', $document1->getAttribute('metadata')['version']);
+        $this->assertSame(['php', 'database'], $document1->getAttribute('metadata')['tags']);
 
         // Test 2: Update (updateDocument) with modified JSON filter
         $updatedMetadata = [
@@ -6475,11 +6475,11 @@ trait DocumentTests
 
         $updatedDoc = $database->updateDocument($collection, $docId1, $document1);
 
-        $this->assertEquals($docId1, $updatedDoc->getId());
-        $this->assertEquals('Updated Document', $updatedDoc->getAttribute('name'));
+        $this->assertSame($docId1, $updatedDoc->getId());
+        $this->assertSame('Updated Document', $updatedDoc->getAttribute('name'));
         $this->assertIsArray($updatedDoc->getAttribute('metadata'));
-        $this->assertEquals('2.0.0', $updatedDoc->getAttribute('metadata')['version']);
-        $this->assertEquals(['php', 'database', 'json'], $updatedDoc->getAttribute('metadata')['tags']);
+        $this->assertSame('2.0.0', $updatedDoc->getAttribute('metadata')['version']);
+        $this->assertSame(['php', 'database', 'json'], $updatedDoc->getAttribute('metadata')['tags']);
         $this->assertTrue($updatedDoc->getAttribute('metadata')['config']['debug']);
         $this->assertTrue($updatedDoc->getAttribute('metadata')['updated']);
 
@@ -6503,10 +6503,10 @@ trait DocumentTests
 
         $upsertedDoc = $database->upsertDocument($collection, $document2);
 
-        $this->assertEquals($docId2, $upsertedDoc->getId());
-        $this->assertEquals('New Upsert Document', $upsertedDoc->getAttribute('name'));
+        $this->assertSame($docId2, $upsertedDoc->getId());
+        $this->assertSame('New Upsert Document', $upsertedDoc->getAttribute('name'));
         $this->assertIsArray($upsertedDoc->getAttribute('metadata'));
-        $this->assertEquals('1.5.0', $upsertedDoc->getAttribute('metadata')['version']);
+        $this->assertSame('1.5.0', $upsertedDoc->getAttribute('metadata')['version']);
 
         // Test 4: Upsert - Update existing document (upsertDocument)
         $document2->setAttribute('name', 'Updated Upsert Document');
@@ -6522,11 +6522,11 @@ trait DocumentTests
 
         $upsertedDoc2 = $database->upsertDocument($collection, $document2);
 
-        $this->assertEquals($docId2, $upsertedDoc2->getId());
-        $this->assertEquals('Updated Upsert Document', $upsertedDoc2->getAttribute('name'));
+        $this->assertSame($docId2, $upsertedDoc2->getId());
+        $this->assertSame('Updated Upsert Document', $upsertedDoc2->getAttribute('name'));
         $this->assertIsArray($upsertedDoc2->getAttribute('metadata'));
-        $this->assertEquals('2.5.0', $upsertedDoc2->getAttribute('metadata')['version']);
-        $this->assertEquals(['javascript', 'node', 'typescript'], $upsertedDoc2->getAttribute('metadata')['tags']);
+        $this->assertSame('2.5.0', $upsertedDoc2->getAttribute('metadata')['version']);
+        $this->assertSame(['javascript', 'node', 'typescript'], $upsertedDoc2->getAttribute('metadata')['tags']);
         $this->assertTrue($upsertedDoc2->getAttribute('metadata')['migrated']);
 
         // Test 5: Upsert - Bulk upsertDocuments (create and update)
@@ -6572,20 +6572,20 @@ trait DocumentTests
         ];
 
         $count = $database->upsertDocuments($collection, $bulkDocuments);
-        $this->assertEquals(3, $count);
+        $this->assertSame(3, $count);
 
         // Verify bulk upsert results
         $bulkDoc1 = $database->getDocument($collection, $docId3);
-        $this->assertEquals('Bulk Upsert 1', $bulkDoc1->getAttribute('name'));
-        $this->assertEquals('3.0.0', $bulkDoc1->getAttribute('metadata')['version']);
+        $this->assertSame('Bulk Upsert 1', $bulkDoc1->getAttribute('name'));
+        $this->assertSame('3.0.0', $bulkDoc1->getAttribute('metadata')['version']);
 
         $bulkDoc2 = $database->getDocument($collection, $docId4);
-        $this->assertEquals('Bulk Upsert 2', $bulkDoc2->getAttribute('name'));
-        $this->assertEquals('3.1.0', $bulkDoc2->getAttribute('metadata')['version']);
+        $this->assertSame('Bulk Upsert 2', $bulkDoc2->getAttribute('name'));
+        $this->assertSame('3.1.0', $bulkDoc2->getAttribute('metadata')['version']);
 
         $bulkDoc3 = $database->getDocument($collection, $docId1);
-        $this->assertEquals('Bulk Updated Document', $bulkDoc3->getAttribute('name'));
-        $this->assertEquals('3.0.0', $bulkDoc3->getAttribute('metadata')['version']);
+        $this->assertSame('Bulk Updated Document', $bulkDoc3->getAttribute('name'));
+        $this->assertSame('3.0.0', $bulkDoc3->getAttribute('metadata')['version']);
         $this->assertTrue($bulkDoc3->getAttribute('metadata')['bulkUpdated']);
 
         // Cleanup

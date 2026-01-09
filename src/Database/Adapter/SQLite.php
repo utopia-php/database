@@ -216,8 +216,9 @@ class SQLite extends MariaDB
                 $indexAttributes = $index->getAttribute('attributes', []);
                 $indexLengths = $index->getAttribute('lengths', []);
                 $indexOrders = $index->getAttribute('orders', []);
+                $indexTtl = $index->getAttribute('ttl', 0);
 
-                $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
+                $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders, [], [], $indexTtl);
             }
 
             $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
@@ -455,7 +456,7 @@ class SQLite extends MariaDB
      * @throws Exception
      * @throws PDOException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);

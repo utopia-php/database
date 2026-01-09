@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -1863,6 +1864,329 @@ trait SchemalessTests
         ]);
         $this->assertCount(0, $windowsSessions);
 
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessTTLIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only run for MongoDB adapter which supports TTL indexes
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl');
+        $database->createCollection($col);
+
+        // Create datetime attribute for TTL index
+        $database->createAttribute($col, 'expiresAt', Database::VAR_DATETIME, 0, false);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Test 1: Create valid TTL index with valid TTL value
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_valid',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                3600 // 1 hour TTL
+            )
+        );
+
+        // Verify index was created and stored in metadata
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(1, $indexes);
+        $ttlIndex = $indexes[0];
+        $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
+        $this->assertEquals(Database::INDEX_TTL, $ttlIndex->getAttribute('type'));
+        $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
+
+        // Test 2: Create documents with expiresAt field
+        $now = new \DateTime();
+        $future1 = (clone $now)->modify('+2 hours');
+        $future2 = (clone $now)->modify('+1 hour');
+        $past = (clone $now)->modify('-1 hour');
+
+        $doc1 = $database->createDocument($col, new Document([
+            '$id' => 'doc1',
+            '$permissions' => $permissions,
+            'expiresAt' => $future1->format(\DateTime::ATOM),
+            'data' => 'will expire in 2 hours'
+        ]));
+
+        $doc2 = $database->createDocument($col, new Document([
+            '$id' => 'doc2',
+            '$permissions' => $permissions,
+            'expiresAt' => $future2->format(\DateTime::ATOM),
+            'data' => 'will expire in 1 hour'
+        ]));
+
+        $doc3 = $database->createDocument($col, new Document([
+            '$id' => 'doc3',
+            '$permissions' => $permissions,
+            'expiresAt' => $past->format(\DateTime::ATOM),
+            'data' => 'already expired'
+        ]));
+
+        // Verify documents were created
+        $this->assertEquals('doc1', $doc1->getId());
+        $this->assertEquals('doc2', $doc2->getId());
+        $this->assertEquals('doc3', $doc3->getId());
+
+        // Test 3: Delete the first TTL index and create a new one with minimum valid TTL (1 second)
+        // MongoDB only allows one TTL index per attribute, so we need to delete the existing one first
+        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
+        
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_min',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                1 // Minimum TTL
+            )
+        );
+
+        // Test 4: Try to create TTL index with TTL = 0 (should fail)
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_zero',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                0
+            );
+            $this->fail('Expected exception for TTL = 0');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('TTL must be atleast 1 second', $e->getMessage());
+        }
+
+        // Test 5: Try to create TTL index with negative TTL (should fail)
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_negative',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                -100
+            );
+            $this->fail('Expected exception for negative TTL');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('TTL must be atleast 1 second', $e->getMessage());
+        }
+
+        // Test 6: Create TTL index via createCollection with indexes parameter
+        $col2 = uniqid('sl_ttl_collection');
+        
+        // Create attribute document for the collection
+        $expiresAtAttr = new Document([
+            '$id' => ID::custom('expiresAt'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+        
+        $ttlIndexDoc = new Document([
+            '$id' => ID::custom('idx_ttl_collection'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 7200 // 2 hours
+        ]);
+
+        $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
+
+        // Verify TTL index was created via createCollection
+        $collection2 = $database->getCollection($col2);
+        $indexes2 = $collection2->getAttribute('indexes');
+        $this->assertCount(1, $indexes2);
+        $ttlIndex2 = $indexes2[0];
+        $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
+        $this->assertEquals(7200, $ttlIndex2->getAttribute('ttl'));
+
+        // Cleanup
+        $database->deleteCollection($col);
+        $database->deleteCollection($col2);
+    }
+
+    public function testSchemalessTTLIndexDuplicatePrevention(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only run for MongoDB adapter which supports TTL indexes
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl_dup');
+        $database->createCollection($col);
+
+        // Create datetime attribute for TTL index
+        $database->createAttribute($col, 'expiresAt', Database::VAR_DATETIME, 0, false);
+        $database->createAttribute($col, 'deletedAt', Database::VAR_DATETIME, 0, false);
+
+        // Test 1: Create first TTL index on expiresAt
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expires',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                3600 // 1 hour
+            )
+        );
+
+        // Test 2: Try to create another TTL index on the same attribute (should fail)
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_expires_duplicate',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                7200 // 2 hours
+            );
+            $this->fail('Expected exception for duplicate TTL index on same attribute');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('A TTL index already exists on attribute', $e->getMessage());
+        }
+
+        // Test 3: Create TTL index on different attribute (should succeed)
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_deleted',
+                Database::INDEX_TTL,
+                ['deletedAt'],
+                [],
+                [Database::ORDER_ASC],
+                86400 // 24 hours
+            )
+        );
+
+        // Verify both indexes exist
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        
+        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
+        $this->assertContains('idx_ttl_expires', $indexIds);
+        $this->assertContains('idx_ttl_deleted', $indexIds);
+
+        // Test 4: Try to create another TTL index on deletedAt (should fail)
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_deleted_duplicate',
+                Database::INDEX_TTL,
+                ['deletedAt'],
+                [],
+                [Database::ORDER_ASC],
+                172800 // 48 hours
+            );
+            $this->fail('Expected exception for duplicate TTL index on same attribute');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('A TTL index already exists on attribute', $e->getMessage());
+        }
+
+        // Test 5: Delete first TTL index and create a new one on same attribute (should succeed)
+        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
+        
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expires_new',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                1800 // 30 minutes
+            )
+        );
+
+        // Verify the new index replaced the old one
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        
+        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
+        $this->assertNotContains('idx_ttl_expires', $indexIds);
+        $this->assertContains('idx_ttl_expires_new', $indexIds);
+        $this->assertContains('idx_ttl_deleted', $indexIds);
+
+        // Test 6: Try to create TTL index via createCollection with duplicate (should fail validation)
+        $col3 = uniqid('sl_ttl_dup_collection');
+        
+        $expiresAtAttr = new Document([
+            '$id' => ID::custom('expiresAt'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+        
+        $ttlIndex1 = new Document([
+            '$id' => ID::custom('idx_ttl_1'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 3600
+        ]);
+
+        $ttlIndex2 = new Document([
+            '$id' => ID::custom('idx_ttl_2'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 7200
+        ]);
+
+        try {
+            $database->createCollection($col3, [$expiresAtAttr], [$ttlIndex1, $ttlIndex2]);
+            $this->fail('Expected exception for duplicate TTL indexes in createCollection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('A TTL index already exists on attribute', $e->getMessage());
+        }
+
+        // Cleanup
         $database->deleteCollection($col);
     }
 }

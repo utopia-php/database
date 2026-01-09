@@ -666,10 +666,12 @@ abstract class Adapter
      * @param array<int> $lengths
      * @param array<string> $orders
      * @param array<string,string> $indexAttributeTypes
+     * @param array<string, mixed> $collation
+     * @param int $ttl
      *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool;
 
     /**
      * Delete Index
@@ -1482,5 +1484,14 @@ abstract class Adapter
     public function getSupportForRegex(): bool
     {
         return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
+    }
+
+    /**
+     * Are ttl indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportTTLIndexes(): bool {
+        return false;
     }
 }

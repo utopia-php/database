@@ -1685,4 +1685,129 @@ trait SchemalessTests
         // Clean up
         $database->deleteCollection($collectionId);
     }
+
+    public function testSchemalessNestedObjectAttributeQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only run for schemaless adapters that support object attributes
+        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_nested_obj');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Documents with nested objects
+        $database->createDocument($col, new Document([
+            '$id' => 'u1',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Alice',
+                'location' => [
+                    'country' => 'US',
+                    'city' => 'New York',
+                    'coordinates' => [
+                        'lat' => 40.7128,
+                        'lng' => -74.0060,
+                    ],
+                ],
+            ],
+        ]));
+
+        $database->createDocument($col, new Document([
+            '$id' => 'u2',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Bob',
+                'location' => [
+                    'country' => 'UK',
+                    'city' => 'London',
+                    'coordinates' => [
+                        'lat' => 51.5074,
+                        'lng' => -0.1278,
+                    ],
+                ],
+            ],
+        ]));
+
+        // Document without full nesting
+        $database->createDocument($col, new Document([
+            '$id' => 'u3',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Charlie',
+                'location' => [
+                    'country' => 'US',
+                ],
+            ],
+        ]));
+
+        // Query using Mongo-style dotted paths: attribute.key.key
+        $nycDocs = $database->find($col, [
+            Query::equal('profile.location.city', ['New York']),
+        ]);
+        $this->assertCount(1, $nycDocs);
+        $this->assertEquals('u1', $nycDocs[0]->getId());
+
+        // Query on deeper nested numeric field
+        $northOf50 = $database->find($col, [
+            Query::greaterThan('profile.location.coordinates.lat', 50),
+        ]);
+        $this->assertCount(1, $northOf50);
+        $this->assertEquals('u2', $northOf50[0]->getId());
+
+        // exists on nested key should match docs where the full path exists
+        $withCoordinates = $database->find($col, [
+            Query::exists(['profile.location.coordinates.lng']),
+        ]);
+        $this->assertCount(2, $withCoordinates);
+        $ids = array_map(fn (Document $doc) => $doc->getId(), $withCoordinates);
+        $this->assertContains('u1', $ids);
+        $this->assertContains('u2', $ids);
+        $this->assertNotContains('u3', $ids);
+
+        // Combination of filters on nested paths
+        $usWithCoords = $database->find($col, [
+            Query::equal('profile.location.country', ['US']),
+            Query::exists(['profile.location.coordinates.lat']),
+        ]);
+        $this->assertCount(1, $usWithCoords);
+        $this->assertEquals('u1', $usWithCoords[0]->getId());
+
+        // contains on object attribute using nested structure: parent.key and [key => [key => 'value']]
+        $matchedByNestedContains = $database->find($col, [
+            Query::contains('profile', [
+                'location' => [
+                    'city' => 'London',
+                ],
+            ]),
+        ]);
+        $this->assertCount(1, $matchedByNestedContains);
+        $this->assertEquals('u2', $matchedByNestedContains[0]->getId());
+
+        // equal on object attribute using nested structure should behave similarly
+        $matchedByNestedEqual = $database->find($col, [
+            Query::equal('profile', [
+                'location' => [
+                    'country' => 'US',
+                ],
+            ]),
+        ]);
+        $this->assertCount(2, $matchedByNestedEqual);
+        $idsEqual = array_map(fn (Document $doc) => $doc->getId(), $matchedByNestedEqual);
+        $this->assertContains('u1', $idsEqual);
+        $this->assertContains('u3', $idsEqual);
+
+        $database->deleteCollection($col);
+    }
 }

@@ -1691,8 +1691,9 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        // Only run for schemaless adapters that support object attributes
-        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }

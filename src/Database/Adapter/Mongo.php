@@ -508,6 +508,9 @@ class Mongo extends Adapter
                             $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             $unique = true;
                             break;
+                        case Database::INDEX_TTL:
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
+                            break;
                         default:
                             // index not supported
                             return false;
@@ -524,6 +527,14 @@ class Mongo extends Adapter
 
                 if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
                     $newIndexes[$i]['default_language'] = 'none';
+                }
+
+                // Handle TTL indexes
+                if ($index->getAttribute('type') === Database::INDEX_TTL) {
+                    $ttl = $index->getAttribute('ttl', 0);
+                    if ($ttl > 0) {
+                        $newIndexes[$i]['expireAfterSeconds'] = $ttl;
+                    }
                 }
 
                 // Add partial filter for indexes to avoid indexing null values
@@ -901,10 +912,11 @@ class Mongo extends Adapter
      * @param array<string> $orders
      * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
+     * @param int $ttl
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -933,6 +945,8 @@ class Mongo extends Adapter
                 case Database::INDEX_UNIQUE:
                     $indexes['unique'] = true;
                     break;
+                case Database::INDEX_TTL:
+                    break;
                 default:
                     return false;
             }
@@ -959,6 +973,11 @@ class Mongo extends Adapter
          */
         if ($type === Database::INDEX_FULLTEXT) {
             $indexes['default_language'] = 'none';
+        }
+
+        // Handle TTL indexes
+        if ($type === Database::INDEX_TTL && $ttl > 0) {
+            $indexes['expireAfterSeconds'] = $ttl;
         }
 
         // Add partial filter for indexes to avoid indexing null values
@@ -1073,7 +1092,7 @@ class Mongo extends Adapter
 
         try {
             $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes);
+            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, [], $index['ttl'] ?? 0);
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -3394,5 +3413,9 @@ class Mongo extends Adapter
     public function getSupportForTrigramIndex(): bool
     {
         return false;
+    }
+
+    public function getSupportTTLIndexes(): bool {
+        return true;
     }
 }

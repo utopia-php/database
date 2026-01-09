@@ -54,6 +54,7 @@ class Index extends Validator
         protected bool $supportForKeyIndexes = true,
         protected bool $supportForUniqueIndexes = true,
         protected bool $supportForFulltextIndexes = true,
+        protected bool $supportForTTLIndexes = false,
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -156,6 +157,9 @@ class Index extends Validator
         if (!$this->checkKeyUniqueFulltextSupport($value)) {
             return false;
         }
+        if (!$this->checkTTLIndexes($value)) {
+            return false;
+        }
         return true;
     }
 
@@ -222,6 +226,13 @@ class Index extends Validator
                 }
                 break;
 
+            case Database::INDEX_TTL:
+                if (!$this->supportForTTLIndexes) {
+                    $this->message = 'TTL indexes are not supported';
+                    return false;
+                }
+                break;
+    
             default:
                 $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM;
                 return false;
@@ -673,7 +684,7 @@ class Index extends Validator
 
             if ($attributesMatch && $ordersMatch) {
                 // Allow fulltext + key/unique combinations (different purposes)
-                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE];
+                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE, Database::INDEX_TTL];
                 $isRegularIndex = \in_array($indexType, $regularTypes);
                 $isRegularExisting = \in_array($existingType, $regularTypes);
 
@@ -724,6 +735,43 @@ class Index extends Validator
 
         if ($attributeType !== Database::VAR_OBJECT) {
             $this->message = 'Object index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+            return false;
+        }
+
+        return true;
+    }
+
+    public function checkTTLIndexes(Document $index): bool{
+        $type = $index->getAttribute('type');
+
+        $attributes = $index->getAttribute('attributes', []);
+        $orders     = $index->getAttribute('orders', []);
+        $ttl        = $index->getAttribute('ttl', 0);
+        if ($type !== Database::INDEX_TTL) {
+            return true;
+        }
+
+        if (count($attributes) !== 1) {
+            $this->message = 'TTL index can be created on a single object attribute';
+            return false;
+        }
+
+        if (empty($orders)) {
+            $this->message = 'TTL index need explicit orders. Add the orders to create this index.';
+            return false;
+        }
+
+        $attributeName = $attributes[0] ?? '';
+        $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
+        $attributeType = $attribute->getAttribute('type', '');
+
+        if ($attributeType !== Database::VAR_DATETIME) {
+            $this->message = 'Object index can only be created on datetime attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+            return false;
+        }
+
+        if($ttl <= 0){
+            $this->message = 'TTL must be atleast 1 second';
             return false;
         }
 

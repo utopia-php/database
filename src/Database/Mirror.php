@@ -469,9 +469,9 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 0): bool
     {
-        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders);
+        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl);
 
         if ($this->destination === null) {
             return $result;
@@ -502,7 +502,8 @@ class Mirror extends Database
                 $document->getAttribute('type'),
                 $document->getAttribute('attributes'),
                 $document->getAttribute('lengths'),
-                $document->getAttribute('orders')
+                $document->getAttribute('orders'),
+                $document->getAttribute('ttl', 0)
             );
         } catch (\Throwable $err) {
             $this->logError('createIndex', $err);

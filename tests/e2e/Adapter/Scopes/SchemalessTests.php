@@ -1813,22 +1813,22 @@ trait SchemalessTests
 
         // contains on object attribute using nested structure: parent.key and [key => [key => 'value']]
         $matchedByNestedContains = $database->find($col, [
-            Query::contains('profile', [
+            Query::contains('profile', [[
                 'location' => [
                     'city' => 'London',
                 ],
-            ]),
+            ]]),
         ]);
         $this->assertCount(1, $matchedByNestedContains);
         $this->assertEquals('u2', $matchedByNestedContains[0]->getId());
 
         // equal on object attribute using nested structure should behave similarly
         $matchedByNestedEqual = $database->find($col, [
-            Query::equal('profile', [
+            Query::equal('profile', [[
                 'location' => [
                     'country' => 'US',
                 ],
-            ]),
+            ]]),
         ]);
         $this->assertCount(2, $matchedByNestedEqual);
         $idsEqual = array_map(fn (Document $doc) => $doc->getId(), $matchedByNestedEqual);

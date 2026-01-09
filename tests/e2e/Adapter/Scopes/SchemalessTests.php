@@ -1723,6 +1723,22 @@ trait SchemalessTests
                     ],
                 ],
             ],
+            'sessions' => [
+                [
+                    'device' => [
+                        'os' => 'ios',
+                        'version' => '17',
+                    ],
+                    'active' => true,
+                ],
+                [
+                    'device' => [
+                        'os' => 'android',
+                        'version' => '14',
+                    ],
+                    'active' => false,
+                ],
+            ],
         ]));
 
         $database->createDocument($col, new Document([
@@ -1739,6 +1755,15 @@ trait SchemalessTests
                     ],
                 ],
             ],
+            'sessions' => [
+                [
+                    'device' => [
+                        'os' => 'android',
+                        'version' => '15',
+                    ],
+                    'active' => true,
+                ],
+            ],
         ]));
 
         // Document without full nesting
@@ -1751,6 +1776,7 @@ trait SchemalessTests
                     'country' => 'US',
                 ],
             ],
+            'sessions' => [],
         ]));
 
         // Query using Mongo-style dotted paths: attribute.key.key
@@ -1808,6 +1834,34 @@ trait SchemalessTests
         $idsEqual = array_map(fn (Document $doc) => $doc->getId(), $matchedByNestedEqual);
         $this->assertContains('u1', $idsEqual);
         $this->assertContains('u3', $idsEqual);
+
+        // elemMatch on array of nested objects (sessions.device.os, sessions.active)
+        $iosActive = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['ios']),
+                Query::equal('active', [true]),
+            ]),
+        ]);
+        $this->assertCount(1, $iosActive);
+        $this->assertEquals('u1', $iosActive[0]->getId());
+
+        // elemMatch where nested condition only matches u2 (android & active)
+        $androidActive = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['android']),
+                Query::equal('active', [true]),
+            ]),
+        ]);
+        $this->assertCount(1, $androidActive);
+        $this->assertEquals('u2', $androidActive[0]->getId());
+
+        // elemMatch with condition that should not match any document
+        $windowsSessions = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['windows']),
+            ]),
+        ]);
+        $this->assertCount(0, $windowsSessions);
 
         $database->deleteCollection($col);
     }

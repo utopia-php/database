@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -751,6 +752,62 @@ trait SchemalessTests
         $database->deleteCollection($col);
     }
 
+    public function testSchemalessObjectIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only run for schemaless adapters that support object attributes
+        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_obj_idx');
+        $database->createCollection($col);
+
+        // Define object attributes in metadata
+        $database->createAttribute($col, 'meta', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, 'meta2', Database::VAR_OBJECT, 0, false);
+
+        // Create regular key index on first object attribute
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_meta_key',
+                Database::INDEX_KEY,
+                ['meta'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        // Create unique index on second object attribute
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_meta_unique',
+                Database::INDEX_UNIQUE,
+                ['meta2'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        // Verify index metadata is stored on the collection
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        $ids = array_map(fn ($i) => $i['$id'], $indexes);
+        $this->assertContains('idx_meta_key', $ids);
+        $this->assertContains('idx_meta_unique', $ids);
+
+        // Clean up indexes and collection
+        $this->assertTrue($database->deleteIndex($col, 'idx_meta_key'));
+        $this->assertTrue($database->deleteIndex($col, 'idx_meta_unique'));
+        $database->deleteCollection($col);
+    }
+
     public function testSchemalessPermissions(): void
     {
         /** @var Database $database */
@@ -1377,5 +1434,435 @@ trait SchemalessTests
         $this->assertEquals(2, count($documents)); // only ones missing optionalField (doc3, doc5)
 
         $database->deleteCollection($colName);
+    }
+
+    /**
+     * Test elemMatch query functionality
+     *
+     * @throws Exception
+     */
+    public function testElemMatch(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Create documents with array of objects
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order1',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'ABC', 'qty' => 5, 'price' => 10.50],
+                ['sku' => 'XYZ', 'qty' => 2, 'price' => 20.00],
+            ]
+        ]));
+
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order2',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'ABC', 'qty' => 1, 'price' => 10.50],
+                ['sku' => 'DEF', 'qty' => 10, 'price' => 15.00],
+            ]
+        ]));
+
+        $doc3 = $database->createDocument($collectionId, new Document([
+            '$id' => 'order3',
+            '$permissions' => [Permission::read(Role::any())],
+            'items' => [
+                ['sku' => 'XYZ', 'qty' => 3, 'price' => 20.00],
+            ]
+        ]));
+
+        // Test 1: elemMatch with equal and greaterThan - should match doc1
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order1', $results[0]->getId());
+
+        // Test 2: elemMatch with equal and greaterThan - should not match doc2 (qty is 1, not > 1)
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order1', $results[0]->getId());
+
+        // Test 3: elemMatch with equal only - should match doc1 and doc2
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order2', $ids);
+
+        // Elematch means at least ONE element in the array matches this condition.
+        // that means array having two docs qty -> 1 and qty -> 10  , it will be returned as it has atleast one doc with qty > 10
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::greaterThan('qty', 1),
+            ])
+        ]);
+        $this->assertCount(3, $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order2', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Test 5: elemMatch with multiple conditions - should match doc2
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['DEF']),
+                Query::greaterThan('qty', 5),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order2', $results[0]->getId());
+
+        // Test 6: elemMatch with lessThan
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::lessThan('qty', 3),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('order2', $results[0]->getId());
+
+        // Test 7: elemMatch with equal and greaterThanEqual
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['ABC']),
+                Query::greaterThanEqual('qty', 1),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+
+        // Test 8: elemMatch with no matching conditions
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['NONEXISTENT']),
+            ])
+        ]);
+        $this->assertCount(0, $results);
+
+        // Test 9: elemMatch with price condition
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::equal('sku', ['XYZ']),
+                Query::equal('price', [20.00]),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
+        $this->assertContains('order1', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Test 10: elemMatch with notEqual
+        $results = $database->find($collectionId, [
+            Query::elemMatch('items', [
+                Query::notEqual('sku', ['ABC']),
+                Query::greaterThan('qty', 2),
+            ])
+        ]);
+        // order 1 has elements where sku == "ABC", qty: 5 => !=ABC fails and sku = XYZ ,qty: 2 => >2 fails
+        $this->assertCount(2, $results);
+        $ids = array_map(fn ($doc) => $doc->getId(), $results);
+        $this->assertContains('order2', $ids);
+        $this->assertContains('order3', $ids);
+
+        // Clean up
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test elemMatch with complex nested conditions
+     *
+     * @throws Exception
+     */
+    public function testElemMatchComplex(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Create documents with complex nested structures
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'store1',
+            '$permissions' => [Permission::read(Role::any())],
+            'products' => [
+                ['name' => 'Widget', 'stock' => 100, 'category' => 'A', 'active' => true],
+                ['name' => 'Gadget', 'stock' => 50, 'category' => 'B', 'active' => false],
+            ]
+        ]));
+
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'store2',
+            '$permissions' => [Permission::read(Role::any())],
+            'products' => [
+                ['name' => 'Widget', 'stock' => 200, 'category' => 'A', 'active' => true],
+                ['name' => 'Thing', 'stock' => 25, 'category' => 'C', 'active' => true],
+            ]
+        ]));
+
+        // Test: elemMatch with multiple conditions including boolean
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::equal('name', ['Widget']),
+                Query::greaterThan('stock', 50),
+                Query::equal('category', ['A']),
+                Query::equal('active', [true]),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+
+        // Test: elemMatch with between
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::equal('category', ['A']),
+                Query::between('stock', 75, 150),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('store1', $results[0]->getId());
+
+        // Test: elemMatch with OR grouping on name and stock threshold
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::or([
+                    Query::equal('name', ['Widget']),
+                    Query::equal('name', ['Thing']),
+                ]),
+                Query::greaterThanEqual('stock', 25),
+            ])
+        ]);
+        // Both stores have at least one matching product:
+        // - store1: Widget (stock 100)
+        // - store2: Widget (stock 200) and Thing (stock 25)
+        $this->assertCount(2, $results);
+
+        // Test: elemMatch with nested AND/OR conditions
+        $results = $database->find($collectionId, [
+            Query::elemMatch('products', [
+                Query::or([
+                    Query::and([
+                        Query::equal('name', ['Widget']),
+                        Query::greaterThan('stock', 150),
+                    ]),
+                    Query::and([
+                        Query::equal('name', ['Thing']),
+                        Query::greaterThan('stock', 20),
+                    ]),
+                ]),
+                Query::equal('active', [true]),
+            ])
+        ]);
+        // Only store2 matches:
+        // - Widget with stock 200 (>150) and active true
+        // - Thing with stock 25 (>20) and active true
+        $this->assertCount(1, $results);
+        $this->assertEquals('store2', $results[0]->getId());
+
+        // Clean up
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testSchemalessNestedObjectAttributeQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_nested_obj');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Documents with nested objects
+        $database->createDocument($col, new Document([
+            '$id' => 'u1',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Alice',
+                'location' => [
+                    'country' => 'US',
+                    'city' => 'New York',
+                    'coordinates' => [
+                        'lat' => 40.7128,
+                        'lng' => -74.0060,
+                    ],
+                ],
+            ],
+            'sessions' => [
+                [
+                    'device' => [
+                        'os' => 'ios',
+                        'version' => '17',
+                    ],
+                    'active' => true,
+                ],
+                [
+                    'device' => [
+                        'os' => 'android',
+                        'version' => '14',
+                    ],
+                    'active' => false,
+                ],
+            ],
+        ]));
+
+        $database->createDocument($col, new Document([
+            '$id' => 'u2',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Bob',
+                'location' => [
+                    'country' => 'UK',
+                    'city' => 'London',
+                    'coordinates' => [
+                        'lat' => 51.5074,
+                        'lng' => -0.1278,
+                    ],
+                ],
+            ],
+            'sessions' => [
+                [
+                    'device' => [
+                        'os' => 'android',
+                        'version' => '15',
+                    ],
+                    'active' => true,
+                ],
+            ],
+        ]));
+
+        // Document without full nesting
+        $database->createDocument($col, new Document([
+            '$id' => 'u3',
+            '$permissions' => $permissions,
+            'profile' => [
+                'name' => 'Charlie',
+                'location' => [
+                    'country' => 'US',
+                ],
+            ],
+            'sessions' => [],
+        ]));
+
+        // Query using Mongo-style dotted paths: attribute.key.key
+        $nycDocs = $database->find($col, [
+            Query::equal('profile.location.city', ['New York']),
+        ]);
+        $this->assertCount(1, $nycDocs);
+        $this->assertEquals('u1', $nycDocs[0]->getId());
+
+        // Query on deeper nested numeric field
+        $northOf50 = $database->find($col, [
+            Query::greaterThan('profile.location.coordinates.lat', 50),
+        ]);
+        $this->assertCount(1, $northOf50);
+        $this->assertEquals('u2', $northOf50[0]->getId());
+
+        // exists on nested key should match docs where the full path exists
+        $withCoordinates = $database->find($col, [
+            Query::exists(['profile.location.coordinates.lng']),
+        ]);
+        $this->assertCount(2, $withCoordinates);
+        $ids = array_map(fn (Document $doc) => $doc->getId(), $withCoordinates);
+        $this->assertContains('u1', $ids);
+        $this->assertContains('u2', $ids);
+        $this->assertNotContains('u3', $ids);
+
+        // Combination of filters on nested paths
+        $usWithCoords = $database->find($col, [
+            Query::equal('profile.location.country', ['US']),
+            Query::exists(['profile.location.coordinates.lat']),
+        ]);
+        $this->assertCount(1, $usWithCoords);
+        $this->assertEquals('u1', $usWithCoords[0]->getId());
+
+        // contains on object attribute using nested structure: parent.key and [key => [key => 'value']]
+        $matchedByNestedContains = $database->find($col, [
+            Query::contains('profile', [[
+                'location' => [
+                    'city' => 'London',
+                ],
+            ]]),
+        ]);
+        $this->assertCount(1, $matchedByNestedContains);
+        $this->assertEquals('u2', $matchedByNestedContains[0]->getId());
+
+        // equal on object attribute using nested structure should behave similarly
+        $matchedByNestedEqual = $database->find($col, [
+            Query::equal('profile', [[
+                'location' => [
+                    'country' => 'US',
+                ],
+            ]]),
+        ]);
+        $this->assertCount(2, $matchedByNestedEqual);
+        $idsEqual = array_map(fn (Document $doc) => $doc->getId(), $matchedByNestedEqual);
+        $this->assertContains('u1', $idsEqual);
+        $this->assertContains('u3', $idsEqual);
+
+        // elemMatch on array of nested objects (sessions.device.os, sessions.active)
+        $iosActive = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['ios']),
+                Query::equal('active', [true]),
+            ]),
+        ]);
+        $this->assertCount(1, $iosActive);
+        $this->assertEquals('u1', $iosActive[0]->getId());
+
+        // elemMatch where nested condition only matches u2 (android & active)
+        $androidActive = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['android']),
+                Query::equal('active', [true]),
+            ]),
+        ]);
+        $this->assertCount(1, $androidActive);
+        $this->assertEquals('u2', $androidActive[0]->getId());
+
+        // elemMatch with condition that should not match any document
+        $windowsSessions = $database->find($col, [
+            Query::elemMatch('sessions', [
+                Query::equal('device.os', ['windows']),
+            ]),
+        ]);
+        $this->assertCount(0, $windowsSessions);
+
+        $database->deleteCollection($col);
     }
 }

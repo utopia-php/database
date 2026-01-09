@@ -1013,6 +1013,16 @@ class SQLite extends MariaDB
         return false;
     }
 
+    /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
+    {
+        return false;
+    }
+
     public function getSupportForSpatialIndexNull(): bool
     {
         return false; // SQLite doesn't have native spatial support

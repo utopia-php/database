@@ -65,7 +65,7 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
-
+    public const TYPE_ELEM_MATCH = 'elemMatch';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -114,6 +114,7 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
         self::TYPE_REGEX
     ];
 
@@ -126,12 +127,14 @@ class Query
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
     ];
 
     protected string $method = '';
     protected string $attribute = '';
     protected string $attributeType = '';
     protected bool $onArray = false;
+    protected bool $isObjectAttribute = false;
 
     /**
      * @var array<mixed>
@@ -297,6 +300,7 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_ELEM_MATCH,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
@@ -1219,5 +1223,15 @@ class Query
     public static function notExists(string|int|float|bool|array $attribute): self
     {
         return new self(self::TYPE_NOT_EXISTS, '', is_array($attribute) ? $attribute : [$attribute]);
+    }
+
+    /**
+     * @param string $attribute
+     * @param array<Query> $queries
+     * @return Query
+     */
+    public static function elemMatch(string $attribute, array $queries): self
+    {
+        return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
     }
 }

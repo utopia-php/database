@@ -169,8 +169,11 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_OBJECT:
-                    // value for object can be of any type as its a hashmap
-                    // eg; ['key'=>value']
+                    if (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
+                        && !$this->isValidObjectQueryValues($value)) {
+                        $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
+                        return false;
+                    }
                     continue 2;
 
                 case Database::VAR_POINT:
@@ -295,6 +298,50 @@ class Filter extends Base
     }
 
     /**
+     * Validate object attribute query values.
+     *
+     * Disallows ambiguous nested structures like:
+     *   ['a' => [1, 'b' => [212]]]           // mixed list
+     *
+     * but allows:
+     *   ['a' => [1, 2], 'b' => [212]]        // multiple top-level paths
+     *   ['projects' => [[...]]]              // list of objects
+     *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
+     *
+     * @param mixed $values
+     * @return bool
+     */
+    private function isValidObjectQueryValues(mixed $values): bool
+    {
+        if (!is_array($values)) {
+            return true;
+        }
+
+        $hasInt = false;
+        $hasString = false;
+
+        foreach (array_keys($values) as $key) {
+            if (is_int($key)) {
+                $hasInt = true;
+            } else {
+                $hasString = true;
+            }
+        }
+
+        if ($hasInt && $hasString) {
+            return false;
+        }
+
+        foreach ($values as $value) {
+            if (!$this->isValidObjectQueryValues($value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Is valid.
      *
      * Returns true if method is a filter method, attribute exists, and value matches attribute type
@@ -403,6 +450,32 @@ class Filter extends Base
                     return false;
                 }
 
+                return true;
+
+            case Query::TYPE_ELEM_MATCH:
+                // elemMatch is not supported when adapter supports attributes (schema mode)
+                if ($this->supportForAttributes) {
+                    $this->message = 'elemMatch is not supported by the database';
+                    return false;
+                }
+
+                // Validate that the attribute (array field) exists
+                if (!$this->isValidAttribute($attribute)) {
+                    return false;
+                }
+
+                // For schemaless mode, allow elemMatch on any attribute
+                // Validate nested queries are filter queries
+                $filters = Query::groupByType($value->getValues())['filters'];
+                if (count($value->getValues()) !== count($filters)) {
+                    $this->message = 'elemMatch queries can only contain filter queries';
+                    return false;
+                }
+
+                if (count($filters) < 1) {
+                    $this->message = 'elemMatch queries require at least one query';
+                    return false;
+                }
                 return true;
 
             default:

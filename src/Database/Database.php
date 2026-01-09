@@ -651,13 +651,14 @@ class Database
                 return \json_encode($value);
             },
             /**
-             * @param string|null $value
+             * @param mixed $value
              * @return array|null
              */
-            function (?string $value) {
+            function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
+                // can be non string in case of mongodb as it stores the value as object
                 if (!is_string($value)) {
                     return $value;
                 }
@@ -1641,7 +1642,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForObjectIndexes(),
                 $this->adapter->getSupportForTrigramIndex(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForIndex(),
@@ -2791,7 +2792,7 @@ class Database
                         $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForObject(),
+                        $this->adapter->getSupportForObjectIndexes(),
                         $this->adapter->getSupportForTrigramIndex(),
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForIndex(),
@@ -3686,7 +3687,7 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForObjectIndexes(),
                 $this->adapter->getSupportForTrigramIndex(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForIndex(),
@@ -8086,6 +8087,43 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
+    /**
+     * Check if values are compatible with object attribute type (hashmap/multi-dimensional array)
+     *
+     * @param array<mixed> $values
+     * @return bool
+     */
+    private function isCompatibleObjectValue(array $values): bool
+    {
+        if (empty($values)) {
+            return false;
+        }
+
+        foreach ($values as $value) {
+            if (!\is_array($value)) {
+                return false;
+            }
+
+            // Check associative array (hashmap) or nested structure
+            if (empty($value)) {
+                continue;
+            }
+
+            // simple indexed array => not an object
+            if (\array_keys($value) === \range(0, \count($value) - 1)) {
+                return false;
+            }
+
+            foreach ($value as $nestedValue) {
+                if (\is_array($nestedValue)) {
+                    continue;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public function convertQuery(Document $collection, Query $query): Query
     {
         /**
@@ -8121,6 +8159,12 @@ class Database
                     }
                 }
                 $query->setValues($values);
+            }
+        } elseif (!$this->adapter->getSupportForAttributes()) {
+            $values = $query->getValues();
+            // setting attribute type to properly apply filters in the adapter level
+            if ($this->adapter->getSupportForObject() && $this->isCompatibleObjectValue($values)) {
+                $query->setAttributeType(Database::VAR_OBJECT);
             }
         }
 

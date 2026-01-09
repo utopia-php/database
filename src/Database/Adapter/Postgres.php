@@ -2225,6 +2225,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Are object (JSONB) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
+    {
+        return true;
+    }
+
+    /**
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool

@@ -253,6 +253,11 @@ class MySQL extends MariaDB
         return true;
     }
 
+    public function getSupportForObjectIndexes(): bool
+    {
+        return false;
+    }
+
     /**
      * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format

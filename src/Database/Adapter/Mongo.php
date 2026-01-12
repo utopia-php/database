@@ -488,7 +488,7 @@ class Mongo extends Adapter
                 $orders = $index->getAttribute('orders');
 
                 // If sharedTables, always add _tenant as the first key
-                if ($this->sharedTables) {
+                if ($this->sharedTables && $index->getAttribute('type') !== Database::INDEX_TTL) {
                     $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
                 }
 
@@ -925,7 +925,7 @@ class Mongo extends Adapter
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $type !== Database::INDEX_TTL) {
             $indexes['key']['_tenant'] = $this->getOrder(Database::ORDER_ASC);
         }
 

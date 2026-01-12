@@ -753,7 +753,7 @@ class Index extends Validator
         }
 
         if (count($attributes) !== 1) {
-            $this->message = 'TTL index can be created on a single object attribute';
+            $this->message = 'TTL index can be created on a single datetime attribute';
             return false;
         }
 

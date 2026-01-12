@@ -699,7 +699,7 @@ class IndexTest extends TestCase
             'ttl' => 3600,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexType));
-        $this->assertStringContainsString('Object index can only be created on datetime attributes', $validator->getDescription());
+        $this->assertStringContainsString('TTL index can only be created on datetime attributes', $validator->getDescription());
 
         // Invalid: TTL index on multiple attributes
         $invalidIndexMulti = new Document([
@@ -711,7 +711,7 @@ class IndexTest extends TestCase
             'ttl' => 3600,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
-        $this->assertStringContainsString('TTL index can be created on a single object attribute', $validator->getDescription());
+        $this->assertStringContainsString('TTL index can be created on a single datetime attribute', $validator->getDescription());
 
         // Invalid: TTL index without orders
         $invalidIndexNoOrders = new Document([

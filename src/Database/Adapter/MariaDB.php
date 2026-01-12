@@ -2255,4 +2255,9 @@ class MariaDB extends SQL
     {
         return false;
     }
+
+    public function getSupportTTLIndexes(): bool
+    {
+        return false;
+    }
 }

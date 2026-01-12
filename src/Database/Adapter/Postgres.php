@@ -2832,4 +2832,9 @@ class Postgres extends SQL
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }
+
+    public function getSupportTTLIndexes(): bool
+    {
+        return false;
+    }
 }

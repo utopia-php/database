@@ -675,7 +675,7 @@ class IndexTest extends TestCase
             'ttl' => 0,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexZero));
-        $this->assertEquals('TTL must be atleast 1 second', $validator->getDescription());
+        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index with TTL < 0
         $invalidIndexNegative = new Document([
@@ -687,7 +687,7 @@ class IndexTest extends TestCase
             'ttl' => -100,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexNegative));
-        $this->assertEquals('TTL must be atleast 1 second', $validator->getDescription());
+        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index on non-datetime attribute
         $invalidIndexType = new Document([

@@ -772,7 +772,7 @@ class Index extends Validator
         }
 
         if ($ttl <= 0) {
-            $this->message = 'TTL must be atleast 1 second';
+            $this->message = 'TTL must be at least 1 second';
             return false;
         }
 

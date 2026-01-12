@@ -232,7 +232,7 @@ class Index extends Validator
                     return false;
                 }
                 break;
-    
+
             default:
                 $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM;
                 return false;
@@ -684,7 +684,7 @@ class Index extends Validator
 
             if ($attributesMatch && $ordersMatch) {
                 // Allow fulltext + key/unique combinations (different purposes)
-                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE, Database::INDEX_TTL];
+                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE];
                 $isRegularIndex = \in_array($indexType, $regularTypes);
                 $isRegularExisting = \in_array($existingType, $regularTypes);
 
@@ -741,7 +741,8 @@ class Index extends Validator
         return true;
     }
 
-    public function checkTTLIndexes(Document $index): bool{
+    public function checkTTLIndexes(Document $index): bool
+    {
         $type = $index->getAttribute('type');
 
         $attributes = $index->getAttribute('attributes', []);
@@ -765,14 +766,29 @@ class Index extends Validator
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
-        if ($attributeType !== Database::VAR_DATETIME) {
-            $this->message = 'Object index can only be created on datetime attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+        if ($this->supportForAttributes && $attributeType !== Database::VAR_DATETIME) {
+            $this->message = 'TTL index can only be created on datetime attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
             return false;
         }
 
-        if($ttl <= 0){
+        if ($ttl <= 0) {
             $this->message = 'TTL must be atleast 1 second';
             return false;
+        }
+
+        foreach ($this->indexes as $existingIndex) {
+            $existingAttributes = $existingIndex->getAttribute('attributes', []);
+            $existingOrders = $existingIndex->getAttribute('orders', []);
+            $existingType = $existingIndex->getAttribute('type', '');
+            if ($this->supportForAttributes && $existingType !== Database::INDEX_TTL) {
+                continue;
+            }
+            $attributeAlreadyPresent = ($this->supportForAttributes && in_array($attribute->getId(), $existingAttributes)) || in_array($attributeName, $existingAttributes);
+            $ordersMatched = empty(array_diff($existingOrders, $orders));
+            if ($attributeAlreadyPresent && $ordersMatched) {
+                $this->message = 'There is already an index with the same attributes and orders';
+                return false;
+            }
         }
 
         return true;

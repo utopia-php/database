@@ -758,7 +758,7 @@ class IndexTest extends TestCase
             true,  // supportForFulltextIndexes
             true   // supportForTTLIndexes
         );
-        
+
         $duplicateTTLIndex = new Document([
             '$id' => ID::custom('idx_ttl_duplicate'),
             'type' => Database::INDEX_TTL,
@@ -768,7 +768,7 @@ class IndexTest extends TestCase
             'ttl' => 7200,
         ]);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
-        $this->assertStringContainsString('A TTL index already exists on attribute', $validatorWithExisting->getDescription());
+        $this->assertStringContainsString('There is already an index with the same attributes and orders', $validatorWithExisting->getDescription());
 
         // Validator with supportForTrigramIndexes disabled should reject TTL
         $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);

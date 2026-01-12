@@ -3624,7 +3624,6 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
 

@@ -3415,7 +3415,8 @@ class Mongo extends Adapter
         return false;
     }
 
-    public function getSupportTTLIndexes(): bool {
+    public function getSupportTTLIndexes(): bool
+    {
         return true;
     }
 }

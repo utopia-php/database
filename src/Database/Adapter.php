@@ -1491,7 +1491,8 @@ abstract class Adapter
      *
      * @return bool
      */
-    public function getSupportTTLIndexes(): bool {
+    public function getSupportTTLIndexes(): bool
+    {
         return false;
     }
 }

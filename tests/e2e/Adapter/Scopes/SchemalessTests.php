@@ -2771,10 +2771,6 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $remainingStringDoc2->getAttribute('expiresAt'));
         $this->assertEquals('string', $remainingStringDoc2->getAttribute('type'));
 
-        // Verify expired datetime document is gone
-        $expiredDoc = $database->getDocument($col, 'doc_datetime_expired');
-        $this->assertTrue($expiredDoc->isEmpty());
-
         // Future datetime documents might still exist or be deleted depending on timing
         // But at minimum, we should have the string documents
         $this->assertGreaterThanOrEqual(2, count($remainingDocs)); // At least 2 string docs

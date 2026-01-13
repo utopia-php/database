@@ -2414,14 +2414,32 @@ trait SchemalessTests
         $initialDocs = $database->find($col);
         $this->assertCount(4, $initialDocs);
 
-        // Wait for TTL to expire (at least 60 seconds + buffer)
-        // Note: MongoDB TTL cleanup runs every 60 seconds, so we need to wait
-        sleep(65);
-
-        // Fetch collection to trigger TTL cleanup check
-        $collection = $database->getCollection($col);
-        $this->assertNotNull($collection);
-
+        // Wait for TTL to expire with retry loop
+        // Note: MongoDB TTL cleanup runs every 60 seconds, so we need to retry
+        $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
+        $retryDelay = 5; // Wait 5 seconds between retries
+        $expiredDocDeleted = false;
+        
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+            
+            // Fetch collection to trigger TTL cleanup check
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+            
+            // Check if expired document is gone
+            $remainingDocs = $database->find($col);
+            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+            
+            if (!in_array('expired_doc', $remainingIds)) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+        
+        // Assert that expired document was deleted
+        $this->assertTrue($expiredDocDeleted, 'Expired document should have been deleted after TTL expiry');
+        
         // After expiry, expired document should be gone
         // Documents without expiresAt should remain
         $remainingDocs = $database->find($col);
@@ -2707,13 +2725,32 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $expiresAt4);
         $this->assertTrue(is_string($expiresAt4));
 
-        // Wait for TTL to expire (at least 60 seconds + buffer)
-        sleep(65);
-
-        // Fetch collection to trigger TTL cleanup check
-        $collection = $database->getCollection($col);
-        $this->assertNotNull($collection);
-
+        // Wait for TTL to expire with retry loop
+        // Note: MongoDB TTL cleanup runs every 60 seconds, so we need to retry
+        $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
+        $retryDelay = 5; // Wait 5 seconds between retries
+        $expiredDocDeleted = false;
+        
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+            
+            // Fetch collection to trigger TTL cleanup check
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+            
+            // Check if expired datetime document is gone
+            $remainingDocs = $database->find($col);
+            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+            
+            if (!in_array('doc_datetime_expired', $remainingIds)) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+        
+        // Assert that expired document was deleted
+        $this->assertTrue($expiredDocDeleted, 'Expired datetime document should have been deleted after TTL expiry');
+        
         // After expiry, check remaining documents
         $remainingDocs = $database->find($col);
         $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);

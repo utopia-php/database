@@ -2670,7 +2670,7 @@ class Mongo extends Adapter
 
     /**
      * Check if tenant should be added to index
-     * 
+     *
      * @param Document|string $indexOrType Index document or index type string
      * @return bool
      */
@@ -3483,7 +3483,7 @@ class Mongo extends Adapter
         if ($hasOffset && $len > 31) {
             return false;
         }
-        
+
         if ($hasZ && $len > 26) {
             return false;
         }

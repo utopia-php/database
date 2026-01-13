@@ -2419,27 +2419,27 @@ trait SchemalessTests
         $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
         $retryDelay = 5; // Wait 5 seconds between retries
         $expiredDocDeleted = false;
-        
+
         for ($i = 0; $i < $maxRetries; $i++) {
             sleep($retryDelay);
-            
+
             // Fetch collection to trigger TTL cleanup check
             $collection = $database->getCollection($col);
             $this->assertNotNull($collection);
-            
+
             // Check if expired document is gone
             $remainingDocs = $database->find($col);
             $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
-            
+
             if (!in_array('expired_doc', $remainingIds)) {
                 $expiredDocDeleted = true;
                 break;
             }
         }
-        
+
         // Assert that expired document was deleted
         $this->assertTrue($expiredDocDeleted, 'Expired document should have been deleted after TTL expiry');
-        
+
         // After expiry, expired document should be gone
         // Documents without expiresAt should remain
         $remainingDocs = $database->find($col);
@@ -2730,27 +2730,27 @@ trait SchemalessTests
         $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
         $retryDelay = 5; // Wait 5 seconds between retries
         $expiredDocDeleted = false;
-        
+
         for ($i = 0; $i < $maxRetries; $i++) {
             sleep($retryDelay);
-            
+
             // Fetch collection to trigger TTL cleanup check
             $collection = $database->getCollection($col);
             $this->assertNotNull($collection);
-            
+
             // Check if expired datetime document is gone
             $remainingDocs = $database->find($col);
             $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
-            
+
             if (!in_array('doc_datetime_expired', $remainingIds)) {
                 $expiredDocDeleted = true;
                 break;
             }
         }
-        
+
         // Assert that expired document was deleted
         $this->assertTrue($expiredDocDeleted, 'Expired datetime document should have been deleted after TTL expiry');
-        
+
         // After expiry, check remaining documents
         $remainingDocs = $database->find($col);
         $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);

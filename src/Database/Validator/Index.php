@@ -753,7 +753,12 @@ class Index extends Validator
         }
 
         if (count($attributes) !== 1) {
-            $this->message = 'TTL indexes must be created on a single datetime attribute';
+            $this->message = 'TTL indexes must be created on a single datetime attribute.';
+            return false;
+        }
+
+        if (empty($orders)) {
+            $this->message = 'TTL index need explicit orders. Add the orders to create this index.';
             return false;
         }
 

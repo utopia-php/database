@@ -879,7 +879,7 @@ class Postgres extends SQL
 
      * @return bool
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
@@ -2833,7 +2833,7 @@ class Postgres extends SQL
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }
 
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

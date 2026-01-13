@@ -1649,7 +1649,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportTTLIndexes()
+                $this->adapter->getSupportForTTLIndexes()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2800,7 +2800,7 @@ class Database
                         $this->adapter->getSupportForIndex(),
                         $this->adapter->getSupportForUniqueIndex(),
                         $this->adapter->getSupportForFulltextIndex(),
-                        $this->adapter->getSupportTTLIndexes()
+                        $this->adapter->getSupportForTTLIndexes()
                     );
 
                     foreach ($indexes as $index) {
@@ -3617,7 +3617,7 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
     {
         if (empty($attributes)) {
             throw new DatabaseException('Missing attributes');
@@ -3697,7 +3697,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportTTLIndexes()
+                $this->adapter->getSupportForTTLIndexes()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

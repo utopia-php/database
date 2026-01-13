@@ -469,7 +469,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
     {
         $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl);
 

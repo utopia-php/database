@@ -456,7 +456,7 @@ class SQLite extends MariaDB
      * @throws Exception
      * @throws PDOException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -1910,7 +1910,7 @@ class SQLite extends MariaDB
         return false;
     }
 
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

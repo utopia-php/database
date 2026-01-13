@@ -2341,7 +2341,7 @@ trait SchemalessTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportTTLIndexes()) {
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2595,7 +2595,7 @@ trait SchemalessTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportTTLIndexes()) {
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
             $this->expectNotToPerformAssertions();
             return;
         }

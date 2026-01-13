@@ -488,7 +488,7 @@ class Mongo extends Adapter
                 $orders = $index->getAttribute('orders');
 
                 // If sharedTables, always add _tenant as the first key
-                if ($this->sharedTables && $index->getAttribute('type') !== Database::INDEX_TTL) {
+                if ($this->shouldAddTenantToIndex($index)) {
                     $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
                 }
 
@@ -916,7 +916,7 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -925,7 +925,7 @@ class Mongo extends Adapter
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
-        if ($this->sharedTables && $type !== Database::INDEX_TTL) {
+        if ($this->shouldAddTenantToIndex($type)) {
             $indexes['key']['_tenant'] = $this->getOrder(Database::ORDER_ASC);
         }
 
@@ -2669,6 +2669,25 @@ class Mongo extends Adapter
     }
 
     /**
+     * Check if tenant should be added to index
+     * 
+     * @param Document|string $indexOrType Index document or index type string
+     * @return bool
+     */
+    protected function shouldAddTenantToIndex(Document|string $indexOrType): bool
+    {
+        if (!$this->sharedTables) {
+            return false;
+        }
+
+        $indexType = $indexOrType instanceof Document
+            ? $indexOrType->getAttribute('type')
+            : $indexOrType;
+
+        return $indexType !== Database::INDEX_TTL;
+    }
+
+    /**
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
@@ -3412,7 +3431,7 @@ class Mongo extends Adapter
         return false;
     }
 
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return true;
     }
@@ -3461,10 +3480,11 @@ class Mongo extends Adapter
             return false;
         }
 
-        if ($hasZ && $len > 26) {
+        if ($hasOffset && $len > 31) {
             return false;
         }
-        if ($hasOffset && ($len < 25 || $len > 31)) {
+        
+        if ($hasZ && $len > 26) {
             return false;
         }
 

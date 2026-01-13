@@ -318,7 +318,7 @@ class MySQL extends MariaDB
         return parent::getOperatorSQL($column, $operator, $bindIndex);
     }
 
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

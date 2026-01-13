@@ -790,7 +790,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportTTLIndexes()) {
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -904,7 +904,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportTTLIndexes()) {
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
             $this->expectNotToPerformAssertions();
             return;
         }

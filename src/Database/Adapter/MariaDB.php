@@ -715,7 +715,7 @@ class MariaDB extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $metadataCollection = new Document(['$id' => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $collection);
@@ -2256,7 +2256,7 @@ class MariaDB extends SQL
         return false;
     }
 
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

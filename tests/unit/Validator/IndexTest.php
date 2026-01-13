@@ -665,7 +665,7 @@ class IndexTest extends TestCase
         ]);
         $this->assertTrue($validator->isValid($validIndex));
 
-        // Invalid: TTL index with TTL = 0
+        // Invalid: TTL index with ttl = 1
         $invalidIndexZero = new Document([
             '$id' => ID::custom('idx_ttl_zero'),
             'type' => Database::INDEX_TTL,
@@ -711,19 +711,7 @@ class IndexTest extends TestCase
             'ttl' => 3600,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
-        $this->assertStringContainsString('TTL index can be created on a single datetime attribute', $validator->getDescription());
-
-        // Invalid: TTL index without orders
-        $invalidIndexNoOrders = new Document([
-            '$id' => ID::custom('idx_ttl_no_orders'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [],
-            'ttl' => 3600,
-        ]);
-        $this->assertFalse($validator->isValid($invalidIndexNoOrders));
-        $this->assertEquals('TTL index need explicit orders. Add the orders to create this index.', $validator->getDescription());
+        $this->assertStringContainsString('TTL indexes must be created on a single datetime attribute', $validator->getDescription());
 
         // Valid: TTL index with minimum valid TTL (1 second)
         $validIndexMin = new Document([

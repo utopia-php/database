@@ -671,7 +671,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 0): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool;
 
     /**
      * Delete Index
@@ -1491,7 +1491,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    public function getSupportTTLIndexes(): bool
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

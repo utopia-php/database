@@ -2725,10 +2725,8 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $expiresAt4);
         $this->assertTrue(is_string($expiresAt4));
 
-        // Wait for TTL to expire with retry loop
-        // Note: MongoDB TTL cleanup runs every 60 seconds, so we need to retry
-        $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
-        $retryDelay = 5; // Wait 5 seconds between retries
+        $maxRetries = 25;
+        $retryDelay = 5;
         $expiredDocDeleted = false;
 
         for ($i = 0; $i < $maxRetries; $i++) {

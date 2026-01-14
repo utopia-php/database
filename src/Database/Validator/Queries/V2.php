@@ -591,6 +591,7 @@ class V2 extends Validator
                     case Query::TYPE_NOT_STARTS_WITH:
                     case Query::TYPE_ENDS_WITH:
                     case Query::TYPE_NOT_ENDS_WITH:
+                    case Query::TYPE_REGEX:
                         if (count($query->getValues()) != 1) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly one value.');
                         }

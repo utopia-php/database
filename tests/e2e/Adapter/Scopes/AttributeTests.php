@@ -1408,7 +1408,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
 
@@ -1419,7 +1419,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
 

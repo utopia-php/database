@@ -5,9 +5,11 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1115,6 +1117,90 @@ trait ObjectAttributeTests
         $this->assertEquals('vecA', $results[0]->getId());
 
         // Cleanup
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testNestedObjectAttributeIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
+        }
+
+        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Base attributes
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+
+        // 1) KEY index on a nested object path (dot notation)
+        $created = $database->createIndex($collectionId, 'idx_profile_country', Database::INDEX_KEY, ['profile.user.info.country']);
+        $this->assertTrue($created);
+
+        // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
+        $created = $database->createIndex($collectionId, 'idx_profile_email_unique', Database::INDEX_UNIQUE, ['profile.user.email']);
+        $this->assertTrue($created);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'nest1',
+            '$permissions' => [Permission::read(Role::any())],
+            'profile' => [
+                'user' => [
+                    'email' => 'a@example.com',
+                    'info' => [
+                        'country' => 'IN'
+                    ]
+                ]
+            ]
+        ]));
+
+        try {
+            $database->createDocument($collectionId, new Document([
+                '$id' => 'nest2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'a@example.com', // duplicate
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]));
+            $this->fail('Expected Duplicate exception for UNIQUE index on nested object path');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        // 3) INDEX_OBJECT must NOT be allowed on nested paths
+        if ($database->getAdapter()->getSupportForObjectIndexes()) {
+            $exceptionThrown = false;
+            try {
+                $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
+            } catch (Exception $e) {
+                $exceptionThrown = true;
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+            $this->assertTrue($exceptionThrown, 'Expected Index exception for object index on nested path');
+        }
+
+        // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
+        $exceptionThrown = false;
+        try {
+            $database->createIndex($collectionId, 'idx_name_nested', Database::INDEX_KEY, ['name.first']);
+            $this->fail('Expected Type exception for nested index on non-object base attribute');
+        } catch (Exception $e) {
+            $exceptionThrown = true;
+            $this->assertInstanceOf(TypeException::class, $e);
+        }
+
         $database->deleteCollection($collectionId);
     }
 }

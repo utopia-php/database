@@ -328,6 +328,119 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
+    public function testNestedObjectPathIndexValidation(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('data'),
+                    'type' => Database::VAR_OBJECT,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => false,
+                    'required' => true,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('metadata'),
+                    'type' => Database::VAR_OBJECT,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => false,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            'indexes' => []
+        ]);
+
+        // Validator with supportForObjectIndexes enabled
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true);
+
+        // InValid: INDEX_OBJECT on nested path (dot notation)
+        $validNestedObjectIndex = new Document([
+            '$id' => ID::custom('idx_nested_object'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['data.key.nestedKey'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+
+        $this->assertFalse($validator->isValid($validNestedObjectIndex));
+
+        // Valid: INDEX_UNIQUE on nested path (for Postgres/Mongo)
+        $validNestedUniqueIndex = new Document([
+            '$id' => ID::custom('idx_nested_unique'),
+            'type' => Database::INDEX_UNIQUE,
+            'attributes' => ['data.key.nestedKey'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validNestedUniqueIndex));
+
+        // Valid: INDEX_KEY on nested path
+        $validNestedKeyIndex = new Document([
+            '$id' => ID::custom('idx_nested_key'),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['metadata.user.id'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validNestedKeyIndex));
+
+        // Invalid: Nested path on non-object attribute
+        $invalidNestedPath = new Document([
+            '$id' => ID::custom('idx_invalid_nested'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['name.key'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidNestedPath));
+        $this->assertStringContainsString('Invalid index attribute', $validator->getDescription());
+
+        // Invalid: Nested path with non-existent base attribute
+        $invalidBaseAttribute = new Document([
+            '$id' => ID::custom('idx_invalid_base'),
+            'type' => Database::INDEX_OBJECT,
+            'attributes' => ['nonexistent.key'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertFalse($validator->isValid($invalidBaseAttribute));
+        $this->assertStringContainsString('Invalid index attribute', $validator->getDescription());
+
+        // Valid: Multiple nested paths in same index
+        $validMultiNested = new Document([
+            '$id' => ID::custom('idx_multi_nested'),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['data.key1', 'data.key2'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+        $this->assertTrue($validator->isValid($validMultiNested));
+    }
+
+    /**
+     * @throws Exception
+     */
     public function testDuplicatedAttributes(): void
     {
         $collection = new Document([

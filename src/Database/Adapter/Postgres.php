@@ -884,14 +884,19 @@ class Postgres extends SQL
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
-            $attr = match ($attr) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $this->filter($attr),
-            };
+            $isNestedPath = \strpos($attr, '.') !== false;
+            if ($isNestedPath) {
+                $attributes[$i] = $this->convertObjectPathToJSONB($attr) . ($order ? " {$order}" : '');
+            } else {
+                $attr = match ($attr) {
+                    '$id' => '_uid',
+                    '$createdAt' => '_createdAt',
+                    '$updatedAt' => '_updatedAt',
+                    default => $this->filter($attr),
+                };
 
-            $attributes[$i] = "\"{$attr}\" {$order}";
+                $attributes[$i] = "\"{$attr}\" {$order}";
+            }
         }
 
         $sqlType = match ($type) {
@@ -2828,5 +2833,35 @@ class Postgres extends SQL
         $table = $this->getShortKey($table);
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
+    }
+    protected function convertObjectPathToJSONB(string $path): string
+    {
+        $parts = \explode('.', $path);
+
+        // validating the parts so that there is no injection
+        foreach ($parts as $part) {
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
+                throw new DatabaseException('Invalid JSON key '.$part);
+            }
+        }
+
+        if (\count($parts) === 1) {
+            $baseColumn = $this->filter($parts[0]);
+            return "\"{$baseColumn}\"";
+        }
+
+        $baseColumn = $this->filter($parts[0]);
+        $baseColumnQuoted = "\"{$baseColumn}\"";
+        $nestedPath = \array_slice($parts, 1);
+
+        // (data->'key'->>'nestedKey')::text
+        $chain = $baseColumnQuoted;
+        $lastKey = \array_pop($nestedPath);
+
+        foreach ($nestedPath as $key) {
+            $chain .= "->'" . $key . "'";
+        }
+
+        return "(({$chain}->>'" . $lastKey . "')::text)";
     }
 }

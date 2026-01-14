@@ -3639,14 +3639,29 @@ class Database
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
         foreach ($attributes as $i => $attr) {
+            // Support nested paths on object attributes using dot notation:
+            // attribute.key.nestedKey -> base attribute "attribute"
+            $baseAttr = $attr;
+            if (\strpos($attr, '.') !== false) {
+                $baseAttr = \explode('.', $attr, 2)[0] ?? $attr;
+            }
+
             foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getAttribute('key') === $attr) {
-                    $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                if ($collectionAttribute->getAttribute('key') === $baseAttr) {
+                    $attributeType = $collectionAttribute->getAttribute('type');
+
+                    // If this is a nested path, only allow it when the base attribute is an object
+                    if (\strpos($attr, '.') !== false && $attributeType !== self::VAR_OBJECT) {
+                        throw new TypeException('Index attribute "' . $attr . '" is only supported on object attributes');
+                    }
+
+                    // Track the (base) attribute type for adapters that need it
+                    $indexAttributesWithTypes[$attr] = $attributeType;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
-                    if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
+                    if ($attributeType === self::VAR_STRING) {
                         if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }

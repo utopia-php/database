@@ -235,8 +235,24 @@ class Index extends Validator
      */
     public function checkValidAttributes(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if ($this->supportForAttributes && !isset($this->attributes[\strtolower($attribute)])) {
+            if ($this->supportForObjectIndexes && $this->isDottedAttribute($attribute)) {
+                $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
+                if ($baseAttribute && isset($this->attributes[\strtolower($baseAttribute)])) {
+                    $baseAttrDoc = $this->attributes[\strtolower($baseAttribute)];
+                    $baseAttrType = $baseAttrDoc->getAttribute('type', '');
+                    if ($baseAttrType === Database::VAR_OBJECT) {
+                        continue;
+                    }
+                }
+                $this->message = 'Invalid index attribute "' . $attribute . '" not found';
+                return false;
+            }
+
+            if (!isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -374,6 +390,9 @@ class Index extends Validator
             return false;
         }
         foreach ($attributes as $attributePosition => $attributeName) {
+            if ($this->supportForObjectIndexes && $this->isDottedAttribute($attributeName)) {
+                $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
+            }
             $attribute = $this->attributes[\strtolower($attributeName)];
 
             switch ($attribute->getAttribute('type')) {
@@ -719,6 +738,14 @@ class Index extends Validator
         }
 
         $attributeName = $attributes[0] ?? '';
+
+        // Object indexes are only allowed on the top-level object attribute,
+        // not on nested paths like "data.key.nestedKey".
+        if (\strpos($attributeName, '.') !== false) {
+            $this->message = 'Object index can only be created on a top-level object attribute';
+            return false;
+        }
+
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
@@ -728,5 +755,15 @@ class Index extends Validator
         }
 
         return true;
+    }
+
+    private function isDottedAttribute(string $attribute)
+    {
+        return \strpos($attribute, '.') !== false;
+    }
+
+    private function getBaseAttributeFromDottedAttribute(string $attribute)
+    {
+        return \strpos($attribute, '.') !== false ? \explode('.', $attribute, 2)[0] ?? '' : '';
     }
 }

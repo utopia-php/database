@@ -281,7 +281,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
     public function testValidDocument(): void
@@ -459,7 +459,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -474,7 +474,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
     public function testArrayOfIntegersValidation(): void
@@ -540,7 +540,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid integer', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
     public function testFloatValidation(): void
@@ -662,7 +662,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid range between -2,147,483,647 and 2,147,483,647', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
     public function testDoubleUnsigned(): void

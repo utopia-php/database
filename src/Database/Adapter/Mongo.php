@@ -919,7 +919,13 @@ class Mongo extends Adapter
 
         foreach ($attributes as $i => $attribute) {
 
-            $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+            if (\strpos($attribute, '.') !== false) {
+                $dottedAttributes = \explode('.', $attribute);
+                $expandedAttributes = array_map(fn ($attr) => $this->filter($attr), $dottedAttributes);
+                $attributes[$i] = implode('.', $expandedAttributes);
+            } else {
+                $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+            }
 
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
             $indexes['key'][$attributes[$i]] = $orderType;

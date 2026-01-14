@@ -776,17 +776,15 @@ class Index extends Validator
             return false;
         }
 
+        // Check if there's already a TTL index in this collection
         foreach ($this->indexes as $existingIndex) {
-            $existingAttributes = $existingIndex->getAttribute('attributes', []);
-            $existingOrders = $existingIndex->getAttribute('orders', []);
-            $existingType = $existingIndex->getAttribute('type', '');
-            if ($this->supportForAttributes && $existingType !== Database::INDEX_TTL) {
+            if ($existingIndex->getId() === $index->getId()) {
                 continue;
             }
-            $attributeAlreadyPresent = ($this->supportForAttributes && in_array($attribute->getId(), $existingAttributes)) || in_array($attributeName, $existingAttributes);
-            $ordersMatched = empty(array_diff($existingOrders, $orders));
-            if ($attributeAlreadyPresent && $ordersMatched) {
-                $this->message = 'There is already an index with the same attributes and orders';
+
+            // Check if existing index is also a TTL index
+            if ($existingIndex->getAttribute('type') === Database::INDEX_TTL) {
+                $this->message = 'There can be only one TTL index in a collection';
                 return false;
             }
         }

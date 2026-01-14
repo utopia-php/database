@@ -1585,6 +1585,14 @@ class Database
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
+        // Enforce single TTL index per collection
+        if ($this->validate && $this->getAdapter()->getSupportForTTLIndexes()) {
+            $ttlIndexes = array_filter($indexes, fn (Document $idx) => $idx->getAttribute('type') === self::INDEX_TTL);
+            if (count($ttlIndexes) > 1) {
+                throw new IndexException('There can be only one TTL index in a collection');
+            }
+        }
+
         /**
          * Fix metadata index length & orders
          */

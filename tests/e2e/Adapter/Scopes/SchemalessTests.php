@@ -2111,13 +2111,13 @@ trait SchemalessTests
                 [Database::ORDER_ASC],
                 7200 // 2 hours
             );
-            $this->fail('Expected exception for duplicate TTL index on same attribute');
+            $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There is already an index with the same attributes and orders', $e->getMessage());
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
         }
 
-        $this->assertTrue(
+        try {
             $database->createIndex(
                 $col,
                 'idx_ttl_deleted',
@@ -2126,16 +2126,20 @@ trait SchemalessTests
                 [],
                 [Database::ORDER_ASC],
                 86400 // 24 hours
-            )
-        );
+            );
+            $this->fail('Expected exception for creating a second TTL index in a collection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
 
         $collection = $database->getCollection($col);
         $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(2, $indexes);
+        $this->assertCount(1, $indexes);
 
         $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
         $this->assertContains('idx_ttl_expires', $indexIds);
-        $this->assertContains('idx_ttl_deleted', $indexIds);
+        $this->assertNotContains('idx_ttl_deleted', $indexIds);
 
         try {
             $database->createIndex(
@@ -2147,10 +2151,10 @@ trait SchemalessTests
                 [Database::ORDER_ASC],
                 172800 // 48 hours
             );
-            $this->fail('Expected exception for duplicate TTL index on same attribute');
+            $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There is already an index with the same attributes and orders', $e->getMessage());
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
         }
 
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
@@ -2158,9 +2162,9 @@ trait SchemalessTests
         $this->assertTrue(
             $database->createIndex(
                 $col,
-                'idx_ttl_expires_new',
+                'idx_ttl_deleted',
                 Database::INDEX_TTL,
-                ['expiresAt'],
+                ['deletedAt'],
                 [],
                 [Database::ORDER_ASC],
                 1800 // 30 minutes
@@ -2169,11 +2173,10 @@ trait SchemalessTests
 
         $collection = $database->getCollection($col);
         $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(2, $indexes);
+        $this->assertCount(1, $indexes);
 
         $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
         $this->assertNotContains('idx_ttl_expires', $indexIds);
-        $this->assertContains('idx_ttl_expires_new', $indexIds);
         $this->assertContains('idx_ttl_deleted', $indexIds);
 
         $col3 = uniqid('sl_ttl_dup_collection');
@@ -2212,7 +2215,7 @@ trait SchemalessTests
             $this->fail('Expected exception for duplicate TTL indexes in createCollection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('Index already exists', $e->getMessage());
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
         }
 
         $database->deleteCollection($col);

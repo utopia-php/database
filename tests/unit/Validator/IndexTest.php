@@ -724,7 +724,7 @@ class IndexTest extends TestCase
         ]);
         $this->assertTrue($validator->isValid($validIndexMin));
 
-        // Invalid: TTL index on same attribute when another TTL index already exists
+        // Invalid: any additional TTL index when another TTL index already exists
         $collection->setAttribute('indexes', $validIndex, Document::SET_TYPE_APPEND);
         $validatorWithExisting = new Index(
             $collection->getAttribute('attributes'),
@@ -756,7 +756,7 @@ class IndexTest extends TestCase
             'ttl' => 7200,
         ]);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
-        $this->assertStringContainsString('There is already an index with the same attributes and orders', $validatorWithExisting->getDescription());
+        $this->assertEquals('There can be only one TTL index in a collection', $validatorWithExisting->getDescription());
 
         // Validator with supportForTrigramIndexes disabled should reject TTL
         $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);

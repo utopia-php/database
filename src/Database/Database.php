@@ -393,9 +393,9 @@ class Database
     protected bool $filter = true;
 
     /**
-     * @var array<string, bool>|null
+     * @var array<string, bool>
      */
-    protected ?array $disabledFilters = [];
+    protected array $disabledFilters = [];
 
     protected bool $validate = true;
 
@@ -8463,22 +8463,16 @@ class Database
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
-        if (!$this->filter) {
-            return $value;
-        }
-
-        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
-            return $value;
-        }
+        $skip = $this->filter === false || isset($this->disabledFilters[$filter]);
 
         if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
             throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
 
         if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
+            $value = $this->instanceFilters[$filter]['decode']( $value, $document, $this, skip: $skip);
         } else {
-            $value = self::$filters[$filter]['decode']($value, $document, $this);
+            $value = self::$filters[$filter]['decode']($value, $document, $this, skip: $skip);
         }
 
         return $value;

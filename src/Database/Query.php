@@ -178,6 +178,7 @@ class Query
         self::TYPE_AND,
         self::TYPE_OR,
         self::TYPE_RELATION_EQUAL,
+        self::TYPE_REGEX,
     ];
 
     protected string $method = '';
@@ -190,7 +191,6 @@ class Query
     protected string $as = '';
     protected bool $system = false;
     protected bool $onArray = false;
-    protected bool $isObjectAttribute = false;
 
     /**
      * @var array<mixed>

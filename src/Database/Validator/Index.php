@@ -757,11 +757,6 @@ class Index extends Validator
             return false;
         }
 
-        if (empty($orders)) {
-            $this->message = 'TTL index need explicit orders. Add the orders to create this index.';
-            return false;
-        }
-
         $attributeName = $attributes[0] ?? '';
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');

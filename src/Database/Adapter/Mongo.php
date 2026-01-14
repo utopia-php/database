@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
+use stdClass;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -43,6 +44,8 @@ class Mongo extends Adapter
         '$not',
         '$nor',
         '$exists',
+        '$elemMatch',
+        '$exists'
     ];
 
     protected Client $client;
@@ -415,7 +418,6 @@ class Mongo extends Adapter
         try {
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
-
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
@@ -1242,7 +1244,7 @@ class Mongo extends Adapter
                     case Database::VAR_INTEGER:
                         $node = (int)$node;
                         break;
-                    case Database::VAR_DATETIME :
+                    case Database::VAR_DATETIME:
                         if ($node instanceof UTCDateTime) {
                             // Handle UTCDateTime objects
                             $node = DateTime::format($node->toDateTime());
@@ -1268,6 +1270,12 @@ class Mongo extends Adapter
                             }
                         }
                         break;
+                    case Database::VAR_OBJECT:
+                        // Convert stdClass objects to arrays for object attributes
+                        if (is_object($node) && get_class($node) === stdClass::class) {
+                            $node = $this->convertStdClassToArray($node);
+                        }
+                        break;
                     default:
                         break;
                 }
@@ -1276,7 +1284,31 @@ class Mongo extends Adapter
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
+        if (!$this->getSupportForAttributes()) {
+            foreach ($document->getArrayCopy() as $key => $value) {
+                // mongodb results out a stdclass for objects
+                if (is_object($value) && get_class($value) === stdClass::class) {
+                    $document->setAttribute($key, $this->convertStdClassToArray($value));
+                }
+            }
+        }
         return $document;
+    }
+
+    private function convertStdClassToArray(mixed $value): mixed
+    {
+        if (is_object($value) && get_class($value) === stdClass::class) {
+            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
+        }
+
+        if (is_array($value)) {
+            return array_map(
+                fn ($v) => $this->convertStdClassToArray($v),
+                $value
+            );
+        }
+
+        return $value;
     }
 
     /**
@@ -1328,6 +1360,9 @@ class Mongo extends Adapter
                         if (!($node instanceof UTCDateTime)) {
                             $node = new UTCDateTime(new \DateTime($node));
                         }
+                        break;
+                    case Database::VAR_OBJECT:
+                        $node = json_decode($node);
                         break;
                     default:
                         break;
@@ -1602,7 +1637,6 @@ class Mongo extends Adapter
                 $operations,
                 options: $options
             );
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -2008,7 +2042,7 @@ class Mongo extends Adapter
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
 
-                $doc = new Document($record);
+                $doc = new Document($this->convertStdClassToArray($record));
                 if ($removeSequence) {
                     $doc->removeAttribute('$sequence');
                 }
@@ -2041,7 +2075,6 @@ class Mongo extends Adapter
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         } finally {
@@ -2379,6 +2412,15 @@ class Mongo extends Adapter
         foreach ($queries as $query) {
             /* @var $query Query */
             if ($query->isNested()) {
+                if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
+                    $filters[$separator][] = [
+                        $query->getAttribute() => [
+                            '$elemMatch' => $this->buildFilters($query->getValues(), $separator)
+                        ]
+                    ];
+                    continue;
+                }
+
                 $operator = $this->getQueryOperator($query->getMethod());
 
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
@@ -2429,6 +2471,10 @@ class Mongo extends Adapter
         };
 
         $filter = [];
+        if ($query->isObjectAttribute() && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+            $this->handleObjectFilters($query, $filter);
+            return $filter;
+        }
 
         if ($operator == '$eq' && \is_array($value)) {
             $filter[$attribute]['$in'] = $value;
@@ -2493,6 +2539,88 @@ class Mongo extends Adapter
     }
 
     /**
+     * @param Query $query
+     * @param array<string, mixed> $filter
+     * @return void
+     */
+    private function handleObjectFilters(Query $query, array &$filter): void
+    {
+        $conditions = [];
+        $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS,Query::TYPE_NOT_EQUAL]);
+        $values = $query->getValues();
+        foreach ($values as $attribute => $value) {
+            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
+            $flattenedObjectKey = array_key_first($flattendQuery);
+            $queryValue = $flattendQuery[$flattenedObjectKey];
+            $flattenedObjectKey = $query->getAttribute() . '.' . array_key_first($flattendQuery);
+            switch ($query->getMethod()) {
+
+                case Query::TYPE_CONTAINS:
+                case Query::TYPE_NOT_CONTAINS: {
+                    $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
+                    $operator = $isNot ? '$nin' : '$in';
+                    $conditions[] = [ $flattenedObjectKey => [ $operator => $arrayValue] ];
+                    break;
+                }
+
+                case Query::TYPE_EQUAL:
+                case Query::TYPE_NOT_EQUAL: {
+                    if (\is_array($queryValue)) {
+                        $operator = $isNot ? '$nin' : '$in';
+                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                    } else {
+                        $operator = $isNot ? '$ne' : '$eq';
+                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        $logicalOperator = $isNot ? '$and' : '$or';
+        if (count($conditions) && isset($filter[$logicalOperator])) {
+            $filter[$logicalOperator] = array_merge($filter[$logicalOperator], $conditions);
+        } else {
+            $filter[$logicalOperator] = $conditions;
+        }
+    }
+
+    /**
+     * Flatten a nested associative array into Mongo-style dot notation.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param string $prefix
+     * @return array<string, mixed>
+     */
+    private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
+    {
+        /** @var array<string, mixed> $result */
+        $result = [];
+
+        $stack = [];
+
+        $initialKey = $prefix === '' ? $key : $prefix . '.' . $key;
+        $stack[] = [$initialKey, $value];
+        while (!empty($stack)) {
+            [$currentPath, $currentValue] = array_pop($stack);
+            if (is_array($currentValue) && !array_is_list($currentValue)) {
+                foreach ($currentValue as $nextKey => $nextValue) {
+                    $nextKey = (string)$nextKey;
+                    $nextPath = $currentPath === '' ? $nextKey : $currentPath . '.' . $nextKey;
+                    $stack[] = [$nextPath,  $nextValue];
+                }
+            } else {
+                // leaf node
+                $result[$currentPath] = $currentValue;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Get Query Operator
      *
      * @param string $operator
@@ -2520,11 +2648,13 @@ class Mongo extends Adapter
             Query::TYPE_STARTS_WITH,
             Query::TYPE_NOT_STARTS_WITH,
             Query::TYPE_ENDS_WITH,
-            Query::TYPE_NOT_ENDS_WITH => '$regex',
+            Query::TYPE_NOT_ENDS_WITH,
+            Query::TYPE_REGEX => '$regex',
             Query::TYPE_OR => '$or',
             Query::TYPE_AND => '$and',
             Query::TYPE_EXISTS,
             Query::TYPE_NOT_EXISTS => '$exists',
+            Query::TYPE_ELEM_MATCH => '$elemMatch',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_NOT_BETWEEN . ', ' . Query::TYPE_STARTS_WITH . ', ' . Query::TYPE_NOT_STARTS_WITH . ', ' . Query::TYPE_ENDS_WITH . ', ' . Query::TYPE_NOT_ENDS_WITH . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_NOT_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_NOT_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }
@@ -2802,6 +2932,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is PCRE regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPCRERegex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is POSIX regex supported?
+     *
+     * @return bool
+     */
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is cache fallback supported?
      *
      * @return bool
@@ -2852,6 +3002,16 @@ class Mongo extends Adapter
     }
 
     public function getSupportForObject(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
     {
         return false;
     }
@@ -3284,6 +3444,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForTrigramIndex(): bool
     {
         return false;
     }

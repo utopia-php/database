@@ -1123,6 +1123,13 @@ abstract class Adapter
     abstract public function getSupportForObject(): bool;
 
     /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForObjectIndexes(): bool;
+
+    /**
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool
@@ -1466,4 +1473,38 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportNonUtfCharacters(): bool;
+
+    /**
+     * Does the adapter support trigram index?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTrigramIndex(): bool;
+
+    /**
+     * Is PCRE regex supported?
+     * PCRE (Perl Compatible Regular Expressions) supports \b for word boundaries
+     *
+     * @return bool
+     */
+    abstract public function getSupportForPCRERegex(): bool;
+
+    /**
+     * Is POSIX regex supported?
+     * POSIX regex uses \y for word boundaries instead of \b
+     *
+     * @return bool
+     */
+    abstract public function getSupportForPOSIXRegex(): bool;
+
+    /**
+     * Is regex supported at all?
+     * Returns true if either PCRE or POSIX regex is supported
+     *
+     * @return bool
+     */
+    public function getSupportForRegex(): bool
+    {
+        return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
+    }
 }

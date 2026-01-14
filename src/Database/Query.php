@@ -26,6 +26,7 @@ class Query
     public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
+    public const TYPE_REGEX = 'regex';
     public const TYPE_EXISTS = 'exists';
     public const TYPE_NOT_EXISTS = 'notExists';
 
@@ -67,13 +68,13 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
+    public const TYPE_ELEM_MATCH = 'elemMatch';
+    public const DEFAULT_ALIAS = 'main';
 
     // Join methods
     public const TYPE_INNER_JOIN = 'innerJoin';
     public const TYPE_LEFT_JOIN = 'leftJoin';
     public const TYPE_RIGHT_JOIN = 'rightJoin';
-
-    public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -121,6 +122,8 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
+        self::TYPE_REGEX
     ];
 
     public const VECTOR_TYPES = [
@@ -132,6 +135,7 @@ class Query
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
     ];
 
     protected const JOINS_TYPES = [
@@ -186,6 +190,7 @@ class Query
     protected string $as = '';
     protected bool $system = false;
     protected bool $onArray = false;
+    protected bool $isObjectAttribute = false;
 
     /**
      * @var array<mixed>
@@ -441,6 +446,7 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_ELEM_MATCH,
             self::TYPE_SELECT,
             self::TYPE_RELATION_EQUAL,
             self::TYPE_INNER_JOIN,
@@ -1526,7 +1532,6 @@ class Query
         return new self(self::TYPE_NOT_TOUCHES, $attribute, [$values]);
     }
 
-
     /**
      * Helper method to create Query with vectorDot method
      *
@@ -1564,6 +1569,18 @@ class Query
     }
 
     /**
+     * Helper method to create Query with regex method
+     *
+     * @param string $attribute
+     * @param string $pattern
+     * @return Query
+     */
+    public static function regex(string $attribute, string $pattern): self
+    {
+        return new self(self::TYPE_REGEX, $attribute, [$pattern]);
+    }
+
+    /**
      * Helper method to create Query with exists method
      *
      * @param array<string> $attributes
@@ -1583,5 +1600,15 @@ class Query
     public static function notExists(string|int|float|bool|array $attribute): self
     {
         return new self(self::TYPE_NOT_EXISTS, '', is_array($attribute) ? $attribute : [$attribute]);
+    }
+
+    /**
+     * @param string $attribute
+     * @param array<Query> $queries
+     * @return Query
+     */
+    public static function elemMatch(string $attribute, array $queries): self
+    {
+        return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
     }
 }

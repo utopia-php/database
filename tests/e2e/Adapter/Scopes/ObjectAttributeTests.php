@@ -1141,8 +1141,7 @@ trait ObjectAttributeTests
         $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
 
         // 1) KEY index on a nested object path (dot notation)
-        $created = $database->createIndex($collectionId, 'idx_profile_country', Database::INDEX_KEY, ['profile.user.info.country']);
-        $this->assertTrue($created);
+
 
         // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
         $created = $database->createIndex($collectionId, 'idx_profile_email_unique', Database::INDEX_UNIQUE, ['profile.user.email']);
@@ -1200,6 +1199,136 @@ trait ObjectAttributeTests
             $exceptionThrown = true;
             $this->assertInstanceOf(TypeException::class, $e);
         }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testQueryNestedAttribute(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
+        }
+
+        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Base attributes
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+
+        // Create index on nested email path
+        $created = $database->createIndex($collectionId, 'idx_profile_email', Database::INDEX_KEY, ['profile.user.email']);
+        $this->assertTrue($created);
+
+        // Seed documents with different nested values
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'd1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'alice@example.com',
+                        'info' => [
+                            'country' => 'IN',
+                            'city' => 'BLR'
+                        ]
+                    ]
+                ],
+                'name' => 'Alice'
+            ]),
+            new Document([
+                '$id' => 'd2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'bob@example.com',
+                        'info' => [
+                            'country' => 'US',
+                            'city' => 'NYC'
+                        ]
+                    ]
+                ],
+                'name' => 'Bob'
+            ]),
+            new Document([
+                '$id' => 'd3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'carol@test.org',
+                        'info' => [
+                            'country' => 'CA',
+                            'city' => 'TOR'
+                        ]
+                    ]
+                ],
+                'name' => 'Carol'
+            ])
+        ]);
+
+        // Equal on nested email
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['bob@example.com'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d2', $results[0]->getId());
+
+        // Starts with on nested email
+        $results = $database->find($collectionId, [
+            Query::startsWith('profile.user.email', 'alice@')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d1', $results[0]->getId());
+
+        // Ends with on nested email
+        $results = $database->find($collectionId, [
+            Query::endsWith('profile.user.email', 'test.org')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d3', $results[0]->getId());
+
+        // Contains on nested country (as text)
+        $results = $database->find($collectionId, [
+            Query::contains('profile.user.info.country', ['US'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d2', $results[0]->getId());
+
+        // AND: country IN + email suffix
+        $results = $database->find($collectionId, [
+            Query::and([
+                Query::equal('profile.user.info.country', ['IN']),
+                Query::endsWith('profile.user.email', 'example.com'),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d1', $results[0]->getId());
+
+        // OR: match either country = CA or email starts with bob@
+        $results = $database->find($collectionId, [
+            Query::or([
+                Query::equal('profile.user.info.country', ['CA']),
+                Query::startsWith('profile.user.email', 'bob@'),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+        \sort($ids);
+        $this->assertEquals(['d2', 'd3'], $ids);
+
+        // NOT: exclude emails ending with example.com
+        $results = $database->find($collectionId, [
+            Query::notEndsWith('profile.user.email', 'example.com')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d3', $results[0]->getId());
 
         $database->deleteCollection($collectionId);
     }

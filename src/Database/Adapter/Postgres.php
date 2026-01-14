@@ -1750,9 +1750,13 @@ class Postgres extends SQL
     protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        if (\strpos($query->getAttribute(), '.')) {
+            $attribute = $this->filterObjectPath($query->getAttribute());
+        } else {
+            $attribute = $this->filter($query->getAttribute());
+            $attribute = $this->quote($attribute);
+        }
 
-        $attribute = $this->filter($query->getAttribute());
-        $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
 
@@ -2863,5 +2867,36 @@ class Postgres extends SQL
         }
 
         return "(({$chain}->>'" . $lastKey . "')::text)";
+    }
+
+    protected function filterObjectPath(string $path): string
+    {
+        $parts = \explode('.', $path);
+
+        // validating the parts so that there is no injection
+        foreach ($parts as $part) {
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
+                throw new DatabaseException('Invalid JSON key '.$part);
+            }
+        }
+
+        if (\count($parts) === 1) {
+            $baseColumn = $this->filter($parts[0]);
+            return $this->quote($baseColumn);
+        }
+
+        $baseColumn = $this->filter($parts[0]);
+        $baseColumnQuoted = "\"{$baseColumn}\"";
+        $nestedPath = \array_slice($parts, 1);
+
+        // (data->'key'->>'nestedKey')::text
+        $chain = $baseColumnQuoted;
+        $lastKey = \array_pop($nestedPath);
+
+        foreach ($nestedPath as $key) {
+            $chain .= "->'" . $key . "'";
+        }
+
+        return "{$chain}->>'{$lastKey}'";
     }
 }

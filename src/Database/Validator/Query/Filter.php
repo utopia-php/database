@@ -126,6 +126,8 @@ class Filter extends Base
 
         $attributeType = $attributeSchema['type'];
 
+        $isDottedOnObject = \str_contains($originalAttribute, '.') && $attributeType === Database::VAR_OBJECT;
+
         // If the query method is spatial-only, the attribute must be a spatial type
         $query = new Query($method);
         if ($query->isSpatialQuery() && !in_array($attributeType, Database::SPATIAL_TYPES, true)) {
@@ -169,11 +171,12 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_OBJECT:
-                    if (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
-                        && !$this->isValidObjectQueryValues($value)) {
-                        $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
-                        return false;
+                    // For dotted attributes on objects, validate as string (path queries)
+                    if ($isDottedOnObject) {
+                        $validator = new Text(0, 0);
+                        break;
                     }
+
                     continue 2;
 
                 case Database::VAR_POINT:

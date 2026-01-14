@@ -372,6 +372,21 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForPCRERegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -593,6 +608,11 @@ class Pool extends Adapter
     }
 
     public function getSupportForObject(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForObjectIndexes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

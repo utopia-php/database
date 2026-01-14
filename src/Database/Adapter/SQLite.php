@@ -1013,6 +1013,16 @@ class SQLite extends MariaDB
         return false;
     }
 
+    /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
+    {
+        return false;
+    }
+
     public function getSupportForSpatialIndexNull(): bool
     {
         return false; // SQLite doesn't have native spatial support
@@ -1878,6 +1888,28 @@ class SQLite extends MariaDB
     }
 
     public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is PCRE regex supported?
+     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
+     *
+     * @return bool
+     */
+    public function getSupportForPCRERegex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is POSIX regex supported?
+     * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function
+     *
+     * @return bool
+     */
+    public function getSupportForPOSIXRegex(): bool
     {
         return false;
     }

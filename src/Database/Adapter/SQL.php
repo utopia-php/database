@@ -1793,6 +1793,8 @@ abstract class SQL extends Adapter
             case Query::TYPE_NOT_ENDS_WITH:
             case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
+            case Query::TYPE_REGEX:
+                return $this->getRegexOperator();
             case Query::TYPE_VECTOR_DOT:
             case Query::TYPE_VECTOR_COSINE:
             case Query::TYPE_VECTOR_EUCLIDEAN:
@@ -2284,6 +2286,14 @@ abstract class SQL extends Adapter
     public function getLikeOperator(): string
     {
         return 'LIKE';
+    }
+
+    /**
+     * @return string
+     */
+    public function getRegexOperator(): string
+    {
+        return 'REGEXP';
     }
 
     public function getInternalIndexesKeys(): array

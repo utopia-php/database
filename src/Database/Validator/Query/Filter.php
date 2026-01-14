@@ -146,7 +146,12 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer();
+                    $size = $attributeSchema['size'] ?? 4;
+                    $signed = $attributeSchema['signed'] ?? true;
+                    $bits = $size >= 8 ? 64 : 32;
+                    // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
+                    $unsigned = !$signed && $bits < 64;
+                    $validator = new Integer(false, $bits, $unsigned);
                     break;
 
                 case Database::VAR_FLOAT:

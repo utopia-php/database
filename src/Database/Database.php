@@ -8470,7 +8470,7 @@ class Database
         }
 
         if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']( $value, $document, $this, skip: $skip);
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this, skip: $skip);
         } else {
             $value = self::$filters[$filter]['decode']($value, $document, $this, skip: $skip);
         }

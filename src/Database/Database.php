@@ -545,7 +545,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value, bool $skip) {
+            function (?string $value) {
                 if ($value === null) {
                     return null;
                 }
@@ -573,7 +573,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value, bool $skip) {
+            function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -601,7 +601,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value, bool $skip) {
+            function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }

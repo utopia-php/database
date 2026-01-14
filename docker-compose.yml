@@ -245,6 +245,30 @@ services:
       retries: 5
       start_period: 5s
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: utopia-clickhouse
+    networks:
+      - database
+    ports:
+      - "8710:8123"
+      - "8711:9000"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   mongo-data:
 

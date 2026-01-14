@@ -7245,222 +7245,222 @@ trait DocumentTests
      * This test verifies that ReDoS patterns either timeout properly or complete quickly,
      * preventing denial of service attacks.
      */
-//    public function testRegexRedos(): void
-//    {
-//        /** @var Database $database */
-//        $database = static::getDatabase();
-//
-//        // Skip test if regex is not supported
-//        if (!$database->getAdapter()->getSupportForRegex()) {
-//            $this->expectNotToPerformAssertions();
-//            return;
-//        }
-//
-//        $collectionName = 'redosTimeoutTest';
-//        $database->createCollection($collectionName, permissions: [
-//            Permission::create(Role::any()),
-//            Permission::read(Role::any()),
-//            Permission::update(Role::any()),
-//            Permission::delete(Role::any()),
-//        ]);
-//
-//        if ($database->getAdapter()->getSupportForAttributes()) {
-//            $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
-//        }
-//
-//        // Create documents with strings designed to trigger ReDoS
-//        // These strings have many 'a's but end with 'c' instead of 'b'
-//        // This causes catastrophic backtracking with patterns like (a+)+b
-//        $redosStrings = [];
-//        for ($i = 15; $i <= 35; $i += 5) {
-//            $redosStrings[] = str_repeat('a', $i) . 'c';
-//        }
-//
-//        // Also add some normal strings
-//        $normalStrings = [
-//            'normal text',
-//            'another string',
-//            'test123',
-//            'valid data',
-//        ];
-//
-//        $documents = [];
-//        foreach ($redosStrings as $text) {
-//            $documents[] = new Document([
-//                '$permissions' => [
-//                    Permission::read(Role::any()),
-//                    Permission::create(Role::any()),
-//                    Permission::update(Role::any()),
-//                    Permission::delete(Role::any()),
-//                ],
-//                'text' => $text,
-//            ]);
-//        }
-//
-//        foreach ($normalStrings as $text) {
-//            $documents[] = new Document([
-//                '$permissions' => [
-//                    Permission::read(Role::any()),
-//                    Permission::create(Role::any()),
-//                    Permission::update(Role::any()),
-//                    Permission::delete(Role::any()),
-//                ],
-//                'text' => $text,
-//            ]);
-//        }
-//
-//        $database->createDocuments($collectionName, $documents);
-//
-//        // ReDoS patterns that cause exponential backtracking
-//        $redosPatterns = [
-//            '(a+)+b',      // Classic ReDoS: nested quantifiers
-//            '(a|a)*b',     // Alternation with quantifier
-//            '(a+)+$',      // Anchored pattern
-//            '(a*)*b',      // Nested star quantifiers
-//            '(a+)+b+',     // Multiple nested quantifiers
-//            '(.+)+b',      // Generic nested quantifiers
-//            '(.*)+b',      // Generic nested quantifiers
-//        ];
-//
-//        $supportsTimeout = $database->getAdapter()->getSupportForTimeouts();
-//
-//        if ($supportsTimeout) {
-//            $database->setTimeout(2000);
-//        }
-//
-//        foreach ($redosPatterns as $pattern) {
-//            $startTime = microtime(true);
-//
-//            try {
-//                $results = $database->find($collectionName, [
-//                    Query::regex('text', $pattern),
-//                ]);
-//                $elapsed = microtime(true) - $startTime;
-//                // If timeout is supported, the query should either:
-//                // 1. Complete quickly (< 3 seconds) if ReDoS is mitigated
-//                // 2. Throw TimeoutException if it takes too long
-//                if ($supportsTimeout) {
-//                    // If we got here without timeout, it should have completed quickly
-//                    $this->assertLessThan(
-//                        3.0,
-//                        $elapsed,
-//                        "Regex pattern '{$pattern}' should complete quickly or timeout. Took {$elapsed}s"
-//                    );
-//                } else {
-//                    // Without timeout support, we just check it doesn't hang forever
-//                    // Set a reasonable upper bound (15 seconds) for systems without timeout
-//                    $this->assertLessThan(
-//                        15.0,
-//                        $elapsed,
-//                        "Regex pattern '{$pattern}' should not cause excessive delay. Took {$elapsed}s"
-//                    );
-//                }
-//
-//                // Verify results: none of our ReDoS strings should match these patterns
-//                // (they all end with 'c', not 'b')
-//                foreach ($results as $doc) {
-//                    $text = $doc->getAttribute('text');
-//                    // If it matched, verify it's actually a valid match
-//                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
-//                    if ($matches !== false) {
-//                        $this->assertEquals(
-//                            1,
-//                            $matches,
-//                            "Document with text '{$text}' should actually match pattern '{$pattern}'"
-//                        );
-//                    }
-//                }
-//
-//            } catch (TimeoutException $e) {
-//                // Timeout is expected for ReDoS patterns if not properly mitigated
-//                $elapsed = microtime(true) - $startTime;
-//                $this->assertInstanceOf(
-//                    TimeoutException::class,
-//                    $e,
-//                    "Regex pattern '{$pattern}' should timeout if it causes ReDoS. Elapsed: {$elapsed}s"
-//                );
-//
-//                // Timeout should happen within reasonable time (not immediately, but not too late)
-//                // Fast timeouts are actually good - they mean the system is protecting itself quickly
-//                $this->assertGreaterThan(
-//                    0.05,
-//                    $elapsed,
-//                    "Timeout should occur after some minimal processing time"
-//                );
-//
-//                // Timeout should happen before the timeout limit (with some buffer)
-//                if ($supportsTimeout) {
-//                    $this->assertLessThan(
-//                        5.0,
-//                        $elapsed,
-//                        "Timeout should occur within reasonable time (before 5 seconds)"
-//                    );
-//                }
-//
-//            } catch (\Exception $e) {
-//                // Check if this is a query interruption/timeout from MySQL (error 1317)
-//                // MySQL sometimes throws "Query execution was interrupted" instead of TimeoutException
-//                $message = $e->getMessage();
-//                $isQueryInterrupted = false;
-//
-//                // Check message for interruption keywords
-//                if (strpos($message, 'Query execution was interrupted') !== false ||
-//                    strpos($message, 'interrupted') !== false) {
-//                    $isQueryInterrupted = true;
-//                }
-//
-//                // Check if it's a PDOException with error code 1317
-//                if ($e instanceof PDOException) {
-//                    $errorInfo = $e->errorInfo ?? [];
-//                    // Error 1317 is "Query execution was interrupted"
-//                    if (isset($errorInfo[1]) && $errorInfo[1] === 1317) {
-//                        $isQueryInterrupted = true;
-//                    }
-//                    // Also check SQLSTATE 70100
-//                    if ($e->getCode() === '70100') {
-//                        $isQueryInterrupted = true;
-//                    }
-//                }
-//
-//                if ($isQueryInterrupted) {
-//                    // This is effectively a timeout - MySQL interrupted the query
-//                    $elapsed = microtime(true) - $startTime;
-//                    $this->assertGreaterThan(
-//                        0.05,
-//                        $elapsed,
-//                        "Query interruption should occur after some minimal processing time"
-//                    );
-//                    // This is acceptable - the query was interrupted due to timeout
-//                    continue;
-//                }
-//
-//                // Other exceptions are unexpected
-//                $this->fail("Unexpected exception for pattern '{$pattern}': " . get_class($e) . " - " . $e->getMessage());
-//            }
-//        }
-//
-//        // Test with a pattern that should match quickly (not ReDoS)
-//        $safePattern = 'normal';
-//        $startTime = microtime(true);
-//        $results = $database->find($collectionName, [
-//            Query::regex('text', $safePattern),
-//        ]);
-//        $elapsed = microtime(true) - $startTime;
-//
-//        // Safe patterns should complete very quickly
-//        $this->assertLessThan(1.0, $elapsed, 'Safe regex pattern should complete quickly');
-//        $this->assertGreaterThan(0, count($results), 'Safe pattern should match some documents');
-//
-//        // Verify safe pattern results are correct
-//        foreach ($results as $doc) {
-//            $text = $doc->getAttribute('text');
-//            $this->assertStringContainsString('normal', $text, "Document '{$text}' should contain 'normal'");
-//        }
-//
-//        // Cleanup
-//        if ($supportsTimeout) {
-//            $database->clearTimeout();
-//        }
-//        $database->deleteCollection($collectionName);
-//    }
+    //    public function testRegexRedos(): void
+    //    {
+    //        /** @var Database $database */
+    //        $database = static::getDatabase();
+    //
+    //        // Skip test if regex is not supported
+    //        if (!$database->getAdapter()->getSupportForRegex()) {
+    //            $this->expectNotToPerformAssertions();
+    //            return;
+    //        }
+    //
+    //        $collectionName = 'redosTimeoutTest';
+    //        $database->createCollection($collectionName, permissions: [
+    //            Permission::create(Role::any()),
+    //            Permission::read(Role::any()),
+    //            Permission::update(Role::any()),
+    //            Permission::delete(Role::any()),
+    //        ]);
+    //
+    //        if ($database->getAdapter()->getSupportForAttributes()) {
+    //            $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
+    //        }
+    //
+    //        // Create documents with strings designed to trigger ReDoS
+    //        // These strings have many 'a's but end with 'c' instead of 'b'
+    //        // This causes catastrophic backtracking with patterns like (a+)+b
+    //        $redosStrings = [];
+    //        for ($i = 15; $i <= 35; $i += 5) {
+    //            $redosStrings[] = str_repeat('a', $i) . 'c';
+    //        }
+    //
+    //        // Also add some normal strings
+    //        $normalStrings = [
+    //            'normal text',
+    //            'another string',
+    //            'test123',
+    //            'valid data',
+    //        ];
+    //
+    //        $documents = [];
+    //        foreach ($redosStrings as $text) {
+    //            $documents[] = new Document([
+    //                '$permissions' => [
+    //                    Permission::read(Role::any()),
+    //                    Permission::create(Role::any()),
+    //                    Permission::update(Role::any()),
+    //                    Permission::delete(Role::any()),
+    //                ],
+    //                'text' => $text,
+    //            ]);
+    //        }
+    //
+    //        foreach ($normalStrings as $text) {
+    //            $documents[] = new Document([
+    //                '$permissions' => [
+    //                    Permission::read(Role::any()),
+    //                    Permission::create(Role::any()),
+    //                    Permission::update(Role::any()),
+    //                    Permission::delete(Role::any()),
+    //                ],
+    //                'text' => $text,
+    //            ]);
+    //        }
+    //
+    //        $database->createDocuments($collectionName, $documents);
+    //
+    //        // ReDoS patterns that cause exponential backtracking
+    //        $redosPatterns = [
+    //            '(a+)+b',      // Classic ReDoS: nested quantifiers
+    //            '(a|a)*b',     // Alternation with quantifier
+    //            '(a+)+$',      // Anchored pattern
+    //            '(a*)*b',      // Nested star quantifiers
+    //            '(a+)+b+',     // Multiple nested quantifiers
+    //            '(.+)+b',      // Generic nested quantifiers
+    //            '(.*)+b',      // Generic nested quantifiers
+    //        ];
+    //
+    //        $supportsTimeout = $database->getAdapter()->getSupportForTimeouts();
+    //
+    //        if ($supportsTimeout) {
+    //            $database->setTimeout(2000);
+    //        }
+    //
+    //        foreach ($redosPatterns as $pattern) {
+    //            $startTime = microtime(true);
+    //
+    //            try {
+    //                $results = $database->find($collectionName, [
+    //                    Query::regex('text', $pattern),
+    //                ]);
+    //                $elapsed = microtime(true) - $startTime;
+    //                // If timeout is supported, the query should either:
+    //                // 1. Complete quickly (< 3 seconds) if ReDoS is mitigated
+    //                // 2. Throw TimeoutException if it takes too long
+    //                if ($supportsTimeout) {
+    //                    // If we got here without timeout, it should have completed quickly
+    //                    $this->assertLessThan(
+    //                        3.0,
+    //                        $elapsed,
+    //                        "Regex pattern '{$pattern}' should complete quickly or timeout. Took {$elapsed}s"
+    //                    );
+    //                } else {
+    //                    // Without timeout support, we just check it doesn't hang forever
+    //                    // Set a reasonable upper bound (15 seconds) for systems without timeout
+    //                    $this->assertLessThan(
+    //                        15.0,
+    //                        $elapsed,
+    //                        "Regex pattern '{$pattern}' should not cause excessive delay. Took {$elapsed}s"
+    //                    );
+    //                }
+    //
+    //                // Verify results: none of our ReDoS strings should match these patterns
+    //                // (they all end with 'c', not 'b')
+    //                foreach ($results as $doc) {
+    //                    $text = $doc->getAttribute('text');
+    //                    // If it matched, verify it's actually a valid match
+    //                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+    //                    if ($matches !== false) {
+    //                        $this->assertEquals(
+    //                            1,
+    //                            $matches,
+    //                            "Document with text '{$text}' should actually match pattern '{$pattern}'"
+    //                        );
+    //                    }
+    //                }
+    //
+    //            } catch (TimeoutException $e) {
+    //                // Timeout is expected for ReDoS patterns if not properly mitigated
+    //                $elapsed = microtime(true) - $startTime;
+    //                $this->assertInstanceOf(
+    //                    TimeoutException::class,
+    //                    $e,
+    //                    "Regex pattern '{$pattern}' should timeout if it causes ReDoS. Elapsed: {$elapsed}s"
+    //                );
+    //
+    //                // Timeout should happen within reasonable time (not immediately, but not too late)
+    //                // Fast timeouts are actually good - they mean the system is protecting itself quickly
+    //                $this->assertGreaterThan(
+    //                    0.05,
+    //                    $elapsed,
+    //                    "Timeout should occur after some minimal processing time"
+    //                );
+    //
+    //                // Timeout should happen before the timeout limit (with some buffer)
+    //                if ($supportsTimeout) {
+    //                    $this->assertLessThan(
+    //                        5.0,
+    //                        $elapsed,
+    //                        "Timeout should occur within reasonable time (before 5 seconds)"
+    //                    );
+    //                }
+    //
+    //            } catch (\Exception $e) {
+    //                // Check if this is a query interruption/timeout from MySQL (error 1317)
+    //                // MySQL sometimes throws "Query execution was interrupted" instead of TimeoutException
+    //                $message = $e->getMessage();
+    //                $isQueryInterrupted = false;
+    //
+    //                // Check message for interruption keywords
+    //                if (strpos($message, 'Query execution was interrupted') !== false ||
+    //                    strpos($message, 'interrupted') !== false) {
+    //                    $isQueryInterrupted = true;
+    //                }
+    //
+    //                // Check if it's a PDOException with error code 1317
+    //                if ($e instanceof PDOException) {
+    //                    $errorInfo = $e->errorInfo ?? [];
+    //                    // Error 1317 is "Query execution was interrupted"
+    //                    if (isset($errorInfo[1]) && $errorInfo[1] === 1317) {
+    //                        $isQueryInterrupted = true;
+    //                    }
+    //                    // Also check SQLSTATE 70100
+    //                    if ($e->getCode() === '70100') {
+    //                        $isQueryInterrupted = true;
+    //                    }
+    //                }
+    //
+    //                if ($isQueryInterrupted) {
+    //                    // This is effectively a timeout - MySQL interrupted the query
+    //                    $elapsed = microtime(true) - $startTime;
+    //                    $this->assertGreaterThan(
+    //                        0.05,
+    //                        $elapsed,
+    //                        "Query interruption should occur after some minimal processing time"
+    //                    );
+    //                    // This is acceptable - the query was interrupted due to timeout
+    //                    continue;
+    //                }
+    //
+    //                // Other exceptions are unexpected
+    //                $this->fail("Unexpected exception for pattern '{$pattern}': " . get_class($e) . " - " . $e->getMessage());
+    //            }
+    //        }
+    //
+    //        // Test with a pattern that should match quickly (not ReDoS)
+    //        $safePattern = 'normal';
+    //        $startTime = microtime(true);
+    //        $results = $database->find($collectionName, [
+    //            Query::regex('text', $safePattern),
+    //        ]);
+    //        $elapsed = microtime(true) - $startTime;
+    //
+    //        // Safe patterns should complete very quickly
+    //        $this->assertLessThan(1.0, $elapsed, 'Safe regex pattern should complete quickly');
+    //        $this->assertGreaterThan(0, count($results), 'Safe pattern should match some documents');
+    //
+    //        // Verify safe pattern results are correct
+    //        foreach ($results as $doc) {
+    //            $text = $doc->getAttribute('text');
+    //            $this->assertStringContainsString('normal', $text, "Document '{$text}' should contain 'normal'");
+    //        }
+    //
+    //        // Cleanup
+    //        if ($supportsTimeout) {
+    //            $database->clearTimeout();
+    //        }
+    //        $database->deleteCollection($collectionName);
+    //    }
 }

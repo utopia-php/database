@@ -32,9 +32,6 @@ class MySQL extends MariaDB
 
         $this->timeout = $milliseconds;
 
-        $pdo = $this->getPDO();
-        $pdo->exec("SET GLOBAL regexp_time_limit = {$milliseconds}");
-
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return \preg_replace(
                 pattern: '/SELECT/',

@@ -545,7 +545,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, bool $skip) {
                 if ($value === null) {
                     return null;
                 }
@@ -573,7 +573,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, bool $skip) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -601,7 +601,7 @@ class Database
              * @param string|null $value
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, bool $skip) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -8470,9 +8470,9 @@ class Database
         }
 
         if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this, skip: $skip);
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this, $skip);
         } else {
-            $value = self::$filters[$filter]['decode']($value, $document, $this, skip: $skip);
+            $value = self::$filters[$filter]['decode']($value, $document, $this, $skip);
         }
 
         return $value;

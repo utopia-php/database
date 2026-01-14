@@ -32,7 +32,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
@@ -148,7 +147,7 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
     }
     $database->create();
 
-    Authorization::setRole(Role::any()->toString());
+    $authorization->addRole(Role::any()->toString());
 
     // Create test collection
     $database->createCollection('operators_test', permissions: [

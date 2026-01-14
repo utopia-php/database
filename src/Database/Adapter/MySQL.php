@@ -32,6 +32,9 @@ class MySQL extends MariaDB
 
         $this->timeout = $milliseconds;
 
+        $pdo = $this->getPDO();
+        $pdo->exec("SET GLOBAL regexp_time_limit = {$milliseconds}");
+
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return \preg_replace(
                 pattern: '/SELECT/',
@@ -157,6 +160,11 @@ class MySQL extends MariaDB
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
+        // Regex timeout
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3699) {
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
+        }
+
         // Functional index dependency
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3837) {
             return new DependencyException('Attribute cannot be deleted because it is used in an index', $e->getCode(), $e);
@@ -248,6 +256,11 @@ class MySQL extends MariaDB
     public function getSupportForSpatialAxisOrder(): bool
     {
         return true;
+    }
+
+    public function getSupportForObjectIndexes(): bool
+    {
+        return false;
     }
 
     /**

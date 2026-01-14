@@ -348,8 +348,12 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                    // We need both Integer and Range because Range implicitly casts non-numeric values
-                    $validators[] = new Integer();
+                    // Determine bit size based on attribute size in bytes
+                    $bits = $size >= 8 ? 64 : 32;
+                    // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
+                    // The Range validator will restrict to positive values only
+                    $unsigned = !$signed && $bits < 64;
+                    $validators[] = new Integer(false, $bits, $unsigned);
                     $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, Database::VAR_INTEGER);

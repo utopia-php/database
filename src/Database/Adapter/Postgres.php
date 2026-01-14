@@ -154,6 +154,7 @@ class Postgres extends SQL
         // Enable extensions
         $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
         $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS pg_trgm')->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
@@ -899,9 +900,10 @@ class Postgres extends SQL
             Database::INDEX_SPATIAL,
             Database::INDEX_HNSW_EUCLIDEAN,
             Database::INDEX_HNSW_COSINE,
-            Database::INDEX_HNSW_DOT => 'INDEX',
+            Database::INDEX_HNSW_DOT,
+            Database::INDEX_OBJECT,
+            Database::INDEX_TRIGRAM => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_OBJECT => 'INDEX',
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
@@ -922,6 +924,11 @@ class Postgres extends SQL
             Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
             Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
             Database::INDEX_OBJECT => " USING GIN ({$attributes})",
+            Database::INDEX_TRIGRAM =>
+                " USING GIN (" . implode(', ', array_map(
+                    fn ($attr) => "$attr gin_trgm_ops",
+                    array_map(fn ($attr) => trim($attr), explode(',', $attributes))
+                )) . ")",
             default => " ({$attributes})",
         };
 
@@ -2112,12 +2119,35 @@ class Postgres extends SQL
         return true;
     }
 
+    public function getSupportForPCRERegex(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return true;
+    }
+
     /**
      * @return string
      */
     public function getLikeOperator(): string
     {
         return 'ILIKE';
+    }
+
+    /**
+     * @return string
+     */
+    public function getRegexOperator(): string
+    {
+        return '~';
     }
 
     protected function processException(PDOException $e): \Exception
@@ -2190,6 +2220,16 @@ class Postgres extends SQL
      * @return bool
     */
     public function getSupportForObject(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are object (JSONB) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
     {
         return true;
     }

@@ -1585,4 +1585,101 @@ trait CollectionTests
         $this->assertEmpty($db->getGlobalCollections());
 
     }
+
+    public function testCreateCollectionWithLongId(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = '019a91aa-58cd-708d-a55c-5f7725ef937a';
+
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => true,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'age',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'isActive',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('idx_name'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['name'],
+                'lengths' => [128],
+                'orders' => ['ASC'],
+            ]),
+            new Document([
+                '$id' => ID::custom('idx_name_age'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['name', 'age'],
+                'lengths' => [128, null],
+                'orders' => ['ASC', 'DESC'],
+            ]),
+        ];
+
+        $collectionDocument = $database->createCollection(
+            $collection,
+            $attributes,
+            $indexes,
+            permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        );
+
+        $this->assertEquals($collection, $collectionDocument->getId());
+        $this->assertCount(3, $collectionDocument->getAttribute('attributes'));
+        $this->assertCount(2, $collectionDocument->getAttribute('indexes'));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'longIdDoc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'LongId Test',
+            'age' => 42,
+            'isActive' => true,
+        ]));
+
+        $this->assertEquals('longIdDoc', $document->getId());
+        $this->assertEquals('LongId Test', $document->getAttribute('name'));
+        $this->assertEquals(42, $document->getAttribute('age'));
+        $this->assertTrue($document->getAttribute('isActive'));
+
+        $found = $database->find($collection, [
+            Query::equal('name', ['LongId Test']),
+        ]);
+
+        $this->assertCount(1, $found);
+        $this->assertEquals('longIdDoc', $found[0]->getId());
+
+        $fetched = $database->getDocument($collection, 'longIdDoc');
+        $this->assertEquals('LongId Test', $fetched->getAttribute('name'));
+
+        $this->assertTrue($database->deleteCollection($collection));
+    }
 }

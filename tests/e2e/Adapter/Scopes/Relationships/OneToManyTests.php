@@ -2682,4 +2682,191 @@ trait OneToManyTests
         $database->deleteCollection('libraries');
         $database->deleteCollection('books_lib');
     }
+
+    public function testOneToManyRelationshipWithArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Cleanup any leftover collections from previous runs
+        try {
+            $database->deleteCollection('author');
+        } catch (\Throwable $e) {
+        }
+        try {
+            $database->deleteCollection('article');
+        } catch (\Throwable $e) {
+        }
+
+        $database->createCollection('author');
+        $database->createCollection('article');
+
+        $database->createAttribute('author', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('article', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'author',
+            relatedCollection: 'article',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'articles',
+            twoWayKey: 'author'
+        );
+
+        // Create some articles
+        $article1 = $database->createDocument('article', new Document([
+            '$id' => 'article1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Article 1',
+        ]));
+
+        $article2 = $database->createDocument('article', new Document([
+            '$id' => 'article2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Article 2',
+        ]));
+
+        $article3 = $database->createDocument('article', new Document([
+            '$id' => 'article3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Article 3',
+        ]));
+
+        // Create author with one article
+        $database->createDocument('author', new Document([
+            '$id' => 'author1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Author 1',
+            'articles' => ['article1'],
+        ]));
+
+        // Fetch the document to get relationships (needed for Mirror which may not return relationships on create)
+        $author = $database->getDocument('author', 'author1');
+        $this->assertCount(1, $author->getAttribute('articles'));
+        $this->assertEquals('article1', $author->getAttribute('articles')[0]->getId());
+
+        // Test arrayAppend - add articles
+        $author = $database->updateDocument('author', 'author1', new Document([
+            'articles' => \Utopia\Database\Operator::arrayAppend(['article2']),
+        ]));
+
+        $author = $database->getDocument('author', 'author1');
+        $this->assertCount(2, $author->getAttribute('articles'));
+        $articleIds = \array_map(fn ($article) => $article->getId(), $author->getAttribute('articles'));
+        $this->assertContains('article1', $articleIds);
+        $this->assertContains('article2', $articleIds);
+
+        // Test arrayRemove - remove an article
+        $author = $database->updateDocument('author', 'author1', new Document([
+            'articles' => \Utopia\Database\Operator::arrayRemove('article1'),
+        ]));
+
+        $author = $database->getDocument('author', 'author1');
+        $this->assertCount(1, $author->getAttribute('articles'));
+        $articleIds = \array_map(fn ($article) => $article->getId(), $author->getAttribute('articles'));
+        $this->assertNotContains('article1', $articleIds);
+        $this->assertContains('article2', $articleIds);
+
+        // Cleanup
+        $database->deleteCollection('author');
+        $database->deleteCollection('article');
+    }
+
+    public function testOneToManyChildSideRejectsArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Cleanup any leftover collections from previous runs
+        try {
+            $database->deleteCollection('parent_o2m');
+        } catch (\Throwable $e) {
+        }
+        try {
+            $database->deleteCollection('child_o2m');
+        } catch (\Throwable $e) {
+        }
+
+        $database->createCollection('parent_o2m');
+        $database->createCollection('child_o2m');
+
+        $database->createAttribute('parent_o2m', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('child_o2m', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'parent_o2m',
+            relatedCollection: 'child_o2m',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'children',
+            twoWayKey: 'parent'
+        );
+
+        // Create a parent
+        $database->createDocument('parent_o2m', new Document([
+            '$id' => 'parent1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Parent 1',
+        ]));
+
+        // Create child with parent
+        $database->createDocument('child_o2m', new Document([
+            '$id' => 'child1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Child 1',
+            'parent' => 'parent1',
+        ]));
+
+        // Array operators should fail on child side (single-value "parent" relationship)
+        try {
+            $database->updateDocument('child_o2m', 'child1', new Document([
+                'parent' => \Utopia\Database\Operator::arrayAppend(['parent2']),
+            ]));
+            $this->fail('Expected exception for array operator on child side of one-to-many relationship');
+        } catch (\Utopia\Database\Exception\Structure $e) {
+            $this->assertStringContainsString('single-value relationship', $e->getMessage());
+        }
+
+        // Cleanup
+        $database->deleteCollection('parent_o2m');
+        $database->deleteCollection('child_o2m');
+    }
 }

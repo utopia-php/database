@@ -1165,4 +1165,227 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
     }
+
+    public function testSchemalessExists(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid('schemaless_exists');
+        $database->createCollection($colName);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create documents with and without the 'optionalField' attribute
+        $docs = [
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'optionalField' => 'value1', 'name' => 'doc1']),
+            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'optionalField' => 'value2', 'name' => 'doc2']),
+            new Document(['$id' => 'doc3', '$permissions' => $permissions, 'name' => 'doc3']), // no optionalField
+            new Document(['$id' => 'doc4', '$permissions' => $permissions, 'optionalField' => null, 'name' => 'doc4']), // exists but null
+            new Document(['$id' => 'doc5', '$permissions' => $permissions, 'name' => 'doc5']), // no optionalField
+        ];
+        $this->assertEquals(5, $database->createDocuments($colName, $docs));
+
+        // Test exists - should return documents where optionalField exists (even if null)
+        $documents = $database->find($colName, [
+            Query::exists(['optionalField']),
+        ]);
+
+        $this->assertEquals(3, count($documents)); // doc1, doc2, doc4
+        $ids = array_map(fn ($doc) => $doc->getId(), $documents);
+        $this->assertContains('doc1', $ids);
+        $this->assertContains('doc2', $ids);
+        $this->assertContains('doc4', $ids);
+
+        // Verify that doc4 is included even though optionalField is null
+        $doc4 = array_filter($documents, fn ($doc) => $doc->getId() === 'doc4');
+        $this->assertCount(1, $doc4);
+        $doc4Array = array_values($doc4);
+        $this->assertTrue(array_key_exists('optionalField', $doc4Array[0]->getAttributes()));
+
+        // Test exists with another attribute
+        $documents = $database->find($colName, [
+            Query::exists(['name']),
+        ]);
+        $this->assertEquals(5, count($documents)); // All documents have 'name'
+
+        // Test exists with non-existent attribute
+        $documents = $database->find($colName, [
+            Query::exists(['nonExistentField']),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // Multiple attributes in a single exists query (OR semantics)
+        $documents = $database->find($colName, [
+            Query::exists(['optionalField', 'name']),
+        ]);
+        // All documents have "name", some also have "optionalField"
+        $this->assertEquals(5, count($documents));
+
+        // Multiple attributes where only one exists on some documents
+        $documents = $database->find($colName, [
+            Query::exists(['optionalField', 'nonExistentField']),
+        ]);
+        // Only documents where optionalField exists should be returned
+        $this->assertEquals(3, count($documents)); // doc1, doc2, doc4
+
+        // Multiple attributes where none exist should return empty
+        $documents = $database->find($colName, [
+            Query::exists(['nonExistentField', 'alsoMissing']),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // Multiple attributes including one present on all docs still returns all (OR)
+        $documents = $database->find($colName, [
+            Query::exists(['name', 'nonExistentField', 'alsoMissing']),
+        ]);
+        $this->assertEquals(5, count($documents));
+
+        // Multiple exists queries (AND semantics)
+        $documents = $database->find($colName, [
+            Query::exists(['optionalField']),
+            Query::exists(['name']),
+        ]);
+        // Documents must have both attributes
+        $this->assertEquals(3, count($documents)); // doc1, doc2, doc4
+
+        // Nested OR with exists (optionalField OR nonExistentField) AND name
+        $documents = $database->find($colName, [
+            Query::and([
+                Query::or([
+                    Query::exists(['optionalField']),
+                    Query::exists(['nonExistentField']),
+                ]),
+                Query::exists(['name']),
+            ]),
+        ]);
+        $this->assertEquals(3, count($documents)); // doc1, doc2, doc4
+
+        // Nested OR with only missing attributes should yield empty
+        $documents = $database->find($colName, [
+            Query::or([
+                Query::exists(['nonExistentField']),
+                Query::exists(['alsoMissing']),
+            ]),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $database->deleteCollection($colName);
+    }
+
+    public function testSchemalessNotExists(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid('schemaless_not_exists');
+        $database->createCollection($colName);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create documents with and without the 'optionalField' attribute
+        $docs = [
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'optionalField' => 'value1', 'name' => 'doc1']),
+            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'optionalField' => 'value2', 'name' => 'doc2']),
+            new Document(['$id' => 'doc3', '$permissions' => $permissions, 'name' => 'doc3']), // no optionalField
+            new Document(['$id' => 'doc4', '$permissions' => $permissions, 'optionalField' => null, 'name' => 'doc4']), // exists but null
+            new Document(['$id' => 'doc5', '$permissions' => $permissions, 'name' => 'doc5']), // no optionalField
+        ];
+        $this->assertEquals(5, $database->createDocuments($colName, $docs));
+
+        // Test notExists - should return documents where optionalField does not exist
+        $documents = $database->find($colName, [
+            Query::notExists('optionalField'),
+        ]);
+
+        $this->assertEquals(2, count($documents)); // doc3, doc5
+        $ids = array_map(fn ($doc) => $doc->getId(), $documents);
+        $this->assertContains('doc3', $ids);
+        $this->assertContains('doc5', $ids);
+
+        // Verify that doc4 is NOT included (it exists even though null)
+        $this->assertNotContains('doc4', $ids);
+
+        // Test notExists with another attribute
+        $documents = $database->find($colName, [
+            Query::notExists('name'),
+        ]);
+        $this->assertEquals(0, count($documents)); // All documents have 'name'
+
+        // Test notExists with non-existent attribute
+        $documents = $database->find($colName, [
+            Query::notExists('nonExistentField'),
+        ]);
+        $this->assertEquals(5, count($documents)); // All documents don't have this field
+
+        // Multiple attributes in a single notExists query (OR semantics) - both missing
+        $documents = $database->find($colName, [
+            Query::notExists(['nonExistentField', 'alsoMissing']),
+        ]);
+        $this->assertEquals(5, count($documents));
+
+        // Multiple attributes (OR) where only some documents miss one of them
+        $documents = $database->find($colName, [
+            Query::notExists(['name', 'optionalField']),
+        ]);
+        $this->assertEquals(2, count($documents)); // doc3, doc5
+
+        // Multiple notExists queries (AND semantics) - must miss both
+        $documents = $database->find($colName, [
+            Query::notExists(['optionalField']),
+            Query::notExists(['nonExistentField']),
+        ]);
+        $this->assertEquals(2, count($documents)); // doc3, doc5
+
+        // Test combination of exists and notExists
+        $documents = $database->find($colName, [
+            Query::exists(['name']),
+            Query::notExists('optionalField'),
+        ]);
+        $this->assertEquals(2, count($documents)); // doc3, doc5
+
+        // Nested OR/AND with notExists: (notExists optionalField OR notExists nonExistent) AND name
+        $documents = $database->find($colName, [
+            Query::and([
+                Query::or([
+                    Query::notExists(['optionalField']),
+                    Query::notExists(['nonExistentField']),
+                ]),
+                Query::exists(['name']),
+            ]),
+        ]);
+        // notExists(nonExistentField) matches all docs, so OR is always true; AND with name returns all
+        $this->assertEquals(5, count($documents)); // all docs match due to nonExistentField
+
+        // Nested OR with notExists where all attributes exist => empty
+        $documents = $database->find($colName, [
+            Query::or([
+                Query::notExists(['name']),
+                Query::notExists(['optionalField']),
+            ]),
+        ]);
+        $this->assertEquals(2, count($documents)); // only ones missing optionalField (doc3, doc5)
+
+        $database->deleteCollection($colName);
+    }
 }

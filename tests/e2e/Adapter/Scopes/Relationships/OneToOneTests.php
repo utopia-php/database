@@ -2602,4 +2602,80 @@ trait OneToOneTests
         $database->deleteCollection('cities_strict');
         $database->deleteCollection('mayors_strict');
     }
+
+    public function testOneToOneRelationshipRejectsArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Cleanup any leftover collections from previous runs
+        try {
+            $database->deleteCollection('user_o2o');
+        } catch (\Throwable $e) {
+        }
+        try {
+            $database->deleteCollection('profile_o2o');
+        } catch (\Throwable $e) {
+        }
+
+        $database->createCollection('user_o2o');
+        $database->createCollection('profile_o2o');
+
+        $database->createAttribute('user_o2o', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('profile_o2o', 'bio', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'user_o2o',
+            relatedCollection: 'profile_o2o',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'profile',
+            twoWayKey: 'user'
+        );
+
+        // Create a profile
+        $database->createDocument('profile_o2o', new Document([
+            '$id' => 'profile1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'bio' => 'Test bio',
+        ]));
+
+        // Create user with profile
+        $database->createDocument('user_o2o', new Document([
+            '$id' => 'user1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'User 1',
+            'profile' => 'profile1',
+        ]));
+
+        // Array operators should fail on one-to-one relationships
+        try {
+            $database->updateDocument('user_o2o', 'user1', new Document([
+                'profile' => \Utopia\Database\Operator::arrayAppend(['profile2']),
+            ]));
+            $this->fail('Expected exception for array operator on one-to-one relationship');
+        } catch (\Utopia\Database\Exception\Structure $e) {
+            $this->assertStringContainsString('single-value relationship', $e->getMessage());
+        }
+
+        // Cleanup
+        $database->deleteCollection('user_o2o');
+        $database->deleteCollection('profile_o2o');
+    }
 }

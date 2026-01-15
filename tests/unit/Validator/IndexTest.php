@@ -372,7 +372,7 @@ class IndexTest extends TestCase
         ]);
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true);
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true, supportForObjects:true);
 
         // InValid: INDEX_OBJECT on nested path (dot notation)
         $validNestedObjectIndex = new Document([

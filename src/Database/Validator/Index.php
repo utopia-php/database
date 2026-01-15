@@ -239,20 +239,15 @@ class Index extends Validator
             return true;
         }
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if ($this->supportForObjectIndexes && $this->isDottedAttribute($attribute)) {
-                $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
-                if ($baseAttribute && isset($this->attributes[\strtolower($baseAttribute)])) {
-                    $baseAttrDoc = $this->attributes[\strtolower($baseAttribute)];
-                    $baseAttrType = $baseAttrDoc->getAttribute('type', '');
-                    if ($baseAttrType === Database::VAR_OBJECT) {
+            // attribute is part of the attributes
+            // or object indexes supported and its a dotted attribute with base present in the attributes
+            if (!isset($this->attributes[\strtolower($attribute)])) {
+                if ($this->supportForObjectIndexes && $this->isDottedAttribute($attribute)) {
+                    $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
+                    if (isset($this->attributes[\strtolower($baseAttribute)])) {
                         continue;
                     }
                 }
-                $this->message = 'Invalid index attribute "' . $attribute . '" not found';
-                return false;
-            }
-
-            if (!isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -390,7 +385,7 @@ class Index extends Validator
             return false;
         }
         foreach ($attributes as $attributePosition => $attributeName) {
-            if ($this->supportForObjectIndexes && $this->isDottedAttribute($attributeName)) {
+            if ($this->supportForObjectIndexes && !isset($this->attributes[\strtolower($attributeName)]) && $this->isDottedAttribute($attributeName)) {
                 $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
             }
             $attribute = $this->attributes[\strtolower($attributeName)];

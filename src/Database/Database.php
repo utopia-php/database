@@ -3648,15 +3648,17 @@ class Database
 
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $baseAttr) {
-                    $attributeType = $collectionAttribute->getAttribute('type');
 
-                    // If this is a nested path, only allow it when the base attribute is an object
-                    if (\strpos($attr, '.') !== false && $attributeType !== self::VAR_OBJECT) {
-                        throw new TypeException('Index attribute "' . $attr . '" is only supported on object attributes');
+                    if ($this->getAdapter()->getSupportForObject()) {
+                        $attributeType = $collectionAttribute->getAttribute('type');
+
+                        // If this is a nested path, only allow it when the base attribute is an object
+                        if (\strpos($attr, '.') !== false && $attributeType !== self::VAR_OBJECT) {
+                            throw new TypeException('Index attribute "' . $attr . '" is only supported on object attributes');
+                        }
+
+                        $indexAttributesWithTypes[$attr] = $attributeType;
                     }
-
-                    // Track the (base) attribute type for adapters that need it
-                    $indexAttributesWithTypes[$attr] = $attributeType;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -8150,11 +8152,21 @@ class Database
             $attributes[] = new Document($attribute);
         }
 
+        $queryAttribute = $query->getAttribute();
+        $isNestedQueryAttribute = $this->getAdapter()->getSupportForAttributes() && $this->getAdapter()->getSupportForObject() && \str_contains($queryAttribute, '.');
+
         $attribute = new Document();
 
         foreach ($attributes as $attr) {
             if ($attr->getId() === $query->getAttribute()) {
                 $attribute = $attr;
+            } elseif ($isNestedQueryAttribute) {
+                // nested object query
+                $baseAttribute = \explode('.', $queryAttribute, 2)[0];
+                if ($baseAttribute === $attr->getId() && $attr->getAttribute('type') === Database::VAR_OBJECT) {
+                    // TODO: should be on the query validation layer
+                    $query->setAttributeType(Database::VAR_OBJECT);
+                }
             }
         }
 

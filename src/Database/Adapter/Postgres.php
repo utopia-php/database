@@ -883,8 +883,7 @@ class Postgres extends SQL
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
-
-            $isNestedPath = \strpos($attr, '.') !== false;
+            $isNestedPath = isset($indexAttributeTypes[$attr]) && $indexAttributeTypes[$attr] === Database::VAR_OBJECT && \strpos($attr, '.') !== false;
             if ($isNestedPath) {
                 $attributes[$i] = $this->convertObjectPathToJSONB($attr) . ($order ? " {$order}" : '');
             } else {
@@ -1750,7 +1749,8 @@ class Postgres extends SQL
     protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-        if (\strpos($query->getAttribute(), '.')) {
+        $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
+        if ($isNestedObjectAttribute) {
             $attribute = $this->filterObjectPath($query->getAttribute());
         } else {
             $attribute = $this->filter($query->getAttribute());
@@ -1766,7 +1766,7 @@ class Postgres extends SQL
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
-        if ($query->isObjectAttribute()) {
+        if ($query->isObjectAttribute() && !$isNestedObjectAttribute) {
             return $this->handleObjectQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 

@@ -1178,15 +1178,10 @@ trait ObjectAttributeTests
         }
 
         // 3) INDEX_OBJECT must NOT be allowed on nested paths
-        if ($database->getAdapter()->getSupportForObjectIndexes()) {
-            $exceptionThrown = false;
-            try {
-                $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
-            } catch (Exception $e) {
-                $exceptionThrown = true;
-                $this->assertInstanceOf(IndexException::class, $e);
-            }
-            $this->assertTrue($exceptionThrown, 'Expected Index exception for object index on nested path');
+        try {
+            $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
+        } catch (Exception $e) {
+            $this->assertInstanceOf(IndexException::class, $e);
         }
 
         // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT

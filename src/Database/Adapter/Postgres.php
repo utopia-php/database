@@ -2875,7 +2875,7 @@ class Postgres extends SQL
 
         // validating the parts so that there is no injection
         foreach ($parts as $part) {
-            if (!preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
+            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
                 throw new DatabaseException('Invalid JSON key '.$part);
             }
         }
@@ -2886,7 +2886,7 @@ class Postgres extends SQL
         }
 
         $baseColumn = $this->filter($parts[0]);
-        $baseColumnQuoted = "\"{$baseColumn}\"";
+        $baseColumnQuoted = $this->quote($baseColumn);
         $nestedPath = \array_slice($parts, 1);
 
         // (data->'key'->>'nestedKey')::text

@@ -766,12 +766,12 @@ class Index extends Validator
         return true;
     }
 
-    private function isDottedAttribute(string $attribute)
+    private function isDottedAttribute(string $attribute): bool
     {
         return \str_contains($attribute, '.');
     }
 
-    private function getBaseAttributeFromDottedAttribute(string $attribute)
+    private function getBaseAttributeFromDottedAttribute(string $attribute): string
     {
         return $this->isDottedAttribute($attribute) ? \explode('.', $attribute, 2)[0] ?? '' : $attribute;
     }

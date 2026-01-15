@@ -1185,12 +1185,10 @@ trait ObjectAttributeTests
         }
 
         // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
-        $exceptionThrown = false;
         try {
             $database->createIndex($collectionId, 'idx_name_nested', Database::INDEX_KEY, ['name.first']);
             $this->fail('Expected Type exception for nested index on non-object base attribute');
         } catch (Exception $e) {
-            $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
         }
 

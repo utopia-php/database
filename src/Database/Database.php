@@ -2245,9 +2245,9 @@ class Database
     ): Document {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
-        
+
         // Loosen verification during migration
-        $isLoose = $this->adapter->getSharedTables() && $this->isMigrating();   
+        $isLoose = $this->adapter->getSharedTables() && $this->isMigrating();
 
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {

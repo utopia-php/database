@@ -2259,10 +2259,13 @@ class Database
     ): Document {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
+        
+        // Loosen verification during migration
+        $isLoose = $this->adapter->getSharedTables() && $this->isMigrating();   
 
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+            if (!$isLoose && \strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists in metadata');
             }
         }
@@ -2271,7 +2274,7 @@ class Database
             $schema = $this->getSchemaAttributes($collection->getId());
             foreach ($schema as $attribute) {
                 $newId = $this->adapter->filter($attribute->getId());
-                if (\strtolower($newId) === \strtolower($id)) {
+                if (!$isLoose && \strtolower($newId) === \strtolower($id)) {
                     throw new DuplicateException('Attribute already exists in schema');
                 }
             }

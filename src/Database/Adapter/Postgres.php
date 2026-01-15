@@ -1801,7 +1801,7 @@ class Postgres extends SQL
 
             case Query::TYPE_RELATION_EQUAL:
                 $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
-                $aliasRight = $this->quote($query->getRightAlias());
+                $aliasRight = $this->quote($this->filter($query->getRightAlias()));
 
                 return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
 

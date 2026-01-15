@@ -2047,7 +2047,11 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        // Append attribute, removing any duplicates
+        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = \array_filter($attributes, fn ($attr) => $attr['$id'] !== $id);
+        $attributes[] = $attribute;
+        $collection->setAttribute('attributes', \array_values($attributes));
 
         $this->updateMetadata(
             collection: $collection,
@@ -2169,9 +2173,16 @@ class Database
             }
         }
 
+        // Append attribute, removing any duplicates
+        $attributes = $collection->getAttribute('attributes', []);
+        $newAttributeIds = \array_map(fn ($attr) => $attr['$id'], $attributeDocuments);
+        $attributes = \array_filter($attributes, fn ($attr) => !\in_array($attr['$id'], $newAttributeIds));
+
         foreach ($attributeDocuments as $attributeDocument) {
-            $collection->setAttribute('attributes', $attributeDocument, Document::SET_TYPE_APPEND);
+            $attributes[] = $attributeDocument;
         }
+
+        $collection->setAttribute('attributes', \array_values($attributes));
 
         $this->updateMetadata(
             collection: $collection,

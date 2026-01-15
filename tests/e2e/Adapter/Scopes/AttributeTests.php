@@ -2195,4 +2195,50 @@ trait AttributeTests
         $this->assertCount(1, $attrs);
         $this->assertEquals('b', $attrs[0]['$id']);
     }
+
+    public function testCreateAttributeWhileMigrating(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Skip test if adapter doesn't support shared tables
+        if (!$database->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Prepare collection
+        $database->createCollection('migration_test');
+        $database->setMigrating(true);
+
+        // First creation, as usual
+        $this->assertTrue($database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true));
+
+        $collection = $database->getCollection('migration_test');
+        $attributes = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attributes);
+        $this->assertEquals('status', $attributes[0]['$id']);
+
+        // Second creation, no exceptions, no duplicates
+        $result = $database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection('migration_test');
+        $attributes = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attributes);
+        $this->assertEquals('status', $attributes[0]['$id']);
+
+        // Third creation, same as second, once more, just in case
+        $result = $database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection('migration_test');
+        $attributes = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attributes);
+        $this->assertEquals('status', $attributes[0]['$id']);
+
+        // Cleanup
+        $database->setMigrating(false);
+        $database->deleteCollection('migration_test');
+    }
 }

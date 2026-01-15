@@ -372,7 +372,7 @@ class QueryTest extends TestCase
 
         $this->assertEquals('Invalid object query structure for attribute "meta"', $validator->getDescription());
 
-        // Object attribute query: disallowed complex multi-key nested structure
+        // Object attribute query: allowed complex multi-key nested structure
         $this->assertTrue(
             $validator->isValid([
                 Query::contains('meta', [

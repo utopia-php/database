@@ -2311,7 +2311,7 @@ trait AttributeTests
         // Test partial overlap - create one new attribute and one existing
         $mixedAttributes = [
             [
-                '$id' => 'status', // existing
+                '$id' => 'statusColumn', // existing
                 'type' => Database::VAR_STRING,
                 'size' => 128,
                 'required' => true

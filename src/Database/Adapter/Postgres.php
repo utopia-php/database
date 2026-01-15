@@ -885,7 +885,7 @@ class Postgres extends SQL
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
             $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === Database::VAR_OBJECT;
             if ($isNestedPath) {
-                $attributes[$i] = $this->convertObjectPathToJSONB($attr) . ($order ? " {$order}" : '');
+                $attributes[$i] = $this->buildJsonbPath($attr, true) . ($order ? " {$order}" : '');
             } else {
                 $attr = match ($attr) {
                     '$id' => '_uid',
@@ -1751,7 +1751,7 @@ class Postgres extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
         if ($isNestedObjectAttribute) {
-            $attribute = $this->filterObjectPath($query->getAttribute());
+            $attribute = $this->buildJsonbPath($query->getAttribute());
         } else {
             $attribute = $this->filter($query->getAttribute());
             $attribute = $this->quote($attribute);
@@ -2838,65 +2838,30 @@ class Postgres extends SQL
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }
-    protected function convertObjectPathToJSONB(string $path): string
+    protected function buildJsonbPath(string $path, bool $asText = false): string
     {
         $parts = \explode('.', $path);
 
-        // validating the parts so that there is no injection
-        foreach ($parts as $part) {
-            if (!preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
-                throw new DatabaseException('Invalid JSON key '.$part);
-            }
-        }
-
-        if (\count($parts) === 1) {
-            $baseColumn = $this->filter($parts[0]);
-            return "\"{$baseColumn}\"";
-        }
-
-        $baseColumn = $this->filter($parts[0]);
-        $baseColumnQuoted = "\"{$baseColumn}\"";
-        $nestedPath = \array_slice($parts, 1);
-
-        // (data->'key'->>'nestedKey')::text
-        $chain = $baseColumnQuoted;
-        $lastKey = \array_pop($nestedPath);
-
-        foreach ($nestedPath as $key) {
-            $chain .= "->'" . $key . "'";
-        }
-
-        return "(({$chain}->>'" . $lastKey . "')::text)";
-    }
-
-    protected function filterObjectPath(string $path): string
-    {
-        $parts = \explode('.', $path);
-
-        // validating the parts so that there is no injection
         foreach ($parts as $part) {
             if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
-                throw new DatabaseException('Invalid JSON key '.$part);
+                throw new DatabaseException('Invalid JSON key ' . $part);
             }
         }
-
         if (\count($parts) === 1) {
-            $baseColumn = $this->filter($parts[0]);
-            return $this->quote($baseColumn);
+            $column = $this->filter($parts[0]);
+            return $this->quote($column);
         }
 
-        $baseColumn = $this->filter($parts[0]);
-        $baseColumnQuoted = $this->quote($baseColumn);
-        $nestedPath = \array_slice($parts, 1);
+        $baseColumn = $this->quote($this->filter(\array_shift($parts)));
+        $lastKey = \array_pop($parts);
 
-        // (data->'key'->>'nestedKey')::text
-        $chain = $baseColumnQuoted;
-        $lastKey = \array_pop($nestedPath);
-
-        foreach ($nestedPath as $key) {
-            $chain .= "->'" . $key . "'";
+        $chain = $baseColumn;
+        foreach ($parts as $key) {
+            $chain .= "->'{$key}'";
         }
 
-        return "{$chain}->>'{$lastKey}'";
+        $result = "{$chain}->>'{$lastKey}'";
+
+        return $asText ? "(({$result})::text)" : $result;
     }
 }

@@ -170,7 +170,7 @@ class Index extends Validator
             // getting dotted attributes not present in schema
             $dottedAttributes = array_filter($index->getAttribute('attributes'), fn ($attr) => !isset($this->attributes[\strtolower($attr)]) && $this->isDottedAttribute($attr));
             if (\count($dottedAttributes)) {
-                foreach ($index->getAttribute('attributes') as $attribute) {
+                foreach ($dottedAttributes as $attribute) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
                     if (isset($this->attributes[\strtolower($baseAttribute)]) && $this->attributes[\strtolower($baseAttribute)]->getAttribute('type') != Database::VAR_OBJECT) {
                         $this->message = 'Index attribute "' . $attribute . '" is only supported on object attributes';

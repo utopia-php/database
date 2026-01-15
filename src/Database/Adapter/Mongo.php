@@ -919,7 +919,7 @@ class Mongo extends Adapter
 
         foreach ($attributes as $i => $attribute) {
 
-            if (\strpos($attribute, '.') !== false) {
+            if (\str_contains($attribute, '.')) {
                 $dottedAttributes = \explode('.', $attribute);
                 $expandedAttributes = array_map(fn ($attr) => $this->filter($attr), $dottedAttributes);
                 $attributes[$i] = implode('.', $expandedAttributes);

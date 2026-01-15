@@ -1864,7 +1864,7 @@ trait ObjectAttributeTests
         $results = $database->find($collectionId, [
             Query::contains('profile.user.info.country', ['United'])
         ]);
-        $this->assertGreaterThanOrEqual(2, count($results)); // Should match both "United States" and "United Kingdom"
+        $this->assertGreaterThanOrEqual(2, count($results));
 
         $database->deleteCollection($collectionId);
     }

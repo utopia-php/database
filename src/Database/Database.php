@@ -2018,19 +2018,26 @@ class Database
             $filters = array_unique($filters);
         }
 
-        $attribute = $this->validateAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters
-        );
+        try {
+            $attribute = $this->validateAttribute(
+                $collection,
+                $id,
+                $type,
+                $size,
+                $required,
+                $default,
+                $signed,
+                $array,
+                $format,
+                $formatOptions,
+                $filters
+            );
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
 
         $created = false;
 
@@ -2140,19 +2147,26 @@ class Database
                 $attribute['filters'] = [];
             }
 
-            $attributeDocument = $this->validateAttribute(
-                $collection,
-                $attribute['$id'],
-                $attribute['type'],
-                $attribute['size'],
-                $attribute['required'],
-                $attribute['default'],
-                $attribute['signed'],
-                $attribute['array'],
-                $attribute['format'],
-                $attribute['formatOptions'],
-                $attribute['filters']
-            );
+            try {
+                $attributeDocument = $this->validateAttribute(
+                    $collection,
+                    $attribute['$id'],
+                    $attribute['type'],
+                    $attribute['size'],
+                    $attribute['required'],
+                    $attribute['default'],
+                    $attribute['signed'],
+                    $attribute['array'],
+                    $attribute['format'],
+                    $attribute['formatOptions'],
+                    $attribute['filters']
+                );
+            } catch (DuplicateException $e) {
+                // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+                if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                    throw $e;
+                }
+            }
 
             $attributeDocuments[] = $attributeDocument;
         }

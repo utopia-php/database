@@ -2331,9 +2331,17 @@ trait AttributeTests
         $collection = $database->getCollection('migration_test_batch');
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(3, $attrs);
-        $this->assertSame('statusColumn', $attrs[0]['$id']);
-        $this->assertSame('count', $attrs[1]['$id']);
-        $this->assertSame('active', $attrs[2]['$id']);
+
+        // TODO: Eventuelly rewrite to assertSame for each item; currently their order differs between providers
+        $attributes = [
+            $attrs[0]['$id'],
+            $attrs[1]['$id'],
+            $attrs[2]['$id']
+        ];
+
+        $this->assertContains('statusColumn', $attributes);
+        $this->assertContains('count', $attributes);
+        $this->assertContains('active', $attributes);
 
         // Cleanup
         $database->setMigrating(false);

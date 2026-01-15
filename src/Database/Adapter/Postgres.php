@@ -883,7 +883,7 @@ class Postgres extends SQL
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
-            $isNestedPath = isset($indexAttributeTypes[$attr]) && $indexAttributeTypes[$attr] === Database::VAR_OBJECT && \strpos($attr, '.') !== false;
+            $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === Database::VAR_OBJECT;
             if ($isNestedPath) {
                 $attributes[$i] = $this->convertObjectPathToJSONB($attr) . ($order ? " {$order}" : '');
             } else {

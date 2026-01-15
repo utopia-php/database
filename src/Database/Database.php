@@ -3642,23 +3642,15 @@ class Database
             // Support nested paths on object attributes using dot notation:
             // attribute.key.nestedKey -> base attribute "attribute"
             $baseAttr = $attr;
-            if (\strpos($attr, '.') !== false) {
+            if (\str_contains($attr, '.')) {
                 $baseAttr = \explode('.', $attr, 2)[0] ?? $attr;
             }
 
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $baseAttr) {
 
-                    if ($this->getAdapter()->getSupportForObject()) {
-                        $attributeType = $collectionAttribute->getAttribute('type');
-
-                        // If this is a nested path, only allow it when the base attribute is an object
-                        if (\strpos($attr, '.') !== false && $attributeType !== self::VAR_OBJECT) {
-                            throw new TypeException('Index attribute "' . $attr . '" is only supported on object attributes');
-                        }
-
-                        $indexAttributesWithTypes[$attr] = $attributeType;
-                    }
+                    $attributeType = $collectionAttribute->getAttribute('type');
+                    $indexAttributesWithTypes[$attr] = $attributeType;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -8164,7 +8156,6 @@ class Database
                 // nested object query
                 $baseAttribute = \explode('.', $queryAttribute, 2)[0];
                 if ($baseAttribute === $attr->getId() && $attr->getAttribute('type') === Database::VAR_OBJECT) {
-                    // TODO: should be on the query validation layer
                     $query->setAttributeType(Database::VAR_OBJECT);
                 }
             }

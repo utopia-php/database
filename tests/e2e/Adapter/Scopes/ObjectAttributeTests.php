@@ -9,7 +9,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1197,7 +1196,7 @@ trait ObjectAttributeTests
             $this->fail('Expected Type exception for nested index on non-object base attribute');
         } catch (Exception $e) {
             $exceptionThrown = true;
-            $this->assertInstanceOf(TypeException::class, $e);
+            $this->assertInstanceOf(IndexException::class, $e);
         }
 
         $database->deleteCollection($collectionId);

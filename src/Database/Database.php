@@ -2048,10 +2048,10 @@ class Database
         }
 
         // Append attribute, removing any duplicates
-        $attributes = $collection->getAttribute('attributes', []);
-        $attributes = \array_filter($attributes, fn ($attr) => $attr['$id'] !== $id);
-        $attributes[] = $attribute;
-        $collection->setAttribute('attributes', \array_values($attributes));
+        $metadataAttributes = $collection->getAttribute('attributes', []);
+        $metadataAttributes = \array_filter($metadataAttributes, fn ($attribute) => $attribute['$id'] !== $id);
+        $metadataAttributes[] = $attribute;
+        $collection->setAttribute('attributes', \array_values($metadataAttributes));
 
         $this->updateMetadata(
             collection: $collection,
@@ -2174,15 +2174,15 @@ class Database
         }
 
         // Append attribute, removing any duplicates
-        $attributes = $collection->getAttribute('attributes', []);
         $newAttributeIds = \array_map(fn ($attr) => $attr['$id'], $attributeDocuments);
-        $attributes = \array_filter($attributes, fn ($attr) => !\in_array($attr['$id'], $newAttributeIds));
+        $metadataAttributes = $collection->getAttribute('attributes', []);
+        $metadataAttributes = \array_filter($metadataAttributes, fn ($attr) => !\in_array($attr['$id'], $newAttributeIds));
 
         foreach ($attributeDocuments as $attributeDocument) {
-            $attributes[] = $attributeDocument;
+            $metadataAttributes[] = $attributeDocument;
         }
 
-        $collection->setAttribute('attributes', \array_values($attributes));
+        $collection->setAttribute('attributes', \array_values($metadataAttributes));
 
         $this->updateMetadata(
             collection: $collection,

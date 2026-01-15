@@ -2212,33 +2212,131 @@ trait AttributeTests
         $database->setMigrating(true);
 
         // First creation, as usual
-        $this->assertTrue($database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true));
+        $this->assertTrue($database->createAttribute('migration_test', 'statusColumn', Database::VAR_STRING, 128, true));
 
         $collection = $database->getCollection('migration_test');
         $attributes = $collection->getAttribute('attributes');
         $this->assertCount(1, $attributes);
-        $this->assertEquals('status', $attributes[0]['$id']);
+        $this->assertSame('statusColumn', $attributes[0]['$id']);
 
         // Second creation, no exceptions, no duplicates
-        $result = $database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true);
+        $result = $database->createAttribute('migration_test', 'statusColumn', Database::VAR_STRING, 128, true);
         $this->assertTrue($result);
 
         $collection = $database->getCollection('migration_test');
         $attributes = $collection->getAttribute('attributes');
         $this->assertCount(1, $attributes);
-        $this->assertEquals('status', $attributes[0]['$id']);
+        $this->assertSame('statusColumn', $attributes[0]['$id']);
 
         // Third creation, same as second, once more, just in case
-        $result = $database->createAttribute('migration_test', 'status', Database::VAR_STRING, 128, true);
+        $result = $database->createAttribute('migration_test', 'statusColumn', Database::VAR_STRING, 128, true);
         $this->assertTrue($result);
 
         $collection = $database->getCollection('migration_test');
         $attributes = $collection->getAttribute('attributes');
         $this->assertCount(1, $attributes);
-        $this->assertEquals('status', $attributes[0]['$id']);
+        $this->assertSame('statusColumn', $attributes[0]['$id']);
 
         // Cleanup
         $database->setMigrating(false);
         $database->deleteCollection('migration_test');
+    }
+
+    public function testCreateAttributesWhileMigrating(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Skip test if adapter doesn't support shared tables
+        if (!$database->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Skip test if adapter doesn't support batch create attributes
+        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Prepare collection
+        $database->createCollection('migration_test_batch');
+        $database->setMigrating(true);
+
+        // First creation, as usual
+        $attributes = [
+            [
+                '$id' => 'statusColumn',
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => true
+            ],
+            [
+                '$id' => 'count',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false
+            ],
+        ];
+
+        $result = $database->createAttributes('migration_test_batch', $attributes);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection('migration_test_batch');
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(2, $attrs);
+        $this->assertSame('statusColumn', $attrs[0]['$id']);
+        $this->assertSame('count', $attrs[1]['$id']);
+
+        // Second creation, no exceptions, no duplicates
+        $result = $database->createAttributes('migration_test_batch', $attributes);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection('migration_test_batch');
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(2, $attrs);
+        $this->assertSame('statusColumn', $attrs[0]['$id']);
+        $this->assertSame('count', $attrs[1]['$id']);
+
+        // Third creation, same as second, once more, just in case
+        $result = $database->createAttributes('migration_test_batch', $attributes);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection('migration_test_batch');
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(2, $attrs);
+        $this->assertSame('statusColumn', $attrs[0]['$id']);
+        $this->assertSame('count', $attrs[1]['$id']);
+
+        // Test partial overlap - create one new attribute and one existing
+        $mixedAttributes = [
+            [
+                '$id' => 'status', // existing
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => true
+            ],
+            [
+                '$id' => 'active', // new
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false
+            ],
+        ];
+
+        $result = $database->createAttributes('migration_test_batch', $mixedAttributes);
+        $this->assertTrue($result);
+
+        // Ensure all attributes exist
+        $collection = $database->getCollection('migration_test_batch');
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(3, $attrs);
+        $this->assertSame('statusColumn', $attrs[0]['$id']);
+        $this->assertSame('count', $attrs[1]['$id']);
+        $this->assertSame('active', $attrs[2]['$id']);
+
+        // Cleanup
+        $database->setMigrating(false);
+        $database->deleteCollection('migration_test_batch');
     }
 }

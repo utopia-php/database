@@ -1329,7 +1329,11 @@ trait ObjectAttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        var_dump('running');
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
 

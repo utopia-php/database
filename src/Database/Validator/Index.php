@@ -34,6 +34,7 @@ class Index extends Validator
      * @param bool $supportForKeyIndexes
      * @param bool $supportForUniqueIndexes
      * @param bool $supportForFulltextIndexes
+     * @param bool $supportForObjects
      * @throws DatabaseException
      */
     public function __construct(
@@ -54,6 +55,7 @@ class Index extends Validator
         protected bool $supportForKeyIndexes = true,
         protected bool $supportForUniqueIndexes = true,
         protected bool $supportForFulltextIndexes = true,
+        protected bool $supportForObjects = false
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -166,7 +168,7 @@ class Index extends Validator
     public function checkValidIndex(Document $index): bool
     {
         $type = $index->getAttribute('type');
-        if ($this->supportForObjectIndexes) {
+        if ($this->supportForObjects) {
             // getting dotted attributes not present in schema
             $dottedAttributes = array_filter($index->getAttribute('attributes'), fn ($attr) => !isset($this->attributes[\strtolower($attr)]) && $this->isDottedAttribute($attr));
             if (\count($dottedAttributes)) {
@@ -256,7 +258,7 @@ class Index extends Validator
             // attribute is part of the attributes
             // or object indexes supported and its a dotted attribute with base present in the attributes
             if (!isset($this->attributes[\strtolower($attribute)])) {
-                if ($this->supportForObjectIndexes) {
+                if ($this->supportForObjects) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
                     if (isset($this->attributes[\strtolower($baseAttribute)])) {
                         continue;
@@ -399,7 +401,7 @@ class Index extends Validator
             return false;
         }
         foreach ($attributes as $attributePosition => $attributeName) {
-            if ($this->supportForObjectIndexes && !isset($this->attributes[\strtolower($attributeName)])) {
+            if ($this->supportForObjects && !isset($this->attributes[\strtolower($attributeName)])) {
                 $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
             }
             $attribute = $this->attributes[\strtolower($attributeName)];

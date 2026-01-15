@@ -1648,6 +1648,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
+                $this->adapter->getSupportForObject()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2798,6 +2799,7 @@ class Database
                         $this->adapter->getSupportForIndex(),
                         $this->adapter->getSupportForUniqueIndex(),
                         $this->adapter->getSupportForFulltextIndex(),
+                        $this->adapter->getSupportForObject()
                     );
 
                     foreach ($indexes as $index) {
@@ -3702,6 +3704,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
+                $this->adapter->getSupportForObject()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

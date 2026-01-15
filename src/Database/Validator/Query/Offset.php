@@ -51,9 +51,4 @@ class Offset extends Base
 
         return true;
     }
-
-    public function getMethodType(): string
-    {
-        return self::METHOD_TYPE_OFFSET;
-    }
 }

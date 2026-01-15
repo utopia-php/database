@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -404,10 +403,6 @@ class V2 extends Validator
             }
 
         } catch (\Throwable $e) {
-            //            Console::error($e->getMessage());
-            //            Console::error('File: '.$e->getFile());
-            //            Console::error('Line: '.$e->getLine());
-
             $this->message = $e->getMessage();
             return false;
         }
@@ -703,7 +698,14 @@ class V2 extends Validator
 
         if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+            !in_array($method, [
+                Query::TYPE_CONTAINS,
+                Query::TYPE_NOT_CONTAINS,
+                Query::TYPE_IS_NULL,
+                Query::TYPE_IS_NOT_NULL,
+                Query::TYPE_EXISTS,
+                Query::TYPE_NOT_EXISTS,
+            ])
         ) {
             throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
         }

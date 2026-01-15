@@ -3065,7 +3065,7 @@ abstract class SQL extends Adapter
                     $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
-                    $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($prevAttr)} = {$bindName}";
+                    $conditions[] = "{$this->quote($prevQuery->getAlias())}.{$this->quote($prevAttr)} = {$bindName}";
                 }
 
                 // Add comparison for current attribute

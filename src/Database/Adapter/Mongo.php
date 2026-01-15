@@ -2171,7 +2171,7 @@ class Mongo extends Adapter
      *
      * @throws DatabaseException
      */
-    public function count(QueryContext $context, ?int $max, array $filters = [], array $joins = []): int
+    public function count(QueryContext $context, ?int $max, array $filters, array $joins): int
     {
         $collection = $context->getMainCollection();
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());

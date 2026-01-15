@@ -404,9 +404,9 @@ class V2 extends Validator
             }
 
         } catch (\Throwable $e) {
-//            Console::error($e->getMessage());
-//            Console::error('File: '.$e->getFile());
-//            Console::error('Line: '.$e->getLine());
+            //            Console::error($e->getMessage());
+            //            Console::error('File: '.$e->getFile());
+            //            Console::error('Line: '.$e->getLine());
 
             $this->message = $e->getMessage();
             return false;

@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Queries;
 
+use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -158,6 +159,263 @@ class V2 extends Validator
     }
 
     /**
+     * @param  array<Query|string>  $value
+     *
+     * @throws \Utopia\Database\Exception\Query|\Throwable
+     */
+    public function isValid($value, string $scope = ''): bool
+    {
+        try {
+            if (! is_array($value)) {
+                throw new \Exception('Queries must be an array');
+            }
+
+            if (! array_is_list($value)) {
+                throw new \Exception('Queries must be an array list');
+            }
+
+            if ($this->maxQueriesCount > 0 && \count($value) > $this->maxQueriesCount) {
+                throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
+            }
+
+            foreach ($value as $query) {
+                if (!$query instanceof Query) {
+                    try {
+                        $query = Query::parse($query);
+                    } catch (\Throwable $e) {
+                        throw new \Exception('Invalid query: ' . $e->getMessage());
+                    }
+                }
+
+                $this->validateAlias($query);
+
+                if ($query->isNested()) {
+                    if (! $this->isValid($query->getValues(), $scope)) {
+                        throw new \Exception($this->message);
+                    }
+                }
+
+                if ($scope === 'joins') {
+                    if (!in_array($query->getAlias(), $this->joinsAliasOrder) || !in_array($query->getRightAlias(), $this->joinsAliasOrder)) {
+                        throw new \Exception('Invalid query: '.\ucfirst($query->getMethod()).' alias reference in join has not been defined.');
+                    }
+                }
+
+                $method = $query->getMethod();
+
+                switch ($method) {
+                    case Query::TYPE_EQUAL:
+                    case Query::TYPE_CONTAINS:
+                    case Query::TYPE_NOT_CONTAINS:
+                    case Query::TYPE_EXISTS:
+                    case Query::TYPE_NOT_EXISTS:
+                        if ($this->isEmpty($query->getValues())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+
+                        break;
+
+                    case Query::TYPE_DISTANCE_EQUAL:
+                    case Query::TYPE_DISTANCE_NOT_EQUAL:
+                    case Query::TYPE_DISTANCE_GREATER_THAN:
+                    case Query::TYPE_DISTANCE_LESS_THAN:
+                        if (count($query->getValues()) !== 1 || !is_array($query->getValues()[0]) || count($query->getValues()[0]) !== 3) {
+                            throw new \Exception('Distance query requires [[geometry, distance]] parameters');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        break;
+
+                    case Query::TYPE_CROSSES:
+                    case Query::TYPE_NOT_CROSSES:
+                    case Query::TYPE_INTERSECTS:
+                    case Query::TYPE_NOT_INTERSECTS:
+                    case Query::TYPE_OVERLAPS:
+                    case Query::TYPE_NOT_OVERLAPS:
+                    case Query::TYPE_TOUCHES:
+                    case Query::TYPE_NOT_TOUCHES :
+                        if ($this->isEmpty($query->getValues())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        break;
+
+                    case Query::TYPE_NOT_EQUAL:
+                    case Query::TYPE_LESSER:
+                    case Query::TYPE_LESSER_EQUAL:
+                    case Query::TYPE_GREATER:
+                    case Query::TYPE_GREATER_EQUAL:
+                    case Query::TYPE_SEARCH:
+                    case Query::TYPE_NOT_SEARCH:
+                    case Query::TYPE_STARTS_WITH:
+                    case Query::TYPE_NOT_STARTS_WITH:
+                    case Query::TYPE_ENDS_WITH:
+                    case Query::TYPE_NOT_ENDS_WITH:
+                    case Query::TYPE_REGEX:
+                        if (count($query->getValues()) != 1) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly one value.');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        $this->validateFulltextIndex($query);
+
+                        break;
+
+                    case Query::TYPE_BETWEEN:
+                    case Query::TYPE_NOT_BETWEEN:
+                        if (count($query->getValues()) != 2) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly two values.');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+
+                        break;
+
+                    case Query::TYPE_IS_NULL:
+                    case Query::TYPE_IS_NOT_NULL:
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+
+                        break;
+
+                    case Query::TYPE_OR:
+                    case Query::TYPE_AND:
+                        $this->validateFilterQueries($query);
+                        $filters = Query::getFilterQueries($query->getValues());
+
+                        if (count($filters) < 2) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least two queries');
+                        }
+
+                        break;
+
+                    case Query::TYPE_ELEM_MATCH:
+                        if ($this->supportForAttributes) {
+                            throw new \Exception(\ucfirst($method).' is not supported by the database');
+                        }
+
+                        $this->validateFilterQueries($query);
+
+                        $filters = Query::getFilterQueries($query->getValues());
+
+                        if (count($filters) < 1) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one queries');
+                        }
+
+                        break;
+
+                    case Query::TYPE_INNER_JOIN:
+                    case Query::TYPE_LEFT_JOIN:
+                    case Query::TYPE_RIGHT_JOIN:
+                        $this->joinsAliasOrder[] = $query->getAlias();
+
+                        $this->validateFilterQueries($query);
+
+                        if (! $this->isValid($query->getValues(), 'joins')) {
+                            throw new \Exception($this->message);
+                        }
+
+                        if (! $this->isRelationExist($query->getValues(), $query->getAlias())) {
+                            throw new \Exception('Invalid query: At least one relation query is required on the joined collection.');
+                        }
+
+                        break;
+
+                    case Query::TYPE_RELATION_EQUAL:
+                        if ($scope !== 'joins') {
+                            throw new \Exception('Invalid query: Relations are only valid within joins.');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
+
+                        break;
+
+                    case Query::TYPE_LIMIT:
+                        $validator = new Limit($this->maxLimit);
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
+
+                        break;
+
+                    case Query::TYPE_OFFSET:
+                        $validator = new Offset($this->maxOffset);
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
+
+                        break;
+
+                    case Query::TYPE_SELECT:
+                        $asValidator = new AsValidator($query->getAttribute());
+                        if (! $asValidator->isValid($query->getAs())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' '.$asValidator->getDescription());
+                        }
+
+                        if ($query->getAttribute() !== '*') {
+                            $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        }
+
+                        break;
+
+                    case Query::TYPE_ORDER_RANDOM:
+
+                        break;
+
+                    case Query::TYPE_ORDER_ASC:
+                    case Query::TYPE_ORDER_DESC:
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias(), $query->getMethod());
+
+                        break;
+
+                    case Query::TYPE_CURSOR_AFTER:
+                    case Query::TYPE_CURSOR_BEFORE:
+                        $validator = new Cursor($this->maxUIDLength);
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
+
+                        break;
+
+                    case Query::TYPE_VECTOR_DOT:
+                    case Query::TYPE_VECTOR_COSINE:
+                    case Query::TYPE_VECTOR_EUCLIDEAN:
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+
+                        if (count($query->getValues()) != 1) {
+                            throw new \Exception(\ucfirst($method) . ' queries require exactly one vector value.');
+                        }
+
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        break;
+
+                    default:
+                        throw new \Exception('Invalid query: Method not found ');
+                }
+            }
+
+        } catch (\Throwable $e) {
+//            Console::error($e->getMessage());
+//            Console::error('File: '.$e->getFile());
+//            Console::error('Line: '.$e->getLine());
+
+            $this->message = $e->getMessage();
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * @param  array<mixed>  $values
      */
     protected function isEmpty(array $values): bool
@@ -192,7 +450,6 @@ class V2 extends Validator
 
         $isNested = false;
 
-
         if (\str_contains($attributeId, '.')) {
             /**
              * This attribute name has a special symbol `.` or is a relationship
@@ -208,6 +465,11 @@ class V2 extends Validator
         }
 
         $attribute = $this->schema[$collection->getId()][$attributeId] ?? [];
+
+        if (empty($attribute) && !$this->supportForAttributes) {
+            return; // Schemaless (Internal attributes have schema)
+        }
+
         if (empty($attribute) && $this->supportForAttributes) {
             throw new \Exception('Invalid query: Attribute not found in schema: '.$attributeId);
         }
@@ -355,8 +617,13 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_OBJECT:
-                    // value for object can be of any type as its a hashmap
-                    // eg; ['key'=>value']
+                    if (
+                        \in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true) &&
+                        !$this->isValidObjectQueryValues($value)
+                    ) {
+                        throw new \Exception('Invalid object query structure for attribute "'.$attributeId.'"');
+                    }
+
                     continue 2;
 
                 case Database::VAR_POINT:
@@ -495,223 +762,44 @@ class V2 extends Validator
     }
 
     /**
-     * @param  array<Query|string>  $value
+     * Validate object attribute query values.
      *
-     * @throws \Utopia\Database\Exception\Query|\Throwable
+     * Disallows ambiguous nested structures like:
+     *   ['a' => [1, 'b' => [212]]]           // mixed list
+     *
+     * but allows:
+     *   ['a' => [1, 2], 'b' => [212]]        // multiple top-level paths
+     *   ['projects' => [[...]]]              // list of objects
+     *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
+     *
+     * @param mixed $values
+     * @return bool
      */
-    public function isValid($value, string $scope = ''): bool
+    private function isValidObjectQueryValues(mixed $values): bool
     {
-        try {
-            if (! is_array($value)) {
-                throw new \Exception('Queries must be an array');
+        if (!is_array($values)) {
+            return true;
+        }
+
+        $hasInt = false;
+        $hasString = false;
+
+        foreach (array_keys($values) as $key) {
+            if (is_int($key)) {
+                $hasInt = true;
+            } else {
+                $hasString = true;
             }
+        }
 
-            if (! array_is_list($value)) {
-                throw new \Exception('Queries must be an array list');
-            }
-
-            if ($this->maxQueriesCount > 0 && \count($value) > $this->maxQueriesCount) {
-                throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
-            }
-
-            foreach ($value as $query) {
-                if (!$query instanceof Query) {
-                    try {
-                        $query = Query::parse($query);
-                    } catch (\Throwable $e) {
-                        throw new \Exception('Invalid query: ' . $e->getMessage());
-                    }
-                }
-
-                $this->validateAlias($query);
-
-                if ($query->isNested()) {
-                    if (! $this->isValid($query->getValues(), $scope)) {
-                        throw new \Exception($this->message);
-                    }
-                }
-
-                if ($scope === 'joins') {
-                    if (!in_array($query->getAlias(), $this->joinsAliasOrder) || !in_array($query->getRightAlias(), $this->joinsAliasOrder)) {
-                        throw new \Exception('Invalid query: '.\ucfirst($query->getMethod()).' alias reference in join has not been defined.');
-                    }
-                }
-
-                $method = $query->getMethod();
-
-                switch ($method) {
-                    case Query::TYPE_EQUAL:
-                    case Query::TYPE_CONTAINS:
-                    case Query::TYPE_NOT_CONTAINS:
-                        if ($this->isEmpty($query->getValues())) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-
-                        break;
-
-                    case Query::TYPE_DISTANCE_EQUAL:
-                    case Query::TYPE_DISTANCE_NOT_EQUAL:
-                    case Query::TYPE_DISTANCE_GREATER_THAN:
-                    case Query::TYPE_DISTANCE_LESS_THAN:
-                        if (count($query->getValues()) !== 1 || !is_array($query->getValues()[0]) || count($query->getValues()[0]) !== 3) {
-                            throw new \Exception('Distance query requires [[geometry, distance]] parameters');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                        break;
-
-                    case Query::TYPE_CROSSES:
-                    case Query::TYPE_NOT_CROSSES:
-                    case Query::TYPE_INTERSECTS:
-                    case Query::TYPE_NOT_INTERSECTS:
-                    case Query::TYPE_OVERLAPS:
-                    case Query::TYPE_NOT_OVERLAPS:
-                    case Query::TYPE_TOUCHES:
-                    case Query::TYPE_NOT_TOUCHES :
-                        if ($this->isEmpty($query->getValues())) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                        break;
-
-                    case Query::TYPE_NOT_EQUAL:
-                    case Query::TYPE_LESSER:
-                    case Query::TYPE_LESSER_EQUAL:
-                    case Query::TYPE_GREATER:
-                    case Query::TYPE_GREATER_EQUAL:
-                    case Query::TYPE_SEARCH:
-                    case Query::TYPE_NOT_SEARCH:
-                    case Query::TYPE_STARTS_WITH:
-                    case Query::TYPE_NOT_STARTS_WITH:
-                    case Query::TYPE_ENDS_WITH:
-                    case Query::TYPE_NOT_ENDS_WITH:
-                    case Query::TYPE_REGEX:
-                        if (count($query->getValues()) != 1) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly one value.');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                        $this->validateFulltextIndex($query);
-
-                        break;
-                    case Query::TYPE_BETWEEN:
-                    case Query::TYPE_NOT_BETWEEN:
-                        if (count($query->getValues()) != 2) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly two values.');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-
-                        break;
-                    case Query::TYPE_IS_NULL:
-                    case Query::TYPE_IS_NOT_NULL:
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-
-                        break;
-                    case Query::TYPE_OR:
-                    case Query::TYPE_AND:
-                        $this->validateFilterQueries($query);
-                        $filters = Query::getFilterQueries($query->getValues());
-
-                        if (count($filters) < 2) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least two queries');
-                        }
-
-                        break;
-                    case Query::TYPE_INNER_JOIN:
-                    case Query::TYPE_LEFT_JOIN:
-                    case Query::TYPE_RIGHT_JOIN:
-                        $this->joinsAliasOrder[] = $query->getAlias();
-
-                        $this->validateFilterQueries($query);
-
-                        if (! $this->isValid($query->getValues(), 'joins')) {
-                            throw new \Exception($this->message);
-                        }
-
-                        if (! $this->isRelationExist($query->getValues(), $query->getAlias())) {
-                            throw new \Exception('Invalid query: At least one relation query is required on the joined collection.');
-                        }
-
-                        break;
-                    case Query::TYPE_RELATION_EQUAL:
-                        if ($scope !== 'joins') {
-                            throw new \Exception('Invalid query: Relations are only valid within joins.');
-                        }
-
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
-
-                        break;
-                    case Query::TYPE_LIMIT:
-                        $validator = new Limit($this->maxLimit);
-                        if (! $validator->isValid($query)) {
-                            throw new \Exception($validator->getDescription());
-                        }
-
-                        break;
-                    case Query::TYPE_OFFSET:
-                        $validator = new Offset($this->maxOffset);
-                        if (! $validator->isValid($query)) {
-                            throw new \Exception($validator->getDescription());
-                        }
-
-                        break;
-                    case Query::TYPE_SELECT:
-                        $asValidator = new AsValidator($query->getAttribute());
-                        if (! $asValidator->isValid($query->getAs())) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' '.$asValidator->getDescription());
-                        }
-
-                        if ($query->getAttribute() !== '*') {
-                            $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        }
-
-                        break;
-                    case Query::TYPE_ORDER_RANDOM:
-
-                        break;
-                    case Query::TYPE_ORDER_ASC:
-                    case Query::TYPE_ORDER_DESC:
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias(), $query->getMethod());
-
-                        break;
-                    case Query::TYPE_CURSOR_AFTER:
-                    case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor($this->maxUIDLength);
-                        if (! $validator->isValid($query)) {
-                            throw new \Exception($validator->getDescription());
-                        }
-
-                        break;
-                    case Query::TYPE_VECTOR_DOT:
-                    case Query::TYPE_VECTOR_COSINE:
-                    case Query::TYPE_VECTOR_EUCLIDEAN:
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-
-                        if (count($query->getValues()) != 1) {
-                            throw new \Exception(\ucfirst($method) . ' queries require exactly one vector value.');
-                        }
-
-                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                        break;
-                    default:
-                        throw new \Exception('Invalid query: Method not found ');
-                }
-            }
-
-        } catch (\Throwable $e) {
-            $this->message = $e->getMessage();
+        if ($hasInt && $hasString) {
             return false;
+        }
+
+        foreach ($values as $value) {
+            if (!$this->isValidObjectQueryValues($value)) {
+                return false;
+            }
         }
 
         return true;

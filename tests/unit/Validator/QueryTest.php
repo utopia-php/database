@@ -90,6 +90,12 @@ class QueryTest extends TestCase
                 'array' => false,
                 'filters' => ['datetime'],
             ],
+            [
+                '$id' => 'meta',
+                'key' => 'meta',
+                'type' => Database::VAR_OBJECT,
+                'array' => false,
+            ]
         ];
 
         $attributes = array_map(
@@ -335,5 +341,49 @@ class QueryTest extends TestCase
         ));
 
         $this->assertEquals('Invalid query: Or queries can only contain filter queries', $validator->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testObjectAttribute(): void
+    {
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
+
+        // Object attribute query: allowed shape
+        $this->assertTrue(
+            $validator->isValid([
+                Query::equal('meta', [
+                    ['a' => [1, 2]],
+                    ['b' => [212]],
+                ]),
+            ]),
+            $validator->getDescription()
+        );
+
+        // Object attribute query: disallowed nested multiple keys in same level
+        $this->assertFalse(
+            $validator->isValid([
+                Query::equal('meta', [
+                    ['a' => [1, 'b' => [212]]],
+                ]),
+            ])
+        );
+
+        $this->assertEquals('Invalid object query structure for attribute "meta"', $validator->getDescription());
+
+        // Object attribute query: disallowed complex multi-key nested structure
+        $this->assertTrue(
+            $validator->isValid([
+                Query::contains('meta', [
+                    [
+                        'role' => [
+                            'name' => ['test1', 'test2'],
+                            'ex' => ['new' => 'test1'],
+                        ],
+                    ],
+                ]),
+            ])
+        );
     }
 }

@@ -167,10 +167,11 @@ class Index extends Validator
     {
         $type = $index->getAttribute('type');
         if ($this->supportForObjectIndexes) {
-            $dottedAttributes = array_filter($index->getAttribute('attributes'), fn ($attr) => $this->isDottedAttribute($attr));
+            // getting dotted attributes not present in schema
+            $dottedAttributes = array_filter($index->getAttribute('attributes'), fn ($attr) => !isset($this->attributes[\strtolower($attr)]) && $this->isDottedAttribute($attr));
             if (\count($dottedAttributes)) {
                 foreach ($index->getAttribute('attributes') as $attribute) {
-                    $baseAttribute = isset($this->attributes[\strtolower($attribute)]) ? $attribute : $this->getBaseAttributeFromDottedAttribute($attribute);
+                    $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
                     if (isset($this->attributes[\strtolower($baseAttribute)]) && $this->attributes[\strtolower($baseAttribute)]->getAttribute('type') != Database::VAR_OBJECT) {
                         $this->message = 'Index attribute "' . $attribute . '" is only supported on object attributes';
                         return false;

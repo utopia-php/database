@@ -414,7 +414,7 @@ class IndexTest extends TestCase
             'orders' => [],
         ]);
         $this->assertFalse($validator->isValid($invalidNestedPath));
-        $this->assertStringContainsString('Object index can only be created on a top-level object attribute', $validator->getDescription());
+        $this->assertStringContainsString('Index attribute "name.key" is only supported on object attributes', $validator->getDescription());
 
         // Invalid: Nested path with non-existent base attribute
         $invalidBaseAttribute = new Document([

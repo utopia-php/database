@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\PDO;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Pools\Adapter\Stack;
 
 class PoolTest extends Base
 {
@@ -43,7 +44,7 @@ class PoolTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $pool = new UtopiaPool('mysql', 10, function () {
+        $pool = new UtopiaPool(new Stack(), 'mysql', 10, function () {
             $dbHost = 'mysql';
             $dbPort = '3307';
             $dbUser = 'root';

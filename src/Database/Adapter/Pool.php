@@ -18,40 +18,10 @@ class Pool extends Adapter
 
     /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
-     * @throws DatabaseException
      */
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
-
-        $this->pool->use(function (mixed $resource) {
-            if (!($resource instanceof Adapter)) {
-                throw new DatabaseException('Pool must contain instances of ' . Adapter::class);
-            }
-
-            // Run setters in case the pooled adapter has its own config
-            try {
-                $this->setAuthorization($resource->getAuthorization());
-            } catch (\Error $e) {
-                // Authorization not initialized yet, so skip it.
-            }
-            $this->setDatabase($resource->getDatabase());
-            $this->setNamespace($resource->getNamespace());
-            $this->setSharedTables($resource->getSharedTables());
-            $this->setTenant($resource->getTenant());
-
-            if ($resource->getTimeout() > 0) {
-                $this->setTimeout($resource->getTimeout());
-            }
-            $this->resetDebug();
-            foreach ($resource->getDebug() as $key => $value) {
-                $this->setDebug($key, $value);
-            }
-            $this->resetMetadata();
-            foreach ($resource->getMetadata() as $key => $value) {
-                $this->setMetadata($key, $value);
-            }
-        });
     }
 
     /**
@@ -372,6 +342,21 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForPCRERegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -593,6 +578,11 @@ class Pool extends Adapter
     }
 
     public function getSupportForObject(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForObjectIndexes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

@@ -959,7 +959,8 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
         }
 
         try {
@@ -967,7 +968,8 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
         }
     }
 
@@ -1037,7 +1039,9 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('bytes but the maximum is 65535 bytes', $e->getMessage());
+            $this->assertStringContainsString('Reduce the size of existing attributes or remove some attributes to free up space.', $e->getMessage());
         }
 
         try {
@@ -1045,7 +1049,9 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
-            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('bytes but the maximum is 65535 bytes', $e->getMessage());
+            $this->assertStringContainsString('Reduce the size of existing attributes or remove some attributes to free up space.', $e->getMessage());
         }
     }
 
@@ -1404,7 +1410,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
 
@@ -1415,7 +1421,7 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
 

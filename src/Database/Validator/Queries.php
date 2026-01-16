@@ -107,6 +107,7 @@ class Queries extends Validator
                 Query::TYPE_NOT_CONTAINS,
                 Query::TYPE_AND,
                 Query::TYPE_OR,
+                Query::TYPE_ELEM_MATCH,
                 Query::TYPE_CROSSES,
                 Query::TYPE_NOT_CROSSES,
                 Query::TYPE_DISTANCE_EQUAL,
@@ -121,7 +122,10 @@ class Queries extends Validator
                 Query::TYPE_NOT_TOUCHES,
                 Query::TYPE_VECTOR_DOT,
                 Query::TYPE_VECTOR_COSINE,
-                Query::TYPE_VECTOR_EUCLIDEAN => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_VECTOR_EUCLIDEAN,
+                Query::TYPE_REGEX,
+                Query::TYPE_EXISTS,
+                Query::TYPE_NOT_EXISTS => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 

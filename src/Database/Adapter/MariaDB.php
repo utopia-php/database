@@ -2146,6 +2146,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForObjectIndexes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get Support for Null Values in Spatial Indexes
      *
      * @return bool
@@ -2239,5 +2249,20 @@ class MariaDB extends SQL
     public function getSupportNonUtfCharacters(): bool
     {
         return true;
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForPCRERegex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
     }
 }

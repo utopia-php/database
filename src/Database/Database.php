@@ -87,6 +87,7 @@ class Database
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
+    public const INDEX_TRIGRAM = 'trigram';
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -660,13 +661,14 @@ class Database
                 return \json_encode($value);
             },
             /**
-             * @param string|null $value
+             * @param mixed $value
              * @return array|null
              */
-            function (?string $value) {
+            function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
+                // can be non string in case of mongodb as it stores the value as object
                 if (!is_string($value)) {
                     return $value;
                 }
@@ -1685,7 +1687,12 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForObjectIndexes(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2923,7 +2930,12 @@ class Database
                     $this->adapter->getSupportForAttributes(),
                     $this->adapter->getSupportForMultipleFulltextIndexes(),
                     $this->adapter->getSupportForIdenticalIndexes(),
-                    $this->adapter->getSupportForObject(),
+                    $this->adapter->getSupportForObjectIndexes(),
+                    $this->adapter->getSupportForTrigramIndex(),
+                    $this->adapter->getSupportForSpatialAttributes(),
+                    $this->adapter->getSupportForIndex(),
+                    $this->adapter->getSupportForUniqueIndex(),
+                    $this->adapter->getSupportForFulltextIndex(),
                 );
 
                 foreach ($indexes as $index) {
@@ -3003,14 +3015,14 @@ class Database
             $this->adapter->getLimitForAttributes() > 0 &&
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is ' . $this->adapter->getCountOfAttributes($collection) . ' but the maximum is ' . $this->adapter->getLimitForAttributes() . '. Remove some attributes to free up space.');
         }
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is ' . $this->adapter->getAttributeWidth($collection) . ' bytes but the maximum is ' . $this->adapter->getDocumentSizeLimit() . ' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
         }
 
         return true;
@@ -4072,52 +4084,6 @@ class Database
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        switch ($type) {
-            case self::INDEX_KEY:
-                if (!$this->adapter->getSupportForIndex()) {
-                    throw new DatabaseException('Key index is not supported');
-                }
-                break;
-
-            case self::INDEX_UNIQUE:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new DatabaseException('Unique index is not supported');
-                }
-                break;
-
-            case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForFulltextIndex()) {
-                    throw new DatabaseException('Fulltext index is not supported');
-                }
-                break;
-
-            case self::INDEX_SPATIAL:
-                if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial indexes are not supported');
-                }
-                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
-                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
-                }
-                break;
-
-            case Database::INDEX_HNSW_EUCLIDEAN:
-            case Database::INDEX_HNSW_COSINE:
-            case Database::INDEX_HNSW_DOT:
-                if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector indexes are not supported');
-                }
-                break;
-
-            case self::INDEX_OBJECT:
-                if (!$this->adapter->getSupportForObject()) {
-                    throw new DatabaseException('Object indexes are not supported');
-                }
-                break;
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
-        }
-
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
@@ -4170,7 +4136,12 @@ class Database
                 $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObject(),
+                $this->adapter->getSupportForObjectIndexes(),
+                $this->adapter->getSupportForTrigramIndex(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForIndex(),
+                $this->adapter->getSupportForUniqueIndex(),
+                $this->adapter->getSupportForFulltextIndex(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -5671,6 +5642,11 @@ class Database
                                     break;
                                 }
 
+                                if (Operator::isOperator($value)) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+
                                 if (!\is_array($value) || !\array_is_list($value)) {
                                     throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                                 }
@@ -6079,6 +6055,24 @@ class Database
             $twoWayKey = (string)$relationship['options']['twoWayKey'];
             $side = (string)$relationship['options']['side'];
 
+            if (Operator::isOperator($value)) {
+                $operator = $value;
+                if ($operator->isArrayOperation()) {
+                    $existingIds = [];
+                    if (\is_array($oldValue)) {
+                        $existingIds = \array_map(function ($item) {
+                            if ($item instanceof Document) {
+                                return $item->getId();
+                            }
+                            return $item;
+                        }, $oldValue);
+                    }
+
+                    $value = $this->applyRelationshipOperator($operator, $existingIds);
+                    $document->setAttribute($key, $value);
+                }
+            }
+
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE
@@ -6436,6 +6430,63 @@ class Database
         return $side === Database::RELATION_SIDE_PARENT
             ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
             : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+    }
+
+    /**
+     * Apply an operator to a relationship array of IDs
+     *
+     * @param Operator $operator
+     * @param array<string> $existingIds
+     * @return array<string|Document>
+     */
+    private function applyRelationshipOperator(Operator $operator, array $existingIds): array
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        // Extract IDs from operator values (could be strings or Documents)
+        $valueIds = \array_filter(\array_map(fn ($item) => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null), $values));
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+                return \array_values(\array_merge($existingIds, $valueIds));
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                return \array_values(\array_merge($valueIds, $existingIds));
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $index = $values[0] ?? 0;
+                $item = $values[1] ?? null;
+                $itemId = $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null);
+                if ($itemId !== null) {
+                    \array_splice($existingIds, $index, 0, [$itemId]);
+                }
+                return \array_values($existingIds);
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $toRemove = $values[0] ?? null;
+                if (\is_array($toRemove)) {
+                    $toRemoveIds = \array_filter(\array_map(fn ($item) => $item instanceof Document ? $item->getId() : (\is_string($item) ? $item : null), $toRemove));
+                    return \array_values(\array_diff($existingIds, $toRemoveIds));
+                }
+                $toRemoveId = $toRemove instanceof Document ? $toRemove->getId() : (\is_string($toRemove) ? $toRemove : null);
+                if ($toRemoveId !== null) {
+                    return \array_values(\array_diff($existingIds, [$toRemoveId]));
+                }
+                return $existingIds;
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return \array_values(\array_unique($existingIds));
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                return \array_values(\array_intersect($existingIds, $valueIds));
+
+            case Operator::TYPE_ARRAY_DIFF:
+                return \array_values(\array_diff($existingIds, $valueIds));
+
+            default:
+                return $existingIds;
+        }
     }
 
     /**
@@ -8519,6 +8570,43 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
+    /**
+     * Check if values are compatible with object attribute type (hashmap/multi-dimensional array)
+     *
+     * @param array<mixed> $values
+     * @return bool
+     */
+    private function isCompatibleObjectValue(array $values): bool
+    {
+        if (empty($values)) {
+            return false;
+        }
+
+        foreach ($values as $value) {
+            if (!\is_array($value)) {
+                return false;
+            }
+
+            // Check associative array (hashmap) or nested structure
+            if (empty($value)) {
+                continue;
+            }
+
+            // simple indexed array => not an object
+            if (\array_keys($value) === \range(0, \count($value) - 1)) {
+                return false;
+            }
+
+            foreach ($value as $nestedValue) {
+                if (\is_array($nestedValue)) {
+                    continue;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public function convertQuery(Document $collection, Query $query): Query
     {
         /**
@@ -8554,6 +8642,12 @@ class Database
                     }
                 }
                 $query->setValues($values);
+            }
+        } elseif (!$this->adapter->getSupportForAttributes()) {
+            $values = $query->getValues();
+            // setting attribute type to properly apply filters in the adapter level
+            if ($this->adapter->getSupportForObject() && $this->isCompatibleObjectValue($values)) {
+                $query->setAttributeType(Database::VAR_OBJECT);
             }
         }
 

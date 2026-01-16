@@ -26,6 +26,9 @@ class Query
     public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
+    public const TYPE_REGEX = 'regex';
+    public const TYPE_EXISTS = 'exists';
+    public const TYPE_NOT_EXISTS = 'notExists';
 
     // Spatial methods
     public const TYPE_CROSSES = 'crosses';
@@ -62,7 +65,7 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
-
+    public const TYPE_ELEM_MATCH = 'elemMatch';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -99,6 +102,8 @@ class Query
         self::TYPE_VECTOR_DOT,
         self::TYPE_VECTOR_COSINE,
         self::TYPE_VECTOR_EUCLIDEAN,
+        self::TYPE_EXISTS,
+        self::TYPE_NOT_EXISTS,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
@@ -109,6 +114,8 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
+        self::TYPE_REGEX
     ];
 
     public const VECTOR_TYPES = [
@@ -120,12 +127,14 @@ class Query
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_ELEM_MATCH,
     ];
 
     protected string $method = '';
     protected string $attribute = '';
     protected string $attributeType = '';
     protected bool $onArray = false;
+    protected bool $isObjectAttribute = false;
 
     /**
      * @var array<mixed>
@@ -291,10 +300,13 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_ELEM_MATCH,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
-            self::TYPE_VECTOR_EUCLIDEAN => true,
+            self::TYPE_VECTOR_EUCLIDEAN,
+            self::TYPE_EXISTS,
+            self::TYPE_NOT_EXISTS => true,
             default => false,
         };
     }
@@ -1177,5 +1189,49 @@ class Query
     public static function vectorEuclidean(string $attribute, array $vector): self
     {
         return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
+    }
+
+    /**
+     * Helper method to create Query with regex method
+     *
+     * @param string $attribute
+     * @param string $pattern
+     * @return Query
+     */
+    public static function regex(string $attribute, string $pattern): self
+    {
+        return new self(self::TYPE_REGEX, $attribute, [$pattern]);
+    }
+
+    /**
+     * Helper method to create Query with exists method
+     *
+     * @param array<string> $attributes
+     * @return Query
+     */
+    public static function exists(array $attributes): self
+    {
+        return new self(self::TYPE_EXISTS, '', $attributes);
+    }
+
+    /**
+     * Helper method to create Query with notExists method
+     *
+     * @param string|int|float|bool|array<mixed,mixed> $attribute
+     * @return Query
+     */
+    public static function notExists(string|int|float|bool|array $attribute): self
+    {
+        return new self(self::TYPE_NOT_EXISTS, '', is_array($attribute) ? $attribute : [$attribute]);
+    }
+
+    /**
+     * @param string $attribute
+     * @param array<Query> $queries
+     * @return Query
+     */
+    public static function elemMatch(string $attribute, array $queries): self
+    {
+        return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
     }
 }

@@ -2067,6 +2067,10 @@ class Mongo extends Adapter
     {
         return match ($appwriteType) {
             Database::VAR_STRING => 'string',
+            Database::VAR_VARCHAR => 'string',
+            Database::VAR_TEXT => 'string',
+            Database::VAR_MEDIUMTEXT => 'string',
+            Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',

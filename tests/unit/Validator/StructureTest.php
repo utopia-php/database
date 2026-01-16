@@ -101,6 +101,46 @@ class StructureTest extends TestCase
                 'array' => false,
                 'filters' => [],
             ],
+            [
+                '$id' => 'varchar_field',
+                'type' => Database::VAR_VARCHAR,
+                'format' => '',
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'text_field',
+                'type' => Database::VAR_TEXT,
+                'format' => '',
+                'size' => 65535,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'mediumtext_field',
+                'type' => Database::VAR_MEDIUMTEXT,
+                'format' => '',
+                'size' => 16777215,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'longtext_field',
+                'type' => Database::VAR_LONGTEXT,
+                'format' => '',
+                'size' => 4294967295,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
         ],
         'indexes' => [],
     ];
@@ -847,6 +887,252 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "rating"', $validator->getDescription());
+    }
+
+    public function testVarcharValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'varchar_field' => 'Short varchar text',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'varchar_field' => 123,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'varchar_field' => \str_repeat('a', 256),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
+    }
+
+    public function testTextValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'text_field' => \str_repeat('a', 65535),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'text_field' => 123,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'text_field' => \str_repeat('a', 65536),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+    }
+
+    public function testMediumtextValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'mediumtext_field' => \str_repeat('a', 100000),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'mediumtext_field' => 123,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string and no longer than 16777215 chars', $validator->getDescription());
+    }
+
+    public function testLongtextValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'longtext_field' => \str_repeat('a', 1000000),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'longtext_field' => 123,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string and no longer than 4294967295 chars', $validator->getDescription());
+    }
+
+    public function testStringTypeArrayValidation(): void
+    {
+        $collection = [
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'collections',
+            'attributes' => [
+                [
+                    '$id' => 'varchar_array',
+                    'type' => Database::VAR_VARCHAR,
+                    'format' => '',
+                    'size' => 128,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => true,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'text_array',
+                    'type' => Database::VAR_TEXT,
+                    'format' => '',
+                    'size' => 65535,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => true,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ];
+
+        $validator = new Structure(
+            new Document($collection),
+            Database::VAR_INTEGER
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'varchar_array' => ['test1', 'test2', 'test3'],
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'varchar_array' => [123, 'test2', 'test3'],
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'varchar_array' => [\str_repeat('a', 129), 'test2'],
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
     }
 
 }

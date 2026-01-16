@@ -25,6 +25,7 @@ use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Index as IndexValidator;
@@ -44,6 +45,11 @@ class Database
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+
+    public const VAR_VARCHAR = 'varchar';
+    public const VAR_TEXT = 'text';
+    public const VAR_MEDIUMTEXT = 'mediumtext';
+    public const VAR_LONGTEXT = 'longtext';
 
     // ID types
     public const VAR_ID = 'id';
@@ -2232,36 +2238,6 @@ class Database
         array $formatOptions,
         array $filters
     ): Document {
-        // Attribute IDs are case-insensitive
-        $attributes = $collection->getAttribute('attributes', []);
-
-        /** @var array<Document> $attributes */
-        foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists in metadata');
-            }
-        }
-
-        if ($this->adapter->getSupportForSchemaAttributes() && !($this->getSharedTables() && $this->isMigrating())) {
-            $schema = $this->getSchemaAttributes($collection->getId());
-            foreach ($schema as $attribute) {
-                $newId = $this->adapter->filter($attribute->getId());
-                if (\strtolower($newId) === \strtolower($id)) {
-                    throw new DuplicateException('Attribute already exists in schema');
-                }
-            }
-        }
-
-        // Ensure required filters for the attribute are passed
-        $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(\array_diff($requiredFilters, $filters))) {
-            throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
-        }
-
-        if ($format && !Structure::hasFormat($format, $type)) {
-            throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
-        }
-
         $attribute = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2276,111 +2252,31 @@ class Database
             'filters' => $filters,
         ]);
 
-        $this->checkAttribute($collection, $attribute);
+        $collectionClone = clone $collection;
+        $collectionClone->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
-        switch ($type) {
-            case self::VAR_ID:
+        $validator = new AttributeValidator(
+            attributes: $collection->getAttribute('attributes', []),
+            schemaAttributes: $this->adapter->getSupportForSchemaAttributes()
+                ? $this->getSchemaAttributes($collection->getId())
+                : [],
+            maxAttributes: $this->adapter->getLimitForAttributes(),
+            maxWidth: $this->adapter->getDocumentSizeLimit(),
+            maxStringLength: $this->adapter->getLimitForString(),
+            maxVarcharLength: $this->adapter->getMaxVarcharLength(),
+            maxIntLength: $this->adapter->getLimitForInt(),
+            supportForSchemaAttributes: $this->adapter->getSupportForSchemaAttributes(),
+            supportForVectors: $this->adapter->getSupportForVectors(),
+            supportForSpatialAttributes: $this->adapter->getSupportForSpatialAttributes(),
+            supportForObject: $this->adapter->getSupportForObject(),
+            attributeCountCallback: fn () => $this->adapter->getCountOfAttributes($collectionClone),
+            attributeWidthCallback: fn () => $this->adapter->getAttributeWidth($collectionClone),
+            filterCallback: fn ($id) => $this->adapter->filter($id),
+            isMigrating: $this->isMigrating(),
+            sharedTables: $this->getSharedTables(),
+        );
 
-                break;
-            case self::VAR_STRING:
-                if ($size > $this->adapter->getLimitForString()) {
-                    throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
-                }
-                break;
-            case self::VAR_INTEGER:
-                $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
-                if ($size > $limit) {
-                    throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
-                }
-                break;
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-            case self::VAR_DATETIME:
-            case self::VAR_RELATIONSHIP:
-                break;
-            case self::VAR_OBJECT:
-                if (!$this->adapter->getSupportForObject()) {
-                    throw new DatabaseException('Object attributes are not supported');
-                }
-                if (!empty($size)) {
-                    throw new DatabaseException('Size must be empty for object attributes');
-                }
-                if (!empty($array)) {
-                    throw new DatabaseException('Object attributes cannot be arrays');
-                }
-                break;
-            case self::VAR_POINT:
-            case self::VAR_LINESTRING:
-            case self::VAR_POLYGON:
-                // Check if adapter supports spatial attributes
-                if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial attributes are not supported');
-                }
-                if (!empty($size)) {
-                    throw new DatabaseException('Size must be empty for spatial attributes');
-                }
-                if (!empty($array)) {
-                    throw new DatabaseException('Spatial attributes cannot be arrays');
-                }
-                break;
-            case self::VAR_VECTOR:
-                if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector types are not supported by the current database');
-                }
-                if ($array) {
-                    throw new DatabaseException('Vector type cannot be an array');
-                }
-                if ($size <= 0) {
-                    throw new DatabaseException('Vector dimensions must be a positive integer');
-                }
-                if ($size > self::MAX_VECTOR_DIMENSIONS) {
-                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
-                }
-
-                // Validate default value if provided
-                if ($default !== null) {
-                    if (!is_array($default)) {
-                        throw new DatabaseException('Vector default value must be an array');
-                    }
-                    if (count($default) !== $size) {
-                        throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
-                    }
-                    foreach ($default as $component) {
-                        if (!is_numeric($component)) {
-                            throw new DatabaseException('Vector default value must contain only numeric elements');
-                        }
-                    }
-                }
-                break;
-            default:
-                $supportedTypes = [
-                    self::VAR_STRING,
-                    self::VAR_INTEGER,
-                    self::VAR_FLOAT,
-                    self::VAR_BOOLEAN,
-                    self::VAR_DATETIME,
-                    self::VAR_RELATIONSHIP
-                ];
-                if ($this->adapter->getSupportForVectors()) {
-                    $supportedTypes[] = self::VAR_VECTOR;
-                }
-                if ($this->adapter->getSupportForSpatialAttributes()) {
-                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
-                }
-                if ($this->adapter->getSupportForObject()) {
-                    $supportedTypes[] = self::VAR_OBJECT;
-                }
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
-        }
-
-        // Only execute when $default is given
-        if (!\is_null($default)) {
-            if ($required === true) {
-                throw new DatabaseException('Cannot set a default value for a required attribute');
-            }
-
-            $this->validateDefaultTypes($type, $default);
-        }
+        $validator->isValid($attribute);
 
         return $attribute;
     }
@@ -2430,6 +2326,14 @@ class Database
 
         switch ($type) {
             case self::VAR_STRING:
+            case self::VAR_VARCHAR:
+            case self::VAR_TEXT:
+            case self::VAR_MEDIUMTEXT:
+            case self::VAR_LONGTEXT:
+                if ($defaultType !== 'string') {
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
             case self::VAR_INTEGER:
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
@@ -2451,6 +2355,10 @@ class Database
             default:
                 $supportedTypes = [
                     self::VAR_STRING,
+                    self::VAR_VARCHAR,
+                    self::VAR_TEXT,
+                    self::VAR_MEDIUMTEXT,
+                    self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,

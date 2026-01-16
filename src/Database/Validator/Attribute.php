@@ -464,8 +464,8 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        // Reject array defaults for non-array attributes (except vectors and spatial types which use arrays internally)
-        if (\is_array($default) && !$array && !\in_array($type, [Database::VAR_VECTOR, ...Database::SPATIAL_TYPES], true)) {
+        // Reject array defaults for non-array attributes (except vectors, spatial types, and objects which use arrays internally)
+        if (\is_array($default) && !$array && !\in_array($type, [Database::VAR_VECTOR, Database::VAR_OBJECT, ...Database::SPATIAL_TYPES], true)) {
             $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }

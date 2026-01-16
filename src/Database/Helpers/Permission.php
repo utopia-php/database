@@ -10,17 +10,6 @@ class Permission
 {
     private Role $role;
 
-    /**
-     * @var array<string, array<string>>
-     */
-    private static array $aggregates = [
-        'write' => [
-            Database::PERMISSION_CREATE,
-            Database::PERMISSION_UPDATE,
-            Database::PERMISSION_DELETE,
-        ]
-    ];
-
     public function __construct(
         private string $permission,
         string $role,
@@ -90,7 +79,7 @@ class Permission
 
         $permission = $permissionParts[0];
 
-        if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
+        if (!\in_array($permission, Database::PERMISSIONS)) {
             throw new DatabaseException('Invalid permission type: "' . $permission . '".');
         }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
@@ -138,43 +127,6 @@ class Permission
         }
 
         return new self($permission, $role, $identifier, $dimension);
-    }
-
-    /**
-     * Map aggregate permissions into the set of individual permissions they represent.
-     *
-     * @param array<string>|null $permissions
-     * @param array<string> $allowed
-     * @return array<string>|null
-     * @throws Exception
-     */
-    public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
-    {
-        if (\is_null($permissions)) {
-            return null;
-        }
-        $mutated = [];
-        foreach ($permissions as $i => $permission) {
-            $permission = self::parse($permission);
-            foreach (self::$aggregates as $type => $subTypes) {
-                if ($permission->getPermission() != $type) {
-                    $mutated[] = $permission->toString();
-                    continue;
-                }
-                foreach ($subTypes as $subType) {
-                    if (!\in_array($subType, $allowed)) {
-                        continue;
-                    }
-                    $mutated[] = (new self(
-                        $subType,
-                        $permission->getRole(),
-                        $permission->getIdentifier(),
-                        $permission->getDimension()
-                    ))->toString();
-                }
-            }
-        }
-        return \array_values(\array_unique($mutated));
     }
 
     /**
@@ -238,23 +190,6 @@ class Permission
     {
         $permission = new self(
             'delete',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
-        );
-        return $permission->toString();
-    }
-
-    /**
-     * Create a write permission string from the given Role
-     *
-     * @param Role $role
-     * @return string
-     */
-    public static function write(Role $role): string
-    {
-        $permission = new self(
-            'write',
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()

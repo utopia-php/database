@@ -453,6 +453,7 @@ class Attribute extends Validator
         $default = $attribute->getAttribute('default');
         $required = $attribute->getAttribute('required', false);
         $type = $attribute->getAttribute('type');
+        $array = $attribute->getAttribute('array', false);
 
         if (\is_null($default)) {
             return true;
@@ -460,6 +461,12 @@ class Attribute extends Validator
 
         if ($required === true) {
             $this->message = 'Cannot set a default value for a required attribute';
+            throw new DatabaseException($this->message);
+        }
+
+        // Reject array defaults for non-array attributes (except vectors and spatial types which use arrays internally)
+        if (\is_array($default) && !$array && !\in_array($type, [Database::VAR_VECTOR, ...Database::SPATIAL_TYPES], true)) {
+            $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }
 

@@ -743,4 +743,1007 @@ class AttributeTest extends TestCase
         $this->expectExceptionMessage('Vector default value must contain only numeric elements');
         $validator->isValid($attribute);
     }
+
+    public function testLongtextSizeTooLarge(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_LONGTEXT,
+            'size' => 5000000000,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Max size allowed for longtext is: 4294967295');
+        $validator->isValid($attribute);
+    }
+
+    public function testValidVarcharAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('name'),
+            'key' => 'name',
+            'type' => Database::VAR_VARCHAR,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidTextAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_TEXT,
+            'size' => 65535,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidMediumtextAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_MEDIUMTEXT,
+            'size' => 16777215,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidLongtextAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_LONGTEXT,
+            'size' => 4294967295,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidFloatAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('price'),
+            'key' => 'price',
+            'type' => Database::VAR_FLOAT,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidBooleanAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('active'),
+            'key' => 'active',
+            'type' => Database::VAR_BOOLEAN,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testFloatDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('price'),
+            'key' => 'price',
+            'type' => Database::VAR_FLOAT,
+            'size' => 0,
+            'required' => false,
+            'default' => 'not_a_float',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value not_a_float does not match given type double');
+        $validator->isValid($attribute);
+    }
+
+    public function testBooleanDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('active'),
+            'key' => 'active',
+            'type' => Database::VAR_BOOLEAN,
+            'size' => 0,
+            'required' => false,
+            'default' => 'not_a_boolean',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value not_a_boolean does not match given type boolean');
+        $validator->isValid($attribute);
+    }
+
+    public function testStringDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('title'),
+            'key' => 'title',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => 123,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type string');
+        $validator->isValid($attribute);
+    }
+
+    public function testValidStringWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('title'),
+            'key' => 'title',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => 'default title',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidIntegerWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('count'),
+            'key' => 'count',
+            'type' => Database::VAR_INTEGER,
+            'size' => 4,
+            'required' => false,
+            'default' => 42,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidFloatWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('price'),
+            'key' => 'price',
+            'type' => Database::VAR_FLOAT,
+            'size' => 0,
+            'required' => false,
+            'default' => 19.99,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidBooleanWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('active'),
+            'key' => 'active',
+            'type' => Database::VAR_BOOLEAN,
+            'size' => 0,
+            'required' => false,
+            'default' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testUnsignedIntegerSizeLimit(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: 100,
+        );
+
+        // Unsigned allows double the size
+        $attribute = new Document([
+            '$id' => ID::custom('count'),
+            'key' => 'count',
+            'type' => Database::VAR_INTEGER,
+            'size' => 80,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testUnsignedIntegerSizeTooLarge(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: 100,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('count'),
+            'key' => 'count',
+            'type' => Database::VAR_INTEGER,
+            'size' => 150,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Max size allowed for int is: 100');
+        $validator->isValid($attribute);
+    }
+
+    public function testDuplicateAttributeIdCaseInsensitive(): void
+    {
+        $validator = new Attribute(
+            attributes: [
+                new Document([
+                    '$id' => ID::custom('Title'),
+                    'key' => 'Title',
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('title'),
+            'key' => 'title',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Attribute already exists in metadata');
+        $validator->isValid($attribute);
+    }
+
+    public function testDuplicateInSchema(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('existing_column'),
+                    'key' => 'existing_column',
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                ])
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('existing_column'),
+            'key' => 'existing_column',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Attribute already exists in schema');
+        $validator->isValid($attribute);
+    }
+
+    public function testSchemaCheckSkippedWhenMigrating(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('existing_column'),
+                    'key' => 'existing_column',
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                ])
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+            isMigrating: true,
+            sharedTables: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('existing_column'),
+            'key' => 'existing_column',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidLinestringAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSpatialAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('route'),
+            'key' => 'route',
+            'type' => Database::VAR_LINESTRING,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => ['linestring'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidPolygonAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSpatialAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('area'),
+            'key' => 'area',
+            'type' => Database::VAR_POLYGON,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => ['polygon'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidPointAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSpatialAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('location'),
+            'key' => 'location',
+            'type' => Database::VAR_POINT,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => ['point'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidVectorAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('embedding'),
+            'key' => 'embedding',
+            'type' => Database::VAR_VECTOR,
+            'size' => 128,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => ['vector'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidVectorWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('embedding'),
+            'key' => 'embedding',
+            'type' => Database::VAR_VECTOR,
+            'size' => 3,
+            'required' => false,
+            'default' => [1.0, 2.0, 3.0],
+            'signed' => true,
+            'array' => false,
+            'filters' => ['vector'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidObjectAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForObject: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('metadata'),
+            'key' => 'metadata',
+            'type' => Database::VAR_OBJECT,
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => ['object'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testArrayStringAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('tags'),
+            'key' => 'tags',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testArrayWithDefaultValues(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('tags'),
+            'key' => 'tags',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => ['tag1', 'tag2', 'tag3'],
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testArrayDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('tags'),
+            'key' => 'tags',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => ['tag1', 123, 'tag3'],
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type string');
+        $validator->isValid($attribute);
+    }
+
+    public function testDatetimeDefaultValueMustBeString(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('created'),
+            'key' => 'created',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'required' => false,
+            'default' => 12345,
+            'signed' => false,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 12345 does not match given type datetime');
+        $validator->isValid($attribute);
+    }
+
+    public function testValidDatetimeWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('created'),
+            'key' => 'created',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'required' => false,
+            'default' => '2024-01-01T00:00:00.000Z',
+            'signed' => false,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testVarcharDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('name'),
+            'key' => 'name',
+            'type' => Database::VAR_VARCHAR,
+            'size' => 255,
+            'required' => false,
+            'default' => 123,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type varchar');
+        $validator->isValid($attribute);
+    }
+
+    public function testTextDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_TEXT,
+            'size' => 65535,
+            'required' => false,
+            'default' => 123,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type text');
+        $validator->isValid($attribute);
+    }
+
+    public function testMediumtextDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_MEDIUMTEXT,
+            'size' => 16777215,
+            'required' => false,
+            'default' => 123,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type mediumtext');
+        $validator->isValid($attribute);
+    }
+
+    public function testLongtextDefaultValueTypeMismatch(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_LONGTEXT,
+            'size' => 4294967295,
+            'required' => false,
+            'default' => 123,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value 123 does not match given type longtext');
+        $validator->isValid($attribute);
+    }
+
+    public function testValidVarcharWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('name'),
+            'key' => 'name',
+            'type' => Database::VAR_VARCHAR,
+            'size' => 255,
+            'required' => false,
+            'default' => 'default name',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidTextWithDefaultValue(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('content'),
+            'key' => 'content',
+            'type' => Database::VAR_TEXT,
+            'size' => 65535,
+            'required' => false,
+            'default' => 'default content',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testValidIntegerAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('count'),
+            'key' => 'count',
+            'type' => Database::VAR_INTEGER,
+            'size' => 4,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testNullDefaultValueAllowed(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('title'),
+            'key' => 'title',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testArrayDefaultOnNonArrayAttribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('title'),
+            'key' => 'title',
+            'type' => Database::VAR_STRING,
+            'size' => 255,
+            'required' => false,
+            'default' => ['not', 'allowed'],
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Cannot set an array default value for a non-array attribute');
+        $validator->isValid($attribute);
+    }
 }

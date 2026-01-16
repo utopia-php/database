@@ -2699,6 +2699,17 @@ class Mongo extends Adapter
     }
 
     /**
+     * Get max VARCHAR limit
+     * MongoDB doesn't distinguish between string types, so using same as string limit
+     *
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 2147483647;
+    }
+
+    /**
      * Get max INT limit
      *
      * @return int

@@ -2312,38 +2312,40 @@ trait AttributeTests
         $this->assertEquals(['test1', 'test2', 'test3'], $doc3->getAttribute('varchar_array'));
         $this->assertEquals([\str_repeat('x', 1000), \str_repeat('y', 2000)], $doc3->getAttribute('text_array'));
 
-        // Test VARCHAR size constraint (should fail)
-        try {
-            $database->createDocument('stringTypes', new Document([
-                '$id' => ID::custom('doc4'),
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'varchar_field' => \str_repeat('a', 256), // Too long for VARCHAR(255)
-            ]));
-            $this->fail('Failed to throw exception for VARCHAR size violation');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
+        // Test VARCHAR size constraint (should fail) - only for adapters that support attributes
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            try {
+                $database->createDocument('stringTypes', new Document([
+                    '$id' => ID::custom('doc4'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'varchar_field' => \str_repeat('a', 256), // Too long for VARCHAR(255)
+                ]));
+                $this->fail('Failed to throw exception for VARCHAR size violation');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
 
-        // Test TEXT size constraint (should fail)
-        try {
-            $database->createDocument('stringTypes', new Document([
-                '$id' => ID::custom('doc5'),
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'text_field' => \str_repeat('a', 65536), // Too long for TEXT(65535)
-            ]));
-            $this->fail('Failed to throw exception for TEXT size violation');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
+            // Test TEXT size constraint (should fail)
+            try {
+                $database->createDocument('stringTypes', new Document([
+                    '$id' => ID::custom('doc5'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'text_field' => \str_repeat('a', 65536), // Too long for TEXT(65535)
+                ]));
+                $this->fail('Failed to throw exception for TEXT size violation');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
         }
 
         // Test querying by VARCHAR field

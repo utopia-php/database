@@ -900,6 +900,13 @@ abstract class Adapter
     abstract public function getMaxIndexLength(): int;
 
     /**
+     * Get the maximum VARCHAR length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxVarcharLength(): int;
+
+    /**
      * Get the maximum UID length for this adapter
      *
      * @return int

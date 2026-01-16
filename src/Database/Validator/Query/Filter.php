@@ -142,6 +142,10 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_STRING:
+                case Database::VAR_VARCHAR:
+                case Database::VAR_TEXT:
+                case Database::VAR_MEDIUMTEXT:
+                case Database::VAR_LONGTEXT:
                     $validator = new Text(0, 0);
                     break;
 

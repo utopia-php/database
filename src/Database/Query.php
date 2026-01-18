@@ -1174,21 +1174,15 @@ class Query
     }
 
     /**
-     * @param array<Query> $queries
-     * @return Query|null
+     * @param  array<Query>  $queries
+     * @return array<Query>
      */
-    public static function getCursorQueries(array $queries): ?Query
+    public static function getCursorQueries(array $queries): array
     {
-        $queries = self::getByType($queries, [
+        return self::getByType($queries, [
             Query::TYPE_CURSOR_AFTER,
             Query::TYPE_CURSOR_BEFORE,
         ]);
-
-        if (empty($queries)) {
-            return null;
-        }
-
-        return $queries[0];
     }
 
     /**

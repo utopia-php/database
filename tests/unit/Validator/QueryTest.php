@@ -265,12 +265,13 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document([])),
         ];
 
-        $query = Query::getCursorQueries($queries);
+        $queries = Query::getCursorQueries($queries);
+        $cursor = reset($queries);
 
-        $this->assertNotNull($query);
-        $this->assertInstanceOf(Query::class, $query);
-        $this->assertEquals($query->getMethod(), Query::TYPE_CURSOR_BEFORE);
-        $this->assertNotEquals($query->getMethod(), Query::TYPE_CURSOR_AFTER);
+        $this->assertEquals(count($queries), 2);
+        $this->assertInstanceOf(Query::class, $queries[0]);
+        $this->assertEquals($cursor->getMethod(), Query::TYPE_CURSOR_BEFORE);
+        $this->assertNotEquals($queries[1]->getMethod(), Query::TYPE_CURSOR_AFTER);
     }
 
     /**

@@ -21,6 +21,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 
 trait DocumentTests
 {
@@ -1438,7 +1439,8 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $document = $database->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed']),
+            Query::select('string'),
+            Query::select('integer_signed'),
         ]);
 
         $this->assertFalse($document->isEmpty());
@@ -1450,22 +1452,24 @@ trait DocumentTests
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
-        $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
 
         $document = $database->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$id']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$id'),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
         $this->assertArrayHasKey('string', $document);
         $this->assertArrayHasKey('integer_signed', $document);
@@ -1473,6 +1477,42 @@ trait DocumentTests
 
         return $document;
     }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocumentOnlySelectQueries(Document $document): Document
+    {
+        $documentId = $document->getId();
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $invalidMessage = 'Only Select queries are permitted';
+
+        try {
+            $database->getDocument('documents', $documentId, [
+                Query::equal('$id', ['id']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals($invalidMessage, $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
+        try {
+            $database->getDocument('documents', $documentId, [
+                Query::limit(1),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals($invalidMessage, $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
+        return $document;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -1955,6 +1995,12 @@ trait DocumentTests
             ]);
 
             $this->assertEquals(2, count($documents));
+
+            $documents = $database->find('movies', [
+                Query::notSearch('name', 'captain'),
+            ]);
+
+            $this->assertEquals(4, count($documents));
 
             /**
              * Fulltext search (wildcard)
@@ -3148,7 +3194,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $queries = [
-            Query::select(['director']),
+            Query::select('director'),
             Query::equal('director', ['Joe Johnston']),
             Query::or([
                 Query::equal('name', ['Frozen']),
@@ -3744,7 +3790,8 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year'])
+            Query::select('name'),
+            Query::select('year')
         ]);
 
         foreach ($documents as $document) {
@@ -3753,16 +3800,18 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$id'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$id')
         ]);
 
         foreach ($documents as $document) {
@@ -3772,15 +3821,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$sequence'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$sequence')
         ]);
 
         foreach ($documents as $document) {
@@ -3789,16 +3840,18 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$collection'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$collection')
         ]);
 
         foreach ($documents as $document) {
@@ -3807,16 +3860,38 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$createdAt')
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$createdAt'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$updatedAt')
         ]);
 
         foreach ($documents as $document) {
@@ -3825,16 +3900,18 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$updatedAt'])
+        $documents = static::getDatabase()->find('movies', [
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$permissions')
         ]);
 
         foreach ($documents as $document) {
@@ -3843,29 +3920,11 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
-        }
-
-        $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$permissions'])
-        ]);
-
-        foreach ($documents as $document) {
-            $this->assertArrayHasKey('name', $document);
-            $this->assertArrayHasKey('year', $document);
-            $this->assertArrayNotHasKey('director', $document);
-            $this->assertArrayNotHasKey('price', $document);
-            $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
             $this->assertArrayHasKey('$permissions', $document);
         }
     }
@@ -4217,7 +4276,10 @@ trait DocumentTests
         $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
         $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
-        $result = $database->decode($collection, $document);
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $result = $database->decode($context, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getAttribute('$permissions'));
@@ -4960,7 +5022,8 @@ trait DocumentTests
         $count = $database->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
-                Query::select([...$selects, '$createdAt']),
+                Query::select('$createdAt'),
+                ...array_map(fn ($f) => Query::select($f), $selects),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),
@@ -5168,7 +5231,8 @@ trait DocumentTests
             $database->deleteDocuments(
                 collection: 'bulk_delete_with_callback',
                 queries: [
-                    Query::select([...$selects, '$createdAt']),
+                    ...array_map(fn ($f) => Query::select($f), $selects),
+                    Query::select('$createdAt'),
                     Query::lessThan('$createdAt', '1800-01-01'),
                     Query::orderAsc('$createdAt'),
                     Query::orderAsc(),
@@ -5190,7 +5254,8 @@ trait DocumentTests
         $count = $database->deleteDocuments(
             collection: 'bulk_delete_with_callback',
             queries: [
-                Query::select([...$selects, '$createdAt']),
+                ...array_map(fn ($f) => Query::select($f), $selects),
+                Query::select('$createdAt'),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),
@@ -5442,7 +5507,7 @@ trait DocumentTests
         if ($database->getAdapter()->getSharedTables()) {
             $documents = $database->find(
                 'documents',
-                [Query::select(['*'])] // Mongo bug with Integer UID
+                [Query::select('*')] // Mongo bug with Integer UID
             );
 
             $document = $documents[0];

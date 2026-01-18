@@ -1562,6 +1562,7 @@ class Mongo extends Adapter
             $operations = [];
             foreach ($changes as $change) {
                 $document = $change->getNew();
+                $oldDocument = $change->getOld();
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document['$createdAt'];
@@ -1587,6 +1588,9 @@ class Mongo extends Adapter
 
                 unset($record['_id']); // Don't update _id
 
+                // Get fields to unset for schemaless mode
+                $unsetFields = $this->getUnsetForSchemalessUpsert($oldDocument, $document, $record);
+
                 if (!empty($attribute)) {
                     // Get the attribute value before removing it from $set
                     $attributeValue = $record[$attribute] ?? 0;
@@ -1595,16 +1599,27 @@ class Mongo extends Adapter
                     // it is requierd to mimic the behaver of SQL on duplicate key update
                     unset($record[$attribute]);
 
+                    // Also remove from unset if it was there
+                    unset($unsetFields[$attribute]);
+
                     // Increment the specific attribute and update all other fields
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
                         '$set' => $record
                     ];
+
+                    if (!empty($unsetFields)) {
+                        $update['$unset'] = $unsetFields;
+                    }
                 } else {
                     // Update all fields
                     $update = [
                         '$set' => $record
                     ];
+
+                    if (!empty($unsetFields)) {
+                        $update['$unset'] = $unsetFields;
+                    }
 
                     // Add UUID7 _id for new documents in upsert operations
                     if (empty($document->getSequence())) {
@@ -3394,5 +3409,42 @@ class Mongo extends Adapter
     public function getSupportForTrigramIndex(): bool
     {
         return false;
+    }
+
+    /**
+     * Get fields to unset for schemaless upsert operations
+     *
+     * @param Document $oldDocument
+     * @param Document $newDocument
+     * @param array<string, mixed> $record
+     * @return array<string, string>
+     */
+    private function getUnsetForSchemalessUpsert(Document $oldDocument, Document $newDocument, array $record): array
+    {
+        $unsetFields = [];
+
+        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
+            return $unsetFields;
+        }
+
+        $oldUserAttributes = $oldDocument->getAttributes();
+        $newUserAttributes = $newDocument->getAttributes();
+
+        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
+
+        foreach ($oldUserAttributes as $originalKey => $originalValue) {
+            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
+                continue;
+            }
+
+            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
+            $dbKey = array_key_first($transformed);
+
+            if ($dbKey && !array_key_exists($dbKey, $record) && !in_array($dbKey, $protectedFields)) {
+                $unsetFields[$dbKey] = '';
+            }
+        }
+
+        return $unsetFields;
     }
 }

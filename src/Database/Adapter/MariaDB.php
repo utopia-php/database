@@ -1687,6 +1687,24 @@ class MariaDB extends SQL
 
                 return "VARCHAR({$size})";
 
+            case Database::VAR_VARCHAR:
+                if ($size <= 0) {
+                    throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                }
+                if ($size > $this->getMaxVarcharLength()) {
+                    throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                }
+                return "VARCHAR({$size})";
+
+            case Database::VAR_TEXT:
+                return 'TEXT';
+
+            case Database::VAR_MEDIUMTEXT:
+                return 'MEDIUMTEXT';
+
+            case Database::VAR_LONGTEXT:
+                return 'LONGTEXT';
+
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
 
@@ -1710,7 +1728,7 @@ class MariaDB extends SQL
                 return 'DATETIME(3)';
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER . ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 

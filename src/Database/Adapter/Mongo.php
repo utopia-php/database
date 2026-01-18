@@ -2109,6 +2109,10 @@ class Mongo extends Adapter
     {
         return match ($appwriteType) {
             Database::VAR_STRING => 'string',
+            Database::VAR_VARCHAR => 'string',
+            Database::VAR_TEXT => 'string',
+            Database::VAR_MEDIUMTEXT => 'string',
+            Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
@@ -2742,6 +2746,17 @@ class Mongo extends Adapter
      * @return int
      */
     public function getLimitForString(): int
+    {
+        return 2147483647;
+    }
+
+    /**
+     * Get max VARCHAR limit
+     * MongoDB doesn't distinguish between string types, so using same as string limit
+     *
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
     {
         return 2147483647;
     }

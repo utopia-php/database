@@ -1144,6 +1144,19 @@ abstract class SQL extends Adapter
 
                     break;
 
+                case Database::VAR_VARCHAR:
+                    $total += match (true) {
+                        $attribute['size'] > 255 => $attribute['size'] * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attribute['size'] * 4 + 1, //  VARCHAR(<=255) + 1 length
+                    };
+                    break;
+
+                case Database::VAR_TEXT:
+                case Database::VAR_MEDIUMTEXT:
+                case Database::VAR_LONGTEXT:
+                    $total += 20; // Pointer storage for TEXT types
+                    break;
+
                 case Database::VAR_INTEGER:
                     if ($attribute['size'] >= 8) {
                         $total += 8; //  BIGINT 8 bytes

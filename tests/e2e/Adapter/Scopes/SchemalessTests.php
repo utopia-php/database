@@ -1873,7 +1873,6 @@ trait SchemalessTests
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
-            return;
         }
 
         $collectionName = ID::unique();

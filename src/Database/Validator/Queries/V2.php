@@ -74,16 +74,6 @@ class V2 extends Validator
         $this->minAllowedDate = $minAllowedDate;
         $this->maxAllowedDate = $maxAllowedDate;
 
-        //        $validators = [
-        //            new Limit(),
-        //            new Offset(),
-        //            new Cursor(),
-        //            new Filter($collections),
-        //            new Order($collections),
-        //            new Select($collections),
-        //            new Join($collections),
-        //        ];
-
         /**
          * Since $context includes Documents , clone if original data is changes.
          */
@@ -581,6 +571,10 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_STRING:
+                case Database::VAR_VARCHAR:
+                case Database::VAR_TEXT:
+                case Database::VAR_MEDIUMTEXT:
+                case Database::VAR_LONGTEXT:
                     $validator = new Text(0, 0);
                     break;
 

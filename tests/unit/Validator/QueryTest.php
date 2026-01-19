@@ -250,6 +250,7 @@ class QueryTest extends TestCase
         }
 
         $cursor = reset($queries_1);
+        $this->assertInstanceOf(Query::class, $cursor);
         $cursor->setValue(new Document(['$id' => 'hello1']));
 
         $query1 = $queries[1];
@@ -263,6 +264,7 @@ class QueryTest extends TestCase
          */
         $queries_2 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], false);
         $cursor = reset($queries_2);
+        $this->assertInstanceOf(Query::class, $cursor);
         $cursor->setValue(new Document(['$id' => 'hello1']));
 
         $query2 = $queries[1];
@@ -283,6 +285,7 @@ class QueryTest extends TestCase
 
         $queries_3 = Query::getCursorQueries($queries, false);
         $cursor = reset($queries_3); // Same as writing $cursor = $queries_3[0];
+        $this->assertInstanceOf(Query::class, $cursor);
         $cursor->setValue(new Document(['$id' => 'hello3']));
 
         $query3 = $queries[1];

@@ -307,6 +307,11 @@ trait GeneralTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionName = 'preserve_sequence_upsert';
 
         $database->createCollection($collectionName);

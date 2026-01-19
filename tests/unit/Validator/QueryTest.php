@@ -280,7 +280,7 @@ class QueryTest extends TestCase
         ];
 
         $queries_3 = Query::getCursorQueries($queries, false);
-        $cursor = reset($queries_3);
+        $cursor = reset($queries_3); // Same as writing $cursor = $queries_3[0];
         $cursor->setValue(new Document(['$id' => 'hello3']));
 
         $query3 = $queries[1];

@@ -1286,6 +1286,32 @@ trait DocumentTests
         // Verify flag was reset after withPreserveSequence
         $this->assertFalse($database->getPreserveSequence());
 
+        // Test: With preserveSequence=true, invalid $sequence should throw error (SQL adapters only)
+        $database->setPreserveSequence(true);
+
+        try {
+            $database->upsertDocuments($collectionName, [
+                new Document([
+                    '$id' => 'doc1',
+                    '$sequence' => 'abc', // Invalid sequence value
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Alice Invalid',
+                ]),
+            ]);
+            // Schemaless adapters may not validate sequence type, so only fail for schemaful
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->fail('Expected StructureException for invalid sequence');
+            }
+        } catch (Throwable $e) {
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertStringContainsString('sequence', $e->getMessage());
+            }
+        }
+
         $database->setPreserveSequence(false);
         $database->deleteCollection($collectionName);
     }

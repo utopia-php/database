@@ -263,7 +263,7 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document([])),
         ];
 
-        $queries1 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
+        $queries1 = Query::getCursorQueries($queries, true);
 
         $this->assertCount(2, $queries1);
         foreach ($queries1 as $query) {
@@ -283,24 +283,7 @@ class QueryTest extends TestCase
         $this->assertTrue($query1->getValue()->isEmpty()); // Cursor Document is not updated
 
         /**
-         * Using reference $queries2 => $queries
-         */
-        $queries2 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], false);
-
-        $cursor = reset($queries2);
-        $this->assertInstanceOf(Query::class, $cursor);
-
-        $cursor->setValue(new Document(['$id' => 'hello1']));
-
-        $query2 = $queries[1];
-
-        $this->assertCount(2, $queries2);
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query2->getMethod());
-        $this->assertInstanceOf(Document::class, $query2->getValue());
-        $this->assertEquals('hello1', $query2->getValue()->getId()); // Cursor Document is updated
-
-        /**
-         * Using getCursorQueries
+         * Using reference $queries3 => $queries
          */
         $queries = [
             Query::equal('key', ['value']),

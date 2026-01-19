@@ -1066,7 +1066,7 @@ class Query
      * @param bool $clone
      * @return array<Query>
      */
-    protected static function getByType(array $queries, array $types, bool $clone = true): array
+    public static function getByType(array $queries, array $types, bool $clone = true): array
     {
         $filtered = [];
 

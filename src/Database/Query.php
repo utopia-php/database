@@ -1195,18 +1195,6 @@ class Query
      * @param  array<Query>  $queries
      * @return array<Query>
      */
-    public static function getCursorQueries(array $queries): array
-    {
-        return self::getByType($queries, [
-            Query::TYPE_CURSOR_AFTER,
-            Query::TYPE_CURSOR_BEFORE,
-        ]);
-    }
-
-    /**
-     * @param  array<Query>  $queries
-     * @return array<Query>
-     */
     public static function getFilterQueries(array $queries): array
     {
         return self::getByType($queries, self::FILTER_TYPES);

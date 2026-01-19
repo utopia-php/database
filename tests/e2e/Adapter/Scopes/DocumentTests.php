@@ -1178,6 +1178,118 @@ trait DocumentTests
         ], $db->getDocument(__FUNCTION__, 'b')->getPermissions());
     }
 
+    public function testPreserveSequenceUpsert(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'preserve_sequence_upsert';
+
+        $database->createCollection($collectionName);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 128, true);
+        }
+
+        // Create initial documents
+        $doc1 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Alice',
+        ]));
+
+        $doc2 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Bob',
+        ]));
+
+        $originalSeq1 = $doc1->getSequence();
+        $originalSeq2 = $doc2->getSequence();
+
+        $this->assertNotEmpty($originalSeq1);
+        $this->assertNotEmpty($originalSeq2);
+
+        // Test: Without preserveSequence (default), $sequence should be ignored
+        $database->setPreserveSequence(false);
+
+        $database->upsertDocuments($collectionName, [
+            new Document([
+                '$id' => 'doc1',
+                '$sequence' => 999, // Try to set a different sequence
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Alice Updated',
+            ]),
+        ]);
+
+        $doc1Updated = $database->getDocument($collectionName, 'doc1');
+        $this->assertEquals('Alice Updated', $doc1Updated->getAttribute('name'));
+        $this->assertEquals($originalSeq1, $doc1Updated->getSequence()); // Sequence unchanged
+
+        // Test: With preserveSequence=true, $sequence from document should be used
+        $database->setPreserveSequence(true);
+
+        $database->upsertDocuments($collectionName, [
+            new Document([
+                '$id' => 'doc2',
+                '$sequence' => $originalSeq2, // Keep original sequence
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Bob Updated',
+            ]),
+        ]);
+
+        $doc2Updated = $database->getDocument($collectionName, 'doc2');
+        $this->assertEquals('Bob Updated', $doc2Updated->getAttribute('name'));
+        $this->assertEquals($originalSeq2, $doc2Updated->getSequence()); // Sequence preserved
+
+        // Test: withPreserveSequence helper
+        $database->setPreserveSequence(false);
+
+        $doc1 = $database->getDocument($collectionName, 'doc1');
+        $currentSeq1 = $doc1->getSequence();
+
+        $database->withPreserveSequence(function () use ($database, $collectionName, $currentSeq1) {
+            $database->upsertDocuments($collectionName, [
+                new Document([
+                    '$id' => 'doc1',
+                    '$sequence' => $currentSeq1,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Alice Final',
+                ]),
+            ]);
+        });
+
+        $doc1Final = $database->getDocument($collectionName, 'doc1');
+        $this->assertEquals('Alice Final', $doc1Final->getAttribute('name'));
+        $this->assertEquals($currentSeq1, $doc1Final->getSequence());
+
+        // Verify flag was reset after withPreserveSequence
+        $this->assertFalse($database->getPreserveSequence());
+
+        $database->setPreserveSequence(false);
+        $database->deleteCollection($collectionName);
+    }
+
     public function testRespectNulls(): Document
     {
         /** @var Database $database */

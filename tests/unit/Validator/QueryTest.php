@@ -238,16 +238,56 @@ class QueryTest extends TestCase
     {
         $queries = [
             Query::equal('key', ['value']),
-            Query::select(['attr1', 'attr2']),
             Query::cursorBefore(new Document([])),
             Query::cursorAfter(new Document([])),
         ];
 
-        $queries = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
-        $this->assertCount(2, $queries);
-        foreach ($queries as $query) {
+        $queries_1 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
+        $this->assertCount(2, $queries_1);
+        foreach ($queries_1 as $query) {
             $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]));
         }
+
+        $cursor = reset($queries_1);
+        $cursor->setValue(new Document(['$id' => 'hello1']));
+
+        $query1 = $queries[1];
+
+        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query1->getMethod());
+        $this->assertInstanceOf(Document::class, $query1->getValue());
+        $this->assertTrue($query1->getValue()->isEmpty()); // Cursor Document is not updated
+
+        /**
+         * Using reference $queries_2 => $queries
+         */
+        $queries_2 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], false);
+        $cursor = reset($queries_2);
+        $cursor->setValue(new Document(['$id' => 'hello1']));
+
+        $query2 = $queries[1];
+
+        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query2->getMethod());
+        $this->assertInstanceOf(Document::class, $query2->getValue());
+        $this->assertEquals('hello1', $query2->getValue()->getId()); // Cursor Document is updated
+
+        /**
+         * Using getCursorQueries
+         */
+        $queries = [
+            Query::equal('key', ['value']),
+            Query::cursorBefore(new Document([])),
+            Query::cursorAfter(new Document([])),
+        ];
+
+        $queries_3 = Query::getCursorQueries($queries, false);
+        $cursor = reset($queries_3);
+        $cursor->setValue(new Document(['$id' => 'hello3']));
+
+        $query3 = $queries[1];
+
+        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query3->getMethod());
+        $this->assertInstanceOf(Document::class, $query3->getValue());
+        $this->assertEquals('hello3', $query3->getValue()->getId()); // Cursor Document is updated
     }
 
     /**

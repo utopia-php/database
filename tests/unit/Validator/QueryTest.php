@@ -243,6 +243,7 @@ class QueryTest extends TestCase
         ];
 
         $queries_1 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
+
         $this->assertCount(2, $queries_1);
         foreach ($queries_1 as $query) {
             $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]));
@@ -266,6 +267,7 @@ class QueryTest extends TestCase
 
         $query2 = $queries[1];
 
+        $this->assertCount(2, $queries_2);
         $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query2->getMethod());
         $this->assertInstanceOf(Document::class, $query2->getValue());
         $this->assertEquals('hello1', $query2->getValue()->getId()); // Cursor Document is updated
@@ -285,6 +287,7 @@ class QueryTest extends TestCase
 
         $query3 = $queries[1];
 
+        $this->assertCount(2, $queries_3);
         $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query3->getMethod());
         $this->assertInstanceOf(Document::class, $query3->getValue());
         $this->assertEquals('hello3', $query3->getValue()->getId()); // Cursor Document is updated

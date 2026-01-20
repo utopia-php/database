@@ -408,6 +408,8 @@ class Database
 
     protected bool $preserveDates = false;
 
+    protected bool $preserveSequence = false;
+
     protected int $maxQueryValues = 5000;
 
     protected bool $migrating = false;
@@ -1397,6 +1399,30 @@ class Database
             return $callback();
         } finally {
             $this->preserveDates = $previous;
+        }
+    }
+
+    public function getPreserveSequence(): bool
+    {
+        return $this->preserveSequence;
+    }
+
+    public function setPreserveSequence(bool $preserve): static
+    {
+        $this->preserveSequence = $preserve;
+
+        return $this;
+    }
+
+    public function withPreserveSequence(callable $callback): mixed
+    {
+        $previous = $this->preserveSequence;
+        $this->preserveSequence = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->preserveSequence = $previous;
         }
     }
 
@@ -6594,8 +6620,11 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
-                ->removeAttribute('$sequence');
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+            if (!$this->preserveSequence) {
+                $document->removeAttribute('$sequence');
+            }
 
             $createdAt = $document->getCreatedAt();
             if ($createdAt === null || !$this->preserveDates) {

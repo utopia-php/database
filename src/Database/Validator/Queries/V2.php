@@ -346,12 +346,12 @@ class V2 extends Validator
 
                     case Query::TYPE_SELECT:
                         if (empty($query->getAttribute())) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries attribute is empty');
+                            throw new \Exception('Invalid query: '.\ucfirst(Query::TYPE_SELECT).' queries requires one attribute');
                         }
 
                         $asValidator = new AsValidator($query->getAttribute());
                         if (! $asValidator->isValid($query->getAs())) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' '.$asValidator->getDescription());
+                            throw new \Exception('Invalid query: '.\ucfirst(Query::TYPE_SELECT).' '.$asValidator->getDescription());
                         }
 
                         if ($query->getAttribute() !== '*') {

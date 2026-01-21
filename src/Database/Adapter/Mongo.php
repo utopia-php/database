@@ -1589,7 +1589,7 @@ class Mongo extends Adapter
                 unset($record['_id']); // Don't update _id
 
                 // Get fields to unset for schemaless mode
-                $unsetFields = $this->getUnsetForSchemalessUpsert($oldDocument, $document, $record);
+                $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
 
                 if (!empty($attribute)) {
                     // Get the attribute value before removing it from $set
@@ -1647,6 +1647,43 @@ class Mongo extends Adapter
         }
 
         return \array_map(fn ($change) => $change->getNew(), $changes);
+    }
+
+    /**
+     * Get fields to unset for schemaless upsert operations
+     *
+     * @param Document $oldDocument
+     * @param Document $newDocument
+     * @param array<string, mixed> $record
+     * @return array<string, string>
+     */
+    private function getUpsertAttributeRemovals(Document $oldDocument, Document $newDocument, array $record): array
+    {
+        $unsetFields = [];
+
+        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
+            return $unsetFields;
+        }
+
+        $oldUserAttributes = $oldDocument->getAttributes();
+        $newUserAttributes = $newDocument->getAttributes();
+
+        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
+
+        foreach ($oldUserAttributes as $originalKey => $originalValue) {
+            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
+                continue;
+            }
+
+            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
+            $dbKey = array_key_first($transformed);
+
+            if ($dbKey && !array_key_exists($dbKey, $record) && !in_array($dbKey, $protectedFields)) {
+                $unsetFields[$dbKey] = '';
+            }
+        }
+
+        return $unsetFields;
     }
 
     /**
@@ -3409,42 +3446,5 @@ class Mongo extends Adapter
     public function getSupportForTrigramIndex(): bool
     {
         return false;
-    }
-
-    /**
-     * Get fields to unset for schemaless upsert operations
-     *
-     * @param Document $oldDocument
-     * @param Document $newDocument
-     * @param array<string, mixed> $record
-     * @return array<string, string>
-     */
-    private function getUnsetForSchemalessUpsert(Document $oldDocument, Document $newDocument, array $record): array
-    {
-        $unsetFields = [];
-
-        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
-            return $unsetFields;
-        }
-
-        $oldUserAttributes = $oldDocument->getAttributes();
-        $newUserAttributes = $newDocument->getAttributes();
-
-        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
-
-        foreach ($oldUserAttributes as $originalKey => $originalValue) {
-            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
-                continue;
-            }
-
-            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
-            $dbKey = array_key_first($transformed);
-
-            if ($dbKey && !array_key_exists($dbKey, $record) && !in_array($dbKey, $protectedFields)) {
-                $unsetFields[$dbKey] = '';
-            }
-        }
-
-        return $unsetFields;
     }
 }

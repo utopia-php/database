@@ -1516,7 +1516,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid query: Select queries requires one attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Select queries requires an attribute', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
 

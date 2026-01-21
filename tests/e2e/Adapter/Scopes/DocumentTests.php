@@ -1510,6 +1510,16 @@ trait DocumentTests
             $this->assertTrue($e instanceof DatabaseException);
         }
 
+        try {
+            $database->getDocument('documents', $documentId, [
+                Query::select(''),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid query: Select queries attribute is empty', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
         return $document;
     }
 

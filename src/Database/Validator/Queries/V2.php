@@ -345,6 +345,10 @@ class V2 extends Validator
                         break;
 
                     case Query::TYPE_SELECT:
+                        if (empty($query->getAttribute())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries attribute is empty');
+                        }
+
                         $asValidator = new AsValidator($query->getAttribute());
                         if (! $asValidator->isValid($query->getAs())) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' '.$asValidator->getDescription());

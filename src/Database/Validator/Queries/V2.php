@@ -346,7 +346,7 @@ class V2 extends Validator
 
                     case Query::TYPE_SELECT:
                         if (empty($query->getAttribute())) {
-                            throw new \Exception('Invalid query: '.\ucfirst(Query::TYPE_SELECT).' queries requires one attribute');
+                            throw new \Exception('Invalid query: '.\ucfirst(Query::TYPE_SELECT).' queries requires an attribute');
                         }
 
                         $asValidator = new AsValidator($query->getAttribute());

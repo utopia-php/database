@@ -2880,7 +2880,7 @@ class Database
                     $this->adapter->getSupportForIndex(),
                     $this->adapter->getSupportForUniqueIndex(),
                     $this->adapter->getSupportForFulltextIndex(),
-                        $this->adapter->getSupportForTTLIndexes()
+                    $this->adapter->getSupportForTTLIndexes()
                 );
 
                 foreach ($indexes as $index) {

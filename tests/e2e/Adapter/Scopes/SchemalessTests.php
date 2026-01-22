@@ -2476,6 +2476,100 @@ trait SchemalessTests
         $database->deleteCollection($col);
     }
 
+    public function testSchemalessTTLWithCacheExpiry(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl_cache_expiry');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create TTL index with 10 seconds expiry (also used as cache TTL)
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expiresAt',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                10
+            )
+        );
+
+        $now = new \DateTime();
+        $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired from TTL perspective
+
+        $expiredDoc = $database->createDocument($col, new Document([
+            '$id' => 'expired_doc',
+            '$permissions' => $permissions,
+            'expiresAt' => $expiredTime->format(\DateTime::ATOM),
+            'data' => 'This should expire',
+        ]));
+
+        $permanentDoc = $database->createDocument($col, new Document([
+            '$id' => 'permanent_doc',
+            '$permissions' => $permissions,
+            'data' => 'This should never expire',
+        ]));
+
+        $this->assertEquals('expired_doc', $expiredDoc->getId());
+        $this->assertEquals('permanent_doc', $permanentDoc->getId());
+
+        // Warm cache for both documents
+        $expiredFetched = $database->getDocument($col, 'expired_doc');
+        $this->assertFalse($expiredFetched->isEmpty());
+        $permanentFetched = $database->getDocument($col, 'permanent_doc');
+        $this->assertFalse($permanentFetched->isEmpty());
+
+        // Wait for TTL to expire with retry loop, always fetching via getDocument (uses cache)
+        $maxRetries = 15; // 15 * 5s = 75 seconds max
+        $retryDelay = 5;
+        $expiredDocDeleted = false;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+
+            // Fetch collection to trigger TTL cleanup check in MongoDB
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+
+            // Fetch through getDocument, which goes through the cache layer
+            $expired = $database->getDocument($col, 'expired_doc');
+            if ($expired->isEmpty()) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+
+        // Expired document should eventually disappear when fetched through cache-aware getDocument
+        $this->assertTrue($expiredDocDeleted, 'Expired document should have been deleted after TTL expiry when fetched via getDocument');
+
+        // Permanent document should still be accessible
+        $permanent = $database->getDocument($col, 'permanent_doc');
+        $this->assertFalse($permanent->isEmpty());
+        $this->assertEquals('This should never expire', $permanent->getAttribute('data'));
+
+        $database->deleteCollection($col);
+    }
+
     public function testStringAndDatetime(): void
     {
         /** @var Database $database */

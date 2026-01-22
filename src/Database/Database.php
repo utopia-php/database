@@ -3858,6 +3858,35 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
+            if ($this->adapter->getSupportForTTLIndexes()) {
+                /** @var array<Document> $collectionIndexes */
+                $collectionIndexes = $collection->getAttribute('indexes', []);
+                foreach ($collectionIndexes as $index) {
+                    if ($index->getAttribute('type') === self::INDEX_TTL) {
+                        $ttlSeconds = (int) $index->getAttribute('ttl', 0);
+                        $ttlAttribute = $index->getAttribute('attributes')[0];
+                        $ttlAttributeValue = $document->getAttribute($ttlAttribute);
+
+                        // Only check TTL if the attribute exists and is a string
+                        if ($ttlAttributeValue !== null && is_string($ttlAttributeValue)) {
+                            try {
+                                $ttlDateTime = new \DateTime($ttlAttributeValue);
+                                $expirationTime = (clone $ttlDateTime)->modify("+{$ttlSeconds} seconds");
+                                $now = new \DateTime();
+
+                                // If document has expired, return empty document
+                                if ($now > $expirationTime) {
+                                    return $this->createDocumentInstance($collection->getId(), []);
+                                }
+                            } catch (\Exception $e) {
+                                // Invalid datetime, continue with normal flow (document doesn't have valid TTL attribute)
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             return $document;
         }
 

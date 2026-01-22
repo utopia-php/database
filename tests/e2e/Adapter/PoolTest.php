@@ -14,6 +14,7 @@ use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\PDO;
+use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class PoolTest extends Base
@@ -32,7 +33,7 @@ class PoolTest extends Base
      * @throws Duplicate
      * @throws Limit
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -43,7 +44,7 @@ class PoolTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $pool = new UtopiaPool('mysql', 10, function () {
+        $pool = new UtopiaPool(new Stack(), 'mysql', 10, function () {
             $dbHost = 'mysql';
             $dbPort = '3307';
             $dbUser = 'root';
@@ -60,6 +61,7 @@ class PoolTest extends Base
         $database = new Database(new Pool($pool), $cache);
 
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
@@ -74,9 +76,9 @@ class PoolTest extends Base
         return self::$database = $database;
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
@@ -91,9 +93,9 @@ class PoolTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {

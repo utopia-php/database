@@ -301,7 +301,15 @@ class Index extends Validator
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
-                if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
+                $attributeType = $attribute->getAttribute('type', '');
+                $validFulltextTypes = [
+                    Database::VAR_STRING,
+                    Database::VAR_VARCHAR,
+                    Database::VAR_TEXT,
+                    Database::VAR_MEDIUMTEXT,
+                    Database::VAR_LONGTEXT
+                ];
+                if (!in_array($attributeType, $validFulltextTypes)) {
                     $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a fulltext index, must be of type string';
                     return false;
                 }
@@ -355,7 +363,13 @@ class Index extends Validator
                     $this->message = 'Indexing an array attribute is not supported';
                     return false;
                 }
-            } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+            } elseif (!in_array($attribute->getAttribute('type'), [
+                Database::VAR_STRING,
+                Database::VAR_VARCHAR,
+                Database::VAR_TEXT,
+                Database::VAR_MEDIUMTEXT,
+                Database::VAR_LONGTEXT
+            ]) && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "' . $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
@@ -389,6 +403,10 @@ class Index extends Validator
 
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:
+                case Database::VAR_VARCHAR:
+                case Database::VAR_TEXT:
+                case Database::VAR_MEDIUMTEXT:
+                case Database::VAR_LONGTEXT:
                     $attributeSize = $attribute->getAttribute('size', 0);
                     $indexLength = !empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $attributeSize;
                     break;
@@ -587,9 +605,17 @@ class Index extends Validator
 
         $attributes = $index->getAttribute('attributes', []);
 
+        $validStringTypes = [
+            Database::VAR_STRING,
+            Database::VAR_VARCHAR,
+            Database::VAR_TEXT,
+            Database::VAR_MEDIUMTEXT,
+            Database::VAR_LONGTEXT
+        ];
+
         foreach ($attributes as $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
-            if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
+            if (!in_array($attribute->getAttribute('type', ''), $validStringTypes)) {
                 $this->message = 'Trigram index can only be created on string type attributes';
                 return false;
             }

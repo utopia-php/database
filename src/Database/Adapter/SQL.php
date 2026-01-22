@@ -17,7 +17,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
@@ -1145,6 +1144,19 @@ abstract class SQL extends Adapter
 
                     break;
 
+                case Database::VAR_VARCHAR:
+                    $total += match (true) {
+                        $attribute['size'] > 255 => $attribute['size'] * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attribute['size'] * 4 + 1, //  VARCHAR(<=255) + 1 length
+                    };
+                    break;
+
+                case Database::VAR_TEXT:
+                case Database::VAR_MEDIUMTEXT:
+                case Database::VAR_LONGTEXT:
+                    $total += 20; // Pointer storage for TEXT types
+                    break;
+
                 case Database::VAR_INTEGER:
                     if ($attribute['size'] >= 8) {
                         $total += 8; //  BIGINT 8 bytes
@@ -1498,7 +1510,7 @@ abstract class SQL extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForNumericCasting(): bool
@@ -2977,10 +2989,9 @@ abstract class SQL extends Adapter
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3077,7 +3088,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
@@ -3194,10 +3205,9 @@ abstract class SQL extends Adapter
      */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        $attributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $binds = [];
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3210,13 +3220,9 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        // Extract vector queries (used for ORDER BY) and keep non-vector for WHERE
-        $vectorQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
                 $otherQueries[] = $query;
             }
         }
@@ -3226,7 +3232,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -3239,22 +3245,11 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        // Add vector distance calculations to ORDER BY (similarity-aware LIMIT)
-        $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
-            }
-        }
-        $sqlOrder = !empty($vectorOrders) ? 'ORDER BY ' . implode(', ', $vectorOrders) : '';
-
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
                 {$sqlWhere}
-                {$sqlOrder}
                 {$limit}
 			) table_count
         ";
@@ -3291,11 +3286,10 @@ abstract class SQL extends Adapter
      */
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
-        $collectionAttributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -3308,13 +3302,9 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        // Extract vector queries (used for ORDER BY) and keep non-vector for WHERE
-        $vectorQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
+            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
                 $otherQueries[] = $query;
             }
         }
@@ -3324,7 +3314,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -3337,22 +3327,11 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        // Add vector distance calculations to ORDER BY (similarity-aware LIMIT)
-        $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
-            }
-        }
-        $sqlOrder = !empty($vectorOrders) ? 'ORDER BY ' . implode(', ', $vectorOrders) : '';
-
         $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
-				{$sqlOrder}
 				{$limit}
 			) table_count
         ";

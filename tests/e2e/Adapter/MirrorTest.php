@@ -33,7 +33,7 @@ class MirrorTest extends Base
      * @throws \RedisException
      * @throws Exception
      */
-    protected static function getDatabase(bool $fresh = false): Mirror
+    protected function getDatabase(bool $fresh = false): Mirror
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -84,15 +84,18 @@ class MirrorTest extends Base
          */
         foreach ($schemas as $schema) {
             if ($database->getSource()->exists($schema)) {
+                $database->getSource()->setAuthorization(self::$authorization);
                 $database->getSource()->setDatabase($schema)->delete();
             }
             if ($database->getDestination()->exists($schema)) {
+                $database->getDestination()->setAuthorization(self::$authorization);
                 $database->getDestination()->setDatabase($schema)->delete();
             }
         }
 
         $database
             ->setDatabase('utopiaTests')
+            ->setAuthorization(self::$authorization)
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         $database->create();
@@ -106,7 +109,7 @@ class MirrorTest extends Base
      */
     public function testGetMirrorSource(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
         $source = $database->getSource();
         $this->assertInstanceOf(Database::class, $source);
         $this->assertEquals(self::$source, $source);
@@ -118,7 +121,7 @@ class MirrorTest extends Base
      */
     public function testGetMirrorDestination(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
         $destination = $database->getDestination();
         $this->assertInstanceOf(Database::class, $destination);
         $this->assertEquals(self::$destination, $destination);
@@ -132,7 +135,7 @@ class MirrorTest extends Base
      */
     public function testCreateMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredCollection');
 
@@ -150,7 +153,7 @@ class MirrorTest extends Base
      */
     public function testUpdateMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredCollection', permissions: [
             Permission::read(Role::any()),
@@ -180,7 +183,7 @@ class MirrorTest extends Base
 
     public function testDeleteMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredCollection');
 
@@ -201,7 +204,7 @@ class MirrorTest extends Base
      */
     public function testCreateMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredDocument', attributes: [
             new Document([
@@ -243,7 +246,7 @@ class MirrorTest extends Base
      */
     public function testUpdateMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredDocument', attributes: [
             new Document([
@@ -283,7 +286,7 @@ class MirrorTest extends Base
 
     public function testDeleteMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredDocument', attributes: [
             new Document([
@@ -310,7 +313,7 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
@@ -325,7 +328,7 @@ class MirrorTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";

@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
@@ -17,35 +18,10 @@ class Pool extends Adapter
 
     /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
-     * @throws DatabaseException
      */
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
-
-        $this->pool->use(function (mixed $resource) {
-            if (!($resource instanceof Adapter)) {
-                throw new DatabaseException('Pool must contain instances of ' . Adapter::class);
-            }
-
-            // Run setters in case the pooled adapter has its own config
-            $this->setDatabase($resource->getDatabase());
-            $this->setNamespace($resource->getNamespace());
-            $this->setSharedTables($resource->getSharedTables());
-            $this->setTenant($resource->getTenant());
-
-            if ($resource->getTimeout() > 0) {
-                $this->setTimeout($resource->getTimeout());
-            }
-            $this->resetDebug();
-            foreach ($resource->getDebug() as $key => $value) {
-                $this->setDebug($key, $value);
-            }
-            $this->resetMetadata();
-            foreach ($resource->getMetadata() as $key => $value) {
-                $this->setMetadata($key, $value);
-            }
-        });
     }
 
     /**
@@ -66,6 +42,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -306,6 +283,11 @@ class Pool extends Adapter
     }
 
     public function getMaxIndexLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getMaxVarcharLength(): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -645,7 +627,18 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
+    }
+
     public function getSupportForAlterLocks(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

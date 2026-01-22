@@ -1888,6 +1888,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
     /**
      * Is PCRE regex supported?
      * SQLite does not have native REGEXP support - it requires compile-time option or user-defined function

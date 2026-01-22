@@ -1578,6 +1578,7 @@ class Mongo extends Adapter
             $operations = [];
             foreach ($changes as $change) {
                 $document = $change->getNew();
+                $oldDocument = $change->getOld();
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document['$createdAt'];
@@ -1603,6 +1604,9 @@ class Mongo extends Adapter
 
                 unset($record['_id']); // Don't update _id
 
+                // Get fields to unset for schemaless mode
+                $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
+
                 if (!empty($attribute)) {
                     // Get the attribute value before removing it from $set
                     $attributeValue = $record[$attribute] ?? 0;
@@ -1611,16 +1615,27 @@ class Mongo extends Adapter
                     // it is requierd to mimic the behaver of SQL on duplicate key update
                     unset($record[$attribute]);
 
+                    // Also remove from unset if it was there
+                    unset($unsetFields[$attribute]);
+
                     // Increment the specific attribute and update all other fields
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
                         '$set' => $record
                     ];
+
+                    if (!empty($unsetFields)) {
+                        $update['$unset'] = $unsetFields;
+                    }
                 } else {
                     // Update all fields
                     $update = [
                         '$set' => $record
                     ];
+
+                    if (!empty($unsetFields)) {
+                        $update['$unset'] = $unsetFields;
+                    }
 
                     // Add UUID7 _id for new documents in upsert operations
                     if (empty($document->getSequence())) {
@@ -1648,6 +1663,43 @@ class Mongo extends Adapter
         }
 
         return \array_map(fn ($change) => $change->getNew(), $changes);
+    }
+
+    /**
+     * Get fields to unset for schemaless upsert operations
+     *
+     * @param Document $oldDocument
+     * @param Document $newDocument
+     * @param array<string, mixed> $record
+     * @return array<string, string>
+     */
+    private function getUpsertAttributeRemovals(Document $oldDocument, Document $newDocument, array $record): array
+    {
+        $unsetFields = [];
+
+        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
+            return $unsetFields;
+        }
+
+        $oldUserAttributes = $oldDocument->getAttributes();
+        $newUserAttributes = $newDocument->getAttributes();
+
+        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
+
+        foreach ($oldUserAttributes as $originalKey => $originalValue) {
+            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
+                continue;
+            }
+
+            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
+            $dbKey = array_key_first($transformed);
+
+            if ($dbKey && !array_key_exists($dbKey, $record) && !in_array($dbKey, $protectedFields)) {
+                $unsetFields[$dbKey] = '';
+            }
+        }
+
+        return $unsetFields;
     }
 
     /**
@@ -1921,8 +1973,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) {
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) {
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
@@ -2083,6 +2135,10 @@ class Mongo extends Adapter
     {
         return match ($appwriteType) {
             Database::VAR_STRING => 'string',
+            Database::VAR_VARCHAR => 'string',
+            Database::VAR_TEXT => 'string',
+            Database::VAR_MEDIUMTEXT => 'string',
+            Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
@@ -2167,8 +2223,8 @@ class Mongo extends Adapter
         }
 
         // Add permissions filter if authorization is enabled
-        if (Authorization::$status) {
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) {
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
@@ -2257,8 +2313,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
@@ -2730,6 +2786,17 @@ class Mongo extends Adapter
     }
 
     /**
+     * Get max VARCHAR limit
+     * MongoDB doesn't distinguish between string types, so using same as string limit
+     *
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 2147483647;
+    }
+
+    /**
      * Get max INT limit
      *
      * @return int
@@ -3077,7 +3144,7 @@ class Mongo extends Adapter
      */
     public function getSupportForCasting(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -3422,6 +3489,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }

@@ -8,6 +8,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotSupported as NotSupportedException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -1518,5 +1519,33 @@ abstract class Adapter
     public function getSupportForRegex(): bool
     {
         return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
+    }
+
+    /**
+     * Get the adapter name for error messages
+     *
+     * @return string
+     */
+    abstract public function getAdapterName(): string;
+
+    /**
+     * Check if the adapter supports a specific capability
+     *
+     * @param Capability $capability
+     * @return bool
+     */
+    abstract public function supports(Capability $capability): bool;
+
+    /**
+     * Require that a capability is supported, throwing an exception if not
+     *
+     * @param Capability $capability
+     * @throws NotSupportedException
+     */
+    public function requireSupport(Capability $capability): void
+    {
+        if (!$this->supports($capability)) {
+            throw new NotSupportedException($capability->value, $this->getAdapterName());
+        }
     }
 }

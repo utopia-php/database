@@ -1494,6 +1494,17 @@ class Database
     }
 
     /**
+     * Check if the adapter supports a specific capability
+     *
+     * @param Capability $capability
+     * @return bool
+     */
+    public function supports(Capability $capability): bool
+    {
+        return $this->adapter->supports($capability);
+    }
+
+    /**
      * Run a callback inside a transaction.
      *
      * @template T

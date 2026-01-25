@@ -824,19 +824,37 @@ class Query
      *
      * @param array<Query> $queries
      * @param array<string> $types
+     * @param bool $clone
      * @return array<Query>
      */
-    public static function getByType(array $queries, array $types): array
+    public static function getByType(array $queries, array $types, bool $clone = true): array
     {
         $filtered = [];
 
         foreach ($queries as $query) {
             if (\in_array($query->getMethod(), $types, true)) {
-                $filtered[] = clone $query;
+                $filtered[] = $clone ? clone $query : $query;
             }
         }
 
         return $filtered;
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param bool $clone
+     * @return array<Query>
+     */
+    public static function getCursorQueries(array $queries, bool $clone = true): array
+    {
+        return self::getByType(
+            $queries,
+            [
+                Query::TYPE_CURSOR_AFTER,
+                Query::TYPE_CURSOR_BEFORE,
+            ],
+            $clone
+        );
     }
 
     /**

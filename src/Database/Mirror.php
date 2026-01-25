@@ -139,6 +139,15 @@ class Mirror extends Database
         return $this;
     }
 
+    public function setPreserveSequence(bool $preserve): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        $this->preserveSequence = $preserve;
+
+        return $this;
+    }
+
     public function enableValidation(): static
     {
         $this->delegate(__FUNCTION__);

@@ -4903,7 +4903,7 @@ class Database
         // Always preserve internal attributes (use hashmap for O(1) lookup)
         $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
         foreach ($internalKeys as $key) {
-            $attributesToKeep[$key] = true;
+            //$attributesToKeep[$key] = true;
         }
 
         foreach ($documents as $doc) {

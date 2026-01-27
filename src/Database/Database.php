@@ -4910,7 +4910,11 @@ class Database
             $allKeys = \array_keys($doc->getArrayCopy());
             foreach ($allKeys as $attrKey) {
                 // Keep if: explicitly selected OR is internal attribute ($ prefix)
-                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
+//                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
+//                    $doc->removeAttribute($attrKey);
+//                }
+
+                if (!isset($attributesToKeep[$attrKey])) {
                     $doc->removeAttribute($attrKey);
                 }
             }

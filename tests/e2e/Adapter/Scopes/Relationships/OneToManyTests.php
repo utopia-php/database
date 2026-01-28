@@ -117,7 +117,7 @@ trait OneToManyTests
         ]));
 
         $documents = $database->find('artist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayNotHasKey('albums', $documents[0]);
@@ -148,7 +148,8 @@ trait OneToManyTests
 
         // Select related document attributes
         $artist = $database->findOne('artist', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         if ($artist->isEmpty()) {
@@ -159,7 +160,8 @@ trait OneToManyTests
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
         $artist = $database->getDocument('artist', 'artist1', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
@@ -584,7 +586,8 @@ trait OneToManyTests
 
         // Select related document attributes
         $customer = $database->findOne('customer', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         if ($customer->isEmpty()) {
@@ -595,7 +598,8 @@ trait OneToManyTests
         $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
         $customer = $database->getDocument('customer', 'customer1', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
@@ -918,21 +922,23 @@ trait OneToManyTests
         $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
 
         $documents = $database->find('countries', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = $database->find('countries', [
-            Query::select(['*']),
+            Query::select('*'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = $database->find('countries', [
-            Query::select(['*', 'cities.*', 'cities.mayor.*']),
+            Query::select('*'),
+            Query::select('cities.*'),
+            Query::select('cities.mayor.*'),
             Query::limit(1)
         ]);
 

@@ -4900,20 +4900,11 @@ class Database
             return;
         }
 
-        // Always preserve internal attributes (use hashmap for O(1) lookup)
-        $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
-        foreach ($internalKeys as $key) {
-            //$attributesToKeep[$key] = true;
-        }
+        $attributesToKeep['$id'] = true; // Always return $id to be consistent with other relationship
 
         foreach ($documents as $doc) {
             $allKeys = \array_keys($doc->getArrayCopy());
             foreach ($allKeys as $attrKey) {
-                // Keep if: explicitly selected OR is internal attribute ($ prefix)
-//                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
-//                    $doc->removeAttribute($attrKey);
-//                }
-
                 if (!isset($attributesToKeep[$attrKey])) {
                     $doc->removeAttribute($attrKey);
                 }

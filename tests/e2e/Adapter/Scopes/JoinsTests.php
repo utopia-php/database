@@ -32,26 +32,26 @@ trait JoinsTests
     public function testJoin(): void
     {
         /** @var Database $database */
-        $db = $this->getDatabase();
+        $database = $this->getDatabase();
 
-        if (!$db->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         //Authorization::setRole('user:bob');
 
-        $db->createCollection('__users');
-        $db->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
-        $db->createAttribute('__users', 'bank_internal_id', Database::VAR_INTEGER, 8, false);
+        $database->createCollection('__users');
+        $database->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
+        $database->createAttribute('__users', 'bank_internal_id', Database::VAR_INTEGER, 8, false);
 
-        $db->createCollection('__sessions');
-        $db->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
-        $db->createAttribute('__sessions', 'user_internal_id', Database::VAR_ID, 8, false);
-        $db->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
-        $db->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
+        $database->createCollection('__sessions');
+        $database->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+        $database->createAttribute('__sessions', 'user_internal_id', Database::VAR_ID, 8, false);
+        $database->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
+        $database->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
 
-        $db->createCollection(
+        $database->createCollection(
             '__banks',
             permissions: [
                 Permission::read(Role::any()),
@@ -59,13 +59,13 @@ trait JoinsTests
             ],
             documentSecurity: false
         );
-        $db->createAttribute('__banks', 'name', Database::VAR_STRING, 100, false);
+        $database->createAttribute('__banks', 'name', Database::VAR_STRING, 100, false);
 
-        $bank1 = $db->createDocument('__banks', new Document([
+        $bank1 = $database->createDocument('__banks', new Document([
             'name' => 'Chase'
         ]));
 
-        $user1 = $db->createDocument('__users', new Document([
+        $user1 = $database->createDocument('__users', new Document([
             'username' => 'Donald',
             'bank_internal_id' => (int)$bank1->getSequence(),
             '$permissions' => [
@@ -74,7 +74,7 @@ trait JoinsTests
             ],
         ]));
 
-        $sessionNoPermissions = $db->createDocument('__sessions', new Document([
+        $sessionNoPermissions = $database->createDocument('__sessions', new Document([
             'user_id' => $user1->getId(),
             'user_internal_id' => $user1->getSequence(),
             '$permissions' => [],
@@ -84,7 +84,7 @@ trait JoinsTests
          * Test $session1 does not have read permissions
          * Test right attribute is internal attribute
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -98,7 +98,7 @@ trait JoinsTests
         );
         $this->assertCount(0, $documents);
 
-        $session2 = $db->createDocument('__sessions', new Document([
+        $session2 = $database->createDocument('__sessions', new Document([
             'user_id' => $user1->getId(),
             'user_internal_id' => $user1->getSequence(),
             '$permissions' => [
@@ -108,7 +108,7 @@ trait JoinsTests
             'float' => 10.5,
         ]));
 
-        $user2 = $db->createDocument('__users', new Document([
+        $user2 = $database->createDocument('__users', new Document([
             'username' => 'Abraham',
 
             '$permissions' => [
@@ -117,7 +117,7 @@ trait JoinsTests
             ],
         ]));
 
-        $session3 = $db->createDocument('__sessions', new Document([
+        $session3 = $database->createDocument('__sessions', new Document([
             'user_id' => $user2->getId(),
             'user_internal_id' => $user2->getSequence(),
             '$permissions' => [
@@ -131,7 +131,7 @@ trait JoinsTests
          * Test $session2 has read permissions
          * Test right attribute is internal attribute
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -145,7 +145,7 @@ trait JoinsTests
         );
         $this->assertCount(2, $documents);
 
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -164,7 +164,7 @@ trait JoinsTests
          * Test alias does not exist
          */
         try {
-            $db->find(
+            $database->find(
                 '__sessions',
                 [
                     Query::equal('user_id', ['bob'], 'alias_not_found')
@@ -180,7 +180,7 @@ trait JoinsTests
          * Test Ambiguous alias
          */
         try {
-            $db->find('__users', [
+            $database->find('__users', [
                 Query::join('__sessions', Query::DEFAULT_ALIAS)
             ]);
             $this->fail('Failed to throw exception');
@@ -193,7 +193,7 @@ trait JoinsTests
          * Test relation query exist, but not on the join alias
          */
         try {
-            $db->find(
+            $database->find(
                 '__users',
                 [
                     Query::join(
@@ -215,7 +215,7 @@ trait JoinsTests
          * Test if relation query exists in the join queries list
          */
         try {
-            $db->find(
+            $database->find(
                 '__users',
                 [
                     Query::join('__sessions', 'B', []),
@@ -231,7 +231,7 @@ trait JoinsTests
          * Test allow only filter queries in joins ON clause
          */
         try {
-            $db->find(
+            $database->find(
                 '__users',
                 [
                     Query::join('__sessions', 'B', [
@@ -249,7 +249,7 @@ trait JoinsTests
          * Test Relations are valid within joins
          */
         try {
-            $db->find(
+            $database->find(
                 '__users',
                 [
                     Query::relationEqual('', '$id', '', '$sequence'),
@@ -266,7 +266,7 @@ trait JoinsTests
          */
         try {
             $alias = 'drop schema;';
-            $db->find(
+            $database->find(
                 '__users',
                 [
                     Query::join(
@@ -287,7 +287,7 @@ trait JoinsTests
         /**
          * Test join same collection
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -311,7 +311,7 @@ trait JoinsTests
         /**
          * Test order by related collection
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -327,7 +327,7 @@ trait JoinsTests
         $this->assertEquals('Donald', $documents[0]['username']);
         $this->assertEquals('Abraham', $documents[1]['username']);
 
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::join(
@@ -346,7 +346,7 @@ trait JoinsTests
         /**
          * Select queries
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::select('*', 'main'),
@@ -379,7 +379,7 @@ trait JoinsTests
          * Test invalid as
          */
         try {
-            $db->find('__users', [
+            $database->find('__users', [
                 Query::select('$id', as: 'truncate schema;'),
             ]);
             $this->fail('Failed to throw exception');
@@ -389,7 +389,7 @@ trait JoinsTests
         }
 
         try {
-            $db->find('__users', [
+            $database->find('__users', [
                 Query::select('*', as: 'as'),
             ]);
             $this->fail('Failed to throw exception');
@@ -401,7 +401,7 @@ trait JoinsTests
         /**
          * Simple `as` query getDocument
          */
-        $document = $db->getDocument(
+        $document = $database->getDocument(
             '__sessions',
             $session2->getId(),
             [
@@ -437,7 +437,7 @@ trait JoinsTests
         /**
          * Simple `as` query getDocument
          */
-        $document = $db->getDocument(
+        $document = $database->getDocument(
             '__sessions',
             $session2->getId(),
             [
@@ -452,7 +452,7 @@ trait JoinsTests
         /**
          * Simple `as` query find
          */
-        $document = $db->findOne(
+        $document = $database->findOne(
             '__sessions',
             [
                 Query::select('$id', as: '___uid'),
@@ -484,7 +484,7 @@ trait JoinsTests
         /**
          * Select queries
          */
-        $document = $db->findOne(
+        $document = $database->findOne(
             '__users',
             [
                 Query::select('username', '', as: 'as_username'),
@@ -513,7 +513,7 @@ trait JoinsTests
         //         * ambiguous and duplications selects
         //         */
         //        try {
-        //            $db->find(
+        //            $database->find(
         //                '__users',
         //                [
         //                    Query::select('$id', 'main'),
@@ -533,7 +533,7 @@ trait JoinsTests
 
         //
         //        try {
-        //            $db->find(
+        //            $database->find(
         //                '__users',
         //                [
         //                    Query::select('*', 'main'),
@@ -552,7 +552,7 @@ trait JoinsTests
         //        }
         //
         //        try {
-        //            $db->find('__users',
+        //            $database->find('__users',
         //                [
         //                    Query::select('$id'),
         //                    Query::select('$id'),
@@ -568,7 +568,7 @@ trait JoinsTests
         //         * This should fail? since 2 _uid attributes will be returned?
         //         */
         //        try {
-        //            $db->find(
+        //            $database->find(
         //                '__users',
         //                [
         //                    Query::select('*', 'main'),
@@ -590,14 +590,14 @@ trait JoinsTests
     public function testLeftJoin(): void
     {
         /** @var Database $database */
-        $db = $this->getDatabase();
+        $database = $this->getDatabase();
 
-        if (!$db->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::select('username'),
@@ -622,8 +622,8 @@ trait JoinsTests
         /**
          * Left join skip permissions
          */
-        $documents = $db->getAuthorization()->skip(function () use ($db) {
-            return $db->find(
+        $documents = $database->getAuthorization()->skip(function () use ($database) {
+            return $database->find(
                 '__users',
                 [
                     Query::select('username'),
@@ -651,7 +651,7 @@ trait JoinsTests
         /**
          * Left join with additional query in ON clause
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__users',
             [
                 Query::select('username'),
@@ -678,14 +678,14 @@ trait JoinsTests
     public function testRightJoin(): void
     {
         /** @var Database $database */
-        $db = $this->getDatabase();
+        $database = $this->getDatabase();
 
-        if (!$db->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $documents = $db->find(
+        $documents = $database->find(
             '__sessions',
             [
                 Query::select('float'),
@@ -710,8 +710,8 @@ trait JoinsTests
         /**
          * Right join skip permissions
          */
-        $documents = $db->getAuthorization()->skip(function () use ($db) {
-            return $db->find(
+        $documents = $database->getAuthorization()->skip(function () use ($database) {
+            return $database->find(
                 '__sessions',
                 [
                     Query::select('float'),
@@ -738,7 +738,7 @@ trait JoinsTests
         /**
          * Right join with additional query in ON clause
          */
-        $documents = $db->find(
+        $documents = $database->find(
             '__sessions',
             [
                 Query::select('float'),
@@ -765,13 +765,13 @@ trait JoinsTests
     public function testJoinsScopeOrder(): void
     {
         /** @var Database $database */
-        $db = $this->getDatabase();
+        $database = $this->getDatabase();
 
-        if (!$db->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        $documents = $db->find(
+        $documents = $database->find(
             '__sessions',
             [
                 Query::select('username', 'B'),
@@ -797,7 +797,7 @@ trait JoinsTests
         $this->assertEquals('Chase', $documents[0]->getAttribute('bank'));
 
         try {
-            $db->find(
+            $database->find(
                 '__sessions',
                 [
                     Query::join(
@@ -819,9 +819,9 @@ trait JoinsTests
     public function testJoinsSum(): void
     {
         /** @var Database $database */
-        $db = $this->getDatabase();
+        $database = $this->getDatabase();
 
-        if (!$db->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -836,10 +836,10 @@ trait JoinsTests
             )
         ];
 
-        $documents = $db->find('__sessions', $queries);
+        $documents = $database->find('__sessions', $queries);
         $this->assertEquals(2, count($documents));
 
-        $count = $db->count('__sessions', $queries);
+        $count = $database->count('__sessions', $queries);
         $this->assertEquals(2, $count);
     }
 }

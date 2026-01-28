@@ -6,6 +6,7 @@ use Exception;
 use PDOException;
 use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -3573,5 +3574,63 @@ abstract class SQL extends Adapter
         }
 
         return '';
+    }
+
+    public function getAdapterName(): string
+    {
+        return 'SQL';
+    }
+
+    public function supports(Capability $capability): bool
+    {
+        return match ($capability) {
+            Capability::Schemas => $this->getSupportForSchemas(),
+            Capability::Attributes => $this->getSupportForAttributes(),
+            Capability::SchemaAttributes => $this->getSupportForSchemaAttributes(),
+            Capability::Index => $this->getSupportForIndex(),
+            Capability::IndexArray => $this->getSupportForIndexArray(),
+            Capability::CastIndexArray => $this->getSupportForCastIndexArray(),
+            Capability::UniqueIndex => $this->getSupportForUniqueIndex(),
+            Capability::FulltextIndex => $this->getSupportForFulltextIndex(),
+            Capability::FulltextWildcardIndex => $this->getSupportForFulltextWildcardIndex(),
+            Capability::MultipleFulltextIndexes => $this->getSupportForMultipleFulltextIndexes(),
+            Capability::TrigramIndex => $this->getSupportForTrigramIndex(),
+            Capability::IdenticalIndexes => $this->getSupportForIdenticalIndexes(),
+            Capability::Casting => $this->getSupportForCasting(),
+            Capability::NumericCasting => $this->getSupportForNumericCasting(),
+            Capability::InternalCasting => $this->getSupportForInternalCasting(),
+            Capability::UTCCasting => $this->getSupportForUTCCasting(),
+            Capability::QueryContains => $this->getSupportForQueryContains(),
+            Capability::JSONOverlaps => $this->getSupportForJSONOverlaps(),
+            Capability::Timeouts => $this->getSupportForTimeouts(),
+            Capability::Relationships => $this->getSupportForRelationships(),
+            Capability::UpdateLock => $this->getSupportForUpdateLock(),
+            Capability::BatchOperations => $this->getSupportForBatchOperations(),
+            Capability::AttributeResizing => $this->getSupportForAttributeResizing(),
+            Capability::GetConnectionId => $this->getSupportForGetConnectionId(),
+            Capability::Upserts => $this->getSupportForUpserts(),
+            Capability::Vectors => $this->getSupportForVectors(),
+            Capability::CacheSkipOnFailure => $this->getSupportForCacheSkipOnFailure(),
+            Capability::Reconnection => $this->getSupportForReconnection(),
+            Capability::Hostname => $this->getSupportForHostname(),
+            Capability::BatchCreateAttributes => $this->getSupportForBatchCreateAttributes(),
+            Capability::SpatialAttributes => $this->getSupportForSpatialAttributes(),
+            Capability::SpatialIndexNull => $this->getSupportForSpatialIndexNull(),
+            Capability::SpatialIndexOrder => $this->getSupportForSpatialIndexOrder(),
+            Capability::SpatialAxisOrder => $this->getSupportForSpatialAxisOrder(),
+            Capability::OptionalSpatialAttributeWithExistingRows => $this->getSupportForOptionalSpatialAttributeWithExistingRows(),
+            Capability::BoundaryInclusiveContains => $this->getSupportForBoundaryInclusiveContains(),
+            Capability::DistanceBetweenMultiDimensionGeometryInMeters => $this->getSupportForDistanceBetweenMultiDimensionGeometryInMeters(),
+            Capability::Object => $this->getSupportForObject(),
+            Capability::ObjectIndexes => $this->getSupportForObjectIndexes(),
+            Capability::Operators => $this->getSupportForOperators(),
+            Capability::OrderRandom => $this->getSupportForOrderRandom(),
+            Capability::AlterLocks => $this->getSupportForAlterLocks(),
+            Capability::NonUtfCharacters => $this->getSupportNonUtfCharacters(),
+            Capability::IntegerBooleans => $this->getSupportForIntegerBooleans(),
+            Capability::PCRERegex => $this->getSupportForPCRERegex(),
+            Capability::POSIXRegex => $this->getSupportForPOSIXRegex(),
+            Capability::Regex => $this->getSupportForRegex(),
+        };
     }
 }

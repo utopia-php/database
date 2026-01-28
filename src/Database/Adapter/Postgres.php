@@ -2842,4 +2842,9 @@ class Postgres extends SQL
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }
+
+    public function getAdapterName(): string
+    {
+        return 'PostgreSQL';
+    }
 }

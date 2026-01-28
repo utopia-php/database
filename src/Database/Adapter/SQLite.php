@@ -1913,4 +1913,9 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    public function getAdapterName(): string
+    {
+        return 'SQLite';
+    }
 }

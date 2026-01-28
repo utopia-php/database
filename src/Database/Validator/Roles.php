@@ -237,8 +237,11 @@ class Roles extends Validator
         string $identifier,
         string $dimension
     ): bool {
-        $key = new Key();
-        $label = new Label();
+        $identifierValidator = match ($role) {
+            self::ROLE_LABEL => new Label(),
+            default => new Key(),
+        };
+        $dimensionValidator = new Key(maxLength: 60);
 
         $config = self::CONFIG[$role] ?? null;
 
@@ -264,14 +267,9 @@ class Roles extends Validator
         }
 
         // Allowed and has an invalid identifier
-        if ($allowed && !empty($identifier)) {
-            if ($role === self::ROLE_LABEL && !$label->isValid($identifier)) {
-                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $label->getDescription();
-                return false;
-            } elseif ($role !== self::ROLE_LABEL && !$key->isValid($identifier)) {
-                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
-                return false;
-            }
+        if ($allowed && !empty($identifier) && !$identifierValidator->isValid($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $identifierValidator->getDescription();
+            return false;
         }
 
         // Process dimension configuration
@@ -300,8 +298,8 @@ class Roles extends Validator
                 return false;
             }
             // Allowed and dimension is not a valid key
-            if (!$key->isValid($dimension)) {
-                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid: ' . $key->getDescription();
+            if (!$dimensionValidator->isValid($dimension)) {
+                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid: ' . $dimensionValidator->getDescription();
                 return false;
             }
         }

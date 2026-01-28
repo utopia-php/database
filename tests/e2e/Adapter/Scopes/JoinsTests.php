@@ -31,10 +31,8 @@ trait JoinsTests
      */
     public function testJoin(): void
     {
-        /**
-         * @var Database $db
-         */
-        $db = static::getDatabase();
+        /** @var Database $database */
+        $db = $this->getDatabase();
 
         if (!$db->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -591,10 +589,8 @@ trait JoinsTests
 
     public function testLeftJoin(): void
     {
-        /**
-         * @var Database $db
-         */
-        $db = static::getDatabase();
+        /** @var Database $database */
+        $db = $this->getDatabase();
 
         if (!$db->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -681,10 +677,8 @@ trait JoinsTests
 
     public function testRightJoin(): void
     {
-        /**
-         * @var Database $db
-         */
-        $db = static::getDatabase();
+        /** @var Database $database */
+        $db = $this->getDatabase();
 
         if (!$db->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -770,10 +764,8 @@ trait JoinsTests
 
     public function testJoinsScopeOrder(): void
     {
-        /**
-         * @var Database $db
-         */
-        $db = static::getDatabase();
+        /** @var Database $database */
+        $db = $this->getDatabase();
 
         if (!$db->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -826,10 +818,8 @@ trait JoinsTests
 
     public function testJoinsSum(): void
     {
-        /**
-         * @var Database $db
-         */
-        $db = static::getDatabase();
+        /** @var Database $database */
+        $db = $this->getDatabase();
 
         if (!$db->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();

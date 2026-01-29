@@ -711,7 +711,7 @@ trait GeneralTests
         }
 
         // Wait for Redis to be fully healthy after previous test
-        sleep(3);
+        $this->waitForRedis();
 
         // Create new cache with reconnection enabled
         $redis = new \Redis();
@@ -733,53 +733,80 @@ trait GeneralTests
         $database->getAuthorization()->cleanRoles();
         $database->getAuthorization()->addRole(Role::any()->toString());
 
-        $database->createCollection('testCacheReconnect', attributes: [
-            new Document([
-                '$id' => ID::custom('title'),
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => true,
-            ])
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+        try {
+            $database->createCollection('testCacheReconnect', attributes: [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                    'required' => true,
+                ])
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ]);
 
-        $database->createDocument('testCacheReconnect', new Document([
-            '$id' => 'reconnect_doc',
-            'title' => 'Test Document',
-        ]));
+            $database->createDocument('testCacheReconnect', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Test Document',
+            ]));
 
-        // Cache the document
-        $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-        $this->assertEquals('Test Document', $doc->getAttribute('title'));
+            // Cache the document
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Test Document', $doc->getAttribute('title'));
 
-        // Bring down Redis
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
-        sleep(1);
+            // Bring down Redis
+            $stdout = '';
+            $stderr = '';
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+            sleep(1);
 
-        // Bring back Redis
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(3);
+            // Bring back Redis
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            $this->waitForRedis();
 
-        // Cache should reconnect - read should work
-        $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-        $this->assertEquals('Test Document', $doc->getAttribute('title'));
+            // Cache should reconnect - read should work
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Test Document', $doc->getAttribute('title'));
 
-        // Update should work after reconnect
-        $database->updateDocument('testCacheReconnect', 'reconnect_doc', new Document([
-            '$id' => 'reconnect_doc',
-            'title' => 'Updated Title',
-        ]));
+            // Update should work after reconnect
+            $database->updateDocument('testCacheReconnect', 'reconnect_doc', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Updated Title',
+            ]));
 
-        $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-        $this->assertEquals('Updated Title', $doc->getAttribute('title'));
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Updated Title', $doc->getAttribute('title'));
+        } finally {
+            // Ensure Redis is running
+            $stdout = '';
+            $stderr = '';
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            $this->waitForRedis();
 
-        // Cleanup
-        $database->deleteCollection('testCacheReconnect');
+            // Cleanup collection if it exists
+            if ($database->exists() && !$database->getCollection('testCacheReconnect')->isEmpty()) {
+                $database->deleteCollection('testCacheReconnect');
+            }
+        }
+    }
+
+    /**
+     * Wait for Redis to be ready with a readiness probe
+     */
+    private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void
+    {
+        for ($i = 0; $i < $maxRetries; $i++) {
+            try {
+                $redis = new \Redis();
+                $redis->connect('redis', 6379);
+                $redis->ping();
+                return;
+            } catch (\RedisException $e) {
+                usleep($delayMs * 1000);
+            }
+        }
     }
 }

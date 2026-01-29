@@ -710,12 +710,13 @@ trait GeneralTests
         }
 
         // Wait for Redis to be fully healthy after previous test
-        sleep(3);
+        sleep(5);
 
-        // Create new cache with reconnection enabled
+        // Create new cache with reconnection enabled and verify connection
         $redis = new \Redis();
         $redis->connect('redis', 6379);
-        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(2));
+        $redis->ping(); // Verify connection is healthy
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
         $database->setCache($cache);
 
         $database->getAuthorization()->cleanRoles();
@@ -752,7 +753,7 @@ trait GeneralTests
 
         // Bring back Redis
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(5);
+        sleep(7);
 
         // Cache should reconnect - read should work
         $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');

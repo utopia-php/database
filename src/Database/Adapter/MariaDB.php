@@ -2283,4 +2283,9 @@ class MariaDB extends SQL
     {
         return false;
     }
+
+    public function getAdapterName(): string
+    {
+        return 'MariaDB';
+    }
 }

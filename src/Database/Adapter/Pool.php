@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -639,6 +640,16 @@ class Pool extends Adapter
     }
 
     public function getSupportNonUtfCharacters(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getAdapterName(): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function supports(Capability $capability): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

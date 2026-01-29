@@ -241,7 +241,11 @@ class Roles extends Validator
             self::ROLE_LABEL => new Label(),
             default => new Key(),
         };
-        $dimensionValidator = new Key(maxLength: 60);
+        /**
+         * For project-specific permissions, roles will be in the format `project-<projectId>-<role>`.
+         * Template takes 9 characters, `projectId` and `role` can be upto 36 characters. In total, 81 characters.
+         */
+        $dimensionValidator = new Key(maxLength: 81);
 
         $config = self::CONFIG[$role] ?? null;
 

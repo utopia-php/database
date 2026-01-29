@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Mirror;
 use Utopia\Database\Query;
 
 trait GeneralTests
@@ -710,13 +711,23 @@ trait GeneralTests
         }
 
         // Wait for Redis to be fully healthy after previous test
-        sleep(5);
+        sleep(3);
 
-        // Create new cache with reconnection enabled and verify connection
+        // Create new cache with reconnection enabled
         $redis = new \Redis();
         $redis->connect('redis', 6379);
-        $redis->ping(); // Verify connection is healthy
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
+
+        // For Mirror, we need to set cache on both source and destination
+        if ($database instanceof Mirror) {
+            $database->getSource()->setCache($cache);
+
+            $mirrorRedis = new \Redis();
+            $mirrorRedis->connect('redis-mirror', 6379);
+            $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
+            $database->getDestination()->setCache($mirrorCache);
+        }
+
         $database->setCache($cache);
 
         $database->getAuthorization()->cleanRoles();
@@ -753,7 +764,7 @@ trait GeneralTests
 
         // Bring back Redis
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(7);
+        sleep(3);
 
         // Cache should reconnect - read should work
         $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');

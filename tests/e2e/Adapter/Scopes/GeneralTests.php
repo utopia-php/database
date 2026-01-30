@@ -4,6 +4,8 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
+use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,6 +20,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Mirror;
 use Utopia\Database\Query;
 
 trait GeneralTests
@@ -697,6 +700,113 @@ trait GeneralTests
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
+    public function testCacheReconnect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
 
+        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
+        // Wait for Redis to be fully healthy after previous test
+        $this->waitForRedis();
+
+        // Create new cache with reconnection enabled
+        $redis = new \Redis();
+        $redis->connect('redis', 6379);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
+
+        // For Mirror, we need to set cache on both source and destination
+        if ($database instanceof Mirror) {
+            $database->getSource()->setCache($cache);
+
+            $mirrorRedis = new \Redis();
+            $mirrorRedis->connect('redis-mirror', 6379);
+            $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
+            $database->getDestination()->setCache($mirrorCache);
+        }
+
+        $database->setCache($cache);
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+
+        try {
+            $database->createCollection('testCacheReconnect', attributes: [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                    'required' => true,
+                ])
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ]);
+
+            $database->createDocument('testCacheReconnect', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Test Document',
+            ]));
+
+            // Cache the document
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Test Document', $doc->getAttribute('title'));
+
+            // Bring down Redis
+            $stdout = '';
+            $stderr = '';
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+            sleep(1);
+
+            // Bring back Redis
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            $this->waitForRedis();
+
+            // Cache should reconnect - read should work
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Test Document', $doc->getAttribute('title'));
+
+            // Update should work after reconnect
+            $database->updateDocument('testCacheReconnect', 'reconnect_doc', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Updated Title',
+            ]));
+
+            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
+            $this->assertEquals('Updated Title', $doc->getAttribute('title'));
+        } finally {
+            // Ensure Redis is running
+            $stdout = '';
+            $stderr = '';
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            $this->waitForRedis();
+
+            // Cleanup collection if it exists
+            if ($database->exists() && !$database->getCollection('testCacheReconnect')->isEmpty()) {
+                $database->deleteCollection('testCacheReconnect');
+            }
+        }
+    }
+
+    /**
+     * Wait for Redis to be ready with a readiness probe
+     */
+    private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void
+    {
+        for ($i = 0; $i < $maxRetries; $i++) {
+            try {
+                $redis = new \Redis();
+                $redis->connect('redis', 6379);
+                $redis->ping();
+                return;
+            } catch (\RedisException $e) {
+                usleep($delayMs * 1000);
+            }
+        }
+    }
 }

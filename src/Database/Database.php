@@ -2666,6 +2666,22 @@ class Database
                 }
                 break;
 
+            case self::VAR_VARCHAR:
+                if (empty($size)) {
+                    throw new DatabaseException('Size length is required');
+                }
+
+                if ($size > $this->adapter->getMaxVarcharLength()) {
+                    throw new DatabaseException('Max size allowed for varchar is: ' . number_format($this->adapter->getMaxVarcharLength()));
+                }
+                break;
+
+            case self::VAR_TEXT:
+            case self::VAR_MEDIUMTEXT:
+            case self::VAR_LONGTEXT:
+                // Text types don't require size validation as they have fixed max sizes
+                break;
+
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
@@ -2733,6 +2749,10 @@ class Database
             default:
                 $supportedTypes = [
                     self::VAR_STRING,
+                    self::VAR_VARCHAR,
+                    self::VAR_TEXT,
+                    self::VAR_MEDIUMTEXT,
+                    self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,

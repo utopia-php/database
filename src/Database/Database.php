@@ -5701,6 +5701,10 @@ class Database
 
             $this->purgeCachedDocument($collection->getId(), $id);
 
+            if ($document->getId() !== $id) {
+                $this->purgeCachedDocument($collection->getId(), $document->getId());
+            }
+
             // If operators were used, refetch document to get computed values
             $hasOperators = false;
             foreach ($document->getArrayCopy() as $value) {

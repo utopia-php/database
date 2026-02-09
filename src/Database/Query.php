@@ -181,7 +181,7 @@ class Query
         self::TYPE_REGEX,
         self::TYPE_EXISTS,
         self::TYPE_NOT_EXISTS,
-        Query::TYPE_ELEM_MATCH,
+        self::TYPE_ELEM_MATCH,
     ];
 
     protected string $method = '';

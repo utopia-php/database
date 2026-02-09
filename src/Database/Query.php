@@ -311,6 +311,13 @@ class Query
         return $this->collection;
     }
 
+    public function setCollection(string $collection): self
+    {
+        $this->collection = $collection;
+
+        return $this;
+    }
+
     /**
      * Sets method
      *

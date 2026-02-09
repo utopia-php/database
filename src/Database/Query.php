@@ -1109,11 +1109,12 @@ class Query
 
     /**
      * @param  array<Query>  $queries
+     * @param bool $clone
      * @return array<Query>
      */
-    public static function getJoinQueries(array $queries): array
+    public static function getJoinQueries(array $queries, bool $clone = true): array
     {
-        return self::getByType($queries, self::JOINS_TYPES);
+        return self::getByType($queries, self::JOINS_TYPES, $clone);
     }
 
     /**

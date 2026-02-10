@@ -7863,10 +7863,10 @@ class Database
      * @param callable $callback
      * @param array<Query> $queries
      * @param string $forPermission
-     * @return void
+     * @return \Generator
      * @throws \Utopia\Database\Exception
      */
-    public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
+    public function foreach(string $collection, ?callable $callback = null, array $queries = [], string $forPermission = Database::PERMISSION_READ): \Generator
     {
         $grouped = Query::groupByType($queries);
         $limitExists = $grouped['limit'] !== null;
@@ -7906,8 +7906,10 @@ class Database
             $sum = count($results);
 
             foreach ($results as $document) {
-                if (is_callable($callback)) {
+                if (!is_null($callback) && is_callable($callback)) {
                     $callback($document);
+                } else {
+                    yield $document;
                 }
             }
 

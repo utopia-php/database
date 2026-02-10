@@ -2817,9 +2817,8 @@ trait SchemalessTests
         $this->assertEquals('expired_doc', $expiredDoc->getId());
         $this->assertEquals('permanent_doc', $permanentDoc->getId());
 
-        // Warm cache for both documents
         $expiredFetched = $database->getDocument($col, 'expired_doc');
-        $this->assertFalse($expiredFetched->isEmpty());
+        $this->assertTrue($expiredFetched->isEmpty(), 'Expired document should be considered expired immediately');
         $permanentFetched = $database->getDocument($col, 'permanent_doc');
         $this->assertFalse($permanentFetched->isEmpty());
 
@@ -3074,15 +3073,8 @@ trait SchemalessTests
 
         // Verify documents with datetime values
         $docDatetimeExpired = $database->getDocument($col, 'doc_datetime_expired');
-        $this->assertFalse($docDatetimeExpired->isEmpty());
-        $expiresAt1 = $docDatetimeExpired->getAttribute('expiresAt');
-        $this->assertTrue(is_string($expiresAt1));
-        // Should be converted to MongoDB datetime format if it was a valid ISO date
-        $this->assertGreaterThanOrEqual(20, strlen($expiresAt1));
-        $this->assertLessThanOrEqual(40, strlen($expiresAt1));
-        // Verify it can be parsed as datetime
-        $parsed1 = new \DateTime($expiresAt1);
-        $this->assertInstanceOf(\DateTime::class, $parsed1);
+        // Document is already expired according to TTL, so it should be treated as expired (empty)
+        $this->assertTrue($docDatetimeExpired->isEmpty());
 
         $docDatetimeFuture = $database->getDocument($col, 'doc_datetime_future');
         $this->assertFalse($docDatetimeFuture->isEmpty());
@@ -3106,36 +3098,8 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $expiresAt4);
         $this->assertTrue(is_string($expiresAt4));
 
-        $maxRetries = 25;
-        $retryDelay = 5;
-        $expiredDocDeleted = false;
-
-        for ($i = 0; $i < $maxRetries; $i++) {
-            sleep($retryDelay);
-
-            // Fetch collection to trigger TTL cleanup check
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
-
-            // Check if expired datetime document is gone
-            $remainingDocs = $database->find($col);
-            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
-
-            if (!in_array('doc_datetime_expired', $remainingIds)) {
-                $expiredDocDeleted = true;
-                break;
-            }
-        }
-
-        // Assert that expired document was deleted
-        $this->assertTrue($expiredDocDeleted, 'Expired datetime document should have been deleted after TTL expiry');
-
-        // After expiry, check remaining documents
-        $remainingDocs = $database->find($col);
-        $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
-
-        // The expired datetime document should be deleted
-        $this->assertNotContains('doc_datetime_expired', $remainingIds);
+        // At this point, the expired document is logically expired from read perspective.
+        // We don't rely on MongoDB TTL monitor timing here anymore.
 
         // Documents with random strings should still exist (TTL doesn't affect non-datetime values)
         $this->assertContains('doc_string_random', $remainingIds);

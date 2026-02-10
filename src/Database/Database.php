@@ -444,7 +444,7 @@ class Database
 
     /**
      * List of collections allowed to join
-     * @var array<string>
+     * @var array<string, bool>
      */
     protected array $joinsCollectionsIds = [];
 

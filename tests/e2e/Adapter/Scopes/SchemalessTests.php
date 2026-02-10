@@ -14,14 +14,13 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 trait SchemalessTests
 {
     public function testSchemalessDocumentOperation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -118,7 +117,7 @@ trait SchemalessTests
     public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // test to ensure internal attributes are checked during creating schemaless document
         if ($database->getAdapter()->getSupportForAttributes()) {
@@ -157,7 +156,7 @@ trait SchemalessTests
     public function testSchemalessSelectionOnUnknownAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -204,7 +203,7 @@ trait SchemalessTests
     public function testSchemalessIncrement(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -258,7 +257,7 @@ trait SchemalessTests
     public function testSchemalessDecrement(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -312,7 +311,7 @@ trait SchemalessTests
     public function testSchemalessUpdateDocumentWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -370,7 +369,7 @@ trait SchemalessTests
     public function testSchemalessDeleteDocumentWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -413,7 +412,7 @@ trait SchemalessTests
     public function testSchemalessUpdateDocumentsWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -508,7 +507,7 @@ trait SchemalessTests
     public function testSchemalessDeleteDocumentsWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -590,7 +589,7 @@ trait SchemalessTests
     public function testSchemalessOperationsWithCallback(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -678,7 +677,7 @@ trait SchemalessTests
     public function testSchemalessIndexCreateListDelete(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -724,7 +723,7 @@ trait SchemalessTests
     public function testSchemalessIndexDuplicatePrevention(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -811,7 +810,7 @@ trait SchemalessTests
     public function testSchemalessPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -833,18 +832,18 @@ trait SchemalessTests
         $this->assertFalse($doc->isEmpty());
 
         // Without roles, cannot read
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
         $empty = $database->getDocument($col, 'd1');
         $this->assertTrue($empty->isEmpty());
 
         // With any role, can read
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
         $fetched = $database->getDocument($col, 'd1');
         $this->assertEquals('value', $fetched->getAttribute('field'));
 
         // Attempt update without update permission
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
         try {
             $database->updateDocument($col, 'd1', new Document(['field' => 'updated']));
             $this->fail('Failed to throw exception');
@@ -853,7 +852,7 @@ trait SchemalessTests
         }
 
         // Grant update permission and update
-        Authorization::skip(function () use ($database, $col) {
+        $database->getAuthorization()->skip(function () use ($database, $col) {
             $database->updateDocument($col, 'd1', new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -866,7 +865,7 @@ trait SchemalessTests
         $this->assertEquals('updated', $updated->getAttribute('field'));
 
         // Creating without any roles should fail
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
         try {
             $database->createDocument($col, new Document([
                 'field' => 'x'
@@ -877,13 +876,13 @@ trait SchemalessTests
         }
 
         $database->deleteCollection($col);
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
     }
 
     public function testSchemalessInternalAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -893,7 +892,7 @@ trait SchemalessTests
         $col = uniqid('sl_internal_full');
         $database->createCollection($col);
 
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
 
         $doc = $database->createDocument($col, new Document([
             '$id' => 'i1',
@@ -987,13 +986,13 @@ trait SchemalessTests
         $database->setPreserveDates(false);
 
         $database->deleteCollection($col);
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
     }
 
     public function testSchemalessDates(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1864,6 +1863,291 @@ trait SchemalessTests
         $this->assertCount(0, $windowsSessions);
 
         $database->deleteCollection($col);
+    }
+
+    public function testUpsertFieldRemoval(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
+        }
+
+        $collectionName = ID::unique();
+        $database->createCollection($collectionName, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        // Test 1: Basic field removal with upsertDocument
+        // Create a document with multiple fields
+        $doc1 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc1',
+            '$permissions' => $permissions,
+            'title' => 'Original Title',
+            'description' => 'Original Description',
+            'category' => 'tech',
+            'tags' => ['php', 'mongodb'],
+            'metadata' => [
+                'author' => 'John Doe',
+                'version' => 1
+            ]
+        ]));
+
+        $this->assertEquals('Original Title', $doc1->getAttribute('title'));
+        $this->assertEquals('Original Description', $doc1->getAttribute('description'));
+        $this->assertEquals('tech', $doc1->getAttribute('category'));
+        $this->assertArrayHasKey('tags', $doc1->getArrayCopy());
+        $this->assertArrayHasKey('metadata', $doc1->getArrayCopy());
+
+        // Upsert with fewer fields - removed fields should be deleted
+        $upserted = $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc1',
+            '$permissions' => $permissions,
+            'title' => 'Updated Title',
+            'category' => 'science',
+            // description, tags, and metadata are removed
+        ]));
+
+        $this->assertEquals('Updated Title', $upserted->getAttribute('title'));
+        $this->assertEquals('science', $upserted->getAttribute('category'));
+
+        // Verify removed fields are actually deleted
+        $retrieved = $database->getDocument($collectionName, 'doc1');
+        $this->assertEquals('Updated Title', $retrieved->getAttribute('title'));
+        $this->assertEquals('science', $retrieved->getAttribute('category'));
+        $this->assertArrayNotHasKey('description', $retrieved->getArrayCopy());
+        $this->assertArrayNotHasKey('tags', $retrieved->getArrayCopy());
+        $this->assertArrayNotHasKey('metadata', $retrieved->getArrayCopy());
+
+        // Test 2: Remove all custom fields except one
+        $doc2 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc2',
+            '$permissions' => $permissions,
+            'field1' => 'value1',
+            'field2' => 'value2',
+            'field3' => 'value3',
+            'field4' => 'value4',
+        ]));
+
+        // Upsert keeping only field1
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc2',
+            '$permissions' => $permissions,
+            'field1' => 'updated_value1',
+        ]));
+
+        $retrieved2 = $database->getDocument($collectionName, 'doc2');
+        $this->assertEquals('updated_value1', $retrieved2->getAttribute('field1'));
+        $this->assertArrayNotHasKey('field2', $retrieved2->getArrayCopy());
+        $this->assertArrayNotHasKey('field3', $retrieved2->getArrayCopy());
+        $this->assertArrayNotHasKey('field4', $retrieved2->getArrayCopy());
+
+        // Test 3: Remove nested object fields
+        $doc3 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc3',
+            '$permissions' => $permissions,
+            'name' => 'Product',
+            'details' => [
+                'color' => 'red',
+                'size' => 'large',
+                'weight' => 10
+            ],
+            'specs' => [
+                'cpu' => 'Intel',
+                'ram' => '8GB'
+            ]
+        ]));
+
+        // Upsert removing details but keeping specs
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc3',
+            '$permissions' => $permissions,
+            'name' => 'Updated Product',
+            'specs' => [
+                'cpu' => 'AMD',
+                'ram' => '16GB'
+            ],
+            // details is removed
+        ]));
+
+        $retrieved3 = $database->getDocument($collectionName, 'doc3');
+        $this->assertEquals('Updated Product', $retrieved3->getAttribute('name'));
+        $this->assertArrayHasKey('specs', $retrieved3->getArrayCopy());
+        $this->assertEquals('AMD', $retrieved3->getAttribute('specs')['cpu']);
+        $this->assertArrayNotHasKey('details', $retrieved3->getArrayCopy());
+
+        // Test 4: Remove array fields
+        $doc4 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc4',
+            '$permissions' => $permissions,
+            'title' => 'Article',
+            'tags' => ['tag1', 'tag2', 'tag3'],
+            'categories' => ['cat1', 'cat2'],
+            'comments' => ['comment1', 'comment2']
+        ]));
+
+        // Upsert removing tags and comments but keeping categories
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc4',
+            '$permissions' => $permissions,
+            'title' => 'Updated Article',
+            'categories' => ['cat3'],
+        ]));
+
+        $retrieved4 = $database->getDocument($collectionName, 'doc4');
+        $this->assertEquals('Updated Article', $retrieved4->getAttribute('title'));
+        $this->assertArrayHasKey('categories', $retrieved4->getArrayCopy());
+        $this->assertEquals(['cat3'], $retrieved4->getAttribute('categories'));
+        $this->assertArrayNotHasKey('tags', $retrieved4->getArrayCopy());
+        $this->assertArrayNotHasKey('comments', $retrieved4->getArrayCopy());
+
+        // Test 5: upsertDocuments with field removal (bulk upsert)
+        $docs5 = [
+            new Document([
+                '$id' => 'bulk1',
+                '$permissions' => $permissions,
+                'fieldA' => 'valueA',
+                'fieldB' => 'valueB',
+                'fieldC' => 'valueC',
+            ]),
+            new Document([
+                '$id' => 'bulk2',
+                '$permissions' => $permissions,
+                'fieldX' => 'valueX',
+                'fieldY' => 'valueY',
+                'fieldZ' => 'valueZ',
+            ]),
+        ];
+        $database->createDocuments($collectionName, $docs5);
+
+        // Upsert removing some fields from each
+        $upsertDocs5 = [
+            new Document([
+                '$id' => 'bulk1',
+                '$permissions' => $permissions,
+                'fieldA' => 'updatedA',
+                // fieldB and fieldC removed
+            ]),
+            new Document([
+                '$id' => 'bulk2',
+                '$permissions' => $permissions,
+                'fieldX' => 'updatedX',
+                'fieldZ' => 'updatedZ',
+                // fieldY removed
+            ]),
+        ];
+        $database->upsertDocuments($collectionName, $upsertDocs5);
+
+        $retrievedBulk1 = $database->getDocument($collectionName, 'bulk1');
+        $this->assertEquals('updatedA', $retrievedBulk1->getAttribute('fieldA'));
+        $this->assertArrayNotHasKey('fieldB', $retrievedBulk1->getArrayCopy());
+        $this->assertArrayNotHasKey('fieldC', $retrievedBulk1->getArrayCopy());
+
+        $retrievedBulk2 = $database->getDocument($collectionName, 'bulk2');
+        $this->assertEquals('updatedX', $retrievedBulk2->getAttribute('fieldX'));
+        $this->assertEquals('updatedZ', $retrievedBulk2->getAttribute('fieldZ'));
+        $this->assertArrayNotHasKey('fieldY', $retrievedBulk2->getArrayCopy());
+
+        // Test 6: Upsert creating new document (should not unset anything)
+        $newDoc = $database->upsertDocument($collectionName, new Document([
+            '$id' => 'newDoc',
+            '$permissions' => $permissions,
+            'newField' => 'newValue',
+        ]));
+
+        $this->assertEquals('newValue', $newDoc->getAttribute('newField'));
+        $retrievedNew = $database->getDocument($collectionName, 'newDoc');
+        $this->assertEquals('newValue', $retrievedNew->getAttribute('newField'));
+        $this->assertArrayHasKey('newField', $retrievedNew->getArrayCopy());
+
+        // Test 7: Remove all custom fields (keep only system fields)
+        $doc7 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc7',
+            '$permissions' => $permissions,
+            'custom1' => 'value1',
+            'custom2' => 'value2',
+            'custom3' => 'value3',
+        ]));
+
+        // Upsert with only system fields (no custom fields)
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc7',
+            '$permissions' => $permissions,
+            // No custom fields
+        ]));
+
+        $retrieved7 = $database->getDocument($collectionName, 'doc7');
+        $this->assertArrayNotHasKey('custom1', $retrieved7->getArrayCopy());
+        $this->assertArrayNotHasKey('custom2', $retrieved7->getArrayCopy());
+        $this->assertArrayNotHasKey('custom3', $retrieved7->getArrayCopy());
+        // System fields should still exist
+        $this->assertEquals('doc7', $retrieved7->getId());
+        $this->assertNotNull($retrieved7->getCreatedAt());
+        $this->assertNotNull($retrieved7->getUpdatedAt());
+
+        // Test 8: Mixed scenario - add new fields while removing others
+        $doc8 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc8',
+            '$permissions' => $permissions,
+            'oldField1' => 'old1',
+            'oldField2' => 'old2',
+            'keepField' => 'keep',
+        ]));
+
+        // Upsert removing oldField1 and oldField2, keeping keepField, adding newField
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc8',
+            '$permissions' => $permissions,
+            'keepField' => 'updatedKeep',
+            'newField' => 'newValue',
+        ]));
+
+        $retrieved8 = $database->getDocument($collectionName, 'doc8');
+        $this->assertEquals('updatedKeep', $retrieved8->getAttribute('keepField'));
+        $this->assertEquals('newValue', $retrieved8->getAttribute('newField'));
+        $this->assertArrayNotHasKey('oldField1', $retrieved8->getArrayCopy());
+        $this->assertArrayNotHasKey('oldField2', $retrieved8->getArrayCopy());
+
+        // Test 9: Verify internal/system fields are never removed
+        $doc9 = $database->createDocument($collectionName, new Document([
+            '$id' => 'doc9',
+            '$permissions' => $permissions,
+            'data' => 'test',
+        ]));
+
+        $originalCreatedAt = $doc9->getCreatedAt();
+        $originalUpdatedAt = $doc9->getUpdatedAt();
+
+        // Upsert - internal fields should be preserved
+        $database->upsertDocument($collectionName, new Document([
+            '$id' => 'doc9',
+            '$permissions' => $permissions,
+            'newData' => 'newTest',
+        ]));
+
+        $retrieved9 = $database->getDocument($collectionName, 'doc9');
+        // System fields should still exist
+        $this->assertEquals('doc9', $retrieved9->getId());
+        $this->assertEquals($originalCreatedAt, $retrieved9->getCreatedAt());
+        // UpdatedAt should be different (document was updated)
+        $this->assertNotEquals($originalUpdatedAt, $retrieved9->getUpdatedAt());
+        $this->assertEquals('newTest', $retrieved9->getAttribute('newData'));
+        // Old field should be removed
+        $this->assertArrayNotHasKey('data', $retrieved9->getArrayCopy());
+
+        // Clean up
+        $database->deleteCollection($collectionName);
     }
 
     public function testSchemalessMongoDotNotationIndexes(): void

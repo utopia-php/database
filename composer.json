@@ -33,13 +33,13 @@
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
-        "php": ">=8.1",
+        "php": ">=8.4",
         "ext-pdo": "*",
         "ext-mongodb": "*",
         "ext-mbstring": "*",
         "utopia-php/framework": "0.33.*",
-        "utopia-php/cache": "0.13.*",
-        "utopia-php/pools": "0.8.*",
+        "utopia-php/cache": "1.0.*",
+        "utopia-php/pools": "1.0.*",
         "utopia-php/mongo": "0.11.*"
     },
     "require-dev": {

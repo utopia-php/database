@@ -7,6 +7,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -1677,6 +1678,24 @@ class MariaDB extends SQL
 
                 return "VARCHAR({$size})";
 
+            case Database::VAR_VARCHAR:
+                if ($size <= 0) {
+                    throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                }
+                if ($size > $this->getMaxVarcharLength()) {
+                    throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                }
+                return "VARCHAR({$size})";
+
+            case Database::VAR_TEXT:
+                return 'TEXT';
+
+            case Database::VAR_MEDIUMTEXT:
+                return 'MEDIUMTEXT';
+
+            case Database::VAR_LONGTEXT:
+                return 'LONGTEXT';
+
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
 
@@ -1700,7 +1719,7 @@ class MariaDB extends SQL
                 return 'DATETIME(3)';
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER . ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -1838,6 +1857,10 @@ class MariaDB extends SQL
 
     protected function processException(PDOException $e): \Exception
     {
+        if ($e->getCode() === '22007' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
+        }
+
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
@@ -2237,6 +2260,11 @@ class MariaDB extends SQL
     }
 
     public function getSupportForAlterLocks(): bool
+    {
+        return true;
+    }
+
+    public function getSupportNonUtfCharacters(): bool
     {
         return true;
     }

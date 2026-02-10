@@ -1931,6 +1931,14 @@ class Postgres extends SQL
 
                 return "VARCHAR({$size})";
 
+            case Database::VAR_VARCHAR:
+                return "VARCHAR({$size})";
+
+            case Database::VAR_TEXT:
+            case Database::VAR_MEDIUMTEXT:
+            case Database::VAR_LONGTEXT:
+                return 'TEXT';  // PostgreSQL doesn't have MEDIUMTEXT/LONGTEXT, use TEXT
+
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
                 if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
@@ -1967,7 +1975,7 @@ class Postgres extends SQL
                 return "VECTOR({$size})";
 
             default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -2799,6 +2807,11 @@ class Postgres extends SQL
                 parent::bindOperatorParams($stmt, $operator, $bindIndex);
                 break;
         }
+    }
+
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
     }
 
     /**

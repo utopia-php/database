@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -49,6 +50,27 @@ abstract class Adapter
      */
     protected array $metadata = [];
 
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
+
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
+    }
     /**
      * @param string $key
      * @param mixed $value
@@ -878,6 +900,13 @@ abstract class Adapter
     abstract public function getMaxIndexLength(): int;
 
     /**
+     * Get the maximum VARCHAR length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxVarcharLength(): int;
+
+    /**
      * Get the maximum UID length for this adapter
      *
      * @return int
@@ -1449,6 +1478,13 @@ abstract class Adapter
 
         return $this;
     }
+
+    /**
+     * Handle non utf characters supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportNonUtfCharacters(): bool;
 
     /**
      * Does the adapter support trigram index?

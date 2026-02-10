@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 trait RelationshipTests
 {
@@ -30,7 +29,7 @@ trait RelationshipTests
     public function testZoo(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -404,7 +403,7 @@ trait RelationshipTests
     public function testSimpleRelationshipPopulation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -476,7 +475,7 @@ trait RelationshipTests
     public function testDeleteRelatedCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -642,7 +641,7 @@ trait RelationshipTests
     public function testVirtualRelationsAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1098,7 +1097,7 @@ trait RelationshipTests
     public function testStructureValidationAfterRelationsAttribute(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1132,7 +1131,7 @@ trait RelationshipTests
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1232,7 +1231,7 @@ trait RelationshipTests
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1291,7 +1290,7 @@ trait RelationshipTests
     public function testNoInvalidKeysWithRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1366,7 +1365,7 @@ trait RelationshipTests
     public function testSelectRelationshipAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1660,7 +1659,7 @@ trait RelationshipTests
     public function testInheritRelationshipPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1739,14 +1738,14 @@ trait RelationshipTests
     public function testEnforceRelationshipPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
@@ -1823,7 +1822,7 @@ trait RelationshipTests
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
 
-        Authorization::setRole(Role::user('user1')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('user1')->toString());
 
         $bird1 = $database->getDocument('birds', 'bird1');
 
@@ -1836,7 +1835,7 @@ trait RelationshipTests
 
         $this->assertEquals('Bird 1 Updated', $bird1['name']);
 
-        Authorization::setRole(Role::user('user2')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('user2')->toString());
 
         // Try delete multi-level nested document
         $deleted = $database->deleteDocument(
@@ -1898,7 +1897,7 @@ trait RelationshipTests
     public function testCreateRelationshipMissingCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1919,7 +1918,7 @@ trait RelationshipTests
     public function testCreateRelationshipMissingRelatedCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1942,7 +1941,7 @@ trait RelationshipTests
     public function testCreateDuplicateRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1973,7 +1972,7 @@ trait RelationshipTests
     public function testCreateInvalidRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1998,7 +1997,7 @@ trait RelationshipTests
     public function testDeleteMissingRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2016,7 +2015,7 @@ trait RelationshipTests
     public function testCreateInvalidIntValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2048,7 +2047,7 @@ trait RelationshipTests
     public function testCreateInvalidObjectValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2070,7 +2069,7 @@ trait RelationshipTests
     public function testCreateInvalidArrayIntValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2098,7 +2097,7 @@ trait RelationshipTests
     public function testCreateEmptyValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2200,7 +2199,7 @@ trait RelationshipTests
     public function testUpdateRelationshipToExistingKey(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2246,8 +2245,8 @@ trait RelationshipTests
             return;
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
             new Document([
@@ -2354,7 +2353,7 @@ trait RelationshipTests
     public function testUpdateDocumentWithRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2660,7 +2659,7 @@ trait RelationshipTests
     public function testMultiDocumentNestedRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2880,7 +2879,7 @@ trait RelationshipTests
     public function testNestedDocumentCreationWithDepthHandling(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3015,7 +3014,7 @@ trait RelationshipTests
     public function testRelationshipTypeQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3504,7 +3503,7 @@ trait RelationshipTests
     public function testRelationshipFilterQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3671,7 +3670,7 @@ trait RelationshipTests
     public function testRelationshipSpatialQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3925,7 +3924,7 @@ trait RelationshipTests
     public function testRelationshipVirtualQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4034,7 +4033,7 @@ trait RelationshipTests
     public function testRelationshipQueryEdgeCases(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4139,7 +4138,7 @@ trait RelationshipTests
     public function testRelationshipManyToManyComplex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4240,7 +4239,7 @@ trait RelationshipTests
     public function testNestedRelationshipQueriesMultipleDepths(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4496,7 +4495,7 @@ trait RelationshipTests
     public function testCountAndSumWithRelationshipQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4657,7 +4656,7 @@ trait RelationshipTests
     public function testOrderAndCursorWithRelationshipQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('authorsOrder');
         $database->createCollection('postsOrder');

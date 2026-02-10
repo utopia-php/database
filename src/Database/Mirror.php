@@ -139,6 +139,15 @@ class Mirror extends Database
         return $this;
     }
 
+    public function setPreserveSequence(bool $preserve): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        $this->preserveSequence = $preserve;
+
+        return $this;
+    }
+
     public function enableValidation(): static
     {
         $this->delegate(__FUNCTION__);
@@ -1084,7 +1093,7 @@ class Mirror extends Database
             return new Document();
         }
 
-        return Authorization::skip(function () use ($collection) {
+        return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
@@ -1098,6 +1107,21 @@ class Mirror extends Database
         foreach ($this->errorCallbacks as $callback) {
             $callback($action, $err);
         }
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+
+        parent::setAuthorization($authorization);
+
+        if (isset($this->source)) {
+            $this->source->setAuthorization($authorization);
+        }
+        if (isset($this->destination)) {
+            $this->destination->setAuthorization($authorization);
+        }
+
+        return $this;
     }
 
     /**

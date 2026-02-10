@@ -3098,8 +3098,8 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $expiresAt4);
         $this->assertTrue(is_string($expiresAt4));
 
-        // At this point, the expired document is logically expired from read perspective.
-        // We don't rely on MongoDB TTL monitor timing here anymore.
+        $remainingDocs = $database->find($col);
+        $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
 
         // Documents with random strings should still exist (TTL doesn't affect non-datetime values)
         $this->assertContains('doc_string_random', $remainingIds);

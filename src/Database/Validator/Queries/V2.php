@@ -51,6 +51,17 @@ class V2 extends Validator
     protected array $joinsAliasOrder = [Query::DEFAULT_ALIAS];
 
     /**
+     * @param QueryContext $context
+     * @param string $idAttributeType
+     * @param int $maxValuesCount
+     * @param int $maxQueriesCount
+     * @param \DateTime $minAllowedDate
+     * @param \DateTime $maxAllowedDate
+     * @param int $maxLimit
+     * @param int $maxOffset
+     * @param bool $supportForAttributes
+     * @param int $maxUIDLength
+     * @param array<string,bool> $joinsCollectionsIds
      * @throws Exception
      */
     public function __construct(

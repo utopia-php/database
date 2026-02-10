@@ -4281,33 +4281,8 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
-            if ($this->adapter->getSupportForTTLIndexes()) {
-                /** @var array<Document> $collectionIndexes */
-                $collectionIndexes = $collection->getAttribute('indexes', []);
-                foreach ($collectionIndexes as $index) {
-                    if ($index->getAttribute('type') === self::INDEX_TTL) {
-                        $ttlSeconds = (int) $index->getAttribute('ttl', 0);
-                        $ttlAttribute = $index->getAttribute('attributes')[0];
-                        $ttlAttributeValue = $document->getAttribute($ttlAttribute);
-
-                        // Only check TTL if the attribute exists and is a string
-                        if ($ttlAttributeValue !== null && is_string($ttlAttributeValue)) {
-                            try {
-                                $ttlDateTime = new \DateTime($ttlAttributeValue);
-                                $expirationTime = (clone $ttlDateTime)->modify("+{$ttlSeconds} seconds");
-                                $now = new \DateTime();
-
-                                // If document has expired, return empty document
-                                if ($now > $expirationTime) {
-                                    return $this->createDocumentInstance($collection->getId(), []);
-                                }
-                            } catch (\Exception $e) {
-                                // Invalid datetime, continue with normal flow (document doesn't have valid TTL attribute)
-                            }
-                            break;
-                        }
-                    }
-                }
+            if ($this->isTtlExpired($collection, $document)) {
+                return $this->createDocumentInstance($collection->getId(), []);
             }
 
             return $document;
@@ -4321,6 +4296,10 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            return $this->createDocumentInstance($collection->getId(), []);
+        }
+
+        if ($this->isTtlExpired($collection, $document)) {
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -4369,6 +4348,33 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
+    }
+
+    private function isTtlExpired(Document $collection, Document $document): bool
+    {
+        if (!$this->adapter->getSupportForTTLIndexes()) {
+            return false;
+        }
+        foreach ($collection->getAttribute('indexes', []) as $index) {
+            if ($index->getAttribute('type') !== self::INDEX_TTL) {
+                continue;
+            }
+            $ttlSeconds = (int) $index->getAttribute('ttl', 0);
+            $ttlAttr    = $index->getAttribute('attributes')[0] ?? null;
+            if ($ttlSeconds <= 0 || !$ttlAttr) {
+                return false;
+            }
+            $val = $document->getAttribute($ttlAttr);
+            if (is_string($val)) {
+                try {
+                    $start = new \DateTime($val);
+                    return (new \DateTime()) > (clone $start)->modify("+{$ttlSeconds} seconds");
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     /**

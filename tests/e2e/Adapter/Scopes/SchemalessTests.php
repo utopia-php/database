@@ -3098,8 +3098,36 @@ trait SchemalessTests
         $this->assertEquals('another_random_string_xyz', $expiresAt4);
         $this->assertTrue(is_string($expiresAt4));
 
+        // Wait for the MongoDB TTL monitor to physically delete the expired datetime document.
+        $maxRetries = 25;
+        $retryDelay = 5;
+        $expiredDocDeleted = false;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+
+            // Fetch collection to trigger TTL cleanup check
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+
+            $remainingDocs = $database->find($col);
+            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+            if (!in_array('doc_datetime_expired', $remainingIds)) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+
+        // Assert that expired datetime document was eventually deleted by TTL monitor
+        $this->assertTrue($expiredDocDeleted, 'Expired datetime document should have been deleted after TTL expiry');
+
+        // After expiry, re-check remaining documents
         $remainingDocs = $database->find($col);
         $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+        // The expired datetime document should be deleted from the collection
+        $this->assertNotContains('doc_datetime_expired', $remainingIds);
 
         // Documents with random strings should still exist (TTL doesn't affect non-datetime values)
         $this->assertContains('doc_string_random', $remainingIds);

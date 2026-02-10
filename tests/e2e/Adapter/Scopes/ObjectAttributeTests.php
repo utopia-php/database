@@ -1542,7 +1542,7 @@ trait ObjectAttributeTests
         $this->assertEquals('mixed2', $results[0]->getId());
 
         // Edge Case 5: Update operations affecting nested indexed paths
-        $updated = $database->updateDocument($collectionId, 'mixed1', new Document([
+        $database->updateDocument($collectionId, 'mixed1', new Document([
             '$id' => 'mixed1',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Alice Updated',

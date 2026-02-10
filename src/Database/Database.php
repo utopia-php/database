@@ -7874,11 +7874,10 @@ class Database
     }
 
     /**
-     * Call callback for each document of the given collection
+     * Return each document of the given collection
      * that matches the given queries
      *
      * @param string $collection
-     * @param callable $callback
      * @param array<Query> $queries
      * @param string $forPermission
      * @return \Generator

@@ -4019,7 +4019,7 @@ trait DocumentTests
          */
         $database->createCollection('moviesEmpty');
         $documents = [];
-        foreach ($database->foreach('moviesEmpty', queries: [Query::limit(2)], ) as $document) {
+        foreach ($database->foreach('moviesEmpty', queries: [Query::limit(2)]) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(0, \count($documents));
@@ -4029,7 +4029,7 @@ trait DocumentTests
          * Test, foreach without callback
          */
         $documents = [];
-        foreach ($database->foreach('movies', queries: [Query::limit(2)], ) as $document) {
+        foreach ($database->foreach('movies', queries: [Query::limit(2)]) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(6, count($documents));

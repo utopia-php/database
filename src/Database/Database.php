@@ -2869,30 +2869,30 @@ class Database
                 }
             }
 
-                /**
-                 * Since we allow changing type & size we need to validate index length
-                 */
-                if ($this->validate) {
-                    $validator = new IndexValidator(
-                        $attributes,
-                        $originalIndexes,
-                        $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys(),
-                        $this->adapter->getSupportForIndexArray(),
-                        $this->adapter->getSupportForSpatialIndexNull(),
-                        $this->adapter->getSupportForSpatialIndexOrder(),
-                        $this->adapter->getSupportForVectors(),
-                        $this->adapter->getSupportForAttributes(),
-                        $this->adapter->getSupportForMultipleFulltextIndexes(),
-                        $this->adapter->getSupportForIdenticalIndexes(),
-                        $this->adapter->getSupportForObjectIndexes(),
-                        $this->adapter->getSupportForTrigramIndex(),
-                        $this->adapter->getSupportForSpatialAttributes(),
-                        $this->adapter->getSupportForIndex(),
-                        $this->adapter->getSupportForUniqueIndex(),
-                        $this->adapter->getSupportForFulltextIndex(),
-                        $this->adapter->getSupportForObject()
-                    );
+            /**
+             * Since we allow changing type & size we need to validate index length
+             */
+            if ($this->validate) {
+                $validator = new IndexValidator(
+                    $attributes,
+                    $originalIndexes,
+                    $this->adapter->getMaxIndexLength(),
+                    $this->adapter->getInternalIndexesKeys(),
+                    $this->adapter->getSupportForIndexArray(),
+                    $this->adapter->getSupportForSpatialIndexNull(),
+                    $this->adapter->getSupportForSpatialIndexOrder(),
+                    $this->adapter->getSupportForVectors(),
+                    $this->adapter->getSupportForAttributes(),
+                    $this->adapter->getSupportForMultipleFulltextIndexes(),
+                    $this->adapter->getSupportForIdenticalIndexes(),
+                    $this->adapter->getSupportForObjectIndexes(),
+                    $this->adapter->getSupportForTrigramIndex(),
+                    $this->adapter->getSupportForSpatialAttributes(),
+                    $this->adapter->getSupportForIndex(),
+                    $this->adapter->getSupportForUniqueIndex(),
+                    $this->adapter->getSupportForFulltextIndex(),
+                    $this->adapter->getSupportForObject()
+                );
 
                 foreach ($indexes as $index) {
                     if (!$validator->isValid($index)) {

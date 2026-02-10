@@ -311,7 +311,7 @@ class Query
         return $this->collectionId;
     }
 
-    public function setCollection(string $collectionId): self
+    public function setCollectionId(string $collectionId): self
     {
         $this->collectionId = $collectionId;
 

@@ -185,7 +185,7 @@ class Query
     ];
 
     protected string $method = '';
-    protected string $collection = '';
+    protected string $collectionId = '';
     protected string $alias = '';
     protected string $attribute = '';
     protected string $attributeType = '';
@@ -214,7 +214,7 @@ class Query
         string $alias = '',
         string $attributeRight = '',
         string $aliasRight = '',
-        string $collection = '',
+        string $collectionId = '',
         string $as = '',
         bool $system = false,
     ) {
@@ -239,7 +239,7 @@ class Query
         $this->values = $values;
         $this->aliasRight = $aliasRight;
         $this->attributeRight = $attributeRight;
-        $this->collection = $collection;
+        $this->collectionId = $collectionId;
         $this->as = $as;
         $this->system = $system;
     }
@@ -306,14 +306,14 @@ class Query
         return $this->as;
     }
 
-    public function getCollection(): string
+    public function getCollectionId(): string
     {
-        return $this->collection;
+        return $this->collectionId;
     }
 
-    public function setCollection(string $collection): self
+    public function setCollection(string $collectionId): self
     {
-        $this->collection = $collection;
+        $this->collectionId = $collectionId;
 
         return $this;
     }
@@ -541,7 +541,7 @@ class Query
         $alias = $query['alias'] ?? '';
         $aliasRight = $query['aliasRight'] ?? '';
         $as = $query['as'] ?? '';
-        $collection = $query['collection'] ?? '';
+        $collectionId = $query['collectionId'] ?? '';
 
         if (!\is_string($method)) {
             throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
@@ -572,7 +572,7 @@ class Query
             alias: $alias,
             attributeRight: $attributeRight,
             aliasRight: $aliasRight,
-            collection: $collection,
+            collectionId: $collectionId,
             as: $as,
         );
     }
@@ -623,8 +623,8 @@ class Query
             $array['as'] = $this->as;
         }
 
-        if (!empty($this->collection)) {
-            $array['collection'] = $this->collection;
+        if (!empty($this->collectionId)) {
+            $array['collectionId'] = $this->collectionId;
         }
 
         if ($this->isNested() || $this->isJoin()) {
@@ -1017,47 +1017,47 @@ class Query
     }
 
     /**
-     * @param string $collection
+     * @param string $collectionId
      * @param string $alias
      * @param array<Query> $queries
      * @return self
      */
-    public static function join(string $collection, string $alias, array $queries = []): self
+    public static function join(string $collectionId, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collectionId: $collectionId);
     }
 
     /**
-     * @param string $collection
+     * @param string $collectionId
      * @param string $alias
      * @param array<Query> $queries
      * @return self
      */
-    public static function innerJoin(string $collection, string $alias, array $queries = []): self
+    public static function innerJoin(string $collectionId, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collectionId: $collectionId);
     }
 
     /**
-     * @param string $collection
+     * @param string $collectionId
      * @param string $alias
      * @param array<Query> $queries
      * @return self
      */
-    public static function leftJoin(string $collection, string $alias, array $queries = []): self
+    public static function leftJoin(string $collectionId, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_LEFT_JOIN, values: $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_LEFT_JOIN, values: $queries, alias: $alias, collectionId: $collectionId);
     }
 
     /**
-     * @param string $collection
+     * @param string $collectionId
      * @param string $alias
      * @param array<Query> $queries
      * @return self
      */
-    public static function rightJoin(string $collection, string $alias, array $queries = []): self
+    public static function rightJoin(string $collectionId, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collectionId: $collectionId);
     }
 
     public static function relationEqual(string $leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self

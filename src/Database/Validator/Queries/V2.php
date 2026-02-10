@@ -316,7 +316,7 @@ class V2 extends Validator
                     case Query::TYPE_INNER_JOIN:
                     case Query::TYPE_LEFT_JOIN:
                     case Query::TYPE_RIGHT_JOIN:
-                        if (($this->joinsCollectionsIds[$query->getCollection()] ?? false) !== true) {
+                        if (($this->joinsCollectionsIds[$query->getCollectionId()] ?? false) !== true) {
                             throw new \Exception('Invalid query: Cannot ' . ucfirst($method) . ' this table.');
                         }
 

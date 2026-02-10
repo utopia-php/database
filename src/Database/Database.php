@@ -7766,7 +7766,7 @@ class Database
 
         foreach ($joins as $join) {
             $context->add(
-                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $this->silent(fn () => $this->getCollection($join->getCollectionId())),
                 $join->getAlias()
             );
         }
@@ -8021,7 +8021,7 @@ class Database
 
         foreach ($joins as $join) {
             $context->add(
-                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $this->silent(fn () => $this->getCollection($join->getCollectionId())),
                 $join->getAlias()
             );
         }

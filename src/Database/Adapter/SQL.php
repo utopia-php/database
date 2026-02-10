@@ -3103,7 +3103,7 @@ abstract class SQL extends Adapter
         $sqlJoin = '';
         foreach ($joins as $join) {
             $permissions = '';
-            $collection = $join->getCollection();
+            $collection = $join->getCollectionId();
             $collection = $this->filter($collection);
 
             $skipAuth = $context->skipAuth($collection, $forPermission, $this->authorization);
@@ -3265,7 +3265,7 @@ abstract class SQL extends Adapter
         $sqlJoin = '';
         foreach ($joins as $join) {
             $permissions = '';
-            $collection = $join->getCollection();
+            $collection = $join->getCollectionId();
             $collection = $this->filter($collection);
 
             $skipAuth = $context->skipAuth($collection, Database::PERMISSION_READ, $this->authorization);

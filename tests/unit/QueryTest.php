@@ -488,7 +488,7 @@ class QueryTest extends TestCase
             );
 
         $this->assertEquals(Query::TYPE_INNER_JOIN, $query->getMethod());
-        $this->assertEquals('users', $query->getCollection());
+        $this->assertEquals('users', $query->getCollectionId());
         $this->assertEquals('u', $query->getAlias());
         $this->assertCount(2, $query->getValues());
 
@@ -539,7 +539,7 @@ class QueryTest extends TestCase
 
         $join = Query::parse($string);
         $this->assertEquals('innerJoin', $join->getMethod());
-        $this->assertEquals('users', $join->getCollection());
+        $this->assertEquals('users', $join->getCollectionId());
 
         $query = $join->getValues()[0];
         $this->assertEquals('relationEqual', $query->getMethod());
@@ -563,7 +563,7 @@ class QueryTest extends TestCase
 
         $join = Query::parse($string);
         $this->assertEquals('leftJoin', $join->getMethod());
-        $this->assertEquals('users', $join->getCollection());
+        $this->assertEquals('users', $join->getCollectionId());
 
         $query = $join->getValues()[0];
         $this->assertEquals('relationEqual', $query->getMethod());
@@ -587,7 +587,7 @@ class QueryTest extends TestCase
 
         $join = Query::parse($string);
         $this->assertEquals('rightJoin', $join->getMethod());
-        $this->assertEquals('users', $join->getCollection());
+        $this->assertEquals('users', $join->getCollectionId());
 
         $query = $join->getValues()[0];
         $this->assertEquals('relationEqual', $query->getMethod());

@@ -4015,21 +4015,21 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         /**
-         * Test, foreach without callback on empty collection
+         * Test, foreach generator on empty collection
          */
         $database->createCollection('moviesEmpty');
         $documents = [];
-        foreach ($database->foreach('moviesEmpty', queries: [Query::limit(2)]) as $document) {
+        foreach ($database->iterate('moviesEmpty', queries: [Query::limit(2)]) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(0, \count($documents));
         $this->assertTrue($database->deleteCollection('moviesEmpty'));
 
         /**
-         * Test, foreach without callback
+         * Test, foreach generator
          */
         $documents = [];
-        foreach ($database->foreach('movies', queries: [Query::limit(2)]) as $document) {
+        foreach ($database->iterate('movies', queries: [Query::limit(2)]) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(6, count($documents));

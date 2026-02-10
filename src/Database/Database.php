@@ -7856,6 +7856,24 @@ class Database
     }
 
     /**
+     * Helper method to iterate documents in collection using callback pattern
+     * Alterative is
+     *
+     * @param string $collection
+     * @param callable $callback
+     * @param array<Query> $queries
+     * @param string $forPermission
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
+    {
+        foreach ($this->iterate($collection, $queries, $forPermission) as $document) {
+            $callback($document);
+        }
+    }
+
+    /**
      * Call callback for each document of the given collection
      * that matches the given queries
      *
@@ -7866,7 +7884,7 @@ class Database
      * @return \Generator
      * @throws \Utopia\Database\Exception
      */
-    public function foreach(string $collection, ?callable $callback = null, array $queries = [], string $forPermission = Database::PERMISSION_READ): \Generator
+    public function iterate(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): \Generator
     {
         $grouped = Query::groupByType($queries);
         $limitExists = $grouped['limit'] !== null;
@@ -7906,11 +7924,7 @@ class Database
             $sum = count($results);
 
             foreach ($results as $document) {
-                if (!is_null($callback) && is_callable($callback)) {
-                    $callback($document);
-                } else {
-                    yield $document;
-                }
+                yield $document;
             }
 
             $latestDocument = $results[array_key_last($results)];

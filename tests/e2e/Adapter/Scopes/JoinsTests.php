@@ -81,6 +81,23 @@ trait JoinsTests
         ]));
 
         /**
+         * Test collection not whitelist
+         */
+        try {
+            $database->find('__users', [
+                Query::join('__sessions', 'B', [])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot InnerJoin this table.', $e->getMessage());
+        }
+
+        $database->addJoinCollection('__users');
+        $database->addJoinCollection('__sessions');
+        $database->addJoinCollection('__banks');
+
+        /**
          * Test $session1 does not have read permissions
          * Test right attribute is internal attribute
          */

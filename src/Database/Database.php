@@ -442,6 +442,11 @@ class Database
      */
     protected array $documentTypes = [];
 
+    /**
+     * List of collections allowed to join
+     * @var array<string>
+     */
+    protected array $joinsCollectionsIds = [];
 
     /**
      * @var Authorization
@@ -5794,7 +5799,7 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime(),
                 supportForAttributes: $this->adapter->getSupportForAttributes(),
-                maxUIDLength: $this->adapter->getMaxUIDLength()
+                maxUIDLength: $this->adapter->getMaxUIDLength(),
             );
 
             if (!$validator->isValid($queries)) {
@@ -7513,7 +7518,7 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime(),
                 supportForAttributes: $this->adapter->getSupportForAttributes(),
-                maxUIDLength: $this->adapter->getMaxUIDLength()
+                maxUIDLength: $this->adapter->getMaxUIDLength(),
             );
 
             if (!$validator->isValid($queries)) {
@@ -7763,7 +7768,8 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime(),
                 supportForAttributes: $this->adapter->getSupportForAttributes(),
-                maxUIDLength: $this->adapter->getMaxUIDLength()
+                maxUIDLength: $this->adapter->getMaxUIDLength(),
+                joinsCollectionsIds: $this->joinsCollectionsIds,
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8017,7 +8023,8 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime(),
                 supportForAttributes: $this->adapter->getSupportForAttributes(),
-                maxUIDLength: $this->adapter->getMaxUIDLength()
+                maxUIDLength: $this->adapter->getMaxUIDLength(),
+                joinsCollectionsIds: $this->joinsCollectionsIds,
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8082,7 +8089,8 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime(),
                 supportForAttributes: $this->adapter->getSupportForAttributes(),
-                maxUIDLength: $this->adapter->getMaxUIDLength()
+                maxUIDLength: $this->adapter->getMaxUIDLength(),
+                joinsCollectionsIds: $this->joinsCollectionsIds,
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -9427,5 +9435,16 @@ class Database
             fn ($attr) => !\in_array($attr->getId(), $attributeIds)
         );
         $collection->setAttribute('attributes', \array_values($filteredAttributes));
+    }
+
+    /**
+     * Add Join Collection
+     *
+     * @param string $collectionId
+     * @return void
+     */
+    public function addJoinCollection(string $collectionId): void
+    {
+        $this->joinsCollectionsIds[$collectionId] = true;
     }
 }

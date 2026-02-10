@@ -63,7 +63,8 @@ class V2 extends Validator
         int $maxLimit = PHP_INT_MAX,
         int $maxOffset = PHP_INT_MAX,
         protected bool $supportForAttributes = true,
-        protected int $maxUIDLength = Database::MAX_UID_DEFAULT_LENGTH
+        protected int $maxUIDLength = Database::MAX_UID_DEFAULT_LENGTH,
+        protected array $joinsCollectionsIds = []
     ) {
         $this->context = $context;
         $this->idAttributeType = $idAttributeType;
@@ -304,6 +305,10 @@ class V2 extends Validator
                     case Query::TYPE_INNER_JOIN:
                     case Query::TYPE_LEFT_JOIN:
                     case Query::TYPE_RIGHT_JOIN:
+                        if (($this->joinsCollectionsIds[$query->getCollection()] ?? false) !== true) {
+                            throw new \Exception('Invalid query: Cannot ' . ucfirst($method) . ' this table.');
+                        }
+
                         $this->joinsAliasOrder[] = $query->getAlias();
 
                         $this->validateFilterQueries($query);
@@ -481,14 +486,18 @@ class V2 extends Validator
      */
     protected function validateAlias(Query $query): void
     {
-        $validator = new AliasValidator();
-
-        if (! $validator->isValid($query->getAlias())) {
-            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+        if ($query->getAlias() !== '') {
+            $validator = new AliasValidator();
+            if (! $validator->isValid($query->getAlias())) {
+                throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+            }
         }
 
-        if (! $validator->isValid($query->getRightAlias())) {
-            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+        if ($query->getRightAlias() !== '') {
+            $validator = new AliasValidator();
+            if (! $validator->isValid($query->getRightAlias())) {
+                throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+            }
         }
     }
 

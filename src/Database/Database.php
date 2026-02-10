@@ -9462,13 +9462,14 @@ class Database
     }
 
     /**
-     * Add Join Collection
+     * Add Join CollectionId
      *
      * @param string $collectionId
      * @return void
      */
-    public function addJoinCollection(string $collectionId): void
+    public function addJoinCollectionId(string $collectionId): void
     {
+        // todo: Consider adding $this->getNamespace()
         $this->joinsCollectionsIds[$collectionId] = true;
     }
 }

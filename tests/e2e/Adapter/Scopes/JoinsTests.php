@@ -93,9 +93,9 @@ trait JoinsTests
             $this->assertEquals('Invalid query: Cannot InnerJoin this table.', $e->getMessage());
         }
 
-        $database->addJoinCollection('__users');
-        $database->addJoinCollection('__sessions');
-        $database->addJoinCollection('__banks');
+        $database->addJoinCollectionId('__users');
+        $database->addJoinCollectionId('__sessions');
+        $database->addJoinCollectionId('__banks');
 
         /**
          * Test $session1 does not have read permissions

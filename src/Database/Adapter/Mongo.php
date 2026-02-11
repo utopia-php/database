@@ -2096,7 +2096,7 @@ class Mongo extends Adapter
 
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
-                    $found[] = new Document($record);
+                    $found[] = new Document($this->convertStdClassToArray($record));
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);

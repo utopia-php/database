@@ -393,6 +393,37 @@ trait JoinsTests
         $this->assertEquals(false, $document->getAttribute('boolean'));
 
         /**
+         * Select * on related collection
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::select('*', 'S'),
+                Query::join(
+                    '__sessions',
+                    'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                    ]
+                ),
+                Query::orderDesc('float', 'S'),
+                Query::limit(1),
+            ]
+        );
+
+        /**
+         * Since we use S.* we should see all related attributes
+         */
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayHasKey('user_id', $document);
+        $this->assertEquals('1', $document->getAttribute('user_internal_id'));
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(10.5, $document->getAttribute('float'));
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(false, $document->getAttribute('boolean'));
+
+        /**
          * Test invalid as
          */
         try {

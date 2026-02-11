@@ -8344,10 +8344,13 @@ class Database
                     break;
                 }
 
-                if ($select->getAttribute() == $key ||
-                    $this->adapter->filter($select->getAttribute()) == $key) {
+                if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
                     break;
+                }
+
+                if ($select->getAttribute() === '*') {
+                    $alias = $select->getAlias();
                 }
             }
 
@@ -8439,14 +8442,16 @@ class Database
                     $attributeKey = $key;
                     $key = $select->getAttribute();
                     $alias = $select->getAlias();
-
                     break;
                 }
 
                 if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
-
                     break;
+                }
+
+                if ($select->getAttribute() === '*') {
+                    $alias = $select->getAlias();
                 }
             }
 

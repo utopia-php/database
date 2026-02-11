@@ -3179,7 +3179,7 @@ abstract class SQL extends Adapter
             {$sqlLimit};
         ";
 
-        if(!empty($sqlJoin)){
+        if (!empty($sqlJoin)) {
             var_dump($sql);
         }
 

@@ -9469,7 +9469,6 @@ class Database
      */
     public function addJoinCollectionId(string $collectionId): void
     {
-        // todo: Consider adding $this->getNamespace()
         $this->joinsCollectionsIds[$collectionId] = true;
     }
 }

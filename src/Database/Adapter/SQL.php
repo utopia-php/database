@@ -1110,7 +1110,7 @@ abstract class SQL extends Adapter
 
         $total = 1067;
 
-        $attributes = $collection->getAttributes()['attributes'];
+        $attributes = $collection->getAttributes()['attributes'] ?? [];
 
         foreach ($attributes as $attribute) {
             /**

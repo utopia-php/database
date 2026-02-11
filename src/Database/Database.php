@@ -94,6 +94,7 @@ class Database
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
     public const INDEX_TRIGRAM = 'trigram';
+    public const INDEX_TTL = 'ttl';
 
     // Max limits
     public const MAX_INT = 2147483647;
@@ -1661,6 +1662,14 @@ class Database
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
+        // Enforce single TTL index per collection
+        if ($this->validate && $this->getAdapter()->getSupportForTTLIndexes()) {
+            $ttlIndexes = array_filter($indexes, fn (Document $idx) => $idx->getAttribute('type') === self::INDEX_TTL);
+            if (count($ttlIndexes) > 1) {
+                throw new IndexException('There can be only one TTL index in a collection');
+            }
+        }
+
         /**
          * Fix metadata index length & orders
          */
@@ -1725,6 +1734,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
+                $this->adapter->getSupportForTTLIndexes()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2890,6 +2900,7 @@ class Database
                     $this->adapter->getSupportForIndex(),
                     $this->adapter->getSupportForUniqueIndex(),
                     $this->adapter->getSupportForFulltextIndex(),
+                    $this->adapter->getSupportForTTLIndexes()
                 );
 
                 foreach ($indexes as $index) {
@@ -4006,6 +4017,7 @@ class Database
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param int $ttl
      *
      * @return bool
      * @throws AuthorizationException
@@ -4016,14 +4028,13 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
     {
         if (empty($attributes)) {
             throw new DatabaseException('Missing attributes');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -4074,6 +4085,7 @@ class Database
             'attributes' => $attributes,
             'lengths' => $lengths,
             'orders' => $orders,
+            'ttl' => $ttl
         ]);
 
         if ($this->validate) {
@@ -4096,6 +4108,7 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
+                $this->adapter->getSupportForTTLIndexes()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -4105,7 +4118,7 @@ class Database
         $created = false;
 
         try {
-            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes, [], $ttl);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
@@ -4268,6 +4281,10 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
+            if ($this->isTtlExpired($collection, $document)) {
+                return $this->createDocumentInstance($collection->getId(), []);
+            }
+
             return $document;
         }
 
@@ -4279,6 +4296,10 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            return $this->createDocumentInstance($collection->getId(), []);
+        }
+
+        if ($this->isTtlExpired($collection, $document)) {
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -4327,6 +4348,33 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
+    }
+
+    private function isTtlExpired(Document $collection, Document $document): bool
+    {
+        if (!$this->adapter->getSupportForTTLIndexes()) {
+            return false;
+        }
+        foreach ($collection->getAttribute('indexes', []) as $index) {
+            if ($index->getAttribute('type') !== self::INDEX_TTL) {
+                continue;
+            }
+            $ttlSeconds = (int) $index->getAttribute('ttl', 0);
+            $ttlAttr    = $index->getAttribute('attributes')[0] ?? null;
+            if ($ttlSeconds <= 0 || !$ttlAttr) {
+                return false;
+            }
+            $val = $document->getAttribute($ttlAttr);
+            if (is_string($val)) {
+                try {
+                    $start = new \DateTime($val);
+                    return (new \DateTime()) > (clone $start)->modify("+{$ttlSeconds} seconds");
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     /**

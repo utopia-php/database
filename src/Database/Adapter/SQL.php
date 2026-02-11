@@ -3179,6 +3179,10 @@ abstract class SQL extends Adapter
             {$sqlLimit};
         ";
 
+        if(!empty($sqlJoin)){
+            var_dump($sql);
+        }
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

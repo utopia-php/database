@@ -4084,6 +4084,26 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         /**
+         * Test, foreach generator on empty collection
+         */
+        $database->createCollection('moviesEmpty');
+        $documents = [];
+        foreach ($database->iterate('moviesEmpty', queries: [Query::limit(2)]) as $document) {
+            $documents[] = $document;
+        }
+        $this->assertEquals(0, \count($documents));
+        $this->assertTrue($database->deleteCollection('moviesEmpty'));
+
+        /**
+         * Test, foreach generator
+         */
+        $documents = [];
+        foreach ($database->iterate('movies', queries: [Query::limit(2)]) as $document) {
+            $documents[] = $document;
+        }
+        $this->assertEquals(6, count($documents));
+
+        /**
          * Test, foreach goes through all the documents
          */
         $documents = [];

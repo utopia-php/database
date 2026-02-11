@@ -319,6 +319,7 @@ class Postgres extends SQL
                     }
                 }
                 $indexOrders = $index->getAttribute('orders', []);
+                $indexTtl = $index->getAttribute('ttl', 0);
                 if ($indexType === Database::INDEX_SPATIAL && count($indexOrders)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
@@ -329,7 +330,9 @@ class Postgres extends SQL
                     $indexAttributes,
                     [],
                     $indexOrders,
-                    $indexAttributesWithType
+                    $indexAttributesWithType,
+                    [],
+                    $indexTtl
                 );
             }
         } catch (PDOException $e) {
@@ -876,7 +879,7 @@ class Postgres extends SQL
 
      * @return bool
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
@@ -2850,5 +2853,10 @@ class Postgres extends SQL
         $table = $this->getShortKey($table);
 
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
+    }
+
+    public function getSupportForTTLIndexes(): bool
+    {
+        return false;
     }
 }

@@ -716,7 +716,7 @@ class MariaDB extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $metadataCollection = new Document(['$id' => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $collection);
@@ -2289,6 +2289,11 @@ class MariaDB extends SQL
     }
 
     public function getSupportForPOSIXRegex(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForTTLIndexes(): bool
     {
         return false;
     }

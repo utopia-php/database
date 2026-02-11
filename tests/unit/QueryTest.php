@@ -535,7 +535,7 @@ class QueryTest extends TestCase
             ]
         )->toString();
 
-        $this->assertEquals($string, '{"method":"innerJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+        $this->assertEquals($string, '{"method":"innerJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
 
         $join = Query::parse($string);
         $this->assertEquals('innerJoin', $join->getMethod());
@@ -559,7 +559,7 @@ class QueryTest extends TestCase
             ]
         )->toString();
 
-        $this->assertEquals($string, '{"method":"leftJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+        $this->assertEquals($string, '{"method":"leftJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
 
         $join = Query::parse($string);
         $this->assertEquals('leftJoin', $join->getMethod());
@@ -583,7 +583,7 @@ class QueryTest extends TestCase
             ]
         )->toString();
 
-        $this->assertEquals($string, '{"method":"rightJoin","alias":"U","collection":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+        $this->assertEquals($string, '{"method":"rightJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
 
         $join = Query::parse($string);
         $this->assertEquals('rightJoin', $join->getMethod());

@@ -483,7 +483,7 @@ class V2 extends Validator
             throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
         }
 
-        if ($isNested && $attribute['type'] != Database::VAR_RELATIONSHIP) {
+        if ($isNested && !in_array($attribute['type'], [Database::VAR_RELATIONSHIP, Database::VAR_OBJECT])) {
             throw new \Exception('Only nested relationships allowed');
         }
 
@@ -630,12 +630,10 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_OBJECT:
-                    $isDottedOnObject = \str_contains($attributeId, '.') && $attribute['type'] === Database::VAR_OBJECT;
-
                     // For dotted attributes on objects, validate as string (path queries)
-                    if ($isDottedOnObject) {
+                    if ($isNested) {
                         $validator = new Text(0, 0);
-                        continue 2;
+                        break;
                     }
 
                     if (

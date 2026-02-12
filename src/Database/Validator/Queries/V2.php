@@ -630,6 +630,14 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_OBJECT:
+                    $isDottedOnObject = \str_contains($attributeId, '.') && $attribute['type'] === Database::VAR_OBJECT;
+
+                    // For dotted attributes on objects, validate as string (path queries)
+                    if ($isDottedOnObject) {
+                        $validator = new Text(0, 0);
+                        continue 2;
+                    }
+
                     if (
                         \in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true) &&
                         !$this->isValidObjectQueryValues($value)

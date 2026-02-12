@@ -1,5 +1,5 @@
 <?php
-shmuel fix this
+
 //
 //namespace Utopia\Database\Validator\Query;
 //
@@ -86,6 +86,7 @@ shmuel fix this
 //
 //        $originalAttribute = $attribute;
 //        // isset check if for special symbols "." in the attribute name
+//        // same for nested path on object
 //        if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
 //            // For relationships, just validate the top level.
 //            // Utopia will validate each nested level during the recursive calls.
@@ -126,6 +127,8 @@ shmuel fix this
 //        $attributeSchema = $this->schema[$attribute];
 //
 //        $attributeType = $attributeSchema['type'];
+//
+//        $isDottedOnObject = \str_contains($originalAttribute, '.') && $attributeType === Database::VAR_OBJECT;
 //
 //        // If the query method is spatial-only, the attribute must be a spatial type
 //        $query = new Query($method);
@@ -179,13 +182,20 @@ shmuel fix this
 //                    break;
 //
 //                case Database::VAR_OBJECT:
-//                    if (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
+//                    // For dotted attributes on objects, validate as string (path queries)
+//                    if ($isDottedOnObject) {
+//                        $validator = new Text(0, 0);
+//                        continue 2;
+//                    }
+//
+//                    // object containment queries on the base object attribute
+//                    elseif (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
 //                        && !$this->isValidObjectQueryValues($value)) {
 //                        $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
 //                        return false;
 //                    }
-//                    continue 2;
 //
+//                    continue 2;
 //                case Database::VAR_POINT:
 //                case Database::VAR_LINESTRING:
 //                case Database::VAR_POLYGON:

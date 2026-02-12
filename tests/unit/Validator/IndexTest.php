@@ -709,4 +709,171 @@ class IndexTest extends TestCase
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('Trigram indexes are not supported', $validatorNoSupport->getDescription());
     }
+
+    /**
+     * @throws Exception
+     */
+    public function testTTLIndexValidation(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('expiresAt'),
+                    'type' => Database::VAR_DATETIME,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => false,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => ['datetime'],
+                ]),
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => []
+        ]);
+
+        // Validator with supportForTTLIndexes enabled
+        $validator = new Index(
+            $collection->getAttribute('attributes'),
+            $collection->getAttribute('indexes', []),
+            768,
+            [],
+            false, // supportForArrayIndexes
+            false, // supportForSpatialIndexNull
+            false, // supportForSpatialIndexOrder
+            false, // supportForVectorIndexes
+            true,  // supportForAttributes
+            true,  // supportForMultipleFulltextIndexes
+            true,  // supportForIdenticalIndexes
+            false, // supportForObjectIndexes
+            false, // supportForTrigramIndexes
+            false, // supportForSpatialIndexes
+            true,  // supportForKeyIndexes
+            true,  // supportForUniqueIndexes
+            true,  // supportForFulltextIndexes
+            true   // supportForTTLIndexes
+        );
+
+        // Valid: TTL index on single datetime attribute with valid TTL
+        $validIndex = new Document([
+            '$id' => ID::custom('idx_ttl_valid'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 3600,
+        ]);
+        $this->assertTrue($validator->isValid($validIndex));
+
+        // Invalid: TTL index with ttl = 1
+        $invalidIndexZero = new Document([
+            '$id' => ID::custom('idx_ttl_zero'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 0,
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexZero));
+        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+
+        // Invalid: TTL index with TTL < 0
+        $invalidIndexNegative = new Document([
+            '$id' => ID::custom('idx_ttl_negative'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => -100,
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexNegative));
+        $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
+
+        // Invalid: TTL index on non-datetime attribute
+        $invalidIndexType = new Document([
+            '$id' => ID::custom('idx_ttl_invalid_type'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['name'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 3600,
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexType));
+        $this->assertStringContainsString('TTL index can only be created on datetime attributes', $validator->getDescription());
+
+        // Invalid: TTL index on multiple attributes
+        $invalidIndexMulti = new Document([
+            '$id' => ID::custom('idx_ttl_multi'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt', 'name'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC, Database::ORDER_ASC],
+            'ttl' => 3600,
+        ]);
+        $this->assertFalse($validator->isValid($invalidIndexMulti));
+        $this->assertStringContainsString('TTL indexes must be created on a single datetime attribute', $validator->getDescription());
+
+        // Valid: TTL index with minimum valid TTL (1 second)
+        $validIndexMin = new Document([
+            '$id' => ID::custom('idx_ttl_min'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 1,
+        ]);
+        $this->assertTrue($validator->isValid($validIndexMin));
+
+        // Invalid: any additional TTL index when another TTL index already exists
+        $collection->setAttribute('indexes', $validIndex, Document::SET_TYPE_APPEND);
+        $validatorWithExisting = new Index(
+            $collection->getAttribute('attributes'),
+            $collection->getAttribute('indexes', []),
+            768,
+            [],
+            false, // supportForArrayIndexes
+            false, // supportForSpatialIndexNull
+            false, // supportForSpatialIndexOrder
+            false, // supportForVectorIndexes
+            true,  // supportForAttributes
+            true,  // supportForMultipleFulltextIndexes
+            true,  // supportForIdenticalIndexes
+            false, // supportForObjectIndexes
+            false, // supportForTrigramIndexes
+            false, // supportForSpatialIndexes
+            true,  // supportForKeyIndexes
+            true,  // supportForUniqueIndexes
+            true,  // supportForFulltextIndexes
+            true   // supportForTTLIndexes
+        );
+
+        $duplicateTTLIndex = new Document([
+            '$id' => ID::custom('idx_ttl_duplicate'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 7200,
+        ]);
+        $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
+        $this->assertEquals('There can be only one TTL index in a collection', $validatorWithExisting->getDescription());
+
+        // Validator with supportForTrigramIndexes disabled should reject TTL
+        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false, false, false, false, false);
+        $this->assertFalse($validatorNoSupport->isValid($validIndex));
+        $this->assertEquals('TTL indexes are not supported', $validatorNoSupport->getDescription());
+    }
 }

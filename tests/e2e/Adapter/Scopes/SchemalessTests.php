@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -1028,19 +1029,36 @@ trait SchemalessTests
 
         $this->assertEquals('d1', $doc1->getId());
         $this->assertTrue(is_string($doc1->getAttribute('curDate')));
-        $this->assertEquals($curDate1, $doc1->getAttribute('curDate'));
+        // MongoDB converts ISO 8601 to 'Y-m-d H:i:s.v' format, so compare by parsing
+        $curDate1Value = $doc1->getAttribute('curDate');
+        $parsedCurDate1 = new \DateTime($curDate1Value);
+        $parsedExpectedCurDate1 = new \DateTime($curDate1);
+        $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedCurDate1->getTimestamp());
         $this->assertTrue(is_string($doc1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($doc1->getAttribute('$updatedAt')));
-        $this->assertEquals($createdAt1, $doc1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt1, $doc1->getAttribute('$updatedAt'));
+        // Internal attributes should preserve format better, but verify by parsing for MongoDB
+        $createdAt1Value = $doc1->getAttribute('$createdAt');
+        $updatedAt1Value = $doc1->getAttribute('$updatedAt');
+        $parsedCreatedAt1 = new \DateTime($createdAt1Value);
+        $parsedUpdatedAt1 = new \DateTime($updatedAt1Value);
+        $parsedExpectedCreatedAt1 = new \DateTime($createdAt1);
+        $parsedExpectedUpdatedAt1 = new \DateTime($updatedAt1);
+        $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedCreatedAt1->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt1->getTimestamp(), $parsedUpdatedAt1->getTimestamp());
 
         $fetched1 = $database->getDocument($col, 'd1');
-        $this->assertEquals($curDate1, $fetched1->getAttribute('curDate'));
-        $this->assertTrue(is_string($fetched1->getAttribute('curDate')));
+        $fetchedCurDate1 = $fetched1->getAttribute('curDate');
+        $this->assertTrue(is_string($fetchedCurDate1));
+        $parsedFetchedCurDate1 = new \DateTime($fetchedCurDate1);
+        $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedFetchedCurDate1->getTimestamp());
         $this->assertTrue(is_string($fetched1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($fetched1->getAttribute('$updatedAt')));
-        $this->assertEquals($createdAt1, $fetched1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt1, $fetched1->getAttribute('$updatedAt'));
+        $fetchedCreatedAt1 = $fetched1->getAttribute('$createdAt');
+        $fetchedUpdatedAt1 = $fetched1->getAttribute('$updatedAt');
+        $parsedFetchedCreatedAt1 = new \DateTime($fetchedCreatedAt1);
+        $parsedFetchedUpdatedAt1 = new \DateTime($fetchedUpdatedAt1);
+        $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedFetchedCreatedAt1->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt1->getTimestamp(), $parsedFetchedUpdatedAt1->getTimestamp());
 
         // createDocuments with preserved dates
         $createdAt2 = '2001-02-03T04:05:06.000+00:00';
@@ -1072,14 +1090,32 @@ trait SchemalessTests
         $this->assertEquals(2, $countCreated);
 
         $fetched2 = $database->getDocument($col, 'd2');
-        $this->assertEquals($curDate2, $fetched2->getAttribute('curDate'));
-        $this->assertEquals($createdAt2, $fetched2->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt2, $fetched2->getAttribute('$updatedAt'));
+        $fetchedCurDate2 = $fetched2->getAttribute('curDate');
+        $parsedCurDate2 = new \DateTime($fetchedCurDate2);
+        $parsedExpectedCurDate2 = new \DateTime($curDate2);
+        $this->assertEquals($parsedExpectedCurDate2->getTimestamp(), $parsedCurDate2->getTimestamp());
+        $fetchedCreatedAt2 = $fetched2->getAttribute('$createdAt');
+        $fetchedUpdatedAt2 = $fetched2->getAttribute('$updatedAt');
+        $parsedCreatedAt2 = new \DateTime($fetchedCreatedAt2);
+        $parsedUpdatedAt2 = new \DateTime($fetchedUpdatedAt2);
+        $parsedExpectedCreatedAt2 = new \DateTime($createdAt2);
+        $parsedExpectedUpdatedAt2 = new \DateTime($updatedAt2);
+        $this->assertEquals($parsedExpectedCreatedAt2->getTimestamp(), $parsedCreatedAt2->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt2->getTimestamp(), $parsedUpdatedAt2->getTimestamp());
 
         $fetched3 = $database->getDocument($col, 'd3');
-        $this->assertEquals($curDate3, $fetched3->getAttribute('curDate'));
-        $this->assertEquals($createdAt3, $fetched3->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt3, $fetched3->getAttribute('$updatedAt'));
+        $fetchedCurDate3 = $fetched3->getAttribute('curDate');
+        $parsedCurDate3 = new \DateTime($fetchedCurDate3);
+        $parsedExpectedCurDate3 = new \DateTime($curDate3);
+        $this->assertEquals($parsedExpectedCurDate3->getTimestamp(), $parsedCurDate3->getTimestamp());
+        $fetchedCreatedAt3 = $fetched3->getAttribute('$createdAt');
+        $fetchedUpdatedAt3 = $fetched3->getAttribute('$updatedAt');
+        $parsedCreatedAt3 = new \DateTime($fetchedCreatedAt3);
+        $parsedUpdatedAt3 = new \DateTime($fetchedUpdatedAt3);
+        $parsedExpectedCreatedAt3 = new \DateTime($createdAt3);
+        $parsedExpectedUpdatedAt3 = new \DateTime($updatedAt3);
+        $this->assertEquals($parsedExpectedCreatedAt3->getTimestamp(), $parsedCreatedAt3->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt3->getTimestamp(), $parsedUpdatedAt3->getTimestamp());
 
         // updateDocument with preserved $updatedAt and custom date field
         $newCurDate1   = '2000-02-01T00:00:00.000+00:00';
@@ -1090,11 +1126,21 @@ trait SchemalessTests
                 '$updatedAt' => $newUpdatedAt1,
             ]));
         });
-        $this->assertEquals($newCurDate1, $updated1->getAttribute('curDate'));
-        $this->assertEquals($newUpdatedAt1, $updated1->getAttribute('$updatedAt'));
+        $updatedCurDate1 = $updated1->getAttribute('curDate');
+        $updatedUpdatedAt1 = $updated1->getAttribute('$updatedAt');
+        $parsedUpdatedCurDate1 = new \DateTime($updatedCurDate1);
+        $parsedUpdatedUpdatedAt1 = new \DateTime($updatedUpdatedAt1);
+        $parsedExpectedNewCurDate1 = new \DateTime($newCurDate1);
+        $parsedExpectedNewUpdatedAt1 = new \DateTime($newUpdatedAt1);
+        $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedUpdatedCurDate1->getTimestamp());
+        $this->assertEquals($parsedExpectedNewUpdatedAt1->getTimestamp(), $parsedUpdatedUpdatedAt1->getTimestamp());
         $refetched1 = $database->getDocument($col, 'd1');
-        $this->assertEquals($newCurDate1, $refetched1->getAttribute('curDate'));
-        $this->assertEquals($newUpdatedAt1, $refetched1->getAttribute('$updatedAt'));
+        $refetchedCurDate1 = $refetched1->getAttribute('curDate');
+        $refetchedUpdatedAt1 = $refetched1->getAttribute('$updatedAt');
+        $parsedRefetchedCurDate1 = new \DateTime($refetchedCurDate1);
+        $parsedRefetchedUpdatedAt1 = new \DateTime($refetchedUpdatedAt1);
+        $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedRefetchedCurDate1->getTimestamp());
+        $this->assertEquals($parsedExpectedNewUpdatedAt1->getTimestamp(), $parsedRefetchedUpdatedAt1->getTimestamp());
 
         // updateDocuments with preserved $updatedAt over a subset
         $bulkCurDate   = '2001-01-01T00:00:00.000+00:00';
@@ -1112,10 +1158,20 @@ trait SchemalessTests
         $this->assertEquals(2, $updatedCount);
         $afterBulk2 = $database->getDocument($col, 'd2');
         $afterBulk3 = $database->getDocument($col, 'd3');
-        $this->assertEquals($bulkCurDate, $afterBulk2->getAttribute('curDate'));
-        $this->assertEquals($bulkUpdatedAt, $afterBulk2->getAttribute('$updatedAt'));
-        $this->assertEquals($bulkCurDate, $afterBulk3->getAttribute('curDate'));
-        $this->assertEquals($bulkUpdatedAt, $afterBulk3->getAttribute('$updatedAt'));
+        $bulkCurDate2 = $afterBulk2->getAttribute('curDate');
+        $bulkUpdatedAt2 = $afterBulk2->getAttribute('$updatedAt');
+        $bulkCurDate3 = $afterBulk3->getAttribute('curDate');
+        $bulkUpdatedAt3 = $afterBulk3->getAttribute('$updatedAt');
+        $parsedBulkCurDate2 = new \DateTime($bulkCurDate2);
+        $parsedBulkUpdatedAt2 = new \DateTime($bulkUpdatedAt2);
+        $parsedBulkCurDate3 = new \DateTime($bulkCurDate3);
+        $parsedBulkUpdatedAt3 = new \DateTime($bulkUpdatedAt3);
+        $parsedExpectedBulkCurDate = new \DateTime($bulkCurDate);
+        $parsedExpectedBulkUpdatedAt = new \DateTime($bulkUpdatedAt);
+        $this->assertEquals($parsedExpectedBulkCurDate->getTimestamp(), $parsedBulkCurDate2->getTimestamp());
+        $this->assertEquals($parsedExpectedBulkUpdatedAt->getTimestamp(), $parsedBulkUpdatedAt2->getTimestamp());
+        $this->assertEquals($parsedExpectedBulkCurDate->getTimestamp(), $parsedBulkCurDate3->getTimestamp());
+        $this->assertEquals($parsedExpectedBulkUpdatedAt->getTimestamp(), $parsedBulkUpdatedAt3->getTimestamp());
 
         // upsertDocument: create new then update existing with preserved dates
         $createdAt4 = '2003-03-03T03:03:03.000+00:00';
@@ -1131,9 +1187,18 @@ trait SchemalessTests
             ]));
         });
         $this->assertEquals('d4', $up1->getId());
-        $this->assertEquals($curDate4, $up1->getAttribute('curDate'));
-        $this->assertEquals($createdAt4, $up1->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt4, $up1->getAttribute('$updatedAt'));
+        $up1CurDate4 = $up1->getAttribute('curDate');
+        $up1CreatedAt4 = $up1->getAttribute('$createdAt');
+        $up1UpdatedAt4 = $up1->getAttribute('$updatedAt');
+        $parsedUp1CurDate4 = new \DateTime($up1CurDate4);
+        $parsedUp1CreatedAt4 = new \DateTime($up1CreatedAt4);
+        $parsedUp1UpdatedAt4 = new \DateTime($up1UpdatedAt4);
+        $parsedExpectedCurDate4 = new \DateTime($curDate4);
+        $parsedExpectedCreatedAt4 = new \DateTime($createdAt4);
+        $parsedExpectedUpdatedAt4 = new \DateTime($updatedAt4);
+        $this->assertEquals($parsedExpectedCurDate4->getTimestamp(), $parsedUp1CurDate4->getTimestamp());
+        $this->assertEquals($parsedExpectedCreatedAt4->getTimestamp(), $parsedUp1CreatedAt4->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt4->getTimestamp(), $parsedUp1UpdatedAt4->getTimestamp());
 
         $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
         $curDate4b   = '2003-03-07T07:07:07.000+00:00';
@@ -1144,11 +1209,21 @@ trait SchemalessTests
                 '$updatedAt' => $updatedAt4b,
             ]));
         });
-        $this->assertEquals($curDate4b, $up2->getAttribute('curDate'));
-        $this->assertEquals($updatedAt4b, $up2->getAttribute('$updatedAt'));
+        $up2CurDate4b = $up2->getAttribute('curDate');
+        $up2UpdatedAt4b = $up2->getAttribute('$updatedAt');
+        $parsedUp2CurDate4b = new \DateTime($up2CurDate4b);
+        $parsedUp2UpdatedAt4b = new \DateTime($up2UpdatedAt4b);
+        $parsedExpectedCurDate4b = new \DateTime($curDate4b);
+        $parsedExpectedUpdatedAt4b = new \DateTime($updatedAt4b);
+        $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedUp2CurDate4b->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt4b->getTimestamp(), $parsedUp2UpdatedAt4b->getTimestamp());
         $refetched4 = $database->getDocument($col, 'd4');
-        $this->assertEquals($curDate4b, $refetched4->getAttribute('curDate'));
-        $this->assertEquals($updatedAt4b, $refetched4->getAttribute('$updatedAt'));
+        $refetched4CurDate4b = $refetched4->getAttribute('curDate');
+        $refetched4UpdatedAt4b = $refetched4->getAttribute('$updatedAt');
+        $parsedRefetched4CurDate4b = new \DateTime($refetched4CurDate4b);
+        $parsedRefetched4UpdatedAt4b = new \DateTime($refetched4UpdatedAt4b);
+        $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedRefetched4CurDate4b->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt4b->getTimestamp(), $parsedRefetched4UpdatedAt4b->getTimestamp());
 
         // upsertDocuments: mix create and update with preserved dates
         $createdAt5 = '2004-04-01T01:01:01.000+00:00';
@@ -1176,13 +1251,28 @@ trait SchemalessTests
         $this->assertEquals(2, $upCount);
 
         $fetched5 = $database->getDocument($col, 'd5');
-        $this->assertEquals($curDate5, $fetched5->getAttribute('curDate'));
-        $this->assertEquals($createdAt5, $fetched5->getAttribute('$createdAt'));
-        $this->assertEquals($updatedAt5, $fetched5->getAttribute('$updatedAt'));
+        $fetched5CurDate5 = $fetched5->getAttribute('curDate');
+        $fetched5CreatedAt5 = $fetched5->getAttribute('$createdAt');
+        $fetched5UpdatedAt5 = $fetched5->getAttribute('$updatedAt');
+        $parsedFetched5CurDate5 = new \DateTime($fetched5CurDate5);
+        $parsedFetched5CreatedAt5 = new \DateTime($fetched5CreatedAt5);
+        $parsedFetched5UpdatedAt5 = new \DateTime($fetched5UpdatedAt5);
+        $parsedExpectedCurDate5 = new \DateTime($curDate5);
+        $parsedExpectedCreatedAt5 = new \DateTime($createdAt5);
+        $parsedExpectedUpdatedAt5 = new \DateTime($updatedAt5);
+        $this->assertEquals($parsedExpectedCurDate5->getTimestamp(), $parsedFetched5CurDate5->getTimestamp());
+        $this->assertEquals($parsedExpectedCreatedAt5->getTimestamp(), $parsedFetched5CreatedAt5->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt5->getTimestamp(), $parsedFetched5UpdatedAt5->getTimestamp());
 
         $fetched2b = $database->getDocument($col, 'd2');
-        $this->assertEquals($curDate2b, $fetched2b->getAttribute('curDate'));
-        $this->assertEquals($updatedAt2b, $fetched2b->getAttribute('$updatedAt'));
+        $fetched2bCurDate2b = $fetched2b->getAttribute('curDate');
+        $fetched2bUpdatedAt2b = $fetched2b->getAttribute('$updatedAt');
+        $parsedFetched2bCurDate2b = new \DateTime($fetched2bCurDate2b);
+        $parsedFetched2bUpdatedAt2b = new \DateTime($fetched2bUpdatedAt2b);
+        $parsedExpectedCurDate2b = new \DateTime($curDate2b);
+        $parsedExpectedUpdatedAt2b = new \DateTime($updatedAt2b);
+        $this->assertEquals($parsedExpectedCurDate2b->getTimestamp(), $parsedFetched2bCurDate2b->getTimestamp());
+        $this->assertEquals($parsedExpectedUpdatedAt2b->getTimestamp(), $parsedFetched2bUpdatedAt2b->getTimestamp());
 
         // increase/decrease should not affect date types; ensure they remain strings
         $afterInc = $database->increaseDocumentAttribute($col, 'd1', 'counter', 5);
@@ -2148,6 +2238,918 @@ trait SchemalessTests
 
         // Clean up
         $database->deleteCollection($collectionName);
+    }
+
+    public function testSchemalessTTLIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_valid',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                3600 // 1 hour TTL
+            )
+        );
+
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(1, $indexes);
+        $ttlIndex = $indexes[0];
+        $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
+        $this->assertEquals(Database::INDEX_TTL, $ttlIndex->getAttribute('type'));
+        $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
+
+        $now = new \DateTime();
+        $future1 = (clone $now)->modify('+2 hours');
+        $future2 = (clone $now)->modify('+1 hour');
+        $past = (clone $now)->modify('-1 hour');
+
+        $doc1 = $database->createDocument($col, new Document([
+            '$id' => 'doc1',
+            '$permissions' => $permissions,
+            'expiresAt' => $future1->format(\DateTime::ATOM),
+            'data' => 'will expire in 2 hours'
+        ]));
+
+        $doc2 = $database->createDocument($col, new Document([
+            '$id' => 'doc2',
+            '$permissions' => $permissions,
+            'expiresAt' => $future2->format(\DateTime::ATOM),
+            'data' => 'will expire in 1 hour'
+        ]));
+
+        $doc3 = $database->createDocument($col, new Document([
+            '$id' => 'doc3',
+            '$permissions' => $permissions,
+            'expiresAt' => $past->format(\DateTime::ATOM),
+            'data' => 'already expired'
+        ]));
+
+        // Verify documents were created
+        $this->assertEquals('doc1', $doc1->getId());
+        $this->assertEquals('doc2', $doc2->getId());
+        $this->assertEquals('doc3', $doc3->getId());
+
+        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
+
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_min',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                1 // Minimum TTL
+            )
+        );
+
+        $col2 = uniqid('sl_ttl_collection');
+
+        $expiresAtAttr = new Document([
+            '$id' => ID::custom('expiresAt'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+
+        $ttlIndexDoc = new Document([
+            '$id' => ID::custom('idx_ttl_collection'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 7200 // 2 hours
+        ]);
+
+        $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
+
+        $collection2 = $database->getCollection($col2);
+        $indexes2 = $collection2->getAttribute('indexes');
+        $this->assertCount(1, $indexes2);
+        $ttlIndex2 = $indexes2[0];
+        $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
+        $this->assertEquals(7200, $ttlIndex2->getAttribute('ttl'));
+
+        $database->deleteCollection($col);
+        $database->deleteCollection($col2);
+    }
+
+    public function testSchemalessTTLIndexDuplicatePrevention(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl_dup');
+        $database->createCollection($col);
+
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expires',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                3600 // 1 hour
+            )
+        );
+
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_expires_duplicate',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                7200 // 2 hours
+            );
+            $this->fail('Expected exception for creating a second TTL index in a collection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
+
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_deleted',
+                Database::INDEX_TTL,
+                ['deletedAt'],
+                [],
+                [Database::ORDER_ASC],
+                86400 // 24 hours
+            );
+            $this->fail('Expected exception for creating a second TTL index in a collection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
+
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(1, $indexes);
+
+        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
+        $this->assertContains('idx_ttl_expires', $indexIds);
+        $this->assertNotContains('idx_ttl_deleted', $indexIds);
+
+        try {
+            $database->createIndex(
+                $col,
+                'idx_ttl_deleted_duplicate',
+                Database::INDEX_TTL,
+                ['deletedAt'],
+                [],
+                [Database::ORDER_ASC],
+                172800 // 48 hours
+            );
+            $this->fail('Expected exception for creating a second TTL index in a collection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
+
+        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
+
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_deleted',
+                Database::INDEX_TTL,
+                ['deletedAt'],
+                [],
+                [Database::ORDER_ASC],
+                1800 // 30 minutes
+            )
+        );
+
+        $collection = $database->getCollection($col);
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(1, $indexes);
+
+        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
+        $this->assertNotContains('idx_ttl_expires', $indexIds);
+        $this->assertContains('idx_ttl_deleted', $indexIds);
+
+        $col3 = uniqid('sl_ttl_dup_collection');
+
+        $expiresAtAttr = new Document([
+            '$id' => ID::custom('expiresAt'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime'],
+        ]);
+
+        $ttlIndex1 = new Document([
+            '$id' => ID::custom('idx_ttl_1'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 3600
+        ]);
+
+        $ttlIndex2 = new Document([
+            '$id' => ID::custom('idx_ttl_2'),
+            'type' => Database::INDEX_TTL,
+            'attributes' => ['expiresAt'],
+            'lengths' => [],
+            'orders' => [Database::ORDER_ASC],
+            'ttl' => 7200
+        ]);
+
+        try {
+            $database->createCollection($col3, [$expiresAtAttr], [$ttlIndex1, $ttlIndex2]);
+            $this->fail('Expected exception for duplicate TTL indexes in createCollection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
+
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessDatetimeCreationAndFetching(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_datetime');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create documents with ISO 8601 datetime strings (20-40 chars)
+        // MongoDB converts ISO 8601 to UTCDateTime and returns in 'Y-m-d H:i:s.v' format
+        $datetime1 = '2024-01-15T10:30:00.000+00:00';
+        $datetime2 = '2024-02-20T14:45:30.123Z';
+        $datetime3 = '2024-03-25T08:15:45.000000+05:30';
+
+        $doc1 = $database->createDocument($col, new Document([
+            '$id' => 'dt1',
+            '$permissions' => $permissions,
+            'eventDate' => $datetime1,
+            'name' => 'Event 1'
+        ]));
+
+        $doc2 = $database->createDocument($col, new Document([
+            '$id' => 'dt2',
+            '$permissions' => $permissions,
+            'eventDate' => $datetime2,
+            'name' => 'Event 2'
+        ]));
+
+        $doc3 = $database->createDocument($col, new Document([
+            '$id' => 'dt3',
+            '$permissions' => $permissions,
+            'eventDate' => $datetime3,
+            'name' => 'Event 3'
+        ]));
+
+        // Verify creation - check that datetime is stored and returned as string
+        $this->assertEquals('dt1', $doc1->getId());
+        $eventDate1 = $doc1->getAttribute('eventDate');
+        $this->assertTrue(is_string($eventDate1));
+        $this->assertGreaterThanOrEqual(20, strlen($eventDate1));
+        $this->assertLessThanOrEqual(40, strlen($eventDate1));
+
+        // Fetch and verify - MongoDB returns datetime in 'Y-m-d H:i:s.v' format
+        $fetched1 = $database->getDocument($col, 'dt1');
+        $fetchedEventDate1 = $fetched1->getAttribute('eventDate');
+        $this->assertTrue(is_string($fetchedEventDate1));
+        $this->assertEquals('Event 1', $fetched1->getAttribute('name'));
+
+        // Verify datetime values are equivalent by parsing (MongoDB converts to UTC)
+        $parsedInput1 = new \DateTime($datetime1);
+        $parsedOutput1 = new \DateTime($fetchedEventDate1);
+        $this->assertEquals($parsedInput1->getTimestamp(), $parsedOutput1->getTimestamp());
+
+        $fetched2 = $database->getDocument($col, 'dt2');
+        $fetchedEventDate2 = $fetched2->getAttribute('eventDate');
+        $this->assertTrue(is_string($fetchedEventDate2));
+        $parsedInput2 = new \DateTime($datetime2);
+        $parsedOutput2 = new \DateTime($fetchedEventDate2);
+        $this->assertEquals($parsedInput2->getTimestamp(), $parsedOutput2->getTimestamp());
+
+        $fetched3 = $database->getDocument($col, 'dt3');
+        $fetchedEventDate3 = $fetched3->getAttribute('eventDate');
+        $this->assertTrue(is_string($fetchedEventDate3));
+        // Verify it's a valid datetime string (format may vary slightly)
+        $this->assertGreaterThanOrEqual(20, strlen($fetchedEventDate3));
+        $this->assertLessThanOrEqual(40, strlen($fetchedEventDate3));
+        $parsedInput3 = new \DateTime($datetime3);
+        $parsedOutput3 = new \DateTime($fetchedEventDate3);
+        // MongoDB converts to UTC, so timestamps should match
+        $this->assertEquals($parsedInput3->getTimestamp(), $parsedOutput3->getTimestamp());
+
+        // Find all datetime documents
+        $allDocs = $database->find($col);
+        $this->assertCount(3, $allDocs);
+
+        // Verify all documents are present
+        $allIds = array_map(fn ($doc) => $doc->getId(), $allDocs);
+        $this->assertContains('dt1', $allIds);
+        $this->assertContains('dt2', $allIds);
+        $this->assertContains('dt3', $allIds);
+
+        // Update datetime
+        $newDatetime = '2024-12-31T23:59:59.999+00:00';
+        $updated = $database->updateDocument($col, 'dt1', new Document([
+            'eventDate' => $newDatetime
+        ]));
+        $updatedEventDate = $updated->getAttribute('eventDate');
+        $this->assertTrue(is_string($updatedEventDate));
+        $this->assertGreaterThanOrEqual(20, strlen($updatedEventDate));
+        $this->assertLessThanOrEqual(40, strlen($updatedEventDate));
+
+        $refetched = $database->getDocument($col, 'dt1');
+        $refetchedEventDate = $refetched->getAttribute('eventDate');
+        $this->assertTrue(is_string($refetchedEventDate));
+        $parsedNewInput = new \DateTime($newDatetime);
+        $parsedNewOutput = new \DateTime($refetchedEventDate);
+        $this->assertEquals($parsedNewInput->getTimestamp(), $parsedNewOutput->getTimestamp());
+
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessTTLExpiry(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl_expiry');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create TTL index with 60 seconds expiry
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expiresAt',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                10
+            )
+        );
+
+        $now = new \DateTime();
+        $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
+        $futureTime = (clone $now)->modify('+120 seconds'); // Will expire in 2 minutes
+
+        // Create mixed documents: some with expiresAt, some without
+        $doc1 = $database->createDocument($col, new Document([
+            '$id' => 'expired_doc',
+            '$permissions' => $permissions,
+            'expiresAt' => $expiredTime->format(\DateTime::ATOM),
+            'data' => 'This should expire',
+            'type' => 'temporary'
+        ]));
+
+        $doc2 = $database->createDocument($col, new Document([
+            '$id' => 'future_doc',
+            '$permissions' => $permissions,
+            'expiresAt' => $futureTime->format(\DateTime::ATOM),
+            'data' => 'This should not expire yet',
+            'type' => 'temporary'
+        ]));
+
+        $doc3 = $database->createDocument($col, new Document([
+            '$id' => 'permanent_doc',
+            '$permissions' => $permissions,
+            'data' => 'This should never expire',
+            'type' => 'permanent'
+        ]));
+
+        $doc4 = $database->createDocument($col, new Document([
+            '$id' => 'another_permanent',
+            '$permissions' => $permissions,
+            'data' => 'This should also never expire',
+            'type' => 'permanent'
+        ]));
+
+        // Verify all documents were created
+        $this->assertEquals('expired_doc', $doc1->getId());
+        $this->assertEquals('future_doc', $doc2->getId());
+        $this->assertEquals('permanent_doc', $doc3->getId());
+        $this->assertEquals('another_permanent', $doc4->getId());
+
+        // Initial count should be 4
+        $initialDocs = $database->find($col);
+        $this->assertCount(4, $initialDocs);
+
+        // Wait for TTL to expire with retry loop
+        // Note: MongoDB TTL cleanup runs every 60 seconds, so we need to retry
+        $maxRetries = 15; // 15 retries * 5 seconds = 75 seconds max
+        $retryDelay = 5; // Wait 5 seconds between retries
+        $expiredDocDeleted = false;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+
+            // Fetch collection to trigger TTL cleanup check
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+
+            // Check if expired document is gone
+            $remainingDocs = $database->find($col);
+            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+            if (!in_array('expired_doc', $remainingIds)) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+
+        // Assert that expired document was deleted
+        $this->assertTrue($expiredDocDeleted, 'Expired document should have been deleted after TTL expiry');
+
+        // After expiry, expired document should be gone
+        // Documents without expiresAt should remain
+        $remainingDocs = $database->find($col);
+        $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+        // The expired document should be deleted
+        $this->assertNotContains('expired_doc', $remainingIds);
+
+        // Documents without expiresAt should still exist
+        $this->assertContains('permanent_doc', $remainingIds);
+        $this->assertContains('another_permanent', $remainingIds);
+
+        // Future document might still exist (depending on timing) or might be deleted
+        // The key test is that permanent docs remain and expired doc is gone
+        $this->assertGreaterThanOrEqual(2, count($remainingDocs)); // At least 2 permanent docs
+        $this->assertLessThanOrEqual(3, count($remainingDocs)); // At most 3 (if future doc still exists)
+
+        // Verify permanent documents are still accessible
+        $permanent1 = $database->getDocument($col, 'permanent_doc');
+        $this->assertFalse($permanent1->isEmpty());
+        $this->assertEquals('permanent', $permanent1->getAttribute('type'));
+
+        $permanent2 = $database->getDocument($col, 'another_permanent');
+        $this->assertFalse($permanent2->isEmpty());
+        $this->assertEquals('permanent', $permanent2->getAttribute('type'));
+
+        // Verify expired document is gone
+        $expired = $database->getDocument($col, 'expired_doc');
+        $this->assertTrue($expired->isEmpty());
+
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessTTLWithCacheExpiry(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_ttl_cache_expiry');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create TTL index with 10 seconds expiry (also used as cache TTL)
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expiresAt',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                10
+            )
+        );
+
+        $now = new \DateTime();
+        $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired from TTL perspective
+
+        $expiredDoc = $database->createDocument($col, new Document([
+            '$id' => 'expired_doc',
+            '$permissions' => $permissions,
+            'expiresAt' => $expiredTime->format(\DateTime::ATOM),
+            'data' => 'This should expire',
+        ]));
+
+        $permanentDoc = $database->createDocument($col, new Document([
+            '$id' => 'permanent_doc',
+            '$permissions' => $permissions,
+            'data' => 'This should never expire',
+        ]));
+
+        $this->assertEquals('expired_doc', $expiredDoc->getId());
+        $this->assertEquals('permanent_doc', $permanentDoc->getId());
+
+        $expiredFetched = $database->getDocument($col, 'expired_doc');
+        $this->assertTrue($expiredFetched->isEmpty(), 'Expired document should be considered expired immediately');
+        $permanentFetched = $database->getDocument($col, 'permanent_doc');
+        $this->assertFalse($permanentFetched->isEmpty());
+
+        // Wait for TTL to expire with retry loop, always fetching via getDocument (uses cache)
+        $maxRetries = 15; // 15 * 5s = 75 seconds max
+        $retryDelay = 5;
+        $expiredDocDeleted = false;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+
+            // Fetch collection to trigger TTL cleanup check in MongoDB
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+
+            // Fetch through getDocument, which goes through the cache layer
+            $expired = $database->getDocument($col, 'expired_doc');
+            if ($expired->isEmpty()) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+
+        // Expired document should eventually disappear when fetched through cache-aware getDocument
+        $this->assertTrue($expiredDocDeleted, 'Expired document should have been deleted after TTL expiry when fetched via getDocument');
+
+        // Permanent document should still be accessible
+        $permanent = $database->getDocument($col, 'permanent_doc');
+        $this->assertFalse($permanent->isEmpty());
+        $this->assertEquals('This should never expire', $permanent->getAttribute('data'));
+
+        $database->deleteCollection($col);
+    }
+
+    public function testStringAndDatetime(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_str_datetime');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create documents with mix of formatted dates (ISO 8601) and non-formatted dates (regular strings)
+        // Each document has two fields: str and datetime
+        $docs = [
+            new Document([
+                '$id' => 'doc1',
+                '$permissions' => $permissions,
+                'str' => '2024-01-15T10:30:00.000+00:00', // ISO 8601 formatted date as string
+                'datetime' => '2024-01-15T10:30:00.000+00:00' // ISO 8601 formatted date
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => $permissions,
+                'str' => 'just a regular string', // Non-formatted string
+                'datetime' => '2024-02-20T14:45:30.123Z' // ISO 8601 formatted date
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => $permissions,
+                'str' => '2024-03-25T08:15:45.000000+05:30', // ISO 8601 formatted date as string
+                'datetime' => 'not a date string' // Non-formatted string in datetime field
+            ]),
+            new Document([
+                '$id' => 'doc4',
+                '$permissions' => $permissions,
+                'str' => 'another string value',
+                'datetime' => '2024-12-31T23:59:59.999+00:00' // ISO 8601 formatted date
+            ]),
+            new Document([
+                '$id' => 'doc5',
+                '$permissions' => $permissions,
+                'str' => '2024-06-15T12:00:00.000Z', // ISO 8601 formatted date as string
+                'datetime' => '2024-06-15T12:00:00.000Z' // ISO 8601 formatted date
+            ]),
+        ];
+
+        $createdCount = $database->createDocuments($col, $docs);
+        $this->assertEquals(5, $createdCount);
+
+        // Fetch all documents and validate
+        $allDocs = $database->find($col);
+        $this->assertCount(5, $allDocs);
+
+        // Validate each document
+        $doc1 = $database->getDocument($col, 'doc1');
+        $this->assertEquals('doc1', $doc1->getId());
+        $this->assertTrue(is_string($doc1->getAttribute('str')));
+        $this->assertTrue(is_string($doc1->getAttribute('datetime')));
+        // str field should remain as string (even if it looks like a date)
+        $this->assertGreaterThanOrEqual(20, strlen($doc1->getAttribute('str')));
+        $this->assertLessThanOrEqual(40, strlen($doc1->getAttribute('str')));
+        // datetime field should be converted to MongoDB format if it's a valid ISO date
+        $datetime1 = $doc1->getAttribute('datetime');
+        $this->assertTrue(is_string($datetime1));
+        $this->assertGreaterThanOrEqual(20, strlen($datetime1));
+        $this->assertLessThanOrEqual(40, strlen($datetime1));
+        // Verify it's a valid datetime by parsing
+        $parsed1 = new \DateTime($datetime1);
+        $this->assertInstanceOf(\DateTime::class, $parsed1);
+
+        $doc2 = $database->getDocument($col, 'doc2');
+        $this->assertEquals('doc2', $doc2->getId());
+        $this->assertEquals('just a regular string', $doc2->getAttribute('str'));
+        $datetime2 = $doc2->getAttribute('datetime');
+        $this->assertTrue(is_string($datetime2));
+        $parsed2 = new \DateTime($datetime2);
+        $this->assertInstanceOf(\DateTime::class, $parsed2);
+
+        $doc3 = $database->getDocument($col, 'doc3');
+        $this->assertEquals('doc3', $doc3->getId());
+        $str3 = $doc3->getAttribute('str');
+        $this->assertTrue(is_string($str3));
+        $this->assertGreaterThanOrEqual(20, strlen($str3));
+        $this->assertLessThanOrEqual(40, strlen($str3));
+        // datetime field contains non-date string, should remain as string
+        $datetime3 = $doc3->getAttribute('datetime');
+        $this->assertEquals('not a date string', $datetime3);
+        $this->assertTrue(is_string($datetime3));
+
+        $doc4 = $database->getDocument($col, 'doc4');
+        $this->assertEquals('doc4', $doc4->getId());
+        $this->assertEquals('another string value', $doc4->getAttribute('str'));
+        $datetime4 = $doc4->getAttribute('datetime');
+        $this->assertTrue(is_string($datetime4));
+        $parsed4 = new \DateTime($datetime4);
+        $this->assertInstanceOf(\DateTime::class, $parsed4);
+
+        $doc5 = $database->getDocument($col, 'doc5');
+        $this->assertEquals('doc5', $doc5->getId());
+        $str5 = $doc5->getAttribute('str');
+        $this->assertTrue(is_string($str5));
+        $this->assertGreaterThanOrEqual(20, strlen($str5));
+        $this->assertLessThanOrEqual(40, strlen($str5));
+        $datetime5 = $doc5->getAttribute('datetime');
+        $this->assertTrue(is_string($datetime5));
+        $parsed5 = new \DateTime($datetime5);
+        $this->assertInstanceOf(\DateTime::class, $parsed5);
+
+        // Verify all documents are present using simple find
+        $allDocs = $database->find($col);
+        $this->assertCount(5, $allDocs);
+        $allIds = array_map(fn ($doc) => $doc->getId(), $allDocs);
+        $this->assertContains('doc1', $allIds);
+        $this->assertContains('doc2', $allIds);
+        $this->assertContains('doc3', $allIds);
+        $this->assertContains('doc4', $allIds);
+        $this->assertContains('doc5', $allIds);
+
+        $database->deleteCollection($col);
+    }
+
+    public function testStringAndDateWithTTL(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_str_date_ttl');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Create TTL index on expiresAt field
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_ttl_expiresAt',
+                Database::INDEX_TTL,
+                ['expiresAt'],
+                [],
+                [Database::ORDER_ASC],
+                10
+            )
+        );
+
+        $now = new \DateTime();
+        $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
+        $futureTime = (clone $now)->modify('+120 seconds'); // Will expire in 2 minutes
+
+        // Create documents with mix of datetime values and random strings in expiresAt
+        $docs = [
+            new Document([
+                '$id' => 'doc_datetime_expired',
+                '$permissions' => $permissions,
+                'expiresAt' => $expiredTime->format(\DateTime::ATOM), // Valid datetime - should expire
+                'data' => 'This should expire',
+                'type' => 'datetime'
+            ]),
+            new Document([
+                '$id' => 'doc_datetime_future',
+                '$permissions' => $permissions,
+                'expiresAt' => $futureTime->format(\DateTime::ATOM), // Valid datetime - future
+                'data' => 'This should not expire yet',
+                'type' => 'datetime'
+            ]),
+            new Document([
+                '$id' => 'doc_string_random',
+                '$permissions' => $permissions,
+                'expiresAt' => 'random_string_value_12345', // Random string - should not expire
+                'data' => 'This should never expire',
+                'type' => 'string'
+            ]),
+            new Document([
+                '$id' => 'doc_string_another',
+                '$permissions' => $permissions,
+                'expiresAt' => 'another_random_string_xyz', // Random string - should not expire
+                'data' => 'This should also never expire',
+                'type' => 'string'
+            ]),
+            new Document([
+                '$id' => 'doc_datetime_valid',
+                '$permissions' => $permissions,
+                'expiresAt' => $futureTime->format(\DateTime::ATOM), // Valid datetime - future
+                'data' => 'This is a valid datetime',
+                'type' => 'datetime'
+            ]),
+        ];
+
+        $createdCount = $database->createDocuments($col, $docs);
+        $this->assertEquals(5, $createdCount);
+
+        // Verify all documents were created
+        $initialDocs = $database->find($col);
+        $this->assertCount(5, $initialDocs);
+
+        // Verify documents with datetime values
+        $docDatetimeExpired = $database->getDocument($col, 'doc_datetime_expired');
+        // Document is already expired according to TTL, so it should be treated as expired (empty)
+        $this->assertTrue($docDatetimeExpired->isEmpty());
+
+        $docDatetimeFuture = $database->getDocument($col, 'doc_datetime_future');
+        $this->assertFalse($docDatetimeFuture->isEmpty());
+        $expiresAt2 = $docDatetimeFuture->getAttribute('expiresAt');
+        $this->assertTrue(is_string($expiresAt2));
+        $parsed2 = new \DateTime($expiresAt2);
+        $this->assertInstanceOf(\DateTime::class, $parsed2);
+
+        // Verify documents with random strings remain as strings
+        $docStringRandom = $database->getDocument($col, 'doc_string_random');
+        $this->assertFalse($docStringRandom->isEmpty());
+        $expiresAt3 = $docStringRandom->getAttribute('expiresAt');
+        $this->assertEquals('random_string_value_12345', $expiresAt3);
+        $this->assertTrue(is_string($expiresAt3));
+        // Should remain as the original string (not converted to datetime)
+        $this->assertEquals('random_string_value_12345', $expiresAt3);
+
+        $docStringAnother = $database->getDocument($col, 'doc_string_another');
+        $this->assertFalse($docStringAnother->isEmpty());
+        $expiresAt4 = $docStringAnother->getAttribute('expiresAt');
+        $this->assertEquals('another_random_string_xyz', $expiresAt4);
+        $this->assertTrue(is_string($expiresAt4));
+
+        // Wait for the MongoDB TTL monitor to physically delete the expired datetime document.
+        $maxRetries = 25;
+        $retryDelay = 5;
+        $expiredDocDeleted = false;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            sleep($retryDelay);
+
+            // Fetch collection to trigger TTL cleanup check
+            $collection = $database->getCollection($col);
+            $this->assertNotNull($collection);
+
+            $remainingDocs = $database->find($col);
+            $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+            if (!in_array('doc_datetime_expired', $remainingIds)) {
+                $expiredDocDeleted = true;
+                break;
+            }
+        }
+
+        // Assert that expired datetime document was eventually deleted by TTL monitor
+        $this->assertTrue($expiredDocDeleted, 'Expired datetime document should have been deleted after TTL expiry');
+
+        // After expiry, re-check remaining documents
+        $remainingDocs = $database->find($col);
+        $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
+
+        // The expired datetime document should be deleted from the collection
+        $this->assertNotContains('doc_datetime_expired', $remainingIds);
+
+        // Documents with random strings should still exist (TTL doesn't affect non-datetime values)
+        $this->assertContains('doc_string_random', $remainingIds);
+        $this->assertContains('doc_string_another', $remainingIds);
+
+        // Verify random string documents are still accessible with original string values
+        $remainingStringDoc1 = $database->getDocument($col, 'doc_string_random');
+        $this->assertFalse($remainingStringDoc1->isEmpty());
+        $this->assertEquals('random_string_value_12345', $remainingStringDoc1->getAttribute('expiresAt'));
+        $this->assertEquals('string', $remainingStringDoc1->getAttribute('type'));
+
+        $remainingStringDoc2 = $database->getDocument($col, 'doc_string_another');
+        $this->assertFalse($remainingStringDoc2->isEmpty());
+        $this->assertEquals('another_random_string_xyz', $remainingStringDoc2->getAttribute('expiresAt'));
+        $this->assertEquals('string', $remainingStringDoc2->getAttribute('type'));
+
+        // Future datetime documents might still exist or be deleted depending on timing
+        // But at minimum, we should have the string documents
+        $this->assertGreaterThanOrEqual(2, count($remainingDocs)); // At least 2 string docs
+        $this->assertLessThanOrEqual(4, count($remainingDocs)); // At most 4 (if future datetime docs still exist)
+
+        $database->deleteCollection($col);
     }
 
     public function testSchemalessMongoDotNotationIndexes(): void

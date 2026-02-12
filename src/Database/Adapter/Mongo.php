@@ -488,7 +488,7 @@ class Mongo extends Adapter
                 $orders = $index->getAttribute('orders');
 
                 // If sharedTables, always add _tenant as the first key
-                if ($this->sharedTables) {
+                if ($this->shouldAddTenantToIndex($index)) {
                     $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
                 }
 
@@ -508,6 +508,9 @@ class Mongo extends Adapter
                             $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             $unique = true;
                             break;
+                        case Database::INDEX_TTL:
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
+                            break;
                         default:
                             // index not supported
                             return false;
@@ -524,6 +527,14 @@ class Mongo extends Adapter
 
                 if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
                     $newIndexes[$i]['default_language'] = 'none';
+                }
+
+                // Handle TTL indexes
+                if ($index->getAttribute('type') === Database::INDEX_TTL) {
+                    $ttl = $index->getAttribute('ttl', 0);
+                    if ($ttl > 0) {
+                        $newIndexes[$i]['expireAfterSeconds'] = $ttl;
+                    }
                 }
 
                 // Add partial filter for indexes to avoid indexing null values
@@ -901,10 +912,11 @@ class Mongo extends Adapter
      * @param array<string> $orders
      * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
+     * @param int $ttl
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -913,7 +925,7 @@ class Mongo extends Adapter
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
-        if ($this->sharedTables) {
+        if ($this->shouldAddTenantToIndex($type)) {
             $indexes['key']['_tenant'] = $this->getOrder(Database::ORDER_ASC);
         }
 
@@ -938,6 +950,8 @@ class Mongo extends Adapter
                     break;
                 case Database::INDEX_UNIQUE:
                     $indexes['unique'] = true;
+                    break;
+                case Database::INDEX_TTL:
                     break;
                 default:
                     return false;
@@ -965,6 +979,11 @@ class Mongo extends Adapter
          */
         if ($type === Database::INDEX_FULLTEXT) {
             $indexes['default_language'] = 'none';
+        }
+
+        // Handle TTL indexes
+        if ($type === Database::INDEX_TTL && $ttl > 0) {
+            $indexes['expireAfterSeconds'] = $ttl;
         }
 
         // Add partial filter for indexes to avoid indexing null values
@@ -1079,7 +1098,7 @@ class Mongo extends Adapter
 
         try {
             $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes);
+            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, [], $index['ttl'] ?? 0);
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -1241,30 +1260,7 @@ class Mongo extends Adapter
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME:
-                        if ($node instanceof UTCDateTime) {
-                            // Handle UTCDateTime objects
-                            $node = DateTime::format($node->toDateTime());
-                        } elseif (is_array($node) && isset($node['$date'])) {
-                            // Handle Extended JSON format from (array) cast
-                            // Format: {"$date":{"$numberLong":"1760405478290"}}
-                            if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
-                                $milliseconds = (int)$node['$date']['$numberLong'];
-                                $seconds = intdiv($milliseconds, 1000);
-                                $microseconds = ($milliseconds % 1000) * 1000;
-                                $dateTime = \DateTime::createFromFormat('U.u', $seconds . '.' . str_pad((string)$microseconds, 6, '0'));
-                                if ($dateTime) {
-                                    $dateTime->setTimezone(new \DateTimeZone('UTC'));
-                                    $node = DateTime::format($dateTime);
-                                }
-                            }
-                        } elseif (is_string($node)) {
-                            // Already a string, validate and pass through
-                            try {
-                                new \DateTime($node);
-                            } catch (\Exception $e) {
-                                // Invalid date string, skip
-                            }
-                        }
+                        $node = $this->convertUTCDateToString($node);
                         break;
                     case Database::VAR_OBJECT:
                         // Convert stdClass objects to arrays for object attributes
@@ -1285,6 +1281,8 @@ class Mongo extends Adapter
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {
                     $document->setAttribute($key, $this->convertStdClassToArray($value));
+                } elseif ($value instanceof UTCDateTime) {
+                    $document->setAttribute($key, $this->convertUTCDateToString($value));
                 }
             }
         }
@@ -1366,6 +1364,24 @@ class Mongo extends Adapter
             }
             unset($node);
             $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
+        $indexes = $collection->getAttribute('indexes');
+        $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === Database::INDEX_TTL);
+
+        if (!$this->getSupportForAttributes()) {
+            foreach ($document->getArrayCopy() as $key => $value) {
+                if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
+                    continue;
+                }
+                if (is_string($value) && (in_array($key, $ttlIndexes) || $this->isExtendedISODatetime($value))) {
+                    try {
+                        $newValue = new UTCDateTime(new \DateTime($value));
+                        $document->setAttribute($key, $newValue);
+                    } catch (\Throwable $th) {
+                        // skip -> a valid string
+                    }
+                }
+            }
         }
 
         return $document;
@@ -2086,7 +2102,7 @@ class Mongo extends Adapter
 
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
-                    $found[] = new Document($record);
+                    $found[] = new Document($this->convertStdClassToArray($record));
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);
@@ -2714,6 +2730,25 @@ class Mongo extends Adapter
             Database::ORDER_DESC => -1,
             default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
         };
+    }
+
+    /**
+     * Check if tenant should be added to index
+     *
+     * @param Document|string $indexOrType Index document or index type string
+     * @return bool
+     */
+    protected function shouldAddTenantToIndex(Document|string $indexOrType): bool
+    {
+        if (!$this->sharedTables) {
+            return false;
+        }
+
+        $indexType = $indexOrType instanceof Document
+            ? $indexOrType->getAttribute('type')
+            : $indexOrType;
+
+        return $indexType !== Database::INDEX_TTL;
     }
 
     /**
@@ -3474,5 +3509,129 @@ class Mongo extends Adapter
     public function getSupportForTrigramIndex(): bool
     {
         return false;
+    }
+
+    public function getSupportForTTLIndexes(): bool
+    {
+        return true;
+    }
+
+    protected function isExtendedISODatetime(string $val): bool
+    {
+        /**
+         * Min:
+         *   YYYY-MM-DDTHH:mm:ssZ             (20)
+         *   YYYY-MM-DDTHH:mm:ss+HH:MM        (25)
+         *
+         * Max:
+         *   YYYY-MM-DDTHH:mm:ss.fffffZ       (26)
+         *   YYYY-MM-DDTHH:mm:ss.fffff+HH:MM  (31)
+         */
+
+        $len = strlen($val);
+
+        // absolute minimum
+        if ($len < 20) {
+            return false;
+        }
+
+        // fixed datetime fingerprints
+        if (
+            !isset($val[19]) ||
+            $val[4]  !== '-' ||
+            $val[7]  !== '-' ||
+            $val[10] !== 'T' ||
+            $val[13] !== ':' ||
+            $val[16] !== ':'
+        ) {
+            return false;
+        }
+
+        // timezone detection
+        $hasZ = ($val[$len - 1] === 'Z');
+
+        $hasOffset = (
+            $len >= 25 &&
+            ($val[$len - 6] === '+' || $val[$len - 6] === '-') &&
+            $val[$len - 3] === ':'
+        );
+
+        if (!$hasZ && !$hasOffset) {
+            return false;
+        }
+
+        if ($hasOffset && $len > 31) {
+            return false;
+        }
+
+        if ($hasZ && $len > 26) {
+            return false;
+        }
+
+        $digitPositions = [
+            0,1,2,3,
+            5,6,
+            8,9,
+            11,12,
+            14,15,
+            17,18
+        ];
+
+        $timeEnd = $hasZ ? $len - 1 : $len - 6;
+
+        // fractional seconds
+        if ($timeEnd > 19) {
+            if ($val[19] !== '.' || $timeEnd < 21) {
+                return false;
+            }
+            for ($i = 20; $i < $timeEnd; $i++) {
+                $digitPositions[] = $i;
+            }
+        }
+
+        // timezone offset numeric digits
+        if ($hasOffset) {
+            foreach ([$len - 5, $len - 4, $len - 2, $len - 1] as $i) {
+                $digitPositions[] = $i;
+            }
+        }
+
+        foreach ($digitPositions as $i) {
+            if (!ctype_digit($val[$i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected function convertUTCDateToString(mixed $node): mixed
+    {
+        if ($node instanceof UTCDateTime) {
+            // Handle UTCDateTime objects
+            $node = DateTime::format($node->toDateTime());
+        } elseif (is_array($node) && isset($node['$date'])) {
+            // Handle Extended JSON format from (array) cast
+            // Format: {"$date":{"$numberLong":"1760405478290"}}
+            if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
+                $milliseconds = (int)$node['$date']['$numberLong'];
+                $seconds = intdiv($milliseconds, 1000);
+                $microseconds = ($milliseconds % 1000) * 1000;
+                $dateTime = \DateTime::createFromFormat('U.u', $seconds . '.' . str_pad((string)$microseconds, 6, '0'));
+                if ($dateTime) {
+                    $dateTime->setTimezone(new \DateTimeZone('UTC'));
+                    $node = DateTime::format($dateTime);
+                }
+            }
+        } elseif (is_string($node)) {
+            // Already a string, validate and pass through
+            try {
+                new \DateTime($node);
+            } catch (\Exception $e) {
+                // Invalid date string, skip
+            }
+        }
+
+        return $node;
     }
 }

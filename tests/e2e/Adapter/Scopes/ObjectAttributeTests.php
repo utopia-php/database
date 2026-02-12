@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -1115,6 +1116,760 @@ trait ObjectAttributeTests
         $this->assertEquals('vecA', $results[0]->getId());
 
         // Cleanup
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testNestedObjectAttributeIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
+        }
+
+        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Base attributes
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+
+        // 1) KEY index on a nested object path (dot notation)
+
+
+        // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
+        $created = $database->createIndex($collectionId, 'idx_profile_email_unique', Database::INDEX_UNIQUE, ['profile.user.email']);
+        $this->assertTrue($created);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'nest1',
+            '$permissions' => [Permission::read(Role::any())],
+            'profile' => [
+                'user' => [
+                    'email' => 'a@example.com',
+                    'info' => [
+                        'country' => 'IN'
+                    ]
+                ]
+            ]
+        ]));
+
+        try {
+            $database->createDocument($collectionId, new Document([
+                '$id' => 'nest2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'a@example.com', // duplicate
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]));
+            $this->fail('Expected Duplicate exception for UNIQUE index on nested object path');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        // 3) INDEX_OBJECT must NOT be allowed on nested paths
+        try {
+            $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
+        } catch (Exception $e) {
+            $this->assertInstanceOf(IndexException::class, $e);
+        }
+
+        // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
+        try {
+            $database->createIndex($collectionId, 'idx_name_nested', Database::INDEX_KEY, ['name.first']);
+            $this->fail('Expected Type exception for nested index on non-object base attribute');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(IndexException::class, $e);
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testQueryNestedAttribute(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
+        }
+
+        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Base attributes
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+
+        // Create index on nested email path
+        $created = $database->createIndex($collectionId, 'idx_profile_email', Database::INDEX_KEY, ['profile.user.email']);
+        $this->assertTrue($created);
+
+        // Seed documents with different nested values
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'd1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'alice@example.com',
+                        'info' => [
+                            'country' => 'IN',
+                            'city' => 'BLR'
+                        ]
+                    ]
+                ],
+                'name' => 'Alice'
+            ]),
+            new Document([
+                '$id' => 'd2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'bob@example.com',
+                        'info' => [
+                            'country' => 'US',
+                            'city' => 'NYC'
+                        ]
+                    ]
+                ],
+                'name' => 'Bob'
+            ]),
+            new Document([
+                '$id' => 'd3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'carol@test.org',
+                        'info' => [
+                            'country' => 'CA',
+                            'city' => 'TOR'
+                        ]
+                    ]
+                ],
+                'name' => 'Carol'
+            ])
+        ]);
+
+        // Equal on nested email
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['bob@example.com'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d2', $results[0]->getId());
+
+        // Starts with on nested email
+        $results = $database->find($collectionId, [
+            Query::startsWith('profile.user.email', 'alice@')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d1', $results[0]->getId());
+
+        // Ends with on nested email
+        $results = $database->find($collectionId, [
+            Query::endsWith('profile.user.email', 'test.org')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d3', $results[0]->getId());
+
+        // Contains on nested country (as text)
+        $results = $database->find($collectionId, [
+            Query::contains('profile.user.info.country', ['US'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d2', $results[0]->getId());
+
+        // AND: country IN + email suffix
+        $results = $database->find($collectionId, [
+            Query::and([
+                Query::equal('profile.user.info.country', ['IN']),
+                Query::endsWith('profile.user.email', 'example.com'),
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d1', $results[0]->getId());
+
+        // OR: match either country = CA or email starts with bob@
+        $results = $database->find($collectionId, [
+            Query::or([
+                Query::equal('profile.user.info.country', ['CA']),
+                Query::startsWith('profile.user.email', 'bob@'),
+            ])
+        ]);
+        $this->assertCount(2, $results);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+        \sort($ids);
+        $this->assertEquals(['d2', 'd3'], $ids);
+
+        // NOT: exclude emails ending with example.com
+        $results = $database->find($collectionId, [
+            Query::notEndsWith('profile.user.email', 'example.com')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('d3', $results[0]->getId());
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testNestedObjectAttributeEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Base attributes
+        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'age', Database::VAR_INTEGER, 0, false);
+
+        // Edge Case 1: Deep nesting (5 levels deep)
+        $created = $database->createIndex($collectionId, 'idx_deep_nest', Database::INDEX_KEY, ['profile.level1.level2.level3.level4.value']);
+        $this->assertTrue($created);
+
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'deep1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'level1' => [
+                        'level2' => [
+                            'level3' => [
+                                'level4' => [
+                                    'value' => 'deep_value_1'
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'deep2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'level1' => [
+                        'level2' => [
+                            'level3' => [
+                                'level4' => [
+                                    'value' => 'deep_value_2'
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        $results = $database->find($collectionId, [
+            Query::equal('profile.level1.level2.level3.level4.value', ['deep_value_1'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('deep1', $results[0]->getId());
+
+        // Edge Case 2: Multiple nested indexes on same base attribute
+        $created = $database->createIndex($collectionId, 'idx_email', Database::INDEX_KEY, ['profile.user.email']);
+        $this->assertTrue($created);
+        $created = $database->createIndex($collectionId, 'idx_country', Database::INDEX_KEY, ['profile.user.info.country']);
+        $this->assertTrue($created);
+        $created = $database->createIndex($collectionId, 'idx_city', Database::INDEX_KEY, ['profile.user.info.city']);
+        $this->assertTrue($created);
+
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'multi1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'multi1@test.com',
+                        'info' => [
+                            'country' => 'US',
+                            'city' => 'NYC'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'multi2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'multi2@test.com',
+                        'info' => [
+                            'country' => 'CA',
+                            'city' => 'TOR'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Query using first nested index
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['multi1@test.com'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('multi1', $results[0]->getId());
+
+        // Query using second nested index
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.country', ['US'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('multi1', $results[0]->getId());
+
+        // Query using third nested index
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.city', ['TOR'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('multi2', $results[0]->getId());
+
+        // Edge Case 3: Null/missing nested values
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'null1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => null, // null value
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'null2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        // missing email key entirely
+                        'info' => [
+                            'country' => 'CA'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'null3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => null // entire profile is null
+            ])
+        ]);
+
+        // Query for null email should not match null1 (null values typically don't match equal queries)
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['non-existent@test.com'])
+        ]);
+        // Should not include null1, null2, or null3
+        foreach ($results as $doc) {
+            $this->assertNotEquals('null1', $doc->getId());
+            $this->assertNotEquals('null2', $doc->getId());
+            $this->assertNotEquals('null3', $doc->getId());
+        }
+
+        // Edge Case 4: Mixed queries (nested + regular attributes)
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'mixed1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'name' => 'Alice',
+                'age' => 25,
+                'profile' => [
+                    'user' => [
+                        'email' => 'alice.mixed@test.com',
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'mixed2',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'name' => 'Bob',
+                'age' => 30,
+                'profile' => [
+                    'user' => [
+                        'email' => 'bob.mixed@test.com',
+                        'info' => [
+                            'country' => 'CA'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Create indexes on regular attributes
+        $database->createIndex($collectionId, 'idx_name', Database::INDEX_KEY, ['name']);
+        $database->createIndex($collectionId, 'idx_age', Database::INDEX_KEY, ['age']);
+
+        // Combined query: nested path + regular attribute
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.country', ['US']),
+            Query::equal('name', ['Alice'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('mixed1', $results[0]->getId());
+
+        // Combined query: nested path + regular attribute with AND
+        $results = $database->find($collectionId, [
+            Query::and([
+                Query::equal('profile.user.email', ['bob.mixed@test.com']),
+                Query::equal('age', [30])
+            ])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('mixed2', $results[0]->getId());
+
+        // Edge Case 5: Update operations affecting nested indexed paths
+        $database->updateDocument($collectionId, 'mixed1', new Document([
+            '$id' => 'mixed1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Alice Updated',
+            'age' => 26,
+            'profile' => [
+                'user' => [
+                    'email' => 'alice.updated@test.com', // changed email
+                    'info' => [
+                        'country' => 'CA' // changed country
+                    ]
+                ]
+            ]
+        ]));
+
+        // Query with old email should not match
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['alice.mixed@test.com'])
+        ]);
+        foreach ($results as $doc) {
+            $this->assertNotEquals('mixed1', $doc->getId());
+        }
+
+        // Query with new email should match
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['alice.updated@test.com'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('mixed1', $results[0]->getId());
+
+        // Query with new country should match
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.country', ['CA'])
+        ]);
+        $this->assertGreaterThanOrEqual(2, count($results)); // Should include mixed1 and mixed2
+
+        // Edge Case 6: Query on non-indexed nested path
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'noindex1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'noindex1@test.com',
+                        'info' => [
+                            'country' => 'US',
+                            'phone' => '+1234567890' // no index on this path
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'noindex2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'noindex2@test.com',
+                        'info' => [
+                            'country' => 'CA',
+                            'phone' => '+9876543210' // no index on this path
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Query on non-indexed nested path should still work
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.phone', ['+1234567890'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('noindex1', $results[0]->getId());
+
+        // Edge Case 7: Complex query combinations with nested paths
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'complex1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'complex1@test.com',
+                        'info' => [
+                            'country' => 'US',
+                            'city' => 'NYC',
+                            'zip' => '10001'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'complex2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'complex2@test.com',
+                        'info' => [
+                            'country' => 'US',
+                            'city' => 'LAX',
+                            'zip' => '90001'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'complex3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'complex3@test.com',
+                        'info' => [
+                            'country' => 'CA',
+                            'city' => 'TOR',
+                            'zip' => 'M5H1A1'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Complex AND with multiple nested paths
+        $results = $database->find($collectionId, [
+            Query::and([
+                Query::equal('profile.user.info.country', ['US']),
+                Query::equal('profile.user.info.city', ['NYC'])
+            ])
+        ]);
+
+        $this->assertCount(2, $results);
+
+        // Complex OR with nested paths
+        $results = $database->find($collectionId, [
+            Query::or([
+                Query::equal('profile.user.info.city', ['NYC']),
+                Query::equal('profile.user.info.city', ['TOR'])
+            ])
+        ]);
+        $this->assertCount(4, $results);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+        \sort($ids);
+        $this->assertEquals(['complex1', 'complex3','multi1','multi2'], $ids);
+
+        // Complex nested AND/OR combination
+        $results = $database->find($collectionId, [
+            Query::and([
+                Query::equal('profile.user.info.country', ['US']),
+                Query::or([
+                    Query::equal('profile.user.info.city', ['NYC']),
+                    Query::equal('profile.user.info.city', ['LAX'])
+                ])
+            ])
+        ]);
+        $this->assertCount(3, $results);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+        \sort($ids);
+        $this->assertEquals(['complex1', 'complex2', 'multi1'], $ids);
+
+        // Edge Case 8: Order/limit/offset with nested queries
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'order1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'a@order.com',
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'order2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'b@order.com',
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'order3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'c@order.com',
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Limit with nested query
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.country', ['US']),
+            Query::limit(2)
+        ]);
+        $this->assertCount(2, $results);
+
+        // Offset with nested query
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.info.country', ['US']),
+            Query::offset(1),
+            Query::limit(1)
+        ]);
+        $this->assertCount(1, $results);
+
+        // Edge Case 9: Empty strings in nested paths
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'empty1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => '', // empty string
+                        'info' => [
+                            'country' => 'US'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // Query for empty string
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', [''])
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($results));
+        $found = false;
+        foreach ($results as $doc) {
+            if ($doc->getId() === 'empty1') {
+                $found = true;
+                break;
+            }
+        }
+        $this->assertTrue($found, 'Should find document with empty email');
+
+        // Edge Case 10: Index deletion and re-creation
+        $database->deleteIndex($collectionId, 'idx_email');
+
+        // Query should still work without index (just slower)
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['alice.updated@test.com'])
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($results));
+
+        // Re-create index
+        $created = $database->createIndex($collectionId, 'idx_email_recreated', Database::INDEX_KEY, ['profile.user.email']);
+        $this->assertTrue($created);
+
+        // Query should still work with recreated index
+        $results = $database->find($collectionId, [
+            Query::equal('profile.user.email', ['alice.updated@test.com'])
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($results));
+
+        // Edge Case 11: UNIQUE index with updates (duplicate prevention)
+        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
+            $created = $database->createIndex($collectionId, 'idx_unique_email', Database::INDEX_UNIQUE, ['profile.user.email']);
+            $this->assertTrue($created);
+
+            // Try to create duplicate
+            try {
+                $database->createDocument($collectionId, new Document([
+                    '$id' => 'duplicate1',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'profile' => [
+                        'user' => [
+                            'email' => 'alice.updated@test.com', // duplicate
+                            'info' => [
+                                'country' => 'XX'
+                            ]
+                        ]
+                    ]
+                ]));
+                $this->fail('Expected Duplicate exception for UNIQUE index');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(DuplicateException::class, $e);
+            }
+        }
+
+        // Edge Case 12: Query with startsWith/endsWith/contains on nested paths
+        $database->createDocuments($collectionId, [
+            new Document([
+                '$id' => 'text1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'text1@example.org',
+                        'info' => [
+                            'country' => 'United States',
+                            'city' => 'New York City'
+                        ]
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'text2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'text2@test.com',
+                        'info' => [
+                            'country' => 'United Kingdom',
+                            'city' => 'London'
+                        ]
+                    ]
+                ]
+            ])
+        ]);
+
+        // startsWith on nested path
+        $results = $database->find($collectionId, [
+            Query::startsWith('profile.user.email', 'text1@')
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('text1', $results[0]->getId());
+
+        // contains on nested path
+        $results = $database->find($collectionId, [
+            Query::contains('profile.user.info.country', ['United'])
+        ]);
+        $this->assertGreaterThanOrEqual(2, count($results));
+
         $database->deleteCollection($collectionId);
     }
 }

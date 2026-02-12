@@ -931,7 +931,13 @@ class Mongo extends Adapter
 
         foreach ($attributes as $i => $attribute) {
 
-            $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+            if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === Database::VAR_OBJECT) {
+                $dottedAttributes = \explode('.', $attribute);
+                $expandedAttributes = array_map(fn ($attr) => $this->filter($attr), $dottedAttributes);
+                $attributes[$i] = implode('.', $expandedAttributes);
+            } else {
+                $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+            }
 
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
             $indexes['key'][$attributes[$i]] = $orderType;
@@ -2499,7 +2505,7 @@ class Mongo extends Adapter
         };
 
         $filter = [];
-        if ($query->isObjectAttribute() && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
             $this->handleObjectFilters($query, $filter);
             return $filter;
         }
@@ -2580,7 +2586,9 @@ class Mongo extends Adapter
             $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
             $flattenedObjectKey = array_key_first($flattendQuery);
             $queryValue = $flattendQuery[$flattenedObjectKey];
-            $flattenedObjectKey = $query->getAttribute() . '.' . array_key_first($flattendQuery);
+            $queryAttribute = $query->getAttribute();
+            $flattenedQueryField = array_key_first($flattendQuery);
+            $flattenedObjectKey = $flattenedQueryField === '' ? $queryAttribute : $queryAttribute . '.' . array_key_first($flattendQuery);
             switch ($query->getMethod()) {
 
                 case Query::TYPE_CONTAINS:

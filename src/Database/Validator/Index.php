@@ -34,6 +34,7 @@ class Index extends Validator
      * @param bool $supportForKeyIndexes
      * @param bool $supportForUniqueIndexes
      * @param bool $supportForFulltextIndexes
+     * @param bool $supportForObjects
      * @throws DatabaseException
      */
     public function __construct(
@@ -55,6 +56,7 @@ class Index extends Validator
         protected bool $supportForUniqueIndexes = true,
         protected bool $supportForFulltextIndexes = true,
         protected bool $supportForTTLIndexes = false,
+        protected bool $supportForObjects = false
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -170,6 +172,20 @@ class Index extends Validator
     public function checkValidIndex(Document $index): bool
     {
         $type = $index->getAttribute('type');
+        if ($this->supportForObjects) {
+            // getting dotted attributes not present in schema
+            $dottedAttributes = array_filter($index->getAttribute('attributes'), fn ($attr) => !isset($this->attributes[\strtolower($attr)]) && $this->isDottedAttribute($attr));
+            if (\count($dottedAttributes)) {
+                foreach ($dottedAttributes as $attribute) {
+                    $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
+                    if (isset($this->attributes[\strtolower($baseAttribute)]) && $this->attributes[\strtolower($baseAttribute)]->getAttribute('type') != Database::VAR_OBJECT) {
+                        $this->message = 'Index attribute "' . $attribute . '" is only supported on object attributes';
+                        return false;
+                    };
+                }
+            }
+        }
+
         switch ($type) {
             case Database::INDEX_KEY:
                 if (!$this->supportForKeyIndexes) {
@@ -246,8 +262,19 @@ class Index extends Validator
      */
     public function checkValidAttributes(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if ($this->supportForAttributes && !isset($this->attributes[\strtolower($attribute)])) {
+            // attribute is part of the attributes
+            // or object indexes supported and its a dotted attribute with base present in the attributes
+            if (!isset($this->attributes[\strtolower($attribute)])) {
+                if ($this->supportForObjects) {
+                    $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
+                    if (isset($this->attributes[\strtolower($baseAttribute)])) {
+                        continue;
+                    }
+                }
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -399,6 +426,9 @@ class Index extends Validator
             return false;
         }
         foreach ($attributes as $attributePosition => $attributeName) {
+            if ($this->supportForObjects && !isset($this->attributes[\strtolower($attributeName)])) {
+                $attributeName = $this->getBaseAttributeFromDottedAttribute($attributeName);
+            }
             $attribute = $this->attributes[\strtolower($attributeName)];
 
             switch ($attribute->getAttribute('type')) {
@@ -756,6 +786,14 @@ class Index extends Validator
         }
 
         $attributeName = $attributes[0] ?? '';
+
+        // Object indexes are only allowed on the top-level object attribute,
+        // not on nested paths like "data.key.nestedKey".
+        if (\strpos($attributeName, '.') !== false) {
+            $this->message = 'Object index can only be created on a top-level object attribute';
+            return false;
+        }
+
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
@@ -811,5 +849,15 @@ class Index extends Validator
         }
 
         return true;
+    }
+
+    private function isDottedAttribute(string $attribute): bool
+    {
+        return \str_contains($attribute, '.');
+    }
+
+    private function getBaseAttributeFromDottedAttribute(string $attribute): string
+    {
+        return $this->isDottedAttribute($attribute) ? \explode('.', $attribute, 2)[0] ?? '' : $attribute;
     }
 }

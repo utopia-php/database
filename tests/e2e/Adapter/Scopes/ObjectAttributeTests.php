@@ -1385,6 +1385,18 @@ trait ObjectAttributeTests
             ])
         ]);
 
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            try {
+                $database->find($collectionId, [
+                    Query::equal('profile.level1.level2.level3.level4.value', [10])
+                ]);
+                $this->fail('Expected nesting as string');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(QueryException::class, $e);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "profile"', $e->getMessage());
+            }
+        }
+
         $results = $database->find($collectionId, [
             Query::equal('profile.level1.level2.level3.level4.value', ['deep_value_1'])
         ]);

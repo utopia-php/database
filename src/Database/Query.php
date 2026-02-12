@@ -892,22 +892,24 @@ class Query
      * Helper method to create Query with isNull method
      *
      * @param string $attribute
+     * @param string $alias
      * @return Query
      */
-    public static function isNull(string $attribute): self
+    public static function isNull(string $attribute, string $alias = ''): self
     {
-        return new self(self::TYPE_IS_NULL, $attribute);
+        return new self(self::TYPE_IS_NULL, $attribute, alias: $alias);
     }
 
     /**
      * Helper method to create Query with isNotNull method
      *
      * @param string $attribute
+     * @param string $alias
      * @return Query
      */
-    public static function isNotNull(string $attribute): self
+    public static function isNotNull(string $attribute, string $alias = ''): self
     {
-        return new self(self::TYPE_IS_NOT_NULL, $attribute);
+        return new self(self::TYPE_IS_NOT_NULL, $attribute, alias: $alias);
     }
 
     public static function startsWith(string $attribute, string $value): self

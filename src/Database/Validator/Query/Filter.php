@@ -184,7 +184,7 @@ class Filter extends Base
                     // For dotted attributes on objects, validate as string (path queries)
                     if ($isDottedOnObject) {
                         $validator = new Text(0, 0);
-                        continue 2;
+                        break;
                     }
 
                     // object containment queries on the base object attribute

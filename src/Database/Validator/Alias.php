@@ -23,7 +23,7 @@ class Alias extends Validator
      * @param mixed $value
      * @return bool
      */
-    public function isValid($value): bool
+    public function     isValid($value): bool
     {
         if (! \is_string($value)) {
             return false;
@@ -37,7 +37,7 @@ class Alias extends Validator
             return false;
         }
 
-        if (\mb_strlen($value) >= 64) {
+        if (\strlen($value) >= 64) {
             return false;
         }
 

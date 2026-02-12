@@ -3162,4 +3162,95 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
     }
+
+    public function testSchemalessMongoDotNotationIndexes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only meaningful for schemaless adapters
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_mongo_dot_idx');
+        $database->createCollection($col);
+
+        // Define top-level object attribute (metadata only; schemaless adapter won't enforce)
+        $database->createAttribute($col, 'profile', Database::VAR_OBJECT, 0, false);
+
+        // Seed documents
+        $database->createDocuments($col, [
+            new Document([
+                '$id' => 'u1',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'alice@example.com',
+                        'id' => 'alice'
+                    ]
+                ]
+            ]),
+            new Document([
+                '$id' => 'u2',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'bob@example.com',
+                        'id' => 'bob'
+                    ]
+                ]
+            ]),
+        ]);
+
+        // Create KEY index on nested path
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_profile_user_email_key',
+                Database::INDEX_KEY,
+                ['profile.user.email'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        // Create UNIQUE index on nested path and verify enforcement
+        $this->assertTrue(
+            $database->createIndex(
+                $col,
+                'idx_profile_user_id_unique',
+                Database::INDEX_UNIQUE,
+                ['profile.user.id'],
+                [0],
+                [Database::ORDER_ASC]
+            )
+        );
+
+        try {
+            $database->createDocument($col, new Document([
+                '$id' => 'u3',
+                '$permissions' => [Permission::read(Role::any())],
+                'profile' => [
+                    'user' => [
+                        'email' => 'eve@example.com',
+                        'id' => 'alice' // duplicate unique nested id
+                    ]
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        // Validate dot-notation querying works (and is the shape that can use indexes)
+        $results = $database->find($col, [
+            Query::equal('profile.user.email', ['bob@example.com'])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('u2', $results[0]->getId());
+
+        $database->deleteCollection($col);
+    }
 }

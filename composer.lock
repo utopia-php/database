@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "94850a093ef1f28c8baae448af10b724",
+    "content-hash": "f54c8e057ae09c701c2ce792e00543e8",
     "packages": [
         {
             "name": "brick/math",
@@ -2173,16 +2173,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "0.11.0",
+            "version": "1.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "34bc0cda8ea368cde68702a6fffe2c3ac625398e"
+                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/34bc0cda8ea368cde68702a6fffe2c3ac625398e",
-                "reference": "34bc0cda8ea368cde68702a6fffe2c3ac625398e",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
+                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
                 "shasum": ""
             },
             "require": {
@@ -2228,9 +2228,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.11.0"
+                "source": "https://github.com/utopia-php/mongo/tree/1.0.0"
             },
-            "time": "2025-10-20T11:11:23+00:00"
+            "time": "2026-02-12T05:54:06+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -4527,7 +4527,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4536,6 +4536,6 @@
         "ext-mongodb": "*",
         "ext-mbstring": "*"
     },
-    "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
 }

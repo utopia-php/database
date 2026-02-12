@@ -1738,7 +1738,8 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportForTTLIndexes()
+                $this->adapter->getSupportForTTLIndexes(),
+                $this->adapter->getSupportForObject()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2904,7 +2905,8 @@ class Database
                     $this->adapter->getSupportForIndex(),
                     $this->adapter->getSupportForUniqueIndex(),
                     $this->adapter->getSupportForFulltextIndex(),
-                    $this->adapter->getSupportForTTLIndexes()
+                    $this->adapter->getSupportForTTLIndexes(),
+                    $this->adapter->getSupportForObject()
                 );
 
                 foreach ($indexes as $index) {
@@ -4057,14 +4059,23 @@ class Database
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
         foreach ($attributes as $i => $attr) {
+            // Support nested paths on object attributes using dot notation:
+            // attribute.key.nestedKey -> base attribute "attribute"
+            $baseAttr = $attr;
+            if (\str_contains($attr, '.')) {
+                $baseAttr = \explode('.', $attr, 2)[0] ?? $attr;
+            }
+
             foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getAttribute('key') === $attr) {
-                    $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                if ($collectionAttribute->getAttribute('key') === $baseAttr) {
+
+                    $attributeType = $collectionAttribute->getAttribute('type');
+                    $indexAttributesWithTypes[$attr] = $attributeType;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
-                    if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
+                    if ($attributeType === self::VAR_STRING) {
                         if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }
@@ -4112,7 +4123,8 @@ class Database
                 $this->adapter->getSupportForIndex(),
                 $this->adapter->getSupportForUniqueIndex(),
                 $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportForTTLIndexes()
+                $this->adapter->getSupportForTTLIndexes(),
+                $this->adapter->getSupportForObject()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -8698,11 +8710,20 @@ class Database
             $attributes[] = new Document($attribute);
         }
 
+        $queryAttribute = $query->getAttribute();
+        $isNestedQueryAttribute = $this->getAdapter()->getSupportForAttributes() && $this->getAdapter()->getSupportForObject() && \str_contains($queryAttribute, '.');
+
         $attribute = new Document();
 
         foreach ($attributes as $attr) {
             if ($attr->getId() === $query->getAttribute()) {
                 $attribute = $attr;
+            } elseif ($isNestedQueryAttribute) {
+                // nested object query
+                $baseAttribute = \explode('.', $queryAttribute, 2)[0];
+                if ($baseAttribute === $attr->getId() && $attr->getAttribute('type') === Database::VAR_OBJECT) {
+                    $query->setAttributeType(Database::VAR_OBJECT);
+                }
             }
         }
 

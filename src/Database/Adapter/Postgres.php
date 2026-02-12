@@ -886,15 +886,19 @@ class Postgres extends SQL
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
+            $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === Database::VAR_OBJECT;
+            if ($isNestedPath) {
+                $attributes[$i] = $this->buildJsonbPath($attr, true) . ($order ? " {$order}" : '');
+            } else {
+                $attr = match ($attr) {
+                    '$id' => '_uid',
+                    '$createdAt' => '_createdAt',
+                    '$updatedAt' => '_updatedAt',
+                    default => $this->filter($attr),
+                };
 
-            $attr = match ($attr) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $this->filter($attr),
-            };
-
-            $attributes[$i] = "\"{$attr}\" {$order}";
+                $attributes[$i] = "\"{$attr}\" {$order}";
+            }
         }
 
         $sqlType = match ($type) {
@@ -1750,8 +1754,14 @@ class Postgres extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $attribute = $this->filter($query->getAttribute());
-        $attribute = $this->quote($attribute);
+        $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
+        if ($isNestedObjectAttribute) {
+            $attribute = $this->buildJsonbPath($query->getAttribute());
+        } else {
+            $attribute = $this->filter($query->getAttribute());
+            $attribute = $this->quote($attribute);
+        }
+
         $alias = $query->getAlias();
         $alias = $this->filter($alias);
         $alias = $this->quote($alias);
@@ -1763,7 +1773,7 @@ class Postgres extends SQL
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
-        if ($query->isObjectAttribute()) {
+        if ($query->isObjectAttribute() && !$isNestedObjectAttribute) {
             return $this->handleObjectQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
@@ -2858,5 +2868,31 @@ class Postgres extends SQL
     public function getSupportForTTLIndexes(): bool
     {
         return false;
+    }
+    protected function buildJsonbPath(string $path, bool $asText = false): string
+    {
+        $parts = \explode('.', $path);
+
+        foreach ($parts as $part) {
+            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
+                throw new DatabaseException('Invalid JSON key ' . $part);
+            }
+        }
+        if (\count($parts) === 1) {
+            $column = $this->filter($parts[0]);
+            return $this->quote($column);
+        }
+
+        $baseColumn = $this->quote($this->filter(\array_shift($parts)));
+        $lastKey = \array_pop($parts);
+
+        $chain = $baseColumn;
+        foreach ($parts as $key) {
+            $chain .= "->'{$key}'";
+        }
+
+        $result = "{$chain}->>'{$lastKey}'";
+
+        return $asText ? "(({$result})::text)" : $result;
     }
 }

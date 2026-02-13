@@ -866,32 +866,50 @@ class Mongo extends Adapter
         string $twoWayKey,
         string $side
     ): bool {
-        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
-        $collection = $this->getNamespace() . '_' . $this->filter($collection);
-        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+        $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                if ($twoWay) {
-                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                    if ($twoWay) {
+                        $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    }
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    if ($twoWay) {
+                        $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 } else {
-                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
                 } else {
-                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collectionDoc = $this->getDocument($metadataCollection, $collectionName);
+                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollectionName);
+
+                if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
+                    throw new DatabaseException('Collection or related collection not found');
+                }
+
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
+                    : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
+
                 $this->getClient()->dropCollection($junction);
                 break;
             default:
@@ -2956,7 +2974,7 @@ class Mongo extends Adapter
 
     public function getSupportForRelationships(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForUpdateLock(): bool

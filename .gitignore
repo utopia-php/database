@@ -1,14 +1,1 @@
-/vendor/
-/.idea/
-.DS_Store
-mock.json
-data-tests.php
-loader.php
-.phpunit.result.cache
-.vscode
-.vscode/*
-database.sql
-Makefile
-.envrc
-.vscode
-tmp
+vendor/

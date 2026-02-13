@@ -45,12 +45,17 @@ class Sequence extends Validator
             return false;
         }
 
+        // $sequence is always an integer regardless of adapter ID type
+        if ($this->primary) {
+            $validator = new Range(1, Database::MAX_BIG_INT, Database::VAR_INTEGER);
+            return $validator->isValid($value);
+        }
+
         switch ($this->idAttributeType) {
             case Database::VAR_UUID7: //UUID7
                 return preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1;
             case Database::VAR_INTEGER:
-                $start = ($this->primary) ? 1 : 0;
-                $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);
+                $validator = new Range(0, Database::MAX_BIG_INT, Database::VAR_INTEGER);
                 return $validator->isValid($value);
 
             default:

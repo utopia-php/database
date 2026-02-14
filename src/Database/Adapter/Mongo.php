@@ -1131,7 +1131,7 @@ class Mongo extends Adapter
             throw $this->processException($e);
         }
 
-        if ($index && $deletedindex && $createdindex) {
+        if ($deletedindex && $createdindex) {
             return true;
         }
 

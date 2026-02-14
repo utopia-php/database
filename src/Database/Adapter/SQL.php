@@ -566,8 +566,7 @@ abstract class SQL extends Adapter
             }
 
             $bindKey = 'key_' . $keyIndex;
-            // For PostgreSQL, preserve boolean values directly
-            if (!($this instanceof \Utopia\Database\Adapter\Postgres && \is_bool($value))) {
+            if ($this->getSupportForIntegerBooleans()) {
                 $value = (\is_bool($value)) ? (int)$value : $value;
             }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
@@ -2515,7 +2514,9 @@ abstract class SQL extends Adapter
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
-                        $value = (\is_bool($value)) ? (int)$value : $value;
+                        if ($this->getSupportForIntegerBooleans()) {
+                            $value = (\is_bool($value)) ? (int)$value : $value;
+                        }
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = ':' . $bindKey;
                     }

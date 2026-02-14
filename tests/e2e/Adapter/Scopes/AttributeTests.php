@@ -1027,28 +1027,19 @@ trait AttributeTests
         }
 
         $attributes = [];
-
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_16000'),
-            'type' => Database::VAR_STRING,
-            'size' => 16000,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
-
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_200'),
-            'type' => Database::VAR_STRING,
-            'size' => 200,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        $limit = (int)($database->getAdapter()->getDocumentSizeLimit() / (200 * 4));
+        for ($i = 0; $i < $limit; $i++) {
+            $attributes[] = new Document([
+                '$id' => ID::unique(),
+                'type' => Database::VAR_STRING,
+                'size' => 200,
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]);
+        }
 
         try {
             $database->createCollection("attributes_row_size", $attributes);

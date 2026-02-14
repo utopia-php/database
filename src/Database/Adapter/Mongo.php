@@ -834,7 +834,9 @@ class Mongo extends Adapter
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence());
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
+                    : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
 
                 if (!\is_null($newKey) && $key !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);

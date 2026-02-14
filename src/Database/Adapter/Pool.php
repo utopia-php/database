@@ -17,6 +17,13 @@ class Pool extends Adapter
     protected UtopiaPool $pool;
 
     /**
+     * This is used to keep the same adapter instance during a transaction.
+     *
+     * @var Adapter|null
+     */
+    private ?Adapter $pinned = null;
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -36,7 +43,7 @@ class Pool extends Adapter
      */
     public function delegate(string $method, array $args): mixed
     {
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
+        $configure = function (Adapter $adapter): Adapter {
             // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());
@@ -56,7 +63,24 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            return $adapter->{$method}(...$args);
+            return $adapter;
+        };
+
+        if (!empty($this->pinned)) {
+            // If a pinned adapter is set, use it directly
+            $pinned = $this->pinned;
+            if ($method === 'commitTransaction' || $method === 'rollbackTransaction') {
+                // If we are finish a transaction, reset the pinned adapter
+                $this->pinned = null;
+            }
+            return $configure($pinned)->{$method}(...$args);
+        }
+
+        return $this->pool->use(function (Adapter $adapter) use ($method, $args, $configure) {
+            if ($method === 'startTransaction' && $this->pinned === null) {
+                $this->pinned = $adapter;
+            }
+            return $configure($adapter)->{$method}(...$args);
         });
     }
 

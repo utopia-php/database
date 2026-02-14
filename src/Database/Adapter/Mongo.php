@@ -789,15 +789,20 @@ class Mongo extends Adapter
         $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
+        $escapedKey = $this->escapeMongoFieldName($key);
+        $escapedNewKey = !\is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
+        $escapedTwoWayKey = $this->escapeMongoFieldName($twoWayKey);
+        $escapedNewTwoWayKey = !\is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
+
         $renameKey = [
             '$rename' => [
-                $key => $newKey,
+                $escapedKey => $escapedNewKey,
             ]
         ];
 
         $renameTwoWayKey = [
             '$rename' => [
-                $twoWayKey => $newTwoWayKey,
+                $escapedTwoWayKey => $escapedNewTwoWayKey,
             ]
         ];
 
@@ -868,33 +873,35 @@ class Mongo extends Adapter
     ): bool {
         $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+        $escapedKey = $this->escapeMongoFieldName($key);
+        $escapedTwoWayKey = $this->escapeMongoFieldName($twoWayKey);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                     if ($twoWay) {
-                        $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                        $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                     }
                 } elseif ($side === Database::RELATION_SIDE_CHILD) {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                     if ($twoWay) {
-                        $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                        $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                     }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 } else {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$key => '']], multi: true);
+                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 } else {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -1091,7 +1098,7 @@ class Mongo extends Adapter
         $index = null;
 
         foreach ($indexes as $node) {
-            if ($node['key'] === $old) {
+            if (($node['$id'] ?? $node['key'] ?? '') === $old) {
                 $index = $node;
                 break;
             }
@@ -1116,6 +1123,9 @@ class Mongo extends Adapter
 
         try {
             $deletedindex = $this->deleteIndex($collection, $old);
+            if (!$index) {
+                throw new DatabaseException('Index not found: ' . $old);
+            }
             $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, [], $index['ttl'] ?? 0);
         } catch (\Exception $e) {
             throw $this->processException($e);
@@ -1170,8 +1180,9 @@ class Mongo extends Adapter
         $options = $this->getTransactionOptions();
 
         $selections = $this->getAttributeSelections($queries);
+        $hasProjection = !empty($selections) && !\in_array('*', $selections);
 
-        if (!empty($selections) && !\in_array('*', $selections)) {
+        if ($hasProjection) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -1189,6 +1200,11 @@ class Mongo extends Adapter
         $result = $this->replaceChars('_', '$', $resultArray);
         $document = new Document($result);
         $document = $this->castingAfter($collection, $document);
+
+        // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
+        if (!$hasProjection) {
+            $this->ensureRelationshipDefaults($collection, $document);
+        }
 
         return $document;
     }
@@ -1257,10 +1273,6 @@ class Mongo extends Adapter
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key);
             if (is_null($value)) {
-                // Ensure relationship attributes exist as null even if missing from MongoDB document
-                if ($type === Database::VAR_RELATIONSHIP && !$document->offsetExists($key)) {
-                    $document->setAttribute($key, null);
-                }
                 continue;
             }
 
@@ -2020,7 +2032,8 @@ class Mongo extends Adapter
         }
 
         $selections = $this->getAttributeSelections($queries);
-        if (!empty($selections) && !\in_array('*', $selections)) {
+        $hasProjection = !empty($selections) && !\in_array('*', $selections);
+        if ($hasProjection) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -2147,6 +2160,13 @@ class Mongo extends Adapter
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
             $found = array_reverse($found);
+        }
+
+        // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
+        if (!$hasProjection) {
+            foreach ($found as $document) {
+                $this->ensureRelationshipDefaults($collection, $document);
+            }
         }
 
         return $found;
@@ -2383,6 +2403,60 @@ class Mongo extends Adapter
     }
 
     /**
+     * Escape a field name for MongoDB storage.
+     * MongoDB field names cannot start with $ or contain dots.
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function escapeMongoFieldName(string $name): string
+    {
+        if (\str_starts_with($name, '$')) {
+            $name = '_' . \substr($name, 1);
+        }
+        if (\str_contains($name, '.')) {
+            $name = \str_replace('.', '__dot__', $name);
+        }
+        return $name;
+    }
+
+    /**
+     * Ensure relationship attributes have default null values in MongoDB documents.
+     * MongoDB doesn't store null fields, so we need to add them for schema compatibility.
+     *
+     * @param Document $collection
+     * @param Document $document
+     */
+    protected function ensureRelationshipDefaults(Document $collection, Document $document): void
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            if ($type === Database::VAR_RELATIONSHIP && !$document->offsetExists($key)) {
+                $options = $attribute['options'] ?? [];
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? '';
+                $relationType = $options['relationType'] ?? '';
+
+                // Determine if this relationship stores data on this collection's documents
+                // Only set null defaults for relationships that would have a column in SQL
+                $storesData = match ($relationType) {
+                    Database::RELATION_ONE_TO_ONE => $side === Database::RELATION_SIDE_PARENT || $twoWay,
+                    Database::RELATION_ONE_TO_MANY => $side === Database::RELATION_SIDE_CHILD,
+                    Database::RELATION_MANY_TO_ONE => $side === Database::RELATION_SIDE_PARENT,
+                    Database::RELATION_MANY_TO_MANY => false,
+                    default => false,
+                };
+
+                if ($storesData) {
+                    $document->setAttribute($key, null);
+                }
+            }
+        }
+    }
+
+    /**
      * Keys cannot begin with $ in MongoDB
      * Convert $ prefix to _ on $id, $permissions, and $collection
      *
@@ -2407,19 +2481,26 @@ class Mongo extends Adapter
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
+            $newKey = $k;
+
             // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, "", $k);
             if (in_array($clean_key, $filter)) {
                 $newKey = str_replace($from, $to, $k);
-                if ($newKey !== $k) {
-                    $keysToRename[$k] = $newKey;
-                }
             } elseif (\is_string($k) && \str_starts_with($k, $from) && !in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
                 $newKey = $to . \substr($k, \strlen($from));
-                if ($newKey !== $k) {
-                    $keysToRename[$k] = $newKey;
-                }
+            }
+
+            // Handle dot escaping in MongoDB field names
+            if ($from === '$' && \is_string($k) && \str_contains($newKey, '.')) {
+                $newKey = \str_replace('.', '__dot__', $newKey);
+            } elseif ($from === '_' && \is_string($k) && \str_contains($k, '__dot__')) {
+                $newKey = \str_replace('__dot__', '.', $newKey);
+            }
+
+            if ($newKey !== $k) {
+                $keysToRename[$k] = $newKey;
             }
         }
 
@@ -2514,6 +2595,21 @@ class Mongo extends Adapter
             $query->setAttribute('_createdAt');
         } elseif ($query->getAttribute() === '$updatedAt') {
             $query->setAttribute('_updatedAt');
+        } else {
+            // Escape $ prefix and dots in user-defined attribute names for MongoDB
+            $attr = $query->getAttribute();
+            $changed = false;
+            if (\str_starts_with($attr, '$')) {
+                $attr = '_' . \substr($attr, 1);
+                $changed = true;
+            }
+            if (\str_contains($attr, '.')) {
+                $attr = \str_replace('.', '__dot__', $attr);
+                $changed = true;
+            }
+            if ($changed) {
+                $query->setAttribute($attr);
+            }
         }
 
         $attribute = $query->getAttribute();

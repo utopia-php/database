@@ -786,8 +786,8 @@ class Mongo extends Adapter
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $collection = $this->getNamespace() . '_' . $this->filter($collection);
-        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+        $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
         $renameKey = [
             '$rename' => [
@@ -803,38 +803,38 @@ class Mongo extends Adapter
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey)) {
-                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                if (!\is_null($newKey) && $key !== $newKey) {
+                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey)) {
-                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                if (!\is_null($newKey) && $key !== $newKey) {
+                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+                $collectionDoc = $this->getDocument($metadataCollection, $collection);
+                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
 
-                if ($collection->isEmpty() || $relatedCollection->isEmpty()) {
+                if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
+                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence());
 
-                if (!\is_null($newKey)) {
+                if (!\is_null($newKey) && $key !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
+                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -899,8 +899,8 @@ class Mongo extends Adapter
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $collectionName);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollectionName);
+                $collectionDoc = $this->getDocument($metadataCollection, $collection);
+                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
 
                 if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
@@ -1257,6 +1257,10 @@ class Mongo extends Adapter
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key);
             if (is_null($value)) {
+                // Ensure relationship attributes exist as null even if missing from MongoDB document
+                if ($type === Database::VAR_RELATIONSHIP && !$document->offsetExists($key)) {
+                    $document->setAttribute($key, null);
+                }
                 continue;
             }
 
@@ -2407,6 +2411,12 @@ class Mongo extends Adapter
             $clean_key = str_replace($from, "", $k);
             if (in_array($clean_key, $filter)) {
                 $newKey = str_replace($from, $to, $k);
+                if ($newKey !== $k) {
+                    $keysToRename[$k] = $newKey;
+                }
+            } elseif (\is_string($k) && \str_starts_with($k, $from) && !in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
+                // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
+                $newKey = $to . \substr($k, \strlen($from));
                 if ($newKey !== $k) {
                     $keysToRename[$k] = $newKey;
                 }

@@ -2006,6 +2006,10 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
 
+        // Escape query attribute names that contain dots and match collection attributes
+        // (to distinguish from nested object paths like profile.level1.value)
+        $this->escapeQueryAttributes($collection, $queries);
+
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
@@ -2252,6 +2256,9 @@ class Mongo extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
+        // Escape query attribute names that contain dots and match collection attributes
+        $this->escapeQueryAttributes($collection, $queries);
+
         $filters = [];
         $options = [];
 
@@ -2418,6 +2425,37 @@ class Mongo extends Adapter
             $name = \str_replace('.', '__dot__', $name);
         }
         return $name;
+    }
+
+    /**
+     * Escape query attribute names that contain dots and match known collection attributes.
+     * This distinguishes field names with dots (like 'collectionSecurity.Parent') from
+     * nested object paths (like 'profile.level1.value').
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     */
+    protected function escapeQueryAttributes(Document $collection, array $queries): void
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+        $dotAttributes = [];
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            if (\str_contains($key, '.') || \str_starts_with($key, '$')) {
+                $dotAttributes[$key] = $this->escapeMongoFieldName($key);
+            }
+        }
+
+        if (empty($dotAttributes)) {
+            return;
+        }
+
+        foreach ($queries as $query) {
+            $attr = $query->getAttribute();
+            if (isset($dotAttributes[$attr])) {
+                $query->setAttribute($dotAttributes[$attr]);
+            }
+        }
     }
 
     /**
@@ -2595,21 +2633,9 @@ class Mongo extends Adapter
             $query->setAttribute('_createdAt');
         } elseif ($query->getAttribute() === '$updatedAt') {
             $query->setAttribute('_updatedAt');
-        } else {
-            // Escape $ prefix and dots in user-defined attribute names for MongoDB
-            $attr = $query->getAttribute();
-            $changed = false;
-            if (\str_starts_with($attr, '$')) {
-                $attr = '_' . \substr($attr, 1);
-                $changed = true;
-            }
-            if (\str_contains($attr, '.')) {
-                $attr = \str_replace('.', '__dot__', $attr);
-                $changed = true;
-            }
-            if ($changed) {
-                $query->setAttribute($attr);
-            }
+        } elseif (\str_starts_with($query->getAttribute(), '$')) {
+            // Escape $ prefix and dots in user-defined $-prefixed attribute names for MongoDB
+            $query->setAttribute($this->escapeMongoFieldName($query->getAttribute()));
         }
 
         $attribute = $query->getAttribute();
@@ -2824,13 +2850,11 @@ class Mongo extends Adapter
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
                 $value = preg_quote($value, '/');
-                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return $value . '.*';
             case Query::TYPE_NOT_STARTS_WITH:
                 return $value;
             case Query::TYPE_ENDS_WITH:
                 $value = preg_quote($value, '/');
-                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return '.*' . $value;
             case Query::TYPE_NOT_ENDS_WITH:
                 return $value;

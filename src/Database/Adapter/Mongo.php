@@ -1122,10 +1122,10 @@ class Mongo extends Adapter
         }
 
         try {
-            $deletedindex = $this->deleteIndex($collection, $old);
             if (!$index) {
                 throw new DatabaseException('Index not found: ' . $old);
             }
+            $deletedindex = $this->deleteIndex($collection, $old);
             $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, [], $index['ttl'] ?? 0);
         } catch (\Exception $e) {
             throw $this->processException($e);

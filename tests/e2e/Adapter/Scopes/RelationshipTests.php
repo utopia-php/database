@@ -1104,6 +1104,12 @@ trait RelationshipTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            // Schemaless mode allows unknown attributes, so structure validation won't reject them
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
         $database->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
 

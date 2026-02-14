@@ -84,6 +84,7 @@ jobs:
             SharedTables/Postgres,
             SharedTables/SQLite,
             Schemaless/MongoDB,
+            Clickhouse,
           ]
 
     steps:

@@ -12,17 +12,17 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-FROM php:8.3.19-cli-alpine3.21 AS compile
+FROM php:8.4.18-cli-alpine3.22 AS compile
 
-ENV PHP_REDIS_VERSION="6.0.2" \
-    PHP_SWOOLE_VERSION="v5.1.7" \
+ENV PHP_REDIS_VERSION="6.3.0" \
+    PHP_SWOOLE_VERSION="v6.1.6" \
     PHP_XDEBUG_VERSION="3.4.2" \
     PHP_MONGODB_VERSION="2.1.1"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && apk add --no-cache \
-    postgresql-libs \
-    postgresql-dev \
+    libpq \
+    libpq-dev \
     make \
     automake \
     autoconf \
@@ -33,10 +33,19 @@ RUN apk update && apk add --no-cache \
     linux-headers \
     docker-cli \
     docker-cli-compose \
- && pecl install mongodb-$PHP_MONGODB_VERSION \
+ && (pecl install mongodb-$PHP_MONGODB_VERSION \
+    || (git clone --depth 1 --branch $PHP_MONGODB_VERSION --recurse-submodules https://github.com/mongodb/mongo-php-driver.git /tmp/mongodb \
+      && cd /tmp/mongodb \
+      && git submodule update --init --recursive \
+      && phpize \
+      && ./configure \
+      && make \
+      && make install \
+      && cd / \
+      && rm -rf /tmp/mongodb)) \
  && docker-php-ext-enable mongodb \
  && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
- && apk del postgresql-dev \
+ && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 
 # Redis Extension
@@ -96,10 +105,10 @@ RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
-COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20230831/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
-COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20230831/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
-COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20230831/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
-COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20230831/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
+COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20240924/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
+COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20240924/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
+COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20240924/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
+COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20240924/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 
 COPY ./bin /usr/src/code/bin
 COPY ./src /usr/src/code/src
@@ -109,6 +118,6 @@ COPY ./dev /usr/src/code/dev
 RUN if [ "$DEBUG" = "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
 RUN if [ "$DEBUG" = "true" ]; then mkdir -p /tmp/xdebug; fi
 RUN if [ "$DEBUG" = "false" ]; then rm -rf /usr/src/code/dev; fi
-RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/lib/php/extensions/no-debug-non-zts-20220829/xdebug.so; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/lib/php/extensions/no-debug-non-zts-20240924/xdebug.so; fi
 
 CMD [ "tail", "-f", "/dev/null" ]

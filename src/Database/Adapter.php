@@ -1210,6 +1210,13 @@ abstract class Adapter
     abstract public function getSupportForOrderRandom(): bool;
 
     /**
+     * Does the adapter support for joins
+     *
+     * @return bool
+     */
+    abstract public function getSupportForJoins(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

@@ -2033,10 +2033,10 @@ class Mongo extends Adapter
 
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $selects = array_map(fn ($query) => clone $query, $filters);
+        $selects = array_map(fn ($query) => clone $query, $selects);
         $filters = array_map(fn ($query) => clone $query, $filters);
-        $vectors = array_map(fn ($query) => clone $query, $filters);
-        $orderQueries = array_map(fn ($query) => clone $query, $filters);
+        $vectors = array_map(fn ($query) => clone $query, $vectors);
+        $orderQueries = array_map(fn ($query) => clone $query, $orderQueries);
 
         // Escape query attribute names that contain dots and match collection attributes
         // (to distinguish from nested object paths like profile.level1.value)
@@ -3279,6 +3279,11 @@ class Mongo extends Adapter
     public function getSupportForObject(): bool
     {
         return true;
+    }
+
+    public function getSupportForJoins(): bool
+    {
+        return false;
     }
 
     /**

@@ -1680,6 +1680,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForJoins(): bool
+    {
+        return true;
+    }
+
     /**
      * Generate ST_GeomFromText call with proper SRID and axis order support
      *

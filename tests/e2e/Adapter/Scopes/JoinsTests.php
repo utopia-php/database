@@ -34,7 +34,7 @@ trait JoinsTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForJoins()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -640,7 +640,7 @@ trait JoinsTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForJoins()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -728,7 +728,7 @@ trait JoinsTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForJoins()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -815,7 +815,7 @@ trait JoinsTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForJoins()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -869,7 +869,7 @@ trait JoinsTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->getSupportForJoins()) {
             $this->expectNotToPerformAssertions();
             return;
         }

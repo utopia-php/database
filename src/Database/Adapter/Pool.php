@@ -463,6 +463,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForJoins(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getCountOfAttributes(Document $collection): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

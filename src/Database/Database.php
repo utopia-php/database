@@ -5596,11 +5596,16 @@ class Database
                 $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
-            $document = $this->casting($collection, $document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
+
+            // Build attribute type map for type-safe comparison
+            $attributeTypes = [];
+            foreach ($collection->getAttribute('attributes', []) as $attr) {
+                $attributeTypes[$attr['$id'] ?? ''] = $attr['type'] ?? '';
+            }
 
             $shouldUpdate = false;
 
@@ -5698,6 +5703,18 @@ class Database
                     }
 
                     $oldValue = $old->getAttribute($key);
+
+                    // Cast value to attribute type for consistent comparison
+                    // (e.g. cache JSON round-trip turns float 1.0 into int 1)
+                    $attrType = $attributeTypes[$key] ?? null;
+                    if ($attrType !== null && !\is_null($value) && !($value instanceof Operator)) {
+                        $value = match ($attrType) {
+                            self::VAR_FLOAT => (float)$value,
+                            self::VAR_INTEGER => (int)$value,
+                            self::VAR_BOOLEAN => (bool)$value,
+                            default => $value,
+                        };
+                    }
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {

@@ -5700,12 +5700,11 @@ class Database
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
+                        // Handle int/float type coercion (e.g. cache JSON round-trip turns 1.0 into 1)
+                        if (\is_numeric($value) && \is_numeric($oldValue) && $value == $oldValue) {
+                            continue;
+                        }
                         $shouldUpdate = true;
-                        $debugDiffKey = $key;
-                        $debugDiffNew = json_encode($value);
-                        $debugDiffOld = json_encode($oldValue);
-                        $debugTypeNew = gettype($value);
-                        $debugTypeOld = gettype($oldValue);
                         break;
                     }
                 }
@@ -5722,7 +5721,7 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
-                        throw new AuthorizationException($this->authorization->getDescription() . " [DEBUG diff_key={$debugDiffKey} type_new={$debugTypeNew} type_old={$debugTypeOld} val_new={$debugDiffNew} val_old={$debugDiffOld}]");
+                        throw new AuthorizationException($this->authorization->getDescription());
                     }
                 } else {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {

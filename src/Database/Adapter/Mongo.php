@@ -2475,17 +2475,19 @@ class Mongo extends Adapter
     {
         // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
         // so they can be correctly compared against datetime fields stored in MongoDB.
-        $values = $query->getValues();
-        foreach ($values as $k => $value) {
-            if (is_string($value) && $this->isExtendedISODatetime($value)) {
-                try {
-                    $values[$k] = $this->toMongoDatetime($value);
-                } catch (\Throwable $th) {
-                    // Leave value as-is if it cannot be parsed as a datetime
+        if (!$this->getSupportForAttributes()) {
+            $values = $query->getValues();
+            foreach ($values as $k => $value) {
+                if (is_string($value) && $this->isExtendedISODatetime($value)) {
+                    try {
+                        $values[$k] = $this->toMongoDatetime($value);
+                    } catch (\Throwable $th) {
+                        // Leave value as-is if it cannot be parsed as a datetime
+                    }
                 }
             }
+            $query->setValues($values);
         }
-        $query->setValues($values);
 
         if ($query->getAttribute() === '$id') {
             $query->setAttribute('_uid');

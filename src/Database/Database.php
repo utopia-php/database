@@ -5596,6 +5596,7 @@ class Database
                 $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
+            $document = $this->casting($collection, $document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
@@ -5700,10 +5701,6 @@ class Database
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
-                        // Handle int/float type coercion (e.g. cache JSON round-trip turns 1.0 into 1)
-                        if (\is_numeric($value) && \is_numeric($oldValue) && $value == $oldValue) {
-                            continue;
-                        }
                         $shouldUpdate = true;
                         break;
                     }

@@ -3382,14 +3382,14 @@ trait SchemalessTests
         }
 
         // Create a simple schemaless collection and one document.
-        $database->createCollection('movies', permissions: [
+        $database->createCollection('schemaless_time', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]);
 
-        $database->createDocument('movies', new Document([
+        $database->createDocument('schemaless_time', new Document([
             '$id' => ID::unique(),
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'Schemaless Movie',
@@ -3401,107 +3401,107 @@ trait SchemalessTests
         $nearFutureDate = '2025-01-01T00:00:00.000Z';
 
         // --- createdBefore ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBefore($futureDate),
             Query::limit(1),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBefore($pastDate),
             Query::limit(1),
         ]);
         $this->assertEquals(0, count($documents));
 
         // --- createdAfter ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdAfter($pastDate),
             Query::limit(1),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdAfter($futureDate),
             Query::limit(1),
         ]);
         $this->assertEquals(0, count($documents));
 
         // --- updatedBefore ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBefore($futureDate),
             Query::limit(1),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBefore($pastDate),
             Query::limit(1),
         ]);
         $this->assertEquals(0, count($documents));
 
         // --- updatedAfter ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedAfter($pastDate),
             Query::limit(1),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedAfter($futureDate),
             Query::limit(1),
         ]);
         $this->assertEquals(0, count($documents));
 
         // --- createdBetween ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBetween($pastDate, $futureDate),
             Query::limit(25),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBetween($pastDate, $pastDate),
             Query::limit(25),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBetween($recentPastDate, $nearFutureDate),
             Query::limit(25),
         ]);
         $count = count($documents);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::createdBetween($pastDate, $nearFutureDate),
             Query::limit(25),
         ]);
         $this->assertGreaterThanOrEqual($count, count($documents));
 
         // --- updatedBetween ---
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBetween($pastDate, $futureDate),
             Query::limit(25),
         ]);
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBetween($pastDate, $pastDate),
             Query::limit(25),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBetween($recentPastDate, $nearFutureDate),
             Query::limit(25),
         ]);
         $count = count($documents);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find('schemaless_time', [
             Query::updatedBetween($pastDate, $nearFutureDate),
             Query::limit(25),
         ]);
         $this->assertGreaterThanOrEqual($count, count($documents));
 
-        $database->deleteCollection('movies');
+        $database->deleteCollection('schemaless_time');
     }
 }

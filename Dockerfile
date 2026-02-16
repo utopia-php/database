@@ -12,7 +12,7 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-FROM utopia-php/base:php-8.4-0.2.1 AS compile
+FROM appwrite/utopia-base:php-8.4-0.2.1 AS compile
 
 ENV PHP_MONGODB_VERSION="2.1.1"
 

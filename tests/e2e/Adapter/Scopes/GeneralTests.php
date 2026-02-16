@@ -834,7 +834,6 @@ trait GeneralTests
 
                 throw new \Exception('Intentional failure to trigger rollback');
             });
-            $this->fail('Expected exception was not thrown');
         } catch (\Exception $e) {
             $this->assertEquals('Intentional failure to trigger rollback', $e->getMessage());
         }

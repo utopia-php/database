@@ -1910,7 +1910,7 @@ class MariaDB extends SQL
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
             if (!\str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e);
+                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }

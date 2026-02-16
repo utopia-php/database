@@ -3368,6 +3368,6 @@ trait SchemalessTests
         ]);
         $this->assertCount(0, $noneResults);
 
-        // $database->deleteCollection($col);
+        $database->deleteCollection($col);
     }
 }

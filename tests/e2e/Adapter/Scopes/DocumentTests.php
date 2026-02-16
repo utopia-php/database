@@ -5834,6 +5834,7 @@ trait DocumentTests
 
         $doc4->setAttribute('$updatedAt', null);
         $doc4->setAttribute('$createdAt', null);
+        \usleep(2000); // Ensure updatedAt timestamp differs from creation time
         $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);
 
         $this->assertEquals($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));

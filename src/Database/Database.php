@@ -5704,16 +5704,25 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    // Cast value to attribute type for consistent comparison
-                    // (e.g. cache JSON round-trip turns float 1.0 into int 1)
+                    // Cast both values to attribute type for consistent comparison
+                    // (e.g. cache JSON round-trip turns float 1.0 into int 1,
+                    //  and some adapters may not cast floats on read)
                     $attrType = $attributeTypes[$key] ?? null;
-                    if ($attrType !== null && !\is_null($value) && !($value instanceof Operator)) {
-                        $value = match ($attrType) {
-                            self::VAR_FLOAT => (float)$value,
-                            self::VAR_INTEGER => (int)$value,
-                            self::VAR_BOOLEAN => (bool)$value,
-                            default => $value,
+                    if ($attrType !== null && !($value instanceof Operator)) {
+                        $castFn = match ($attrType) {
+                            self::VAR_FLOAT => fn($v) => (float)$v,
+                            self::VAR_INTEGER => fn($v) => (int)$v,
+                            self::VAR_BOOLEAN => fn($v) => (bool)$v,
+                            default => null,
                         };
+                        if ($castFn !== null) {
+                            if (!\is_null($value)) {
+                                $value = $castFn($value);
+                            }
+                            if (!\is_null($oldValue)) {
+                                $oldValue = $castFn($oldValue);
+                            }
+                        }
                     }
 
                     // If values are not equal we need to update document.

@@ -3370,4 +3370,138 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
     }
+
+    public function testSchemalessCreatedAndUpdatedAtQuery(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create a simple schemaless collection and one document.
+        $database->createCollection('movies', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->createDocument('movies', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Schemaless Movie',
+        ]));
+
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // --- createdBefore ---
+        $documents = $database->find('movies', [
+            Query::createdBefore($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdBefore($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- createdAfter ---
+        $documents = $database->find('movies', [
+            Query::createdAfter($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdAfter($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- updatedBefore ---
+        $documents = $database->find('movies', [
+            Query::updatedBefore($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedBefore($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- updatedAfter ---
+        $documents = $database->find('movies', [
+            Query::updatedAfter($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedAfter($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- createdBetween ---
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $futureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $pastDate),
+            Query::limit(25),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $count = count($documents);
+
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThanOrEqual($count, count($documents));
+
+        // --- updatedBetween ---
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $futureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $pastDate),
+            Query::limit(25),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $count = count($documents);
+
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThanOrEqual($count, count($documents));
+
+        $database->deleteCollection('movies');
+    }
 }

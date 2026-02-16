@@ -794,6 +794,59 @@ trait GeneralTests
     }
 
     /**
+     * Test that withTransaction properly rolls back on failure.
+     * With the Pool adapter, this verifies that the entire transaction
+     * (start, callback, commit/rollback) runs on a single pinned connection.
+     */
+    public function testTransactionAtomicity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('transactionAtomicity');
+        $database->createAttribute('transactionAtomicity', 'title', Database::VAR_STRING, 128, true);
+
+        // Verify a successful transaction commits
+        $doc = $database->withTransaction(function () use ($database) {
+            return $database->createDocument('transactionAtomicity', new Document([
+                '$id' => 'tx_success',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'title' => 'Committed',
+            ]));
+        });
+        $this->assertEquals('tx_success', $doc->getId());
+        $found = $database->getDocument('transactionAtomicity', 'tx_success');
+        $this->assertFalse($found->isEmpty());
+        $this->assertEquals('Committed', $found->getAttribute('title'));
+
+        // Verify a failed transaction rolls back completely
+        try {
+            $database->withTransaction(function () use ($database) {
+                $database->createDocument('transactionAtomicity', new Document([
+                    '$id' => 'tx_fail',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'title' => 'Should be rolled back',
+                ]));
+
+                throw new \Exception('Intentional failure to trigger rollback');
+            });
+            $this->fail('Expected exception was not thrown');
+        } catch (\Exception $e) {
+            $this->assertEquals('Intentional failure to trigger rollback', $e->getMessage());
+        }
+
+        // Document should NOT exist since the transaction was rolled back
+        $notFound = $database->getDocument('transactionAtomicity', 'tx_fail');
+        $this->assertTrue($notFound->isEmpty(), 'Document should not exist after transaction rollback');
+
+        $database->deleteCollection('transactionAtomicity');
+    }
+
+    /**
      * Wait for Redis to be ready with a readiness probe
      */
     private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void

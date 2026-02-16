@@ -92,6 +92,41 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * Pin a single connection from the pool for the entire transaction lifecycle.
+     * This prevents startTransaction(), the callback, and commitTransaction()
+     * from running on different connections.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        return $this->pool->use(function (Adapter $adapter) use ($callback) {
+            $adapter->setDatabase($this->getDatabase());
+            $adapter->setNamespace($this->getNamespace());
+            $adapter->setSharedTables($this->getSharedTables());
+            $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
+
+            if ($this->getTimeout() > 0) {
+                $adapter->setTimeout($this->getTimeout());
+            }
+            $adapter->resetDebug();
+            foreach ($this->getDebug() as $key => $value) {
+                $adapter->setDebug($key, $value);
+            }
+            $adapter->resetMetadata();
+            foreach ($this->getMetadata() as $key => $value) {
+                $adapter->setMetadata($key, $value);
+            }
+
+            return $adapter->withTransaction($callback);
+        });
+    }
+
     protected function quote(string $string): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

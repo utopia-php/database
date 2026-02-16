@@ -4271,11 +4271,14 @@ class Database
             $selections
         );
 
-        try {
-            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $cached = null;
+        $cached = null;
+        if (!$forUpdate) {
+            try {
+                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+                $cached = null;
+            }
         }
 
         if ($cached) {
@@ -4348,7 +4351,7 @@ class Database
         );
 
         // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
+        if (!$forUpdate && empty($relationships)) {
             try {
                 $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);

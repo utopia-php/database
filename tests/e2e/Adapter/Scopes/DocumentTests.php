@@ -7456,6 +7456,54 @@ trait DocumentTests
         $database->deleteCollection($collectionName);
     }
 
+    public function testUpdateDocumentUsesFreshForUpdateReadWhenCacheIsStale(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collectionId = 'for_update_cache';
+        $database->createCollection($collectionId);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals(true, $database->createAttribute($collectionId, 'a', Database::VAR_STRING, 255, false));
+            $this->assertEquals(true, $database->createAttribute($collectionId, 'b', Database::VAR_STRING, 255, false));
+        }
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'a' => 'A1',
+            'b' => 'B1',
+        ]));
+
+        // Prime cache with initial values.
+        $cached = $database->getDocument($collectionId, 'doc1');
+        $this->assertEquals('B1', $cached->getAttribute('b'));
+
+        $collection = $database->getCollection($collectionId);
+
+        // Simulate an out-of-band write that bypasses cache invalidation.
+        $outOfBand = $database->getAdapter()->getDocument($collection, 'doc1');
+        $outOfBand->setAttribute('b', 'B2');
+        $database->getAdapter()->updateDocument($collection, 'doc1', $outOfBand, true);
+
+        // Partial update should not overwrite untouched fields with stale cached values.
+        $updated = $database->updateDocument($collectionId, 'doc1', new Document([
+            'a' => 'A2',
+        ]));
+
+        $this->assertEquals('A2', $updated->getAttribute('a'));
+        $this->assertEquals('B2', $updated->getAttribute('b'));
+
+        $fresh = $database->getDocument($collectionId, 'doc1');
+        $this->assertEquals('B2', $fresh->getAttribute('b'));
+
+        $database->deleteCollection($collectionId);
+    }
+
     /**
      * Test ReDoS (Regular Expression Denial of Service) with timeout protection
      * This test verifies that ReDoS patterns either timeout properly or complete quickly,

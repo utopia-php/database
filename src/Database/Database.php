@@ -5709,19 +5709,19 @@ class Database
                     //  and some adapters may not cast floats on read)
                     $attrType = $attributeTypes[$key] ?? null;
                     if ($attrType !== null && !($value instanceof Operator)) {
-                        $castFn = match ($attrType) {
-                            self::VAR_FLOAT => fn($v) => (float)$v,
-                            self::VAR_INTEGER => fn($v) => (int)$v,
-                            self::VAR_BOOLEAN => fn($v) => (bool)$v,
-                            default => null,
-                        };
-                        if ($castFn !== null) {
-                            if (!\is_null($value)) {
-                                $value = $castFn($value);
-                            }
-                            if (!\is_null($oldValue)) {
-                                $oldValue = $castFn($oldValue);
-                            }
+                        switch ($attrType) {
+                            case self::VAR_FLOAT:
+                                $value = \is_null($value) ? null : (float)$value;
+                                $oldValue = \is_null($oldValue) ? null : (float)$oldValue;
+                                break;
+                            case self::VAR_INTEGER:
+                                $value = \is_null($value) ? null : (int)$value;
+                                $oldValue = \is_null($oldValue) ? null : (int)$oldValue;
+                                break;
+                            case self::VAR_BOOLEAN:
+                                $value = \is_null($value) ? null : (bool)$value;
+                                $oldValue = \is_null($oldValue) ? null : (bool)$oldValue;
+                                break;
                         }
                     }
 

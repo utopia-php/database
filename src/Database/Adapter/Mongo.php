@@ -3483,12 +3483,11 @@ class Mongo extends Adapter
         }
 
         // Duplicate key error
-        if ($e->getCode() === 11000) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
-        }
-
-        // Duplicate key error for unique index
-        if ($e->getCode() === 11001) {
+        if ($e->getCode() === 11000 || $e->getCode() === 11001) {
+            $message = $e->getMessage();
+            if (!\str_contains($message, '_uid')) {
+                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 

@@ -2189,6 +2189,10 @@ class Postgres extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            $message = $e->getMessage();
+            if (!\str_contains($message, '_uid')) {
+                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 

@@ -1328,6 +1328,9 @@ class SQLite extends MariaDB
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
             ) {
+                if (!\str_contains($message, '_uid')) {
+                    return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+                }
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
         }

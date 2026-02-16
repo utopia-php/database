@@ -17,6 +17,12 @@ class Pool extends Adapter
     protected UtopiaPool $pool;
 
     /**
+     * When a transaction is active, all delegate calls are routed through
+     * this pinned adapter to ensure they run on the same connection.
+     */
+    protected ?Adapter $pinnedAdapter = null;
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -36,6 +42,10 @@ class Pool extends Adapter
      */
     public function delegate(string $method, array $args): mixed
     {
+        if ($this->pinnedAdapter !== null) {
+            return $this->pinnedAdapter->{$method}(...$args);
+        }
+
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
             // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
@@ -123,7 +133,12 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            return $adapter->withTransaction($callback);
+            $this->pinnedAdapter = $adapter;
+            try {
+                return $adapter->withTransaction($callback);
+            } finally {
+                $this->pinnedAdapter = null;
+            }
         });
     }
 

@@ -5701,7 +5701,7 @@ class Database
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
-                        error_log("DEBUG shouldUpdate: key={$key} type_new=" . gettype($value) . " type_old=" . gettype($oldValue) . " val_new=" . json_encode($value) . " val_old=" . json_encode($oldValue));
+                        fwrite(STDOUT, "\nDEBUG shouldUpdate: key={$key} type_new=" . gettype($value) . " type_old=" . gettype($oldValue) . " val_new=" . json_encode($value) . " val_old=" . json_encode($oldValue) . "\n");
                         break;
                     }
                 }

@@ -5921,6 +5921,8 @@ trait DocumentTests
 
         $newUpdatedAt = $doc11->getUpdatedAt();
 
+        \usleep(2000); // Ensure updatedAt timestamp differs from creation time
+
         $newDoc11 = new Document([
             'string' => 'no_dates_update',
         ]);

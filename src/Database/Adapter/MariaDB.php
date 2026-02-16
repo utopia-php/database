@@ -927,7 +927,29 @@ class MariaDB extends SQL
             }
 
             if (isset($stmtPermissions)) {
-                $stmtPermissions->execute();
+                try {
+                    $stmtPermissions->execute();
+                } catch (PDOException $e) {
+                    $isOrphanedPermission = $e->getCode() === '23000'
+                        && isset($e->errorInfo[1])
+                        && $e->errorInfo[1] === 1062
+                        && \str_contains($e->getMessage(), '_index1');
+
+                    if (!$isOrphanedPermission) {
+                        throw $e;
+                    }
+
+                    // Clean up orphaned permissions from a previous failed delete, then retry
+                    $sql = "DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid {$this->getTenantQuery($collection)}";
+                    $cleanup = $this->getPDO()->prepare($sql);
+                    $cleanup->bindValue(':_uid', $document->getId());
+                    if ($this->sharedTables) {
+                        $cleanup->bindValue(':_tenant', $document->getTenant());
+                    }
+                    $cleanup->execute();
+
+                    $stmtPermissions->execute();
+                }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1883,6 +1905,13 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
+            $message = $e->getMessage();
+            if (\str_contains($message, '_index1')) {
+                return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
+            }
+            if (!\str_contains($message, '_uid')) {
+                return new DuplicateException('Document with the requested unique attributes already exists', $e);
+            }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 

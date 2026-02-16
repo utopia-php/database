@@ -5007,6 +5007,64 @@ trait DocumentTests
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
     }
+
+    /**
+     * Test that DuplicateException messages differentiate between
+     * document ID duplicates and unique index violations.
+     */
+    public function testDuplicateExceptionMessages(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUniqueIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('duplicateMessages');
+        $database->createAttribute('duplicateMessages', 'email', Database::VAR_STRING, 128, true);
+        $database->createIndex('duplicateMessages', 'emailUnique', Database::INDEX_UNIQUE, ['email'], [128]);
+
+        // Create first document
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'test@example.com',
+        ]));
+
+        // Test 1: Duplicate document ID should say "Document already exists"
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'different@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for duplicate document ID');
+        } catch (DuplicateException $e) {
+            $this->assertStringContainsString('Document already exists', $e->getMessage());
+        }
+
+        // Test 2: Unique index violation should mention "unique attributes"
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'test@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for unique index violation');
+        } catch (DuplicateException $e) {
+            $this->assertStringContainsString('unique attributes', $e->getMessage());
+        }
+
+        $database->deleteCollection('duplicateMessages');
+    }
     /**
      * @depends testUniqueIndexDuplicate
      */

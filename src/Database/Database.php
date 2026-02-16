@@ -5701,7 +5701,11 @@ class Database
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
-                        fwrite(STDOUT, "\nDEBUG shouldUpdate: key={$key} type_new=" . gettype($value) . " type_old=" . gettype($oldValue) . " val_new=" . json_encode($value) . " val_old=" . json_encode($oldValue) . "\n");
+                        $debugDiffKey = $key;
+                        $debugDiffNew = json_encode($value);
+                        $debugDiffOld = json_encode($oldValue);
+                        $debugTypeNew = gettype($value);
+                        $debugTypeOld = gettype($oldValue);
                         break;
                     }
                 }
@@ -5718,7 +5722,7 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
-                        throw new AuthorizationException($this->authorization->getDescription());
+                        throw new AuthorizationException($this->authorization->getDescription() . " [DEBUG diff_key={$debugDiffKey} type_new={$debugTypeNew} type_old={$debugTypeOld} val_new={$debugDiffNew} val_old={$debugDiffOld}]");
                     }
                 } else {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {

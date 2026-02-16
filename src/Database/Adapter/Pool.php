@@ -114,6 +114,12 @@ class Pool extends Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
+        // If already inside a transaction, reuse the pinned adapter
+        // so nested withTransaction calls use the same connection
+        if ($this->pinnedAdapter !== null) {
+            return $this->pinnedAdapter->withTransaction($callback);
+        }
+
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());

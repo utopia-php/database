@@ -846,6 +846,154 @@ trait GeneralTests
     }
 
     /**
+     * Test that withTransaction correctly resets inTransaction state
+     * when a known exception (DuplicateException) is thrown after successful rollback.
+     */
+    public function testTransactionStateAfterKnownException(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('txKnownException');
+        $database->createAttribute('txKnownException', 'title', Database::VAR_STRING, 128, true);
+
+        $database->createDocument('txKnownException', new Document([
+            '$id' => 'existing_doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'title' => 'Original',
+        ]));
+
+        // Trigger a DuplicateException inside withTransaction by inserting a duplicate ID
+        try {
+            $database->withTransaction(function () use ($database) {
+                $database->createDocument('txKnownException', new Document([
+                    '$id' => 'existing_doc',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'title' => 'Duplicate',
+                ]));
+            });
+            $this->fail('Expected DuplicateException was not thrown');
+        } catch (DuplicateException $e) {
+            // Expected
+        }
+
+        // inTransaction must be false after the exception
+        $this->assertFalse(
+            $database->getAdapter()->inTransaction(),
+            'Adapter should not be in transaction after DuplicateException'
+        );
+
+        // Database should still be functional
+        $doc = $database->getDocument('txKnownException', 'existing_doc');
+        $this->assertEquals('Original', $doc->getAttribute('title'));
+
+        $database->deleteCollection('txKnownException');
+    }
+
+    /**
+     * Test that withTransaction correctly resets inTransaction state
+     * when retries are exhausted for a generic exception.
+     */
+    public function testTransactionStateAfterRetriesExhausted(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $attempts = 0;
+
+        try {
+            $database->withTransaction(function () use (&$attempts) {
+                $attempts++;
+                throw new \RuntimeException('Persistent failure');
+            });
+            $this->fail('Expected RuntimeException was not thrown');
+        } catch (\RuntimeException $e) {
+            $this->assertEquals('Persistent failure', $e->getMessage());
+        }
+
+        // Should have attempted 3 times (initial + 2 retries)
+        $this->assertEquals(3, $attempts, 'Should have exhausted all retry attempts');
+
+        // inTransaction must be false after retries exhausted
+        $this->assertFalse(
+            $database->getAdapter()->inTransaction(),
+            'Adapter should not be in transaction after retries exhausted'
+        );
+    }
+
+    /**
+     * Test that nested withTransaction calls maintain correct inTransaction state
+     * when the inner transaction throws a known exception.
+     */
+    public function testNestedTransactionState(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('txNested');
+        $database->createAttribute('txNested', 'title', Database::VAR_STRING, 128, true);
+
+        $database->createDocument('txNested', new Document([
+            '$id' => 'nested_existing',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'title' => 'Original',
+        ]));
+
+        // Outer transaction should succeed even if inner transaction throws
+        $result = $database->withTransaction(function () use ($database) {
+            $database->createDocument('txNested', new Document([
+                '$id' => 'outer_doc',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'title' => 'Outer',
+            ]));
+
+            // Inner transaction throws a DuplicateException
+            try {
+                $database->withTransaction(function () use ($database) {
+                    $database->createDocument('txNested', new Document([
+                        '$id' => 'nested_existing',
+                        '$permissions' => [
+                            Permission::read(Role::any()),
+                        ],
+                        'title' => 'Duplicate',
+                    ]));
+                });
+            } catch (DuplicateException $e) {
+                // Caught and handled — outer transaction should continue
+            }
+
+            return true;
+        });
+
+        $this->assertTrue($result);
+
+        // inTransaction must be false after everything completes
+        $this->assertFalse(
+            $database->getAdapter()->inTransaction(),
+            'Adapter should not be in transaction after nested transactions complete'
+        );
+
+        // Outer document should have been committed
+        $outerDoc = $database->getDocument('txNested', 'outer_doc');
+        $this->assertFalse($outerDoc->isEmpty(), 'Outer transaction document should exist');
+        $this->assertEquals('Outer', $outerDoc->getAttribute('title'));
+
+        // Original document should be unchanged
+        $existingDoc = $database->getDocument('txNested', 'nested_existing');
+        $this->assertEquals('Original', $existingDoc->getAttribute('title'));
+
+        $database->deleteCollection('txNested');
+    }
+
+    /**
      * Wait for Redis to be ready with a readiness probe
      */
     private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void

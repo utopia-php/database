@@ -430,7 +430,6 @@ abstract class Adapter
                     $action instanceof ConflictException ||
                     $action instanceof LimitException
                 ) {
-                    $this->inTransaction = 0;
                     throw $action;
                 }
 
@@ -439,7 +438,6 @@ abstract class Adapter
                     continue;
                 }
 
-                $this->inTransaction = 0;
                 throw $action;
             }
         }

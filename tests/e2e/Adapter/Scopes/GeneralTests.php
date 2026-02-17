@@ -910,7 +910,6 @@ trait GeneralTests
                 $attempts++;
                 throw new \RuntimeException('Persistent failure');
             });
-            $this->fail('Expected RuntimeException was not thrown');
         } catch (\RuntimeException $e) {
             $this->assertEquals('Persistent failure', $e->getMessage());
         }

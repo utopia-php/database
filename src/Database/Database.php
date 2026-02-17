@@ -9261,7 +9261,10 @@ class Database
                 return null;
             }
 
-            $relatedQueries = [Query::equal('$id', $matchingIds)];
+            $relatedQueries = \array_values(\array_merge(
+                \array_filter($relatedQueries, fn (Query $q) => !\str_contains($q->getAttribute(), '.')),
+                [Query::equal('$id', $matchingIds)]
+            ));
         }
 
         $needsParentResolution = (

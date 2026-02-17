@@ -23,7 +23,7 @@ class Alias extends Validator
      * @param mixed $value
      * @return bool
      */
-    public function     isValid($value): bool
+    public function isValid($value): bool
     {
         if (! \is_string($value)) {
             return false;

@@ -898,11 +898,19 @@ trait GeneralTests
     /**
      * Test that withTransaction correctly resets inTransaction state
      * when retries are exhausted for a generic exception.
+     *
+     * MongoDB's withTransaction has no retry logic, so this test
+     * only applies to SQL-based adapters.
      */
     public function testTransactionStateAfterRetriesExhausted(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        if ($database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $attempts = 0;
 

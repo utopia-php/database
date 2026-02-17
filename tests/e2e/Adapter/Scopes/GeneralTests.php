@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -927,11 +928,19 @@ trait GeneralTests
     /**
      * Test that nested withTransaction calls maintain correct inTransaction state
      * when the inner transaction throws a known exception.
+     *
+     * MongoDB does not support nested transactions or savepoints, so a duplicate
+     * key error inside an inner transaction aborts the entire transaction.
      */
     public function testNestedTransactionState(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        if ($database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->createCollection('txNested');
         $database->createAttribute('txNested', 'title', Database::VAR_STRING, 128, true);

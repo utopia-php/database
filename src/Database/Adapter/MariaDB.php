@@ -1618,7 +1618,14 @@ class MariaDB extends SQL
             case Query::TYPE_IS_NOT_NULL:
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+            case Query::TYPE_CONTAINS_ALL:
+                if ($query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                    return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
@@ -1642,7 +1649,7 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };

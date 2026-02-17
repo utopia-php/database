@@ -9064,17 +9064,17 @@ class Database
         array $relationships,
         array $queries,
     ): ?array {
-        // Early return if no dot-path queries exist
-        $hasDotPath = false;
+        // Early return if no relationship queries exist
+        $hasRelationshipQuery = false;
         foreach ($queries as $query) {
             $attr = $query->getAttribute();
-            if (\str_contains($attr, '.')) {
-                $hasDotPath = true;
+            if (\str_contains($attr, '.') || $query->getMethod() === Query::TYPE_CONTAINS_ALL) {
+                $hasRelationshipQuery = true;
                 break;
             }
         }
 
-        if (!$hasDotPath) {
+        if (!$hasRelationshipQuery) {
             return $queries;
         }
 
@@ -9087,19 +9087,18 @@ class Database
         $groupedQueries = [];
         $indicesToRemove = [];
 
-        // Group queries by relationship key
+        // Handle containsAll queries first
         foreach ($queries as $index => $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() !== Query::TYPE_CONTAINS_ALL) {
                 continue;
             }
-            $method = $query->getMethod();
+
             $attribute = $query->getAttribute();
 
             if (!\str_contains($attribute, '.')) {
-                continue;
+                continue; // Non-relationship containsAll handled by adapter
             }
 
-            // Parse the relationship path
             $parts = \explode('.', $attribute);
             $relationshipKey = \array_shift($parts);
             $nestedAttribute = \implode('.', $parts);
@@ -9109,7 +9108,52 @@ class Database
                 continue;
             }
 
-            // Group queries by relationship key
+            // Resolve each value independently, then intersect parent IDs
+            $parentIdSets = [];
+            foreach ($query->getValues() as $value) {
+                $relatedQuery = Query::equal($nestedAttribute, [$value]);
+                $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery]);
+
+                if ($result === null) {
+                    return null;
+                }
+
+                $parentIdSets[] = $result['ids'];
+            }
+
+            $ids = \count($parentIdSets) > 1
+                ? \array_values(\array_intersect(...$parentIdSets))
+                : ($parentIdSets[0] ?? []);
+
+            if (empty($ids)) {
+                return null;
+            }
+
+            $additionalQueries[] = Query::equal('$id', $ids);
+            $indicesToRemove[] = $index;
+        }
+
+        // Group regular dot-path queries by relationship key
+        foreach ($queries as $index => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT || $query->getMethod() === Query::TYPE_CONTAINS_ALL) {
+                continue;
+            }
+
+            $attribute = $query->getAttribute();
+
+            if (!\str_contains($attribute, '.')) {
+                continue;
+            }
+
+            $parts = \explode('.', $attribute);
+            $relationshipKey = \array_shift($parts);
+            $nestedAttribute = \implode('.', $parts);
+            $relationship = $relationshipsByKey[$relationshipKey] ?? null;
+
+            if (!$relationship) {
+                continue;
+            }
+
             if (!isset($groupedQueries[$relationshipKey])) {
                 $groupedQueries[$relationshipKey] = [
                     'relationship' => $relationship,
@@ -9119,7 +9163,7 @@ class Database
             }
 
             $groupedQueries[$relationshipKey]['queries'][] = [
-                'method' => $method,
+                'method' => $query->getMethod(),
                 'attribute' => $nestedAttribute,
                 'values' => $query->getValues()
             ];
@@ -9130,11 +9174,19 @@ class Database
         // Process each relationship group
         foreach ($groupedQueries as $relationshipKey => $group) {
             $relationship = $group['relationship'];
-            $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
-            $relationType = $relationship->getAttribute('options')['relationType'];
-            $side = $relationship->getAttribute('options')['side'];
 
-            // Build combined queries for the related collection
+            // Detect impossible conditions: multiple equal on same attribute
+            $equalAttrs = [];
+            foreach ($group['queries'] as $queryData) {
+                if ($queryData['method'] === Query::TYPE_EQUAL) {
+                    $attr = $queryData['attribute'];
+                    if (isset($equalAttrs[$attr])) {
+                        throw new QueryException("Multiple equal queries on '{$relationshipKey}.{$attr}' will never match a single document. Use Query::containsAll() to match across different related documents.");
+                    }
+                    $equalAttrs[$attr] = true;
+                }
+            }
+
             $relatedQueries = [];
             foreach ($group['queries'] as $queryData) {
                 $relatedQueries[] = new Query(
@@ -9145,116 +9197,19 @@ class Database
             }
 
             try {
-                // Process multi-level queries by walking the relationship chain from deepest to shallowest
-                // For example: project.employee.company.name
-                // 1. Find companies matching name -> company IDs
-                // 2. Find employees with those company IDs -> employee IDs
-                // 3. Find projects with those employee IDs -> project IDs
+                $result = $this->resolveRelationshipGroupToIds($relationship, $relatedQueries);
 
-                // Check if we have nested relationships (depth 2+)
-                $hasNestedPaths = false;
-                $deepestQuery = null;
-                foreach ($relatedQueries as $relatedQuery) {
-                    if (\str_contains($relatedQuery->getAttribute(), '.')) {
-                        $hasNestedPaths = true;
-                        $deepestQuery = $relatedQuery;
-                        break;
-                    }
+                if ($result === null) {
+                    return null;
                 }
 
-                if ($hasNestedPaths) {
-                    // Process the nested path iteratively from deepest to shallowest
-                    $matchingIds = $this->processNestedRelationshipPath(
-                        $relatedCollection,
-                        $relatedQueries
-                    );
+                $additionalQueries[] = Query::equal($result['attribute'], $result['ids']);
 
-                    if ($matchingIds === null || empty($matchingIds)) {
-                        return null;
-                    }
-
-                    // Convert to simple ID filter for the current level
-                    $relatedQueries = [Query::equal('$id', $matchingIds)];
-                }
-
-                // For virtual parent relationships (where parent doesn't store child IDs),
-                // we need to find which parents have matching children
-                // - ONE_TO_MANY from parent side: parent doesn't store children
-                // - MANY_TO_ONE from child side: the "one" side doesn't store "many" IDs
-                // - MANY_TO_MANY: both sides are virtual, stored in junction table
-                $needsParentResolution = (
-                    ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
-                    ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
-                    ($relationType === self::RELATION_MANY_TO_MANY)
-                );
-
-                if ($needsParentResolution) {
-                    $matchingDocs = $this->silent(fn () => $this->find(
-                        $relatedCollection,
-                        \array_merge($relatedQueries, [
-                            Query::limit(PHP_INT_MAX),
-                        ])
-                    ));
-                } else {
-                    $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
-                        $relatedCollection,
-                        \array_merge($relatedQueries, [
-                            Query::select(['$id']),
-                            Query::limit(PHP_INT_MAX),
-                        ])
-                    )));
-                }
-
-                $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
-
-                if ($needsParentResolution) {
-                    // Need to find which parents have these children
-                    $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-
-                    $parentIds = [];
-                    foreach ($matchingDocs as $doc) {
-                        $parentId = $doc->getAttribute($twoWayKey);
-
-                        // Handle MANY_TO_MANY: twoWayKey returns an array
-                        if (\is_array($parentId)) {
-                            foreach ($parentId as $id) {
-                                if ($id instanceof Document) {
-                                    $id = $id->getId();
-                                }
-                                if ($id && !\in_array($id, $parentIds)) {
-                                    $parentIds[] = $id;
-                                }
-                            }
-                        } else {
-                            // Handle ONE_TO_MANY/MANY_TO_ONE: single value
-                            if ($parentId instanceof Document) {
-                                $parentId = $parentId->getId();
-                            }
-                            if ($parentId && !\in_array($parentId, $parentIds)) {
-                                $parentIds[] = $parentId;
-                            }
-                        }
-                    }
-
-                    // Add filter on current collection's $id
-                    if (!empty($parentIds)) {
-                        $additionalQueries[] = Query::equal('$id', $parentIds);
-                    } else {
-                        return null;
-                    }
-                } else {
-                    // For other types, filter by the relationship attribute
-                    if (!empty($matchingIds)) {
-                        $additionalQueries[] = Query::equal($relationshipKey, $matchingIds);
-                    } else {
-                        return null;
-                    }
-                }
-
-                // Remove all original relationship queries for this group
                 foreach ($group['indices'] as $originalIndex) {
                     $indicesToRemove[] = $originalIndex;
                 }
+            } catch (QueryException $e) {
+                throw $e;
             } catch (\Exception $e) {
                 return null;
             }
@@ -9267,6 +9222,100 @@ class Database
 
         // Merge additional queries
         return \array_merge(\array_values($queries), $additionalQueries);
+    }
+
+    /**
+     * Resolve a group of relationship queries to matching document IDs.
+     *
+     * @param Document $relationship
+     * @param array<Query> $relatedQueries Queries on the related collection
+     * @return array{attribute: string, ids: string[]}|null
+     */
+    private function resolveRelationshipGroupToIds(
+        Document $relationship,
+        array $relatedQueries,
+    ): ?array {
+        $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
+        $relationType = $relationship->getAttribute('options')['relationType'];
+        $side = $relationship->getAttribute('options')['side'];
+        $relationshipKey = $relationship->getAttribute('key');
+
+        // Process multi-level queries by walking the relationship chain
+        $hasNestedPaths = false;
+        foreach ($relatedQueries as $relatedQuery) {
+            if (\str_contains($relatedQuery->getAttribute(), '.')) {
+                $hasNestedPaths = true;
+                break;
+            }
+        }
+
+        if ($hasNestedPaths) {
+            $matchingIds = $this->processNestedRelationshipPath(
+                $relatedCollection,
+                $relatedQueries
+            );
+
+            if ($matchingIds === null || empty($matchingIds)) {
+                return null;
+            }
+
+            $relatedQueries = [Query::equal('$id', $matchingIds)];
+        }
+
+        $needsParentResolution = (
+            ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
+            ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
+            ($relationType === self::RELATION_MANY_TO_MANY)
+        );
+
+        if ($needsParentResolution) {
+            $matchingDocs = $this->silent(fn () => $this->find(
+                $relatedCollection,
+                \array_merge($relatedQueries, [
+                    Query::limit(PHP_INT_MAX),
+                ])
+            ));
+        } else {
+            $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                $relatedCollection,
+                \array_merge($relatedQueries, [
+                    Query::select(['$id']),
+                    Query::limit(PHP_INT_MAX),
+                ])
+            )));
+        }
+
+        if ($needsParentResolution) {
+            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+            $parentIds = [];
+
+            foreach ($matchingDocs as $doc) {
+                $parentId = $doc->getAttribute($twoWayKey);
+
+                if (\is_array($parentId)) {
+                    foreach ($parentId as $id) {
+                        if ($id instanceof Document) {
+                            $id = $id->getId();
+                        }
+                        if ($id && !\in_array($id, $parentIds)) {
+                            $parentIds[] = $id;
+                        }
+                    }
+                } else {
+                    if ($parentId instanceof Document) {
+                        $parentId = $parentId->getId();
+                    }
+                    if ($parentId && !\in_array($parentId, $parentIds)) {
+                        $parentIds[] = $parentId;
+                    }
+                }
+            }
+
+            return empty($parentIds) ? null : ['attribute' => '$id', 'ids' => $parentIds];
+        } else {
+            $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+            return empty($matchingIds) ? null : ['attribute' => $relationshipKey, 'ids' => $matchingIds];
+        }
     }
 
     /**

@@ -2673,7 +2673,7 @@ class Mongo extends Adapter
         };
 
         $filter = [];
-        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
             $this->handleObjectFilters($query, $filter);
             return $filter;
         }
@@ -2682,8 +2682,10 @@ class Mongo extends Adapter
             $filter[$attribute]['$in'] = $value;
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
+        } elseif ($operator == '$all') {
+            $filter[$attribute]['$all'] = $query->getValues();
         } elseif ($operator == '$in') {
-            if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
+            if (in_array($query->getMethod(), [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY]) && !$query->onArray()) {
                 // contains support array values
                 if (is_array($value)) {
                     $filter['$or'] = array_map(function ($val) use ($attribute) {
@@ -2760,6 +2762,8 @@ class Mongo extends Adapter
             switch ($query->getMethod()) {
 
                 case Query::TYPE_CONTAINS:
+                case Query::TYPE_CONTAINS_ANY:
+                case Query::TYPE_CONTAINS_ALL:
                 case Query::TYPE_NOT_CONTAINS: {
                     $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
                     $operator = $isNot ? '$nin' : '$in';
@@ -2844,6 +2848,8 @@ class Mongo extends Adapter
             Query::TYPE_GREATER => '$gt',
             Query::TYPE_GREATER_EQUAL => '$gte',
             Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_CONTAINS_ANY => '$in',
+            Query::TYPE_CONTAINS_ALL => '$all',
             Query::TYPE_NOT_CONTAINS => 'notContains',
             Query::TYPE_SEARCH => '$search',
             Query::TYPE_NOT_SEARCH => '$search',

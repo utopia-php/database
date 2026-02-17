@@ -15,6 +15,7 @@ class Query
     public const TYPE_GREATER = 'greaterThan';
     public const TYPE_GREATER_EQUAL = 'greaterThanEqual';
     public const TYPE_CONTAINS = 'contains';
+    public const TYPE_CONTAINS_ANY = 'containsAny';
     public const TYPE_NOT_CONTAINS = 'notContains';
     public const TYPE_SEARCH = 'search';
     public const TYPE_NOT_SEARCH = 'notSearch';
@@ -65,6 +66,7 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
+    public const TYPE_CONTAINS_ALL = 'containsAll';
     public const TYPE_ELEM_MATCH = 'elemMatch';
     public const DEFAULT_ALIAS = 'main';
 
@@ -76,6 +78,7 @@ class Query
         self::TYPE_GREATER,
         self::TYPE_GREATER_EQUAL,
         self::TYPE_CONTAINS,
+        self::TYPE_CONTAINS_ANY,
         self::TYPE_NOT_CONTAINS,
         self::TYPE_SEARCH,
         self::TYPE_NOT_SEARCH,
@@ -114,6 +117,7 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_CONTAINS_ALL,
         self::TYPE_ELEM_MATCH,
         self::TYPE_REGEX
     ];
@@ -268,6 +272,7 @@ class Query
             self::TYPE_GREATER,
             self::TYPE_GREATER_EQUAL,
             self::TYPE_CONTAINS,
+            self::TYPE_CONTAINS_ANY,
             self::TYPE_NOT_CONTAINS,
             self::TYPE_SEARCH,
             self::TYPE_NOT_SEARCH,
@@ -300,6 +305,7 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_CONTAINS_ALL,
             self::TYPE_ELEM_MATCH,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
@@ -533,6 +539,7 @@ class Query
     /**
      * Helper method to create Query with contains method
      *
+     * @deprecated Use containsAny() for array attributes, or keep using contains() for string substring matching.
      * @param string $attribute
      * @param array<mixed> $values
      * @return Query
@@ -540,6 +547,19 @@ class Query
     public static function contains(string $attribute, array $values): self
     {
         return new self(self::TYPE_CONTAINS, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with containsAny method.
+     * For array and relationship attributes, matches documents where the attribute contains ANY of the given values.
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function containsAny(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_CONTAINS_ANY, $attribute, $values);
     }
 
     /**
@@ -817,6 +837,16 @@ class Query
     public static function and(array $queries): self
     {
         return new self(self::TYPE_AND, '', $queries);
+    }
+
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function containsAll(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_CONTAINS_ALL, $attribute, $values);
     }
 
     /**

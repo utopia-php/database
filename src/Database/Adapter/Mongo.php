@@ -1209,7 +1209,7 @@ class Mongo extends Adapter
         $document = $this->castingAfter($collection, $document);
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
-        if (!empty($projections)) {
+        if (empty($projections)) {
             $this->ensureRelationshipDefaults($collection, $document);
         }
 
@@ -2215,7 +2215,7 @@ class Mongo extends Adapter
         }
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
-        if (!empty($projections)) {
+        if (empty($projections)) {
             foreach ($found as $document) {
                 $this->ensureRelationshipDefaults($collection, $document);
             }
@@ -2311,15 +2311,10 @@ class Mongo extends Adapter
         // Escape query attribute names that contain dots and match collection attributes
         $this->escapeQueryAttributes($collection, $filters);
 
-        $filters = [];
         $options = [];
 
         if (!\is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
-
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
+            //$options['limit'] = $max; todo: Remove if not needed
         }
 
         // Build filters from queries
@@ -2362,14 +2357,14 @@ class Mongo extends Adapter
         }
 
         // Add limit stage if specified
-        if (!\is_null($max)) {
+        if (!\is_null($max) && $max > 0) {
             $pipeline[] = ['$limit' => $max];
         }
 
         // Use $group and $sum when limit is specified, $count when no limit
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
-        if (!\is_null($max)) {
+        if (!\is_null($max) && $max > 0) {
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [

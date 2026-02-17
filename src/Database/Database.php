@@ -9110,6 +9110,7 @@ class Database
 
             // Resolve each value independently, then intersect parent IDs
             $parentIdSets = [];
+            $resolvedAttribute = '$id';
             foreach ($query->getValues() as $value) {
                 $relatedQuery = Query::equal($nestedAttribute, [$value]);
                 $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery]);
@@ -9118,6 +9119,7 @@ class Database
                     return null;
                 }
 
+                $resolvedAttribute = $result['attribute'];
                 $parentIdSets[] = $result['ids'];
             }
 
@@ -9129,7 +9131,7 @@ class Database
                 return null;
             }
 
-            $additionalQueries[] = Query::equal('$id', $ids);
+            $additionalQueries[] = Query::equal($resolvedAttribute, $ids);
             $indicesToRemove[] = $index;
         }
 

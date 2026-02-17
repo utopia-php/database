@@ -188,7 +188,7 @@ class Filter extends Base
                     }
 
                     // object containment queries on the base object attribute
-                    elseif (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true)
+                    elseif (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS], true)
                         && !$this->isValidObjectQueryValues($value)) {
                         $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
                         return false;
@@ -266,7 +266,7 @@ class Filter extends Base
 
         if (
             !$array &&
-            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
+            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
             $attributeSchema['type'] !== Database::VAR_OBJECT &&
             !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
@@ -278,7 +278,7 @@ class Filter extends Base
 
         if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
@@ -377,7 +377,9 @@ class Filter extends Base
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
+            case Query::TYPE_CONTAINS_ALL:
             case Query::TYPE_EXISTS:
             case Query::TYPE_NOT_EXISTS:
                 if ($this->isEmpty($value->getValues())) {

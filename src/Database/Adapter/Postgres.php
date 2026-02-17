@@ -1712,6 +1712,8 @@ class Postgres extends SQL
             }
 
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
+            case Query::TYPE_CONTAINS_ALL:
             case Query::TYPE_NOT_CONTAINS: {
                 $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
                 $conditions = [];
@@ -1812,7 +1814,15 @@ class Postgres extends SQL
             case Query::TYPE_IS_NOT_NULL:
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS_ALL:
+                if ($query->onArray()) {
+                    // @> checks the array contains ALL specified values
+                    $binds[":{$placeholder}_0"] = \json_encode($query->getValues());
+                    return "{$alias}.{$attribute} @> :{$placeholder}_0::jsonb";
+                }
+                // no break
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
                 if ($query->onArray()) {
                     $operator = '@>';
@@ -1834,7 +1844,7 @@ class Postgres extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };

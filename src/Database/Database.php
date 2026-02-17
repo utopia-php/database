@@ -8982,34 +8982,55 @@ class Database
                 );
 
                 if ($needsReverseLookup) {
-                    // Need to find parents by querying children and extracting parent IDs
-                    $childDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
-                        $link['toCollection'],
-                        [
-                            Query::equal('$id', $matchingIds),
-                            Query::select(['$id', $link['twoWayKey']]),
-                            Query::limit(PHP_INT_MAX),
-                        ]
-                    )));
+                    if ($relationType === self::RELATION_MANY_TO_MANY) {
+                        // For many-to-many, query the junction table directly instead
+                        // of resolving full relationships on the child documents.
+                        $fromCollectionDoc = $this->silent(fn () => $this->getCollection($link['fromCollection']));
+                        $toCollectionDoc = $this->silent(fn () => $this->getCollection($link['toCollection']));
+                        $junction = $this->getJunctionCollection($fromCollectionDoc, $toCollectionDoc, $link['side']);
 
-                    $parentIds = [];
-                    foreach ($childDocs as $doc) {
-                        $parentValue = $doc->getAttribute($link['twoWayKey']);
-                        if (\is_array($parentValue)) {
-                            foreach ($parentValue as $pId) {
-                                if ($pId instanceof Document) {
-                                    $pId = $pId->getId();
-                                }
-                                if ($pId && !\in_array($pId, $parentIds)) {
-                                    $parentIds[] = $pId;
-                                }
+                        $junctionDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find($junction, [
+                            Query::equal($link['key'], $matchingIds),
+                            Query::limit(PHP_INT_MAX),
+                        ])));
+
+                        $parentIds = [];
+                        foreach ($junctionDocs as $jDoc) {
+                            $pId = $jDoc->getAttribute($link['twoWayKey']);
+                            if ($pId && !\in_array($pId, $parentIds)) {
+                                $parentIds[] = $pId;
                             }
-                        } else {
-                            if ($parentValue instanceof Document) {
-                                $parentValue = $parentValue->getId();
-                            }
-                            if ($parentValue && !\in_array($parentValue, $parentIds)) {
-                                $parentIds[] = $parentValue;
+                        }
+                    } else {
+                        // Need to find parents by querying children and extracting parent IDs
+                        $childDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                            $link['toCollection'],
+                            [
+                                Query::equal('$id', $matchingIds),
+                                Query::select(['$id', $link['twoWayKey']]),
+                                Query::limit(PHP_INT_MAX),
+                            ]
+                        )));
+
+                        $parentIds = [];
+                        foreach ($childDocs as $doc) {
+                            $parentValue = $doc->getAttribute($link['twoWayKey']);
+                            if (\is_array($parentValue)) {
+                                foreach ($parentValue as $pId) {
+                                    if ($pId instanceof Document) {
+                                        $pId = $pId->getId();
+                                    }
+                                    if ($pId && !\in_array($pId, $parentIds)) {
+                                        $parentIds[] = $pId;
+                                    }
+                                }
+                            } else {
+                                if ($parentValue instanceof Document) {
+                                    $parentValue = $parentValue->getId();
+                                }
+                                if ($parentValue && !\in_array($parentValue, $parentIds)) {
+                                    $parentIds[] = $parentValue;
+                                }
                             }
                         }
                     }

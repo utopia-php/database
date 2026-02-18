@@ -157,6 +157,8 @@ class Query
         self::TYPE_GREATER_EQUAL,
         self::TYPE_CONTAINS,
         self::TYPE_NOT_CONTAINS,
+        self::TYPE_CONTAINS_ANY,
+        self::TYPE_CONTAINS_ALL,
         self::TYPE_SEARCH,
         self::TYPE_NOT_SEARCH,
         self::TYPE_IS_NULL,
@@ -747,9 +749,9 @@ class Query
      * @param array<mixed> $values
      * @return Query
      */
-    public static function contains(string $attribute, array $values): self
+    public static function contains(string $attribute, array $values, string $alias = ''): self
     {
-        return new self(self::TYPE_CONTAINS, $attribute, $values);
+        return new self(self::TYPE_CONTAINS, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -760,9 +762,9 @@ class Query
      * @param array<mixed> $values
      * @return Query
      */
-    public static function containsAny(string $attribute, array $values): self
+    public static function containsAny(string $attribute, array $values, string $alias = ''): self
     {
-        return new self(self::TYPE_CONTAINS_ANY, $attribute, $values);
+        return new self(self::TYPE_CONTAINS_ANY, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -772,9 +774,9 @@ class Query
      * @param array<mixed> $values
      * @return Query
      */
-    public static function notContains(string $attribute, array $values): self
+    public static function notContains(string $attribute, array $values, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_CONTAINS, $attribute, $values);
+        return new self(self::TYPE_NOT_CONTAINS, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -783,6 +785,7 @@ class Query
      * @param string $attribute
      * @param string|int|float|bool $start
      * @param string|int|float|bool $end
+     * @param string $alias
      * @return Query
      */
     public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end, string $alias = ''): self
@@ -796,11 +799,12 @@ class Query
      * @param string $attribute
      * @param string|int|float|bool $start
      * @param string|int|float|bool $end
+     * @param string $alias
      * @return Query
      */
-    public static function notBetween(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
+    public static function notBetween(string $attribute, string|int|float|bool $start, string|int|float|bool $end, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_BETWEEN, $attribute, [$start, $end]);
+        return new self(self::TYPE_NOT_BETWEEN, $attribute, [$start, $end], alias: $alias);
     }
 
     /**
@@ -808,11 +812,12 @@ class Query
      *
      * @param string $attribute
      * @param string $value
+     * @param string $alias
      * @return Query
      */
-    public static function search(string $attribute, string $value): self
+    public static function search(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_SEARCH, $attribute, [$value]);
+        return new self(self::TYPE_SEARCH, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -820,11 +825,12 @@ class Query
      *
      * @param string $attribute
      * @param string $value
+     * @param string $alias
      * @return Query
      */
-    public static function notSearch(string $attribute, string $value): self
+    public static function notSearch(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_SEARCH, $attribute, [$value]);
+        return new self(self::TYPE_NOT_SEARCH, $attribute, [$value], alias: $alias);
     }
 
     public static function select(string $attribute, string $alias = '', string $as = '', bool $system = false): self
@@ -836,6 +842,7 @@ class Query
      * Helper method to create Query with orderDesc method
      *
      * @param string $attribute
+     * @param string $alias
      * @return Query
      */
     public static function orderDesc(string $attribute = '', string $alias = ''): self
@@ -847,6 +854,7 @@ class Query
      * Helper method to create Query with orderAsc method
      *
      * @param string $attribute
+     * @param string $alias
      * @return Query
      */
     public static function orderAsc(string $attribute = '', string $alias = ''): self
@@ -932,24 +940,24 @@ class Query
         return new self(self::TYPE_IS_NOT_NULL, $attribute, alias: $alias);
     }
 
-    public static function startsWith(string $attribute, string $value): self
+    public static function startsWith(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_STARTS_WITH, $attribute, [$value]);
+        return new self(self::TYPE_STARTS_WITH, $attribute, [$value], alias: $alias);
     }
 
-    public static function notStartsWith(string $attribute, string $value): self
+    public static function notStartsWith(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_STARTS_WITH, $attribute, [$value]);
+        return new self(self::TYPE_NOT_STARTS_WITH, $attribute, [$value], alias: $alias);
     }
 
-    public static function endsWith(string $attribute, string $value): self
+    public static function endsWith(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
+        return new self(self::TYPE_ENDS_WITH, $attribute, [$value], alias: $alias);
     }
 
-    public static function notEndsWith(string $attribute, string $value): self
+    public static function notEndsWith(string $attribute, string $value, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_ENDS_WITH, $attribute, [$value]);
+        return new self(self::TYPE_NOT_ENDS_WITH, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -958,9 +966,9 @@ class Query
      * @param string $value
      * @return Query
      */
-    public static function createdBefore(string $value): self
+    public static function createdBefore(string $value, string $alias = ''): self
     {
-        return self::lessThan('$createdAt', $value);
+        return self::lessThan('$createdAt', $value, alias: $alias);
     }
 
     /**
@@ -969,9 +977,9 @@ class Query
      * @param string $value
      * @return Query
      */
-    public static function createdAfter(string $value): self
+    public static function createdAfter(string $value, string $alias = ''): self
     {
-        return self::greaterThan('$createdAt', $value);
+        return self::greaterThan('$createdAt', $value, alias: $alias);
     }
 
     /**
@@ -980,9 +988,9 @@ class Query
      * @param string $value
      * @return Query
      */
-    public static function updatedBefore(string $value): self
+    public static function updatedBefore(string $value, string $alias = ''): self
     {
-        return self::lessThan('$updatedAt', $value);
+        return self::lessThan('$updatedAt', $value, alias: $alias);
     }
 
     /**
@@ -991,9 +999,9 @@ class Query
      * @param string $value
      * @return Query
      */
-    public static function updatedAfter(string $value): self
+    public static function updatedAfter(string $value, string $alias = ''): self
     {
-        return self::greaterThan('$updatedAt', $value);
+        return self::greaterThan('$updatedAt', $value, alias: $alias);
     }
 
     /**
@@ -1003,9 +1011,9 @@ class Query
      * @param string $end
      * @return Query
      */
-    public static function createdBetween(string $start, string $end): self
+    public static function createdBetween(string $start, string $end, string $alias = ''): self
     {
-        return self::between('$createdAt', $start, $end);
+        return self::between('$createdAt', $start, $end, alias: $alias);
     }
 
     /**
@@ -1015,9 +1023,9 @@ class Query
      * @param string $end
      * @return Query
      */
-    public static function updatedBetween(string $start, string $end): self
+    public static function updatedBetween(string $start, string $end, string $alias = ''): self
     {
-        return self::between('$updatedAt', $start, $end);
+        return self::between('$updatedAt', $start, $end, alias: $alias);
     }
 
     /**

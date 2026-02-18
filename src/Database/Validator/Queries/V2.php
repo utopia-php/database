@@ -208,6 +208,8 @@ class V2 extends Validator
                     case Query::TYPE_EQUAL:
                     case Query::TYPE_CONTAINS:
                     case Query::TYPE_NOT_CONTAINS:
+                    case Query::TYPE_CONTAINS_ANY:
+                    case Query::TYPE_CONTAINS_ALL:
                     case Query::TYPE_EXISTS:
                     case Query::TYPE_NOT_EXISTS:
                         if ($this->isEmpty($query->getValues())) {
@@ -637,7 +639,7 @@ class V2 extends Validator
                     }
 
                     if (
-                        \in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS], true) &&
+                        \in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL], true) &&
                         !$this->isValidObjectQueryValues($value)
                     ) {
                         throw new \Exception('Invalid object query structure for attribute "'.$attributeId.'"');
@@ -712,7 +714,7 @@ class V2 extends Validator
 
         if (
             ! $array &&
-            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
+            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL]) &&
             $attribute['type'] !== Database::VAR_STRING &&
             $attribute['type'] !== Database::VAR_OBJECT &&
             !in_array($attribute['type'], Database::SPATIAL_TYPES)
@@ -725,6 +727,8 @@ class V2 extends Validator
             !in_array($method, [
                 Query::TYPE_CONTAINS,
                 Query::TYPE_NOT_CONTAINS,
+                Query::TYPE_CONTAINS_ANY,
+                Query::TYPE_CONTAINS_ALL,
                 Query::TYPE_IS_NULL,
                 Query::TYPE_IS_NOT_NULL,
                 Query::TYPE_EXISTS,

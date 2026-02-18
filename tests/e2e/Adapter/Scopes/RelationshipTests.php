@@ -3533,6 +3533,33 @@ trait RelationshipTests
             $this->assertStringContainsString('Query::containsAll()', $e->getMessage());
         }
 
+        // Test M2M relationship query inside skipRelationships context
+        // This simulates Appwrite's XList.php which wraps find() in skipRelationships()
+        // when no select queries are provided
+        $projects = $database->skipRelationships(fn () => $database->find('projectsMtmId', [
+            Query::equal('developers.$id', ['dev1']),
+        ]));
+        $this->assertCount(2, $projects);
+
+        $projects = $database->skipRelationships(fn () => $database->find('projectsMtmId', [
+            Query::equal('developers.$id', ['dev2']),
+        ]));
+        $this->assertCount(1, $projects);
+        $this->assertEquals('project1', $projects[0]->getId());
+
+        // Also test inverse direction inside skipRelationships
+        $developers = $database->skipRelationships(fn () => $database->find('developersMtmId', [
+            Query::equal('projects.$id', ['project1']),
+        ]));
+        $this->assertCount(2, $developers);
+
+        // Test containsAll inside skipRelationships
+        $projects = $database->skipRelationships(fn () => $database->find('projectsMtmId', [
+            Query::containsAll('developers.$id', ['dev1', 'dev2']),
+        ]));
+        $this->assertCount(1, $projects);
+        $this->assertEquals('project1', $projects[0]->getId());
+
         // Clean up MANY_TO_MANY test
         $database->deleteCollection('developersMtmId');
         $database->deleteCollection('projectsMtmId');

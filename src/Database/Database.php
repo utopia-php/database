@@ -7864,7 +7864,7 @@ class Database
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         // Convert relationship filter queries to SQL-level subqueries
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
         if ($queriesOrNull === null) {
@@ -8064,7 +8064,7 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($collection, $queries);
 
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
         if ($queriesOrNull === null) {
             return 0;
@@ -8130,7 +8130,7 @@ class Database
         );
 
         $queries = $this->convertQueries($collection, $queries);
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
         if ($queriesOrNull === null) {
@@ -9084,6 +9084,7 @@ class Database
     private function convertRelationshipQueries(
         array $relationships,
         array $queries,
+        ?Document $collection = null,
     ): ?array {
         // Early return if no relationship queries exist
         $hasRelationshipQuery = false;
@@ -9134,7 +9135,7 @@ class Database
             $resolvedAttribute = '$id';
             foreach ($query->getValues() as $value) {
                 $relatedQuery = Query::equal($nestedAttribute, [$value]);
-                $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery]);
+                $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery], $collection);
 
                 if ($result === null) {
                     return null;
@@ -9220,7 +9221,7 @@ class Database
             }
 
             try {
-                $result = $this->resolveRelationshipGroupToIds($relationship, $relatedQueries);
+                $result = $this->resolveRelationshipGroupToIds($relationship, $relatedQueries, $collection);
 
                 if ($result === null) {
                     return null;
@@ -9252,11 +9253,13 @@ class Database
      *
      * @param Document $relationship
      * @param array<Query> $relatedQueries Queries on the related collection
+     * @param Document|null $collection The parent collection document (needed for junction table lookups)
      * @return array{attribute: string, ids: string[]}|null
      */
     private function resolveRelationshipGroupToIds(
         Document $relationship,
         array $relatedQueries,
+        ?Document $collection = null,
     ): ?array {
         $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
         $relationType = $relationship->getAttribute('options')['relationType'];
@@ -9294,14 +9297,10 @@ class Database
             ($relationType === self::RELATION_MANY_TO_MANY)
         );
 
-        if ($needsParentResolution) {
-            $matchingDocs = $this->silent(fn () => $this->find(
-                $relatedCollection,
-                \array_merge($relatedQueries, [
-                    Query::limit(PHP_INT_MAX),
-                ])
-            ));
-        } else {
+        if ($relationType === self::RELATION_MANY_TO_MANY && $needsParentResolution && $collection !== null) {
+            // For many-to-many, query the junction table directly instead of relying
+            // on relationship population (which fails when resolveRelationships is false,
+            // e.g. when the outer find() is wrapped in skipRelationships()).
             $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                 $relatedCollection,
                 \array_merge($relatedQueries, [
@@ -9309,9 +9308,41 @@ class Database
                     Query::limit(PHP_INT_MAX),
                 ])
             )));
-        }
 
-        if ($needsParentResolution) {
+            $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+
+            if (empty($matchingIds)) {
+                return null;
+            }
+
+            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+            $relatedCollectionDoc = $this->silent(fn () => $this->getCollection($relatedCollection));
+            $junction = $this->getJunctionCollection($collection, $relatedCollectionDoc, $side);
+
+            $junctionDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find($junction, [
+                Query::equal($relationshipKey, $matchingIds),
+                Query::limit(PHP_INT_MAX),
+            ])));
+
+            $parentIds = [];
+            foreach ($junctionDocs as $jDoc) {
+                $pId = $jDoc->getAttribute($twoWayKey);
+                if ($pId && !\in_array($pId, $parentIds)) {
+                    $parentIds[] = $pId;
+                }
+            }
+
+            return empty($parentIds) ? null : ['attribute' => '$id', 'ids' => $parentIds];
+        } elseif ($needsParentResolution) {
+            // For one-to-many/many-to-one parent resolution, we need relationship
+            // population to read the twoWayKey attribute from the related documents.
+            $matchingDocs = $this->silent(fn () => $this->find(
+                $relatedCollection,
+                \array_merge($relatedQueries, [
+                    Query::limit(PHP_INT_MAX),
+                ])
+            ));
+
             $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
             $parentIds = [];
 
@@ -9339,6 +9370,14 @@ class Database
 
             return empty($parentIds) ? null : ['attribute' => '$id', 'ids' => $parentIds];
         } else {
+            $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                $relatedCollection,
+                \array_merge($relatedQueries, [
+                    Query::select(['$id']),
+                    Query::limit(PHP_INT_MAX),
+                ])
+            )));
+
             $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
             return empty($matchingIds) ? null : ['attribute' => $relationshipKey, 'ids' => $matchingIds];
         }

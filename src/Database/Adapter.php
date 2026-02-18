@@ -1529,4 +1529,18 @@ abstract class Adapter
     {
         return false;
     }
+
+    /**
+     * Does the adapter support transaction retries?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTransactionRetries(): bool;
+
+    /**
+     * Does the adapter support nested transactions?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForNestedTransactions(): bool;
 }

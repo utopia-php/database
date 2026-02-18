@@ -7,7 +7,6 @@ use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
-use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -907,7 +906,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter() instanceof Mongo) {
+        if (!$database->getAdapter()->getSupportForTransactionRetries()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -945,7 +944,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter() instanceof Mongo) {
+        if (!$database->getAdapter()->getSupportForNestedTransactions()) {
             $this->expectNotToPerformAssertions();
             return;
         }

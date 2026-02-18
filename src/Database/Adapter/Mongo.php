@@ -3692,6 +3692,16 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForTransactionRetries(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForNestedTransactions(): bool
+    {
+        return false;
+    }
+
     protected function isExtendedISODatetime(string $val): bool
     {
         /**

@@ -8,21 +8,19 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\QueryContext;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 
 class DocumentsQueriesTest extends TestCase
 {
-    /**
-     * @var array<string, mixed>
-     */
-    protected array $collection = [];
+    protected QueryContext $context;
 
     /**
      * @throws Exception
      */
     public function setUp(): void
     {
-        $this->collection = [
+        $collection = [
             '$id' => Database::METADATA,
             '$collection' => Database::METADATA,
             'name' => 'movies',
@@ -112,6 +110,13 @@ class DocumentsQueriesTest extends TestCase
                 ]),
             ],
         ];
+
+        $collection = new Document($collection);
+
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $this->context = $context;
     }
 
     public function tearDown(): void
@@ -123,9 +128,8 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testValidQueries(): void
     {
-        $validator = new Documents(
-            $this->collection['attributes'],
-            $this->collection['indexes'],
+        $validator = new DocumentsValidator(
+            $this->context,
             Database::VAR_INTEGER
         );
 
@@ -161,9 +165,8 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testInvalidQueries(): void
     {
-        $validator = new Documents(
-            $this->collection['attributes'],
-            $this->collection['indexes'],
+        $validator = new DocumentsValidator(
+            $this->context,
             Database::VAR_INTEGER
         );
 
@@ -181,7 +184,7 @@ class DocumentsQueriesTest extends TestCase
 
         $queries = [Query::limit(-1)];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
+        $this->assertEquals('Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
 
         $queries = [Query::equal('title', [])]; // empty array
         $this->assertEquals(false, $validator->isValid($queries));

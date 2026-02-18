@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 
 abstract class SQL extends Adapter
 {
@@ -365,16 +366,15 @@ abstract class SQL extends Adapter
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
-        $selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $alias = Query::DEFAULT_ALIAS;
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections, $alias)}
+		    SELECT {$this->getAttributeProjection($queries)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            WHERE {$this->quote($alias)}._uid = :_uid 
             {$this->getTenantQuery($collection, $alias)}
 		";
 
@@ -1680,6 +1680,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForJoins(): bool
+    {
+        return true;
+    }
+
     /**
      * Generate ST_GeomFromText call with proper SRID and axis order support
      *
@@ -1816,6 +1821,12 @@ abstract class SQL extends Adapter
             case Query::TYPE_EXISTS:
             case Query::TYPE_NOT_EXISTS:
                 throw new DatabaseException('Exists queries are not supported by this database');
+            case Query::TYPE_INNER_JOIN:
+                return 'JOIN';
+            case Query::TYPE_RIGHT_JOIN:
+                return 'RIGHT JOIN';
+            case Query::TYPE_LEFT_JOIN:
+                return 'LEFT JOIN';
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -2324,7 +2335,8 @@ abstract class SQL extends Adapter
         string $collection,
         string $alias = '',
         int $tenantCount = 0,
-        string $condition = 'AND'
+        string $condition = 'AND',
+        bool $forceIsNull = false
     ): string {
         if (!$this->sharedTables) {
             return '';
@@ -2347,7 +2359,7 @@ abstract class SQL extends Adapter
         $bindings = \implode(',', $bindings);
 
         $orIsNull = '';
-        if ($collection === Database::METADATA) {
+        if ($collection === Database::METADATA || $forceIsNull) {
             $orIsNull = " OR {$alias}{$dot}_tenant IS NULL";
         }
 
@@ -2357,40 +2369,48 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selects
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    protected function getAttributeProjection(array $selects): string
     {
-        if (empty($selections) || \in_array('*', $selections)) {
-            return "{$this->quote($prefix)}.*";
+
+        if (empty($selects)) {
+            return $this->quote(Query::DEFAULT_ALIAS).'.*';
         }
 
-        // Handle specific selections with spatial conversion where needed
-        $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
-        ];
+        $string = '';
+        foreach ($selects as $select) {
+            if ($select->getAttribute() === '$collection') {
+                continue;
+            }
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+            $alias = $select->getAlias();
+            $alias = $this->filter($alias);
 
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
+            $attribute = $this->getInternalKeyForAttribute($select->getAttribute());
+
+
+            if ($attribute !== '*') {
+                $attribute = $this->filter($attribute);
+                $attribute = $this->quote($attribute);
+            }
+
+            $as = $select->getAs();
+
+            if (!empty($as)) {
+                $as = ' as '.$this->quote($this->filter($as));
+            }
+
+            if (!empty($string)) {
+                $string .= ', ';
+            }
+
+            $string .= "{$this->quote($alias)}.{$attribute}{$as}";
         }
 
-        $projections = [];
-        foreach ($selections as $selection) {
-            $filteredSelection = $this->filter($selection);
-            $quotedSelection = $this->quote($filteredSelection);
-            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-        }
-
-        return \implode(',', $projections);
+        return $string;
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string
@@ -2976,74 +2996,74 @@ abstract class SQL extends Adapter
     /**
      * Find Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $vectors
+     * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
-        $where = [];
-        $orders = [];
+    public function find(
+        QueryContext $context,
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $vectors = [],
+        array $orderQueries = []
+    ): array {
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $name = $context->getMainCollection()->getId();
+        $name = $this->filter($name);
 
-        // Extract vector queries for ORDER BY
-        $vectorQueries = [];
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
-            }
-        }
+        $roles = $this->authorization->getRoles();
+        $where = [];
+        $orders = [];
 
-        $queries = $otherQueries;
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         $cursorWhere = [];
 
-        foreach ($orderAttributes as $i => $originalAttribute) {
-            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
+            $attribute = $this->filter($attribute);
 
-            // Handle random ordering
-            if ($orderType === Database::ORDER_RANDOM) {
+            $direction = $order->getOrderDirection();
+
+            // Handle random ordering specially
+            if ($direction === Database::ORDER_RANDOM) {
                 $orders[] = $this->getRandomOrder();
                 continue;
             }
 
-            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
-            $attribute = $this->filter($attribute);
-
-            $orderType = $this->filter($orderType);
-            $direction = $orderType;
-
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$direction}";
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$direction}";
 
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
                 // Special case: No tie breaks. only 1 attribute and it's a unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                if (count($orderQueries) === 1 && $i === 0 && $originalAttribute === '$sequence') {
                     $operator = ($direction === Database::ORDER_DESC)
                         ? Query::TYPE_LESSER
                         : Query::TYPE_GREATER;
@@ -3051,7 +3071,7 @@ abstract class SQL extends Adapter
                     $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
 
-                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    $cursorWhere[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
                     break;
                 }
 
@@ -3059,13 +3079,14 @@ abstract class SQL extends Adapter
 
                 // Add equality conditions for previous attributes
                 for ($j = 0; $j < $i; $j++) {
-                    $prevOriginal = $orderAttributes[$j];
+                    $prevQuery = $orderQueries[$j];
+                    $prevOriginal = $prevQuery->getAttribute();
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
                     $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
-                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                    $conditions[] = "{$this->quote($prevQuery->getAlias())}.{$this->quote($prevAttr)} = {$bindName}";
                 }
 
                 // Add comparison for current attribute
@@ -3076,7 +3097,7 @@ abstract class SQL extends Adapter
                 $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
 
-                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
 
                 $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
             }
@@ -3086,25 +3107,53 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $rightJoins = false;
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollectionId();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, $forPermission, $this->authorization);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "{$this->getSQLOperator($join->getMethod())} {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+
+            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN) {
+                $rightJoins = true;
+            }
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+        $skipAuth = $context->skipAuth($name, $forPermission, $this->authorization);
+        if (! $skipAuth) {
+            $permissionsCondition = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+            if ($rightJoins) {
+                $permissionsCondition = "($permissionsCondition OR {$alias}._uid IS NULL)";
+            }
+            $where[] = $permissionsCondition;
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '', forceIsNull: $rightJoins)}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         // Add vector distance calculations to ORDER BY
         $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
+        foreach ($vectors as $query) {
             $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
             if ($vectorOrder) {
                 $vectorOrders[] = $vectorOrder;
@@ -3129,15 +3178,18 @@ abstract class SQL extends Adapter
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($queries);
-
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjection($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
         ";
+
+        if (!empty($sqlJoin)) {
+            var_dump($sql);
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
@@ -3153,12 +3205,12 @@ abstract class SQL extends Adapter
             }
 
             $this->execute($stmt);
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -3199,81 +3251,110 @@ abstract class SQL extends Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $max
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     *
      * @return int
-     * @throws Exception
-     * @throws PDOException
+     *
+     * @throws DatabaseException
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(QueryContext $context, ?int $max, array $filters, array $joins): int
     {
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
-        $binds = [];
-        $where = [];
         $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
 
-        $limit = '';
-        if (! \is_null($max)) {
-            $binds[':limit'] = $max;
-            $limit = 'LIMIT :limit';
-        }
+        $name = $context->getMainCollection()->getId();
+        $name = $this->filter($name);
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $roles = $this->authorization->getRoles();
+        $where = [];
 
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (!in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $otherQueries[] = $query;
+        $filters = array_map(fn ($query) => clone $query, $filters);
+
+        $rightJoins = false;
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollectionId();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, Database::PERMISSION_READ, $this->authorization);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias());
+            }
+
+            $sqlJoin .= "{$this->getSQLOperator($join->getMethod())} {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+
+            if ($join->getMethod() === Query::TYPE_RIGHT_JOIN) {
+                $rightJoins = true;
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        $skipAuth = $context->skipAuth($name, Database::PERMISSION_READ, $this->authorization);
+        if (! $skipAuth) {
+            $permissionsCondition = $this->getSQLPermissionsCondition($name, $roles, $alias);
+            if ($rightJoins) {
+                $permissionsCondition = "($permissionsCondition OR {$alias}._uid IS NULL)";
+            }
+            $where[] = $permissionsCondition;
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '', forceIsNull: $rightJoins)}";
         }
 
-        $sqlWhere = !empty($where)
-            ? 'WHERE ' . \implode(' AND ', $where)
-            : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $sqlLimit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $sqlLimit = 'LIMIT :limit';
+        }
 
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			    {$sqlJoin}
                 {$sqlWhere}
-                {$limit}
+                {$sqlLimit}
 			) table_count
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
+            $this->execute($stmt);
+            $result = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
-        $this->execute($stmt);
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($result)) {
-            $result = $result[0];
-        }
-
-        return $result['sum'] ?? 0;
+        return $result[0]['sum'] ?? 0;
     }
 
     /**

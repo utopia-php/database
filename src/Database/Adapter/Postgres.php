@@ -1762,6 +1762,8 @@ class Postgres extends SQL
     protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
+
         $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
         if ($isNestedObjectAttribute) {
             $attribute = $this->buildJsonbPath($query->getAttribute());
@@ -1770,7 +1772,9 @@ class Postgres extends SQL
             $attribute = $this->quote($attribute);
         }
 
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $alias = $query->getAlias();
+        $alias = $this->filter($alias);
+        $alias = $this->quote($alias);
         $placeholder = ID::unique();
 
         $operator = null;
@@ -1817,6 +1821,12 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_RELATION_EQUAL:
+                $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
+                $aliasRight = $this->quote($this->filter($query->getRightAlias()));
+
+                return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:

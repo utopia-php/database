@@ -19,19 +19,21 @@ class QueryTest extends TestCase
 
     public function testCreate(): void
     {
-        $query = new Query(Query::TYPE_EQUAL, 'title', ['Iron Man']);
+        $query = Query::equal('title', ['Iron Man'], 'users');
 
         $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('Iron Man', $query->getValues()[0]);
+        $this->assertEquals('users', $query->getAlias());
 
-        $query = new Query(Query::TYPE_ORDER_DESC, 'score');
+        $query = Query::orderDesc('score', 'users');
 
         $this->assertEquals(Query::TYPE_ORDER_DESC, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+        $this->assertEquals('users', $query->getAlias());
 
-        $query = new Query(Query::TYPE_LIMIT, values: [10]);
+        $query = Query::limit(10);
 
         $this->assertEquals(Query::TYPE_LIMIT, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
@@ -179,7 +181,6 @@ class QueryTest extends TestCase
     }
 
     /**
-     * @return void
      * @throws QueryException
      */
     public function testParse(): void
@@ -279,10 +280,11 @@ class QueryTest extends TestCase
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Tarantino'], $query->getValues());
 
-        $query = Query::parse(Query::select(['title', 'director'])->toString());
+        $query = Query::parse(Query::select('title', alias: 'alias', as: 'as')->toString());
         $this->assertEquals('select', $query->getMethod());
-        $this->assertEquals(null, $query->getAttribute());
-        $this->assertEquals(['title', 'director'], $query->getValues());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals('alias', $query->getAlias());
+        $this->assertEquals('as', $query->getAs());
 
         // Test new date query wrapper methods parsing
         $query = Query::parse(Query::createdBefore('2023-01-01T00:00:00.000Z')->toString());
@@ -347,7 +349,7 @@ class QueryTest extends TestCase
 
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
-            Query::equal('actors', ['Johnny Depp'])
+            Query::equal('actors', ['Johnny Depp']),
         ])->toString();
 
         $query = Query::parse($json);
@@ -467,5 +469,131 @@ class QueryTest extends TestCase
         $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
         $this->assertContains(Query::TYPE_ORDER_RANDOM, Query::TYPES);
+    }
+
+
+    /**
+     * @throws QueryException
+     */
+    public function testJoins(): void
+    {
+        $query =
+            Query::join(
+                'users',
+                'u',
+                [
+                    Query::relationEqual('', 'id', 'u', 'user_id'),
+                    Query::equal('id', ['usa'], 'u'),
+                ]
+            );
+
+        $this->assertEquals(Query::TYPE_INNER_JOIN, $query->getMethod());
+        $this->assertEquals('users', $query->getCollectionId());
+        $this->assertEquals('u', $query->getAlias());
+        $this->assertCount(2, $query->getValues());
+
+        /** @var Query $query0 */
+        $query0 = $query->getValues()[0];
+        $this->assertEquals(Query::TYPE_RELATION_EQUAL, $query0->getMethod());
+        $this->assertEquals(Query::DEFAULT_ALIAS, $query0->getAlias());
+        $this->assertEquals('id', $query0->getAttribute());
+        $this->assertEquals('u', $query0->getRightAlias());
+        $this->assertEquals('user_id', $query0->getAttributeRight());
+
+        /** @var Query $query1 */
+        $query1 = $query->getValues()[1];
+        $this->assertEquals(Query::TYPE_EQUAL, $query1->getMethod());
+        $this->assertEquals('u', $query1->getAlias());
+        $this->assertEquals('id', $query1->getAttribute());
+        $this->assertEquals(Query::DEFAULT_ALIAS, $query1->getRightAlias());
+        $this->assertEquals('', $query1->getAttributeRight());
+    }
+
+    /**
+     * @throws QueryException
+     */
+    public function testJoinsParse(): void
+    {
+        $string = Query::relationEqual('left', 'id1', 'right', 'id2')->toString();
+        $this->assertEquals($string, '{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}');
+
+        $query = Query::parse($string);
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+        /**
+         * Inner join
+         */
+        $string = Query::join(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"innerJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('innerJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollectionId());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+        /**
+         * Left join
+         */
+        $string = Query::leftJoin(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"leftJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('leftJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollectionId());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
+
+        /**
+         * Right join
+         */
+        $string = Query::rightJoin(
+            'users',
+            'U',
+            [
+                Query::relationEqual('left', 'id1', 'right', 'id2'),
+            ]
+        )->toString();
+
+        $this->assertEquals($string, '{"method":"rightJoin","alias":"U","collectionId":"users","values":[{"method":"relationEqual","attribute":"id1","attributeRight":"id2","alias":"left","aliasRight":"right","values":[]}]}');
+
+        $join = Query::parse($string);
+        $this->assertEquals('rightJoin', $join->getMethod());
+        $this->assertEquals('users', $join->getCollectionId());
+
+        $query = $join->getValues()[0];
+        $this->assertEquals('relationEqual', $query->getMethod());
+        $this->assertEquals('left', $query->getAlias());
+        $this->assertEquals('right', $query->getRightAlias());
+        $this->assertEquals('id1', $query->getAttribute());
+        $this->assertEquals('id2', $query->getAttributeRight());
     }
 }

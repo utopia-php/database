@@ -74,6 +74,11 @@ trait AttributeTests
 
         $database->createCollection('attributes');
 
+        $collection = $database->getCollection('attributes');
+        $this->assertEquals([], $collection->getAttribute('attributes'));
+        $this->assertEquals(true, $collection->getAttribute('documentSecurity'));
+        $this->assertEquals(['create("any")'], $collection->getAttribute('$permissions'));
+
         $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
@@ -280,7 +285,7 @@ trait AttributeTests
         ));
 
         $document = $database->find('dots.parent', [
-            Query::select(['dots.name']),
+            Query::select('dots.name'),
         ]);
         $this->assertEmpty($document);
 
@@ -321,7 +326,7 @@ trait AttributeTests
         ]));
 
         $documents = $database->find('dots.parent', [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);

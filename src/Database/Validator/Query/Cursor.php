@@ -48,9 +48,4 @@ class Cursor extends Base
 
         return false;
     }
-
-    public function getMethodType(): string
-    {
-        return self::METHOD_TYPE_CURSOR;
-    }
 }

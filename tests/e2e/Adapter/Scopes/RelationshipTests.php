@@ -319,10 +319,8 @@ trait RelationshipTests
         $this->assertEquals(0, count($president['votes']));
 
         $president = $database->findOne('presidents', [
-            Query::select([
-                '*',
-                'votes.*',
-            ]),
+            Query::select('*'),
+            Query::select('votes.*'),
             Query::equal('$id', ['trump'])
         ]);
 
@@ -332,11 +330,9 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
 
         $president = $database->findOne('presidents', [
-            Query::select([
-                '*',
-                'votes.*',
-                'votes.animals.*',
-            ]),
+            Query::select('*'),
+            Query::select('votes.*'),
+            Query::select('votes.animals.*'),
             Query::equal('$id', ['trump'])
         ]);
 
@@ -349,7 +345,7 @@ trait RelationshipTests
          * Check Selects queries
          */
         $veterinarian = $database->findOne('veterinarians', [
-            Query::select(['*']), // No resolving
+            Query::select('*'), // No resolving
             Query::equal('$id', ['dr.pol']),
         ]);
 
@@ -360,9 +356,7 @@ trait RelationshipTests
         $veterinarian = $database->findOne(
             'veterinarians',
             [
-                Query::select([
-                    'animals.*',
-                ])
+                Query::select('animals.*')
             ]
         );
 
@@ -380,11 +374,9 @@ trait RelationshipTests
         $veterinarian = $database->findOne(
             'veterinarians',
             [
-                Query::select([
-                    'animals.*',
-                    'animals.zoo.*',
-                    'animals.president.*',
-                ])
+                Query::select('animals.*'),
+                Query::select('animals.zoo.*'),
+                Query::select('animals.president.*'),
             ]
         );
 
@@ -1424,7 +1416,8 @@ trait RelationshipTests
 
         // Select some parent attributes, some child attributes
         $make = $database->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select('name'),
+            Query::select('models.name'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1437,16 +1430,17 @@ trait RelationshipTests
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
-        $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$id', $make); // Was added by system in processRelationshipQueries
+        $this->assertArrayNotHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
 
         // Select internal attributes
         $make = $database->findOne('make', [
-            Query::select(['name', '$id']),
+            Query::select('name'),
+            Query::select('$id'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1455,14 +1449,15 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = $database->findOne('make', [
-            Query::select(['name', '$sequence']),
+            Query::select('name'),
+            Query::select('$sequence'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1473,12 +1468,13 @@ trait RelationshipTests
         $this->assertArrayHasKey('$id', $make);
         $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = $database->findOne('make', [
-            Query::select(['name', '$collection']),
+            Query::select('name'),
+            Query::select('$collection'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1487,14 +1483,15 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = $database->findOne('make', [
-            Query::select(['name', '$createdAt']),
+            Query::select('name'),
+            Query::select('$createdAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1503,14 +1500,15 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = $database->findOne('make', [
-            Query::select(['name', '$updatedAt']),
+            Query::select('name'),
+            Query::select('$updatedAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1519,14 +1517,15 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = $database->findOne('make', [
-            Query::select(['name', '$permissions']),
+            Query::select('name'),
+            Query::select('$permissions'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1535,15 +1534,16 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
 
         // Select all parent attributes, some child attributes
         $make = $database->findOne('make', [
-            Query::select(['*', 'models.year']),
+            Query::select('*'),
+            Query::select('models.year'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1551,6 +1551,8 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals('USA', $make['origin']);
+        $this->assertArrayHasKey('$createdAt', $make);
         $this->assertEquals(2, \count($make['models']));
         $this->assertArrayNotHasKey('name', $make['models'][0]);
         $this->assertArrayNotHasKey('name', $make['models'][1]);
@@ -1559,7 +1561,8 @@ trait RelationshipTests
 
         // Select all parent attributes, all child attributes
         $make = $database->findOne('make', [
-            Query::select(['*', 'models.*']),
+            Query::select('*'),
+            Query::select('models.*'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1567,6 +1570,29 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals('USA', $make['origin']);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertEquals(2, \count($make['models']));
+        $this->assertEquals('Fiesta', $make['models'][0]['name']);
+        $this->assertEquals('Focus', $make['models'][1]['name']);
+        $this->assertEquals(2010, $make['models'][0]['year']);
+        $this->assertEquals(2011, $make['models'][1]['year']);
+
+        /**
+         * Select queries only on nested will Select all parent attributes as well.
+         * In getDocument we add $permissions by system, check we add it after processRelationshipQueries
+         */
+        $make = $database->getDocument('make', 'ford', [
+            Query::select('models.*'),
+        ]);
+
+        if ($make->isEmpty()) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals('USA', $make['origin']);
+        $this->assertArrayHasKey('$createdAt', $make);
         $this->assertEquals(2, \count($make['models']));
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
         $this->assertEquals('Focus', $make['models'][1]['name']);
@@ -1576,7 +1602,7 @@ trait RelationshipTests
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
         $make = $database->findOne('make', [
-            Query::select(['models.*']),
+            Query::select('models.*'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1584,6 +1610,8 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals('USA', $make['origin']);
+        $this->assertArrayHasKey('$createdAt', $make);
         $this->assertEquals(2, \count($make['models']));
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
         $this->assertEquals('Focus', $make['models'][1]['name']);
@@ -1592,7 +1620,7 @@ trait RelationshipTests
 
         // Select all parent attributes, no child attributes
         $make = $database->findOne('make', [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1603,7 +1631,8 @@ trait RelationshipTests
 
         // Select some parent attributes, all child attributes
         $make = $database->findOne('make', [
-            Query::select(['name', 'models.*']),
+            Query::select('name'),
+            Query::select('models.*'),
         ]);
 
         $this->assertEquals('Ford', $make['name']);
@@ -1615,7 +1644,8 @@ trait RelationshipTests
 
         // Select some parent attributes, some child attributes
         $model = $database->findOne('model', [
-            Query::select(['name', 'make.name']),
+            Query::select('name'),
+            Query::select('make.name'),
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
@@ -1626,7 +1656,8 @@ trait RelationshipTests
 
         // Select all parent attributes, some child attributes
         $model = $database->findOne('model', [
-            Query::select(['*', 'make.name']),
+            Query::select('*'),
+            Query::select('make.name'),
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
@@ -1635,7 +1666,8 @@ trait RelationshipTests
 
         // Select all parent attributes, all child attributes
         $model = $database->findOne('model', [
-            Query::select(['*', 'make.*']),
+            Query::select('*'),
+            Query::select('make.*'),
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
@@ -1645,7 +1677,7 @@ trait RelationshipTests
 
         // Select all parent attributes, no child attributes
         $model = $database->findOne('model', [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
@@ -1654,7 +1686,8 @@ trait RelationshipTests
 
         // Select some parent attributes, all child attributes
         $model = $database->findOne('model', [
-            Query::select(['name', 'make.*']),
+            Query::select('name'),
+            Query::select('make.*'),
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
@@ -2805,11 +2838,9 @@ trait RelationshipTests
 
         // Query all cars with nested relationship selections
         $cars = $database->find('car', [
-            Query::select([
-                '*',
-                'customer.*',
-                'customer.inspections.type',
-            ]),
+            Query::select('*'),
+            Query::select('customer.*'),
+            Query::select('customer.inspections.type'),
         ]);
 
         $this->assertCount(3, $cars);
@@ -2858,11 +2889,9 @@ trait RelationshipTests
         ]);
 
         $cars = $database->find('car', [
-            Query::select([
-                '*',
-                'customer.*',
-                'customer.inspections.type',
-            ]),
+            Query::select('*'),
+            Query::select('customer.*'),
+            Query::select('customer.inspections.type'),
         ]);
 
         // Verify all cars still have nested relationships after batch create

@@ -103,8 +103,13 @@ class Mongo extends Adapter
     {
         // If the database is not a replica set, we can't use transactions
         if (!$this->client->isReplicaSet()) {
-            $result = $callback();
-            return $result;
+            return $callback();
+        }
+
+        // MongoDB doesn't support nested transactions/savepoints.
+        // If already in a transaction, just run the callback directly.
+        if ($this->inTransaction > 0) {
+            return $callback();
         }
 
         try {
@@ -3752,6 +3757,16 @@ class Mongo extends Adapter
     public function getSupportForTTLIndexes(): bool
     {
         return true;
+    }
+
+    public function getSupportForTransactionRetries(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForNestedTransactions(): bool
+    {
+        return false;
     }
 
     protected function isExtendedISODatetime(string $val): bool

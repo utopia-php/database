@@ -47,6 +47,7 @@ class Postgres extends SQL
 
                 $result = $this->getPDO()->beginTransaction();
             } else {
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
                 $result = true;
             }
         } catch (PDOException $e) {
@@ -72,9 +73,16 @@ class Postgres extends SQL
         }
 
         try {
+            if ($this->inTransaction > 1) {
+                $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->inTransaction--;
+                return true;
+            }
+
             $result = $this->getPDO()->rollBack();
             $this->inTransaction = 0;
         } catch (PDOException $e) {
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 

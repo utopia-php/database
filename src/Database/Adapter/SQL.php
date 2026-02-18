@@ -3658,4 +3658,14 @@ abstract class SQL extends Adapter
 
         return '';
     }
+
+    public function getSupportForTransactionRetries(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForNestedTransactions(): bool
+    {
+        return true;
+    }
 }

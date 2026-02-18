@@ -430,7 +430,6 @@ abstract class Adapter
                     $action instanceof ConflictException ||
                     $action instanceof LimitException
                 ) {
-                    $this->inTransaction = 0;
                     throw $action;
                 }
 
@@ -439,7 +438,6 @@ abstract class Adapter
                     continue;
                 }
 
-                $this->inTransaction = 0;
                 throw $action;
             }
         }
@@ -1531,4 +1529,18 @@ abstract class Adapter
     {
         return false;
     }
+
+    /**
+     * Does the adapter support transaction retries?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTransactionRetries(): bool;
+
+    /**
+     * Does the adapter support nested transactions?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForNestedTransactions(): bool;
 }

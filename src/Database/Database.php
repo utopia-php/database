@@ -2061,32 +2061,72 @@ class Database
             $filters = array_unique($filters);
         }
 
-        $attribute = $this->validateAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters
-        );
+        $existsInSchema = false;
+
+        try {
+            $attribute = $this->validateAttribute(
+                $collection,
+                $id,
+                $type,
+                $size,
+                $required,
+                $default,
+                $signed,
+                $array,
+                $format,
+                $formatOptions,
+                $filters
+            );
+        } catch (DuplicateException $e) {
+            // If the column exists in the physical schema but not in collection
+            // metadata, this is recovery from a partial failure where the column
+            // was created but metadata wasn't updated. Allow re-creation by
+            // skipping physical column creation and proceeding to metadata update.
+            // checkDuplicateId (metadata) runs before checkDuplicateInSchema, so
+            // if the attribute is absent from metadata the duplicate is in the
+            // physical schema only — a recoverable partial-failure state.
+            $existsInMetadata = false;
+            foreach ($collection->getAttribute('attributes', []) as $attr) {
+                if (\strtolower($attr->getAttribute('key', $attr->getId())) === \strtolower($id)) {
+                    $existsInMetadata = true;
+                    break;
+                }
+            }
+
+            if ($existsInMetadata) {
+                throw $e;
+            }
+
+            $existsInSchema = true;
+            $attribute = new Document([
+                '$id' => ID::custom($id),
+                'key' => $id,
+                'type' => $type,
+                'size' => $size,
+                'required' => $required,
+                'default' => $default,
+                'signed' => $signed,
+                'array' => $array,
+                'format' => $format,
+                'formatOptions' => $formatOptions,
+                'filters' => $filters,
+            ]);
+        }
 
         $created = false;
 
-        try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
+        if (!$existsInSchema) {
+            try {
+                $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
 
-            if (!$created) {
-                throw new DatabaseException('Failed to create attribute');
-            }
-        } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
+                if (!$created) {
+                    throw new DatabaseException('Failed to create attribute');
+                }
+            } catch (DuplicateException $e) {
+                // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+                if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                    throw $e;
+                }
             }
         }
 

@@ -1,5 +1,5 @@
 <?php
-//
+
 //namespace Utopia\Database\Validator\Query;
 //
 //use Utopia\Database\Database;

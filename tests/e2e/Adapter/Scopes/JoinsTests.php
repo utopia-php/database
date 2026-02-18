@@ -890,4 +890,19 @@ trait JoinsTests
         $count = $database->count('__sessions', $queries);
         $this->assertEquals(2, $count);
     }
+
+    public function testCleanUp(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->assertTrue($database->deleteCollection('__users'));
+        $this->assertTrue($database->deleteCollection('__sessions'));
+        $this->assertTrue($database->deleteCollection('__banks'));
+    }
 }

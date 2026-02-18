@@ -596,9 +596,4 @@ class QueryTest extends TestCase
         $this->assertEquals('id1', $query->getAttribute());
         $this->assertEquals('id2', $query->getAttributeRight());
     }
-
-    public function testFilter()
-    {
-        $filters = Query::getFilterQueries($queries);
-    }
 }

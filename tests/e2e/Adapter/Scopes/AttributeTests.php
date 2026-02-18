@@ -1655,6 +1655,77 @@ trait AttributeTests
                 Query::contains('pref', ['Joe'])
             ]);
             $this->assertCount(1, $documents);
+
+            // containsAny tests — should behave identically to contains
+
+            $documents = $database->find($collection, [
+                Query::containsAny('tv_show', ['love'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::containsAny('names', ['Jake', 'Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::containsAny('numbers', [-1, 0, 999])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::containsAny('booleans', [false, true])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::containsAny('pref', ['Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // containsAny with no matching values
+            $documents = $database->find($collection, [
+                Query::containsAny('names', ['Jake', 'Unknown'])
+            ]);
+            $this->assertCount(0, $documents);
+
+            // containsAll tests on array attributes
+
+            // All values present in names array
+            $documents = $database->find($collection, [
+                Query::containsAll('names', ['Joe', 'Antony'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // One value missing from names array
+            $documents = $database->find($collection, [
+                Query::containsAll('names', ['Joe', 'Jake'])
+            ]);
+            $this->assertCount(0, $documents);
+
+            // All values present in numbers array
+            $documents = $database->find($collection, [
+                Query::containsAll('numbers', [0, 100, -1])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // One value missing from numbers array
+            $documents = $database->find($collection, [
+                Query::containsAll('numbers', [0, 999])
+            ]);
+            $this->assertCount(0, $documents);
+
+            // Single value containsAll — should match
+            $documents = $database->find($collection, [
+                Query::containsAll('booleans', [false])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // Boolean value not present
+            $documents = $database->find($collection, [
+                Query::containsAll('booleans', [true])
+            ]);
+            $this->assertCount(0, $documents);
         }
     }
 

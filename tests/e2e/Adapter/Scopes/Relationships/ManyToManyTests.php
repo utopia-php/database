@@ -2256,4 +2256,154 @@ trait ManyToManyTests
         $database->deleteCollection('library');
         $database->deleteCollection('book');
     }
+
+    /**
+     * Regression: processNestedRelationshipPath used skipRelationships()
+     * for many-to-many reverse lookups, which prevented junction-table data
+     * (twoWayKey) from being populated, yielding empty matchingIds.
+     */
+    public function testNestedManyToManyRelationshipQueries(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // 3-level many-to-many chain: brands <-> products <-> tags
+        $database->createCollection('brands');
+        $database->createCollection('products');
+        $database->createCollection('tags');
+
+        $database->createAttribute('brands', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('products', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tags', 'label', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'brands',
+            relatedCollection: 'products',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'products',
+            twoWayKey: 'brands',
+        );
+
+        $database->createRelationship(
+            collection: 'products',
+            relatedCollection: 'tags',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'tags',
+            twoWayKey: 'products',
+        );
+
+        // Seed data
+        $database->createDocument('tags', new Document([
+            '$id' => 'tag_eco',
+            '$permissions' => [Permission::read(Role::any())],
+            'label' => 'Eco-Friendly',
+        ]));
+        $database->createDocument('tags', new Document([
+            '$id' => 'tag_premium',
+            '$permissions' => [Permission::read(Role::any())],
+            'label' => 'Premium',
+        ]));
+        $database->createDocument('tags', new Document([
+            '$id' => 'tag_sale',
+            '$permissions' => [Permission::read(Role::any())],
+            'label' => 'Sale',
+        ]));
+
+        $database->createDocument('products', new Document([
+            '$id' => 'prod_a',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Product A',
+            'tags' => ['tag_eco', 'tag_premium'],
+        ]));
+        $database->createDocument('products', new Document([
+            '$id' => 'prod_b',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Product B',
+            'tags' => ['tag_sale'],
+        ]));
+        $database->createDocument('products', new Document([
+            '$id' => 'prod_c',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Product C',
+            'tags' => ['tag_eco'],
+        ]));
+
+        $database->createDocument('brands', new Document([
+            '$id' => 'brand_x',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'BrandX',
+            'products' => ['prod_a', 'prod_b'],
+        ]));
+        $database->createDocument('brands', new Document([
+            '$id' => 'brand_y',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'BrandY',
+            'products' => ['prod_c'],
+        ]));
+
+        // --- 1-level deep: query brands by product title (many-to-many) ---
+        $brands = $database->find('brands', [
+            Query::equal('products.title', ['Product A']),
+        ]);
+        $this->assertCount(1, $brands);
+        $this->assertEquals('brand_x', $brands[0]->getId());
+
+        // --- 2-level deep: query brands by product→tag label (many-to-many→many-to-many) ---
+        // "Eco-Friendly" tag is on prod_a (BrandX) and prod_c (BrandY)
+        $brands = $database->find('brands', [
+            Query::equal('products.tags.label', ['Eco-Friendly']),
+        ]);
+        $this->assertCount(2, $brands);
+        $brandIds = \array_map(fn ($d) => $d->getId(), $brands);
+        $this->assertContains('brand_x', $brandIds);
+        $this->assertContains('brand_y', $brandIds);
+
+        // "Sale" tag is only on prod_b (BrandX)
+        $brands = $database->find('brands', [
+            Query::equal('products.tags.label', ['Sale']),
+        ]);
+        $this->assertCount(1, $brands);
+        $this->assertEquals('brand_x', $brands[0]->getId());
+
+        // "Premium" tag is only on prod_a (BrandX)
+        $brands = $database->find('brands', [
+            Query::equal('products.tags.label', ['Premium']),
+        ]);
+        $this->assertCount(1, $brands);
+        $this->assertEquals('brand_x', $brands[0]->getId());
+
+        // --- 2-level deep from the child side: query tags by product→brand name ---
+        $tags = $database->find('tags', [
+            Query::equal('products.brands.name', ['BrandY']),
+        ]);
+        $this->assertCount(1, $tags);
+        $this->assertEquals('tag_eco', $tags[0]->getId());
+
+        $tags = $database->find('tags', [
+            Query::equal('products.brands.name', ['BrandX']),
+        ]);
+        $this->assertCount(3, $tags);
+        $tagIds = \array_map(fn ($d) => $d->getId(), $tags);
+        $this->assertContains('tag_eco', $tagIds);
+        $this->assertContains('tag_premium', $tagIds);
+        $this->assertContains('tag_sale', $tagIds);
+
+        // --- No match returns empty ---
+        $brands = $database->find('brands', [
+            Query::equal('products.tags.label', ['NonExistent']),
+        ]);
+        $this->assertCount(0, $brands);
+
+        // Cleanup
+        $database->deleteCollection('brands');
+        $database->deleteCollection('products');
+        $database->deleteCollection('tags');
+    }
 }

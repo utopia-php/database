@@ -2676,6 +2676,22 @@ class Mongo extends Adapter
      */
     protected function buildFilter(Query $query): array
     {
+        // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
+        // so they can be correctly compared against datetime fields stored in MongoDB.
+        if (!$this->getSupportForAttributes() || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
+            $values = $query->getValues();
+            foreach ($values as $k => $value) {
+                if (is_string($value) && $this->isExtendedISODatetime($value)) {
+                    try {
+                        $values[$k] = $this->toMongoDatetime($value);
+                    } catch (\Throwable $th) {
+                        // Leave value as-is if it cannot be parsed as a datetime
+                    }
+                }
+            }
+            $query->setValues($values);
+        }
+
         if ($query->getAttribute() === '$id') {
             $query->setAttribute('_uid');
         } elseif ($query->getAttribute() === '$sequence') {
@@ -2711,7 +2727,7 @@ class Mongo extends Adapter
         };
 
         $filter = [];
-        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
             $this->handleObjectFilters($query, $filter);
             return $filter;
         }
@@ -2720,8 +2736,10 @@ class Mongo extends Adapter
             $filter[$attribute]['$in'] = $value;
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
+        } elseif ($operator == '$all') {
+            $filter[$attribute]['$all'] = $query->getValues();
         } elseif ($operator == '$in') {
-            if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
+            if (in_array($query->getMethod(), [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY]) && !$query->onArray()) {
                 // contains support array values
                 if (is_array($value)) {
                     $filter['$or'] = array_map(function ($val) use ($attribute) {
@@ -2798,6 +2816,8 @@ class Mongo extends Adapter
             switch ($query->getMethod()) {
 
                 case Query::TYPE_CONTAINS:
+                case Query::TYPE_CONTAINS_ANY:
+                case Query::TYPE_CONTAINS_ALL:
                 case Query::TYPE_NOT_CONTAINS: {
                     $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
                     $operator = $isNot ? '$nin' : '$in';
@@ -2882,6 +2902,8 @@ class Mongo extends Adapter
             Query::TYPE_GREATER => '$gt',
             Query::TYPE_GREATER_EQUAL => '$gte',
             Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_CONTAINS_ANY => '$in',
+            Query::TYPE_CONTAINS_ALL => '$all',
             Query::TYPE_NOT_CONTAINS => 'notContains',
             Query::TYPE_SEARCH => '$search',
             Query::TYPE_NOT_SEARCH => '$search',
@@ -3550,12 +3572,11 @@ class Mongo extends Adapter
         }
 
         // Duplicate key error
-        if ($e->getCode() === 11000) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
-        }
-
-        // Duplicate key error for unique index
-        if ($e->getCode() === 11001) {
+        if ($e->getCode() === 11000 || $e->getCode() === 11001) {
+            $message = $e->getMessage();
+            if (!\str_contains($message, '_uid')) {
+                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 

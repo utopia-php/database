@@ -927,7 +927,29 @@ class MariaDB extends SQL
             }
 
             if (isset($stmtPermissions)) {
-                $stmtPermissions->execute();
+                try {
+                    $stmtPermissions->execute();
+                } catch (PDOException $e) {
+                    $isOrphanedPermission = $e->getCode() === '23000'
+                        && isset($e->errorInfo[1])
+                        && $e->errorInfo[1] === 1062
+                        && \str_contains($e->getMessage(), '_index1');
+
+                    if (!$isOrphanedPermission) {
+                        throw $e;
+                    }
+
+                    // Clean up orphaned permissions from a previous failed delete, then retry
+                    $sql = "DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid {$this->getTenantQuery($collection)}";
+                    $cleanup = $this->getPDO()->prepare($sql);
+                    $cleanup->bindValue(':_uid', $document->getId());
+                    if ($this->sharedTables) {
+                        $cleanup->bindValue(':_tenant', $document->getTenant());
+                    }
+                    $cleanup->execute();
+
+                    $stmtPermissions->execute();
+                }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1605,7 +1627,14 @@ class MariaDB extends SQL
             case Query::TYPE_IS_NOT_NULL:
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+            case Query::TYPE_CONTAINS_ALL:
+                if ($query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                    return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
@@ -1629,7 +1658,7 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
@@ -1892,6 +1921,13 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
+            $message = $e->getMessage();
+            if (\str_contains($message, '_index1')) {
+                return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
+            }
+            if (!\str_contains($message, '_uid')) {
+                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 

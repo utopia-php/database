@@ -3253,4 +3253,266 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
     }
+
+    public function testQueryWithDatetime(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_query_datetime');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Documents with datetime field (ISO 8601) for query tests
+        // Dates: Jan 15 2024, Feb 20 2024, Mar 25 2024, Jun 15 2024, Dec 31 2024
+        $docs = [
+            new Document([
+                '$id' => 'dt1',
+                '$permissions' => $permissions,
+                'name' => 'January',
+                'datetime' => '2024-01-15T10:30:00.000+00:00'
+            ]),
+            new Document([
+                '$id' => 'dt2',
+                '$permissions' => $permissions,
+                'name' => 'February',
+                'datetime' => '2024-02-20T14:45:30.123Z'
+            ]),
+            new Document([
+                '$id' => 'dt3',
+                '$permissions' => $permissions,
+                'name' => 'March',
+                // Use a valid extended ISO 8601 datetime that will be normalized
+                // to MongoDB UTCDateTime for comparison queries.
+                'datetime' => '2024-03-25T08:15:45.000+00:00'
+            ]),
+            new Document([
+                '$id' => 'dt4',
+                '$permissions' => $permissions,
+                'name' => 'June',
+                'datetime' => '2024-06-15T12:00:00.000Z'
+            ]),
+            new Document([
+                '$id' => 'dt5',
+                '$permissions' => $permissions,
+                'name' => 'December',
+                'datetime' => '2024-12-31T23:59:59.999+00:00'
+            ]),
+        ];
+
+        $createdCount = $database->createDocuments($col, $docs);
+        $this->assertEquals(5, $createdCount);
+
+        // Query: equal - find document with exact datetime (Jan 15 2024)
+        $equalResults = $database->find($col, [
+            Query::equal('datetime', ['2024-01-15T10:30:00.000+00:00'])
+        ]);
+        $this->assertCount(1, $equalResults);
+        $this->assertEquals('dt1', $equalResults[0]->getId());
+        $this->assertEquals('January', $equalResults[0]->getAttribute('name'));
+
+        // Query: greaterThan - datetimes after 2024-03-01 (dt3, dt4, dt5)
+        $greaterResults = $database->find($col, [
+            Query::greaterThan('datetime', '2024-03-01T00:00:00.000Z')
+        ]);
+        $this->assertCount(3, $greaterResults);
+        $greaterIds = array_map(fn ($d) => $d->getId(), $greaterResults);
+        $this->assertContains('dt3', $greaterIds);
+        $this->assertContains('dt4', $greaterIds);
+        $this->assertContains('dt5', $greaterIds);
+
+        // Query: lessThan - datetimes before 2024-03-01 (dt1, dt2)
+        $lessResults = $database->find($col, [
+            Query::lessThan('datetime', '2024-03-01T00:00:00.000Z')
+        ]);
+        $this->assertCount(2, $lessResults);
+        $lessIds = array_map(fn ($d) => $d->getId(), $lessResults);
+        $this->assertContains('dt1', $lessIds);
+        $this->assertContains('dt2', $lessIds);
+
+        // Query: greaterThanEqual - datetimes on or after 2024-02-20 (dt2, dt3, dt4, dt5)
+        $gteResults = $database->find($col, [
+            Query::greaterThanEqual('datetime', '2024-02-20T14:45:30.123Z')
+        ]);
+        $this->assertCount(4, $gteResults);
+        $gteIds = array_map(fn ($d) => $d->getId(), $gteResults);
+        $this->assertContains('dt2', $gteIds);
+        $this->assertContains('dt3', $gteIds);
+        $this->assertContains('dt4', $gteIds);
+        $this->assertContains('dt5', $gteIds);
+
+        // Query: lessThanEqual - datetimes on or before 2024-06-15 (dt1, dt2, dt3, dt4)
+        $lteResults = $database->find($col, [
+            Query::lessThanEqual('datetime', '2024-06-15T12:00:00.000Z')
+        ]);
+        $this->assertCount(4, $lteResults);
+        $lteIds = array_map(fn ($d) => $d->getId(), $lteResults);
+        $this->assertContains('dt1', $lteIds);
+        $this->assertContains('dt2', $lteIds);
+        $this->assertContains('dt3', $lteIds);
+        $this->assertContains('dt4', $lteIds);
+
+        // Query: between - datetimes in range [2024-02-01, 2024-07-01) (dt2, dt3, dt4)
+        $betweenResults = $database->find($col, [
+            Query::between('datetime', '2024-02-01T00:00:00.000Z', '2024-07-01T00:00:00.000Z')
+        ]);
+        $this->assertCount(3, $betweenResults);
+        $betweenIds = array_map(fn ($d) => $d->getId(), $betweenResults);
+        $this->assertContains('dt2', $betweenIds);
+        $this->assertContains('dt3', $betweenIds);
+        $this->assertContains('dt4', $betweenIds);
+
+        // Query: equal with no match
+        $noneResults = $database->find($col, [
+            Query::equal('datetime', ['2020-01-01T00:00:00.000Z'])
+        ]);
+        $this->assertCount(0, $noneResults);
+
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessCreatedAndUpdatedAtQuery(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create a simple schemaless collection and one document.
+        $database->createCollection('schemaless_time', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->createDocument('schemaless_time', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Schemaless Movie',
+        ]));
+
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // --- createdBefore ---
+        $documents = $database->find('schemaless_time', [
+            Query::createdBefore($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::createdBefore($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- createdAfter ---
+        $documents = $database->find('schemaless_time', [
+            Query::createdAfter($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::createdAfter($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- updatedBefore ---
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBefore($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBefore($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- updatedAfter ---
+        $documents = $database->find('schemaless_time', [
+            Query::updatedAfter($pastDate),
+            Query::limit(1),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::updatedAfter($futureDate),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        // --- createdBetween ---
+        $documents = $database->find('schemaless_time', [
+            Query::createdBetween($pastDate, $futureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::createdBetween($pastDate, $pastDate),
+            Query::limit(25),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::createdBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $count = count($documents);
+
+        $documents = $database->find('schemaless_time', [
+            Query::createdBetween($pastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThanOrEqual($count, count($documents));
+
+        // --- updatedBetween ---
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBetween($pastDate, $futureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBetween($pastDate, $pastDate),
+            Query::limit(25),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $count = count($documents);
+
+        $documents = $database->find('schemaless_time', [
+            Query::updatedBetween($pastDate, $nearFutureDate),
+            Query::limit(25),
+        ]);
+        $this->assertGreaterThanOrEqual($count, count($documents));
+
+        $database->deleteCollection('schemaless_time');
+    }
 }

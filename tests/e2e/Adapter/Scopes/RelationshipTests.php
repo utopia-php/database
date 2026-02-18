@@ -3527,6 +3527,41 @@ trait RelationshipTests
         $this->assertCount(1, $developers);
         $this->assertEquals('dev1', $developers[0]->getId());
 
+        // Query projects by BOTH developers using Query::containsAll
+        // This simulates: "find conversations where both user1 AND user2 are participants"
+        $projects = $database->find('projectsMtmId', [
+            Query::containsAll('developers.$id', ['dev1', 'dev2']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('project1', $projects[0]->getId());
+
+        // Inverse: find developers who are on BOTH projects
+        // dev1 is on project1 and project2, dev2 is only on project1
+        $developers = $database->find('developersMtmId', [
+            Query::containsAll('projects.$id', ['project1', 'project2']),
+        ]);
+        $this->assertCount(1, $developers);
+        $this->assertEquals('dev1', $developers[0]->getId());
+
+        // Query projects by BOTH developer names (non-$id attribute)
+        // project1 has developers Alice and Bob, project2 has only Alice
+        $projects = $database->find('projectsMtmId', [
+            Query::containsAll('developers.devName', ['Alice', 'Bob']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('project1', $projects[0]->getId());
+
+        // Two separate equal queries on same relationship attribute should throw
+        try {
+            $database->find('projectsMtmId', [
+                Query::equal('developers.$id', ['dev1']),
+                Query::equal('developers.$id', ['dev2']),
+            ]);
+            $this->fail('Expected QueryException for impossible equal queries');
+        } catch (\Utopia\Database\Exception\Query $e) {
+            $this->assertStringContainsString('Query::containsAll()', $e->getMessage());
+        }
+
         // Clean up MANY_TO_MANY test
         $database->deleteCollection('developersMtmId');
         $database->deleteCollection('projectsMtmId');

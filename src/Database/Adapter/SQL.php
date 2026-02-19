@@ -1545,6 +1545,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForGinIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForRelationships(): bool
     {
         return true;

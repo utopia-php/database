@@ -1150,7 +1150,7 @@ trait IndexTests
         $ns = $database->getNamespace();
         $db = $database->getDatabase();
 
-        if ($adapter instanceof \Utopia\Database\Adapter\Postgres) {
+        if ($adapter->getSupportForGinIndex()) {
             $table = "\"{$db}\".\"{$ns}_{$collection}\"";
 
             // Verify GIN index exists

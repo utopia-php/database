@@ -980,6 +980,13 @@ abstract class Adapter
     abstract public function getSupportForCastIndexArray(): bool;
 
     /**
+     * Does the adapter use GIN indexes for array columns?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForGinIndex(): bool;
+
+    /**
      * Is unique index supported?
      *
      * @return bool

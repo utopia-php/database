@@ -2142,6 +2142,11 @@ class Postgres extends SQL
         return true;
     }
 
+    public function getSupportForGinIndex(): bool
+    {
+        return true;
+    }
+
     /**
      * Does the adapter handle Query Array Overlaps?
      *

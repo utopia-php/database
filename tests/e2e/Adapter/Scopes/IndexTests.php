@@ -1132,9 +1132,10 @@ trait IndexTests
         $database->createAttribute($collection, 'tags', Database::VAR_STRING, 255, false, array: true);
         $database->createIndex($collection, 'idx_tags', Database::INDEX_KEY, ['tags'], [255]);
 
-        // Insert enough documents for the optimizer to prefer the index over a full table scan
+        // PostgreSQL's planner needs a larger dataset to choose a GIN index over a sequential scan.
+        $total = $adapter->getSupportForGinIndex() ? 5000 : 500;
         $documents = [];
-        for ($i = 0; $i < 500; $i++) {
+        for ($i = 0; $i < $total; $i++) {
             $documents[] = new Document([
                 '$id' => ID::unique(),
                 '$permissions' => [Permission::read(Role::any())],
@@ -1161,6 +1162,17 @@ trait IndexTests
             $indexDef = $stmt->fetchColumn();
             $this->assertNotFalse($indexDef, 'GIN index should exist for array column');
             $this->assertStringContainsString('gin', \strtolower($indexDef), 'Index on array column should be a GIN index');
+
+            // Update planner statistics and verify the GIN index is chosen
+            $pdo->prepare("ANALYZE {$table}")->execute();
+            $stmt = $pdo->prepare("EXPLAIN SELECT * FROM {$table} WHERE \"tags\" @> '[\"tag_1\"]'::jsonb");
+            $stmt->execute();
+            $plan = \implode("\n", $stmt->fetchAll(\PDO::FETCH_COLUMN));
+            $this->assertMatchesRegularExpression(
+                '/Bitmap Heap Scan|Index Scan/i',
+                $plan,
+                "PostgreSQL should use the GIN index for @> containment query. EXPLAIN output:\n" . $plan
+            );
         } else {
             $table = "`{$db}`.`{$ns}_{$collection}`";
 
@@ -1185,10 +1197,11 @@ trait IndexTests
         }
 
         // Verify the query also returns correct functional results
+        $expectedCount = $total / 50; // each tag_N appears once per 50 documents
         $results = $database->find($collection, [
             Query::containsAny('tags', ['tag_1']),
         ]);
-        $this->assertCount(10, $results);
+        $this->assertCount($expectedCount, $results);
 
         $database->deleteCollection($collection);
     }

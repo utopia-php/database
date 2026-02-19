@@ -892,6 +892,26 @@ class Postgres extends SQL
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
+        // JSONB array columns need GIN indexes for containment queries (@>).
+        $isArrayIndex = false;
+        if ($type === Database::INDEX_KEY) {
+            $metadataCollection = new Document(['$id' => Database::METADATA]);
+            $collectionDoc = $this->getDocument($metadataCollection, $collection);
+            if (!$collectionDoc->isEmpty()) {
+                $collectionAttributes = \json_decode($collectionDoc->getAttribute('attributes', '[]'), true);
+                $arrayCount = 0;
+                foreach ($attributes as $attr) {
+                    foreach ($collectionAttributes as $collectionAttribute) {
+                        if (\strtolower($collectionAttribute['$id']) === \strtolower($attr) && !empty($collectionAttribute['array'])) {
+                            $arrayCount++;
+                            break;
+                        }
+                    }
+                }
+                $isArrayIndex = $arrayCount > 0 && $arrayCount === \count($attributes);
+            }
+        }
+
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
             $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === Database::VAR_OBJECT;
@@ -933,13 +953,13 @@ class Postgres extends SQL
         $sql = "CREATE {$sqlType} \"{$keyName}\" ON {$this->getSQLTable($collection)}";
 
         // Add USING clause for special index types
-        $sql .= match ($type) {
-            Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
-            Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
-            Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
-            Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
-            Database::INDEX_OBJECT => " USING GIN ({$attributes})",
-            Database::INDEX_TRIGRAM =>
+        $sql .= match (true) {
+            $type === Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
+            $type === Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
+            $type === Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
+            $type === Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
+            $type === Database::INDEX_OBJECT, $isArrayIndex => " USING GIN ({$attributes})",
+            $type === Database::INDEX_TRIGRAM =>
                 " USING GIN (" . implode(', ', array_map(
                     fn ($attr) => "$attr gin_trgm_ops",
                     array_map(fn ($attr) => trim($attr), explode(',', $attributes))
@@ -1937,7 +1957,7 @@ class Postgres extends SQL
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
-            return 'JSONB';
+            return "JSONB NOT NULL DEFAULT '[]'::jsonb";
         }
 
         switch ($type) {
@@ -2113,6 +2133,11 @@ class Postgres extends SQL
      * @return bool
      */
     public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForCastIndexArray(): bool
     {
         return true;
     }
@@ -2688,12 +2713,12 @@ class Postgres extends SQL
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = COALESCE({$columnRef}, '[]'::jsonb) || :$bindKey::jsonb";
+                return "{$quotedColumn} = {$columnRef} || :$bindKey::jsonb";
 
             case Operator::TYPE_ARRAY_PREPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
+                return "{$quotedColumn} = :$bindKey::jsonb || {$columnRef}";
 
             case Operator::TYPE_ARRAY_UNIQUE:
                 return "{$quotedColumn} = COALESCE((

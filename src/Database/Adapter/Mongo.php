@@ -1978,7 +1978,7 @@ class Mongo extends Adapter
     {
         return match ($attribute) {
             '$id' => '_uid',
-            '', '$sequence' => '_id',
+            '$sequence' => '_id',
             '$collection' => '_collection',
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',

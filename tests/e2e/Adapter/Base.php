@@ -15,6 +15,7 @@ use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
+use Tests\E2E\Adapter\Scopes\TransformerTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
@@ -34,6 +35,7 @@ abstract class Base extends TestCase
     use SpatialTests;
     use SchemalessTests;
     use ObjectAttributeTests;
+    use TransformerTests;
     use VectorTests;
     use GeneralTests;
 

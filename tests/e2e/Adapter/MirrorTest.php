@@ -313,6 +313,11 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
+    protected function getPDO(): mixed
+    {
+        return self::$sourcePdo;
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";

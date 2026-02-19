@@ -1684,7 +1684,7 @@ class MariaDB extends SQL
             return $this->getSpatialSQLType($type, $required);
         }
         if ($array === true) {
-            return 'JSON';
+            return 'JSON NOT NULL DEFAULT (JSON_ARRAY())';
         }
 
         switch ($type) {
@@ -2082,12 +2082,12 @@ class MariaDB extends SQL
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE({$quotedColumn}, :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, {$quotedColumn})";
 
             case Operator::TYPE_ARRAY_INSERT:
                 $indexKey = "op_{$bindIndex}";

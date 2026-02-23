@@ -2305,8 +2305,10 @@ class Database
 
                 // Schema-only orphan — check type match
                 $expectedColumnType = $this->adapter->getColumnType(
-                    $attribute['type'], $attribute['size'],
-                    $attribute['signed'], $attribute['array'],
+                    $attribute['type'],
+                    $attribute['size'],
+                    $attribute['signed'],
+                    $attribute['array'],
                     $attribute['required']
                 );
                 if ($expectedColumnType !== '') {
@@ -3220,9 +3222,12 @@ class Database
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->adapter->createAttribute(
-                $collection->getId(), $id,
-                $attribute['type'], $attribute['size'],
-                $attribute['signed'] ?? true, $attribute['array'] ?? false,
+                $collection->getId(),
+                $id,
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
                 $attribute['required'] ?? false
             ),
             shouldRollback: $shouldRollback,
@@ -4597,7 +4602,8 @@ class Database
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->adapter->createIndex(
-                $collection->getId(), $id,
+                $collection->getId(),
+                $id,
                 $indexDeleted->getAttribute('type'),
                 $indexDeleted->getAttribute('attributes', []),
                 $indexDeleted->getAttribute('lengths', []),

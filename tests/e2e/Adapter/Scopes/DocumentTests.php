@@ -5832,6 +5832,8 @@ trait DocumentTests
         $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
         $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
 
+        \usleep(100000); // Ensure auto-generated $updatedAt differs from creation timestamp
+
         $doc4->setAttribute('$updatedAt', null);
         $doc4->setAttribute('$createdAt', null);
         $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);

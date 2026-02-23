@@ -140,9 +140,6 @@ class Database
     public const PERMISSION_UPDATE = 'update';
     public const PERMISSION_DELETE = 'delete';
 
-    // Aggregate permissions
-    public const PERMISSION_WRITE = 'write';
-
     public const PERMISSIONS = [
         self::PERMISSION_CREATE,
         self::PERMISSION_READ,

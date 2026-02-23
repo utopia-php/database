@@ -222,11 +222,11 @@ class PermissionsTest extends TestCase
 
         // Only contains a single ':'
         $this->assertFalse($object->isValid(['user1234']));
-        $this->assertEquals('Permission "user1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
+        $this->assertEquals('Permission "user1234" is not allowed. Must be one of: create, read, update, delete.', $object->getDescription());
         $this->assertFalse($object->isValid(['user::1234']));
-        $this->assertEquals('Permission "user::1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
+        $this->assertEquals('Permission "user::1234" is not allowed. Must be one of: create, read, update, delete.', $object->getDescription());
         $this->assertFalse($object->isValid(['user:123:4']));
-        $this->assertEquals('Permission "user:123:4" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
+        $this->assertEquals('Permission "user:123:4" is not allowed. Must be one of: create, read, update, delete.', $object->getDescription());
 
         // Split role into format {$type}:{$value}
         // Permission must have value
@@ -321,7 +321,6 @@ class PermissionsTest extends TestCase
                 Permission::read(Role::any()),
                 Permission::read(Role::user($user)),
                 Permission::read(Role::user($user)),
-                Permission::write(Role::user($user)),
                 Permission::update(Role::user($user)),
                 Permission::delete(Role::user($user)),
             ],
@@ -337,11 +336,10 @@ class PermissionsTest extends TestCase
         ]);
         $this->assertTrue($validator->isValid($document->getPermissions()));
         $permissions = $document->getPermissions();
-        $this->assertEquals(5, count($permissions));
+        $this->assertEquals(4, count($permissions));
         $this->assertEquals([
             'read("any")',
             'read("user:' . $user . '")',
-            'write("user:' . $user . '")',
             'update("user:' . $user . '")',
             'delete("user:' . $user . '")',
         ], $permissions);

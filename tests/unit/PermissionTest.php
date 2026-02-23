@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -253,9 +252,6 @@ class PermissionTest extends TestCase
 
         $permission = Permission::delete(Role::guests());
         $this->assertEquals('delete("guests")', $permission);
-
-        $permission = Permission::write(Role::any());
-        $this->assertEquals('write("any")', $permission);
     }
 
     public function testInvalidFormats(): void
@@ -287,36 +283,5 @@ class PermissionTest extends TestCase
         } catch (\Exception $e) {
             $this->assertEquals('Dimension must not be empty', $e->getMessage());
         }
-    }
-
-    /**
-     * @throws \Exception
-     */
-    public function testAggregation(): void
-    {
-        $permissions = ['write("any")'];
-        $parsed = Permission::aggregate($permissions);
-        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
-
-        $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
-        $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
-
-        $permissions = [
-            'read("any")',
-            'read("user:123")',
-            'read("user:123")',
-            'write("user:123")',
-            'update("user:123")',
-            'delete("user:123")'
-        ];
-
-        $parsed = Permission::aggregate($permissions, Database::PERMISSIONS);
-        $this->assertEquals([
-            'read("any")',
-            'read("user:123")',
-            'create("user:123")',
-            'update("user:123")',
-            'delete("user:123")',
-        ], $parsed);
     }
 }

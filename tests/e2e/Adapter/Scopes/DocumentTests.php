@@ -5832,7 +5832,7 @@ trait DocumentTests
         $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
         $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
 
-        \usleep(100000); // Ensure auto-generated $updatedAt differs from creation timestamp
+        sleep(1); // Ensure $updatedAt differs when adapter timestamp precision is seconds
 
         $doc4->setAttribute('$updatedAt', null);
         $doc4->setAttribute('$createdAt', null);

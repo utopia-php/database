@@ -1829,6 +1829,9 @@ abstract class SQL extends Adapter
         bool $required = false
     ): string;
 
+    /**
+     * @throws DatabaseException For unknown type values.
+     */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         return $this->getSQLType($type, $size, $signed, $array, $required);

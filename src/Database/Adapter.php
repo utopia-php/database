@@ -1378,6 +1378,7 @@ abstract class Adapter
      * @param bool $array
      * @param bool $required
      * @return string
+     * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
      */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {

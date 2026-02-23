@@ -2358,9 +2358,24 @@ class Database
                     throw new DatabaseException('Failed to create attributes');
                 }
             } catch (DuplicateException) {
-                // No attributes were in metadata (orphan detection above confirmed this).
-                // A DuplicateException from the adapter means the column(s) exist only
-                // in physical schema — suppress and proceed to metadata update.
+                // Batch failed because at least one column already exists.
+                // Fallback to per-attribute creation so non-duplicates still land in schema.
+                foreach ($attributesToCreate as $attr) {
+                    try {
+                        $this->adapter->createAttribute(
+                            $collection->getId(),
+                            $attr['$id'],
+                            $attr['type'],
+                            $attr['size'],
+                            $attr['signed'],
+                            $attr['array'],
+                            $attr['required']
+                        );
+                        $created = true;
+                    } catch (DuplicateException) {
+                        // Column already exists in schema — skip
+                    }
+                }
             }
         }
 
@@ -3579,45 +3594,52 @@ class Database
         $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
             $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+            $junctionAttributes = [
+                new Document([
+                    '$id' => $id,
+                    'key' => $id,
+                    'type' => self::VAR_STRING,
+                    'size' => Database::LENGTH_KEY,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => $twoWayKey,
+                    'key' => $twoWayKey,
+                    'type' => self::VAR_STRING,
+                    'size' => Database::LENGTH_KEY,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ];
+            $junctionIndexes = [
+                new Document([
+                    '$id' => '_index_' . $id,
+                    'key' => 'index_' . $id,
+                    'type' => self::INDEX_KEY,
+                    'attributes' => [$id],
+                ]),
+                new Document([
+                    '$id' => '_index_' . $twoWayKey,
+                    'key' => '_index_' . $twoWayKey,
+                    'type' => self::INDEX_KEY,
+                    'attributes' => [$twoWayKey],
+                ]),
+            ];
             try {
-                $this->silent(fn () => $this->createCollection($junctionCollection, [
-                    new Document([
-                        '$id' => $id,
-                        'key' => $id,
-                        'type' => self::VAR_STRING,
-                        'size' => Database::LENGTH_KEY,
-                        'required' => true,
-                        'signed' => true,
-                        'array' => false,
-                        'filters' => [],
-                    ]),
-                    new Document([
-                        '$id' => $twoWayKey,
-                        'key' => $twoWayKey,
-                        'type' => self::VAR_STRING,
-                        'size' => Database::LENGTH_KEY,
-                        'required' => true,
-                        'signed' => true,
-                        'array' => false,
-                        'filters' => [],
-                    ]),
-                ], [
-                    new Document([
-                        '$id' => '_index_' . $id,
-                        'key' => 'index_' . $id,
-                        'type' => self::INDEX_KEY,
-                        'attributes' => [$id],
-                    ]),
-                    new Document([
-                        '$id' => '_index_' . $twoWayKey,
-                        'key' => '_index_' . $twoWayKey,
-                        'type' => self::INDEX_KEY,
-                        'attributes' => [$twoWayKey],
-                    ]),
-                ]));
+                $this->silent(fn () => $this->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes));
             } catch (DuplicateException) {
-                // Junction collection already exists from a prior partial
-                // failure — proceed to relationship creation.
+                // Junction metadata already exists from a prior partial failure.
+                // Ensure the physical schema also exists.
+                try {
+                    $this->adapter->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes);
+                } catch (DuplicateException) {
+                    // Schema already exists — ignore
+                }
             }
         }
 
@@ -4572,6 +4594,7 @@ class Database
         }
 
         $shouldRollback = false;
+        $deleted = false;
         try {
             $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
@@ -4580,7 +4603,8 @@ class Database
             }
             $shouldRollback = true;
         } catch (NotFoundException) {
-            // Ignore — index already absent from schema
+            // Index already absent from schema; treat as deleted
+            $deleted = true;
         }
 
         $collection->setAttribute('indexes', \array_values($indexes));

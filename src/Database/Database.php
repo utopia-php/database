@@ -1772,10 +1772,10 @@ class Database
             $this->adapter->createCollection($id, $attributes, $indexes);
             $created = true;
         } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
-            }
+            // Metadata check (above) already verified collection is absent
+            // from metadata. A DuplicateException from the adapter means the
+            // collection exists only in physical schema — an orphan from a prior
+            // partial failure. Skip creation and proceed to metadata creation.
         }
 
         if ($id === self::METADATA) {
@@ -1996,19 +1996,37 @@ class Database
             $this->deleteRelationship($collection->getId(), $relationship->getId());
         }
 
+        // Re-fetch collection to get current state after relationship deletions
+        $currentCollection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $currentAttributes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('attributes', []);
+        $currentIndexes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
+
+        $schemaDeleted = false;
         try {
             $this->adapter->deleteCollection($id);
-        } catch (NotFoundException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
-            }
+            $schemaDeleted = true;
+        } catch (NotFoundException) {
+            // Ignore — collection already absent from schema
         }
 
         if ($id === self::METADATA) {
             $deleted = true;
         } else {
-            $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+            try {
+                $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+            } catch (\Throwable $e) {
+                if ($schemaDeleted) {
+                    try {
+                        $this->adapter->createCollection($id, $currentAttributes, $currentIndexes);
+                    } catch (\Throwable) {
+                        // Silent rollback — best effort to restore consistency
+                    }
+                }
+                throw new DatabaseException(
+                    "Failed to persist metadata for collection deletion '{$id}': " . $e->getMessage(),
+                    previous: $e
+                );
+            }
         }
 
         if ($deleted) {
@@ -2061,32 +2079,102 @@ class Database
             $filters = array_unique($filters);
         }
 
-        $attribute = $this->validateAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters
-        );
+        $existsInSchema = false;
+
+        $schemaAttributes = $this->adapter->getSupportForSchemaAttributes()
+            ? $this->getSchemaAttributes($collection->getId())
+            : [];
+
+        try {
+            $attribute = $this->validateAttribute(
+                $collection,
+                $id,
+                $type,
+                $size,
+                $required,
+                $default,
+                $signed,
+                $array,
+                $format,
+                $formatOptions,
+                $filters,
+                $schemaAttributes
+            );
+        } catch (DuplicateException $e) {
+            // If the column exists in the physical schema but not in collection
+            // metadata, this is recovery from a partial failure where the column
+            // was created but metadata wasn't updated. Allow re-creation by
+            // skipping physical column creation and proceeding to metadata update.
+            // checkDuplicateId (metadata) runs before checkDuplicateInSchema, so
+            // if the attribute is absent from metadata the duplicate is in the
+            // physical schema only — a recoverable partial-failure state.
+            $existsInMetadata = false;
+            foreach ($collection->getAttribute('attributes', []) as $attr) {
+                if (\strtolower($attr->getAttribute('key', $attr->getId())) === \strtolower($id)) {
+                    $existsInMetadata = true;
+                    break;
+                }
+            }
+
+            if ($existsInMetadata) {
+                throw $e;
+            }
+
+            // Check if the existing schema column matches the requested type.
+            // If it matches we can skip column creation. If not, drop the
+            // orphaned column so it gets recreated with the correct type.
+            $typesMatch = true;
+            $expectedColumnType = $this->adapter->getColumnType($type, $size, $signed, $array, $required);
+            if ($expectedColumnType !== '') {
+                $filteredId = $this->adapter->filter($id);
+                foreach ($schemaAttributes as $schemaAttr) {
+                    $schemaId = $schemaAttr->getId();
+                    if (\strtolower($schemaId) === \strtolower($filteredId)) {
+                        $actualColumnType = \strtoupper($schemaAttr->getAttribute('columnType', ''));
+                        if ($actualColumnType !== \strtoupper($expectedColumnType)) {
+                            $typesMatch = false;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (!$typesMatch) {
+                // Column exists with wrong type and is not tracked in metadata,
+                // so no indexes or relationships reference it. Drop and recreate.
+                $this->adapter->deleteAttribute($collection->getId(), $id);
+            } else {
+                $existsInSchema = true;
+            }
+
+            $attribute = new Document([
+                '$id' => ID::custom($id),
+                'key' => $id,
+                'type' => $type,
+                'size' => $size,
+                'required' => $required,
+                'default' => $default,
+                'signed' => $signed,
+                'array' => $array,
+                'format' => $format,
+                'formatOptions' => $formatOptions,
+                'filters' => $filters,
+            ]);
+        }
 
         $created = false;
 
-        try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
+        if (!$existsInSchema) {
+            try {
+                $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
 
-            if (!$created) {
-                throw new DatabaseException('Failed to create attribute');
-            }
-        } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
+                if (!$created) {
+                    throw new DatabaseException('Failed to create attribute');
+                }
+            } catch (DuplicateException) {
+                // Attribute not in metadata (orphan detection above confirmed this).
+                // A DuplicateException from the adapter means the column exists only
+                // in physical schema — suppress and proceed to metadata update.
             }
         }
 
@@ -2146,7 +2234,12 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        $schemaAttributes = $this->adapter->getSupportForSchemaAttributes()
+            ? $this->getSchemaAttributes($collection->getId())
+            : [];
+
         $attributeDocuments = [];
+        $attributesToCreate = [];
         foreach ($attributes as $attribute) {
             if (!isset($attribute['$id'])) {
                 throw new DatabaseException('Missing attribute key');
@@ -2179,36 +2272,110 @@ class Database
                 $attribute['filters'] = [];
             }
 
-            $attributeDocument = $this->validateAttribute(
-                $collection,
-                $attribute['$id'],
-                $attribute['type'],
-                $attribute['size'],
-                $attribute['required'],
-                $attribute['default'],
-                $attribute['signed'],
-                $attribute['array'],
-                $attribute['format'],
-                $attribute['formatOptions'],
-                $attribute['filters']
-            );
+            $existsInSchema = false;
+
+            try {
+                $attributeDocument = $this->validateAttribute(
+                    $collection,
+                    $attribute['$id'],
+                    $attribute['type'],
+                    $attribute['size'],
+                    $attribute['required'],
+                    $attribute['default'],
+                    $attribute['signed'],
+                    $attribute['array'],
+                    $attribute['format'],
+                    $attribute['formatOptions'],
+                    $attribute['filters'],
+                    $schemaAttributes
+                );
+            } catch (DuplicateException $e) {
+                // Check if the duplicate is in metadata or only in schema
+                $existsInMetadata = false;
+                foreach ($collection->getAttribute('attributes', []) as $attr) {
+                    if (\strtolower($attr->getAttribute('key', $attr->getId())) === \strtolower($attribute['$id'])) {
+                        $existsInMetadata = true;
+                        break;
+                    }
+                }
+
+                if ($existsInMetadata) {
+                    throw $e;
+                }
+
+                // Schema-only orphan — check type match
+                $expectedColumnType = $this->adapter->getColumnType(
+                    $attribute['type'],
+                    $attribute['size'],
+                    $attribute['signed'],
+                    $attribute['array'],
+                    $attribute['required']
+                );
+                if ($expectedColumnType !== '') {
+                    $filteredId = $this->adapter->filter($attribute['$id']);
+                    foreach ($schemaAttributes as $schemaAttr) {
+                        if (\strtolower($schemaAttr->getId()) === \strtolower($filteredId)) {
+                            $actualColumnType = \strtoupper($schemaAttr->getAttribute('columnType', ''));
+                            if ($actualColumnType !== \strtoupper($expectedColumnType)) {
+                                // Type mismatch — drop orphaned column so it gets recreated
+                                $this->adapter->deleteAttribute($collection->getId(), $attribute['$id']);
+                            } else {
+                                $existsInSchema = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                $attributeDocument = new Document([
+                    '$id' => ID::custom($attribute['$id']),
+                    'key' => $attribute['$id'],
+                    'type' => $attribute['type'],
+                    'size' => $attribute['size'],
+                    'required' => $attribute['required'],
+                    'default' => $attribute['default'],
+                    'signed' => $attribute['signed'],
+                    'array' => $attribute['array'],
+                    'format' => $attribute['format'],
+                    'formatOptions' => $attribute['formatOptions'],
+                    'filters' => $attribute['filters'],
+                ]);
+            }
 
             $attributeDocuments[] = $attributeDocument;
+            if (!$existsInSchema) {
+                $attributesToCreate[] = $attribute;
+            }
         }
 
         $created = false;
 
-        try {
-            $created = $this->adapter->createAttributes($collection->getId(), $attributes);
+        if (!empty($attributesToCreate)) {
+            try {
+                $created = $this->adapter->createAttributes($collection->getId(), $attributesToCreate);
 
-            if (!$created) {
-                throw new DatabaseException('Failed to create attributes');
-            }
-        } catch (DuplicateException $e) {
-            // No attributes were in a metadata, but at least one of them was present on the table
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
+                if (!$created) {
+                    throw new DatabaseException('Failed to create attributes');
+                }
+            } catch (DuplicateException) {
+                // Batch failed because at least one column already exists.
+                // Fallback to per-attribute creation so non-duplicates still land in schema.
+                foreach ($attributesToCreate as $attr) {
+                    try {
+                        $this->adapter->createAttribute(
+                            $collection->getId(),
+                            $attr['$id'],
+                            $attr['type'],
+                            $attr['size'],
+                            $attr['signed'],
+                            $attr['array'],
+                            $attr['required']
+                        );
+                        $created = true;
+                    } catch (DuplicateException) {
+                        // Column already exists in schema — skip
+                    }
+                }
             }
         }
 
@@ -2257,6 +2424,7 @@ class Database
      * @param string $format
      * @param array<string, mixed> $formatOptions
      * @param array<string> $filters
+     * @param array<Document>|null $schemaAttributes Pre-fetched schema attributes, or null to fetch internally
      * @return Document
      * @throws DuplicateException
      * @throws LimitException
@@ -2273,7 +2441,8 @@ class Database
         bool $array,
         ?string $format,
         array $formatOptions,
-        array $filters
+        array $filters,
+        ?array $schemaAttributes = null
     ): Document {
         $attribute = new Document([
             '$id' => ID::custom($id),
@@ -2294,9 +2463,9 @@ class Database
 
         $validator = new AttributeValidator(
             attributes: $collection->getAttribute('attributes', []),
-            schemaAttributes: $this->adapter->getSupportForSchemaAttributes()
+            schemaAttributes: $schemaAttributes ?? ($this->adapter->getSupportForSchemaAttributes()
                 ? $this->getSchemaAttributes($collection->getId())
-                : [],
+                : []),
             maxAttributes: $this->adapter->getLimitForAttributes(),
             maxWidth: $this->adapter->getDocumentSizeLimit(),
             maxStringLength: $this->adapter->getLimitForString(),
@@ -3067,9 +3236,18 @@ class Database
 
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "attribute deletion '{$id}'"
+            rollbackOperation: fn () => $this->adapter->createAttribute(
+                $collection->getId(),
+                $id,
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
+                $attribute['required'] ?? false
+            ),
+            shouldRollback: $shouldRollback,
+            operationDescription: "attribute deletion '{$id}'",
+            silentRollback: true
         );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -3165,7 +3343,28 @@ class Database
                 throw new DatabaseException('Failed to rename attribute');
             }
         } catch (\Throwable $e) {
-            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+            // Check if the rename already happened in schema (orphan from prior
+            // partial failure where rename succeeded but metadata update failed).
+            // We verified $new doesn't exist in metadata (above), so if $new
+            // exists in schema, it must be from a prior rename.
+            if ($this->adapter->getSupportForSchemaAttributes()) {
+                $schemaAttributes = $this->getSchemaAttributes($collection->getId());
+                $filteredNew = $this->adapter->filter($new);
+                $newExistsInSchema = false;
+                foreach ($schemaAttributes as $schemaAttr) {
+                    if (\strtolower($schemaAttr->getId()) === \strtolower($filteredNew)) {
+                        $newExistsInSchema = true;
+                        break;
+                    }
+                }
+                if ($newExistsInSchema) {
+                    $renamed = true;
+                } else {
+                    throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+                }
+            } else {
+                throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+            }
         }
 
         $collection->setAttribute('attributes', $attributes);
@@ -3177,6 +3376,8 @@ class Database
             shouldRollback: $renamed,
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
@@ -3393,7 +3594,7 @@ class Database
         $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
             $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
-            $this->silent(fn () => $this->createCollection($junctionCollection, [
+            $junctionAttributes = [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -3414,7 +3615,8 @@ class Database
                     'array' => false,
                     'filters' => [],
                 ]),
-            ], [
+            ];
+            $junctionIndexes = [
                 new Document([
                     '$id' => '_index_' . $id,
                     'key' => 'index_' . $id,
@@ -3427,62 +3629,86 @@ class Database
                     'type' => self::INDEX_KEY,
                     'attributes' => [$twoWayKey],
                 ]),
-            ]));
-        }
-
-        $created = $this->adapter->createRelationship(
-            $collection->getId(),
-            $relatedCollection->getId(),
-            $type,
-            $twoWay,
-            $id,
-            $twoWayKey
-        );
-
-        if (!$created) {
-            if ($junctionCollection !== null) {
+            ];
+            try {
+                $this->silent(fn () => $this->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes));
+            } catch (DuplicateException) {
+                // Junction metadata already exists from a prior partial failure.
+                // Ensure the physical schema also exists.
                 try {
-                    $this->silent(fn () => $this->cleanupCollection($junctionCollection));
-                } catch (\Throwable $e) {
-                    Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                    $this->adapter->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes);
+                } catch (DuplicateException) {
+                    // Schema already exists — ignore
                 }
             }
-            throw new DatabaseException('Failed to create relationship');
+        }
+
+        $created = false;
+
+        try {
+            $created = $this->adapter->createRelationship(
+                $collection->getId(),
+                $relatedCollection->getId(),
+                $type,
+                $twoWay,
+                $id,
+                $twoWayKey
+            );
+
+            if (!$created) {
+                if ($junctionCollection !== null) {
+                    try {
+                        $this->silent(fn () => $this->cleanupCollection($junctionCollection));
+                    } catch (\Throwable $e) {
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                    }
+                }
+                throw new DatabaseException('Failed to create relationship');
+            }
+        } catch (DuplicateException) {
+            // Metadata checks (above) already verified relationship is absent
+            // from metadata. A DuplicateException from the adapter means the
+            // relationship exists only in physical schema — an orphan from a
+            // prior partial failure. Skip creation and proceed to metadata update.
         }
 
         $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection) {
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection, $created) {
             $indexesCreated = [];
             try {
-                $this->withTransaction(function () use ($collection, $relatedCollection) {
-                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                $this->withRetries(function () use ($collection, $relatedCollection) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
                 });
             } catch (\Throwable $e) {
                 $this->rollbackAttributeMetadata($collection, [$id]);
                 $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
-                try {
-                    $this->cleanupRelationship(
-                        $collection->getId(),
-                        $relatedCollection->getId(),
-                        $type,
-                        $twoWay,
-                        $id,
-                        $twoWayKey,
-                        Database::RELATION_SIDE_PARENT
-                    );
-                } catch (\Throwable $e) {
-                    Console::error("Failed to cleanup relationship '{$id}': " . $e->getMessage());
-                }
-
-                if ($junctionCollection !== null) {
+                if ($created) {
                     try {
-                        $this->cleanupCollection($junctionCollection);
+                        $this->cleanupRelationship(
+                            $collection->getId(),
+                            $relatedCollection->getId(),
+                            $type,
+                            $twoWay,
+                            $id,
+                            $twoWayKey,
+                            Database::RELATION_SIDE_PARENT
+                        );
                     } catch (\Throwable $e) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                        Console::error("Failed to cleanup relationship '{$id}': " . $e->getMessage());
+                    }
+
+                    if ($junctionCollection !== null) {
+                        try {
+                            $this->cleanupCollection($junctionCollection);
+                        } catch (\Throwable $e) {
+                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                        }
                     }
                 }
 
@@ -3667,7 +3893,27 @@ class Database
                     throw new DatabaseException('Failed to update relationship');
                 }
             } catch (\Throwable $e) {
-                throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
+                // Check if the rename already happened in schema (orphan from prior
+                // partial failure where adapter succeeded but metadata+rollback failed).
+                // If the new column names already exist, the prior rename completed.
+                if ($this->adapter->getSupportForSchemaAttributes()) {
+                    $schemaAttributes = $this->getSchemaAttributes($collection->getId());
+                    $filteredNewKey = $this->adapter->filter($actualNewKey);
+                    $newKeyExists = false;
+                    foreach ($schemaAttributes as $schemaAttr) {
+                        if (\strtolower($schemaAttr->getId()) === \strtolower($filteredNewKey)) {
+                            $newKeyExists = true;
+                            break;
+                        }
+                    }
+                    if ($newKeyExists) {
+                        $adapterUpdated = true;
+                    } else {
+                        throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
+                    }
+                } else {
+                    throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
+                }
             }
         }
 
@@ -3731,7 +3977,7 @@ class Database
             throw $e;
         }
 
-        // Update Indexes
+        // Update Indexes — wrapped in rollback for consistency with metadata
         $renameIndex = function (string $collection, string $key, string $newKey) {
             $this->updateIndexMeta(
                 $collection,
@@ -3745,49 +3991,136 @@ class Database
             );
         };
 
-        switch ($type) {
-            case self::RELATION_ONE_TO_ONE:
-                if ($id !== $actualNewKey) {
-                    $renameIndex($collection->getId(), $id, $actualNewKey);
-                }
-                if ($actualTwoWay && $oldTwoWayKey !== $actualNewTwoWayKey) {
-                    $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                }
-                break;
-            case self::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                    }
-                } else {
-                    if ($id !== $actualNewKey) {
-                        $renameIndex($collection->getId(), $id, $actualNewKey);
-                    }
-                }
-                break;
-            case self::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($id !== $actualNewKey) {
-                        $renameIndex($collection->getId(), $id, $actualNewKey);
-                    }
-                } else {
-                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
-                    }
-                }
-                break;
-            case self::RELATION_MANY_TO_MANY:
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+        $indexRenamesCompleted = [];
 
-                if ($id !== $actualNewKey) {
-                    $renameIndex($junction, $id, $actualNewKey);
+        try {
+            switch ($type) {
+                case self::RELATION_ONE_TO_ONE:
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($collection->getId(), $id, $actualNewKey);
+                        $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
+                    }
+                    if ($actualTwoWay && $oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
+                        $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
+                    }
+                    break;
+                case self::RELATION_ONE_TO_MANY:
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
+                            $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
+                        }
+                    } else {
+                        if ($id !== $actualNewKey) {
+                            $renameIndex($collection->getId(), $id, $actualNewKey);
+                            $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
+                        }
+                    }
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($id !== $actualNewKey) {
+                            $renameIndex($collection->getId(), $id, $actualNewKey);
+                            $indexRenamesCompleted[] = [$collection->getId(), $actualNewKey, $id];
+                        }
+                    } else {
+                        if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
+                            $indexRenamesCompleted[] = [$relatedCollection->getId(), $actualNewTwoWayKey, $oldTwoWayKey];
+                        }
+                    }
+                    break;
+                case self::RELATION_MANY_TO_MANY:
+                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($junction, $id, $actualNewKey);
+                        $indexRenamesCompleted[] = [$junction, $actualNewKey, $id];
+                    }
+                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($junction, $oldTwoWayKey, $actualNewTwoWayKey);
+                        $indexRenamesCompleted[] = [$junction, $actualNewTwoWayKey, $oldTwoWayKey];
+                    }
+                    break;
+                default:
+                    throw new RelationshipException('Invalid relationship type.');
+            }
+        } catch (\Throwable $e) {
+            // Reverse completed index renames
+            foreach (\array_reverse($indexRenamesCompleted) as [$coll, $from, $to]) {
+                try {
+                    $renameIndex($coll, $from, $to);
+                } catch (\Throwable) {
+                    // Best effort
                 }
-                if ($oldTwoWayKey !== $actualNewTwoWayKey) {
-                    $renameIndex($junction, $oldTwoWayKey, $actualNewTwoWayKey);
+            }
+
+            // Reverse attribute metadata
+            try {
+                $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldAttribute) {
+                    $attribute->setAttribute('$id', $id);
+                    $attribute->setAttribute('key', $id);
+                    $attribute->setAttribute('options', $oldAttribute['options']);
+                });
+            } catch (\Throwable) {
+                // Best effort
+            }
+
+            try {
+                $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function ($twoWayAttribute) use ($oldTwoWayKey, $id, $oldAttribute) {
+                    $options = $twoWayAttribute->getAttribute('options', []);
+                    $options['twoWayKey'] = $id;
+                    $options['twoWay'] = $oldAttribute['options']['twoWay'];
+                    $options['onDelete'] = $oldAttribute['options']['onDelete'];
+                    $twoWayAttribute->setAttribute('$id', $oldTwoWayKey);
+                    $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
+                    $twoWayAttribute->setAttribute('options', $options);
+                });
+            } catch (\Throwable) {
+                // Best effort
+            }
+
+            if ($type === self::RELATION_MANY_TO_MANY) {
+                $junctionId = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                try {
+                    $this->updateAttributeMeta($junctionId, $actualNewKey, function ($attr) use ($id) {
+                        $attr->setAttribute('$id', $id);
+                        $attr->setAttribute('key', $id);
+                    });
+                } catch (\Throwable) {
+                    // Best effort
                 }
-                break;
-            default:
-                throw new RelationshipException('Invalid relationship type.');
+                try {
+                    $this->updateAttributeMeta($junctionId, $actualNewTwoWayKey, function ($attr) use ($oldTwoWayKey) {
+                        $attr->setAttribute('$id', $oldTwoWayKey);
+                        $attr->setAttribute('key', $oldTwoWayKey);
+                    });
+                } catch (\Throwable) {
+                    // Best effort
+                }
+            }
+
+            // Reverse adapter update
+            if ($adapterUpdated) {
+                try {
+                    $this->adapter->updateRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $oldAttribute['options']['twoWay'],
+                        $actualNewKey,
+                        $actualNewTwoWayKey,
+                        $side,
+                        $id,
+                        $oldTwoWayKey
+                    );
+                } catch (\Throwable) {
+                    // Best effort
+                }
+            }
+
+            throw new DatabaseException("Failed to update relationship indexes for '{$id}': " . $e->getMessage(), previous: $e);
         }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -3850,7 +4183,11 @@ class Database
         $relatedCollectionAttributes = $relatedCollection->getAttribute('attributes');
 
         // Delete indexes BEFORE dropping columns to avoid referencing non-existent columns
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
+        // Track deleted indexes for rollback
+        $deletedIndexes = [];
+        $deletedJunction = null;
+
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side, &$deletedIndexes, &$deletedJunction) {
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
 
@@ -3858,29 +4195,37 @@ class Database
                 case self::RELATION_ONE_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($collection->getId(), $indexKey);
+                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => self::INDEX_UNIQUE, 'attributes' => [$id]];
                         if ($twoWay) {
                             $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                            $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => self::INDEX_UNIQUE, 'attributes' => [$twoWayKey]];
                         }
                     }
                     if ($side === Database::RELATION_SIDE_CHILD) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => self::INDEX_UNIQUE, 'attributes' => [$twoWayKey]];
                         if ($twoWay) {
                             $this->deleteIndex($collection->getId(), $indexKey);
+                            $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => self::INDEX_UNIQUE, 'attributes' => [$id]];
                         }
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => self::INDEX_KEY, 'attributes' => [$twoWayKey]];
                     } else {
                         $this->deleteIndex($collection->getId(), $indexKey);
+                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => self::INDEX_KEY, 'attributes' => [$id]];
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($collection->getId(), $indexKey);
+                        $deletedIndexes[] = ['collection' => $collection->getId(), 'key' => $indexKey, 'type' => self::INDEX_KEY, 'attributes' => [$id]];
                     } else {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        $deletedIndexes[] = ['collection' => $relatedCollection->getId(), 'key' => $twoWayIndexKey, 'type' => self::INDEX_KEY, 'attributes' => [$twoWayKey]];
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
@@ -3890,6 +4235,7 @@ class Database
                         $side
                     );
 
+                    $deletedJunction = $this->silent(fn () => $this->getDocument(self::METADATA, $junction));
                     $this->deleteDocument(self::METADATA, $junction);
                     break;
                 default:
@@ -3902,18 +4248,24 @@ class Database
         $collection->setAttribute('attributes', $collectionAttributes);
         $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
 
-        $deleted = $this->adapter->deleteRelationship(
-            $collection->getId(),
-            $relatedCollection->getId(),
-            $type,
-            $twoWay,
-            $id,
-            $twoWayKey,
-            $side
-        );
+        $shouldRollback = false;
+        try {
+            $deleted = $this->adapter->deleteRelationship(
+                $collection->getId(),
+                $relatedCollection->getId(),
+                $type,
+                $twoWay,
+                $id,
+                $twoWayKey,
+                $side
+            );
 
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete relationship');
+            if (!$deleted) {
+                throw new DatabaseException('Failed to delete relationship');
+            }
+            $shouldRollback = true;
+        } catch (NotFoundException) {
+            // Ignore — relationship already absent from schema
         }
 
         try {
@@ -3926,7 +4278,49 @@ class Database
                 });
             });
         } catch (\Throwable $e) {
-            throw new DatabaseException('Failed to persist metadata after retries: ' . $e->getMessage());
+            if ($shouldRollback) {
+                // Recreate relationship columns
+                try {
+                    $this->adapter->createRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey
+                    );
+                } catch (\Throwable) {
+                    // Silent rollback — best effort to restore consistency
+                }
+            }
+
+            // Restore deleted indexes
+            foreach ($deletedIndexes as $indexInfo) {
+                try {
+                    $this->createIndex(
+                        $indexInfo['collection'],
+                        $indexInfo['key'],
+                        $indexInfo['type'],
+                        $indexInfo['attributes']
+                    );
+                } catch (\Throwable) {
+                    // Silent rollback — best effort
+                }
+            }
+
+            // Restore junction collection metadata for M2M
+            if ($deletedJunction !== null && !$deletedJunction->isEmpty()) {
+                try {
+                    $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
+                } catch (\Throwable) {
+                    // Silent rollback — best effort
+                }
+            }
+
+            throw new DatabaseException(
+                "Failed to persist metadata after retries for relationship deletion '{$id}': " . $e->getMessage(),
+                previous: $e
+            );
         }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -3991,7 +4385,18 @@ class Database
                 throw new DatabaseException('Failed to rename index');
             }
         } catch (\Throwable $e) {
-            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+            // Check if the rename already happened in schema (orphan from prior
+            // partial failure where rename succeeded but metadata update and
+            // rollback both failed). Verify by attempting a reverse rename — if
+            // $new exists in schema, the reverse succeeds confirming a prior rename.
+            try {
+                $this->adapter->renameIndex($collection->getId(), $new, $old);
+                // Reverse succeeded — index was at $new. Re-rename to complete.
+                $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+            } catch (\Throwable) {
+                // Reverse also failed — genuine error
+                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+            }
         }
 
         $this->updateMetadata(
@@ -4000,6 +4405,8 @@ class Database
             shouldRollback: $renamed,
             operationDescription: "index rename '{$old}' to '{$new}'"
         );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
         try {
             $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
@@ -4136,10 +4543,10 @@ class Database
                 throw new DatabaseException('Failed to create index');
             }
         } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
-            }
+            // Metadata check (lines above) already verified index is absent
+            // from metadata. A DuplicateException from the adapter means the
+            // index exists only in physical schema — an orphan from a prior
+            // partial failure. Skip creation and proceed to metadata update.
         }
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
@@ -4186,19 +4593,52 @@ class Database
             throw new NotFoundException('Index not found');
         }
 
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+        $shouldRollback = false;
+        $deleted = false;
+        try {
+            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete index');
+            if (!$deleted) {
+                throw new DatabaseException('Failed to delete index');
+            }
+            $shouldRollback = true;
+        } catch (NotFoundException) {
+            // Index already absent from schema; treat as deleted
+            $deleted = true;
         }
 
         $collection->setAttribute('indexes', \array_values($indexes));
 
+        // Build indexAttributeTypes from collection attributes for rollback
+        /** @var array<Document> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $indexAttributeTypes = [];
+        foreach ($indexDeleted->getAttribute('attributes', []) as $attr) {
+            $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if ($collectionAttribute->getAttribute('key') === $baseAttr) {
+                    $indexAttributeTypes[$attr] = $collectionAttribute->getAttribute('type');
+                    break;
+                }
+            }
+        }
+
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "index deletion '{$id}'"
+            rollbackOperation: fn () => $this->adapter->createIndex(
+                $collection->getId(),
+                $id,
+                $indexDeleted->getAttribute('type'),
+                $indexDeleted->getAttribute('attributes', []),
+                $indexDeleted->getAttribute('lengths', []),
+                $indexDeleted->getAttribute('orders', []),
+                $indexAttributeTypes,
+                [],
+                $indexDeleted->getAttribute('ttl', 1)
+            ),
+            shouldRollback: $shouldRollback,
+            operationDescription: "index deletion '{$id}'",
+            silentRollback: true
         );
 
 

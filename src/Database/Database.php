@@ -1171,7 +1171,9 @@ class Database
     public function skipValidation(callable $callback): mixed
     {
         $initial = $this->validate;
-        $this->disableValidation();
+        // Direct property assignment avoids delegation in subclasses (e.g. Mirror)
+        // that override disableValidation() to propagate to child instances.
+        $this->validate = false;
 
         try {
             return $callback();

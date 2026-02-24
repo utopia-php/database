@@ -8640,6 +8640,13 @@ class Database
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
+                // Non-required array columns are NOT NULL with DEFAULT '[]', so coerce null to empty array.
+                // Required arrays must remain null so the Structure validator catches the missing value.
+                // Only coerce when applying defaults (inserts) to avoid clearing existing values during partial updates.
+                $required = $attribute['required'] ?? false;
+                if ($applyDefaults && $array && !$required) {
+                    $document->setAttribute($key, []);
+                }
                 continue;
             }
 

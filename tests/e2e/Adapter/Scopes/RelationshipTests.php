@@ -157,7 +157,7 @@ trait RelationshipTests
             'price' => 1000,
             'dateOfBirth' => '1975-06-12',
             'isActive' => true,
-            'integers' => null,
+            'integers' => [],
             'email' => null,
             'enum' => null,
             'ip' => '255.0.0.1',

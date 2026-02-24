@@ -98,6 +98,11 @@ class MongoDBTest extends Base
         $this->assertTrue(true);
     }
 
+    protected function getPDO(): mixed
+    {
+        return null;
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         return true;

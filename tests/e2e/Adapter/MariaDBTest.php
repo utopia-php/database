@@ -52,6 +52,11 @@ class MariaDBTest extends Base
         return self::$database = $database;
     }
 
+    protected function getPDO(): mixed
+    {
+        return self::$pdo;
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";

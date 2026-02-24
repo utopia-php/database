@@ -1620,10 +1620,11 @@ trait AttributeTests
                 $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array, string, or object.', $e->getMessage());
             }
 
+            // Array columns are NOT NULL with DEFAULT empty array, so isNull returns nothing
             $documents = $database->find($collection, [
                 Query::isNull('long_size')
             ]);
-            $this->assertCount(1, $documents);
+            $this->assertCount(0, $documents);
 
             $documents = $database->find($collection, [
                 Query::contains('tv_show', ['love'])

@@ -569,10 +569,10 @@ trait CollectionTests
 
         $attribute = $attributes['string_list'];
         $this->assertEquals('string_list', $attribute['$id']);
-        $this->assertTrue(in_array($attribute['dataType'], ['json', 'longtext'])); // mysql vs maria
-        $this->assertTrue(in_array($attribute['columnType'], ['json', 'longtext']));
+        $this->assertTrue(in_array($attribute['dataType'], ['json', 'jsonb', 'longtext']));
+        $this->assertTrue(in_array($attribute['columnType'], ['json', 'jsonb', 'longtext']));
         $this->assertTrue(in_array($attribute['characterMaximumLength'], [null, '4294967295']));
-        $this->assertEquals('YES', $attribute['isNullable']);
+        $this->assertEquals('NO', $attribute['isNullable']);
 
         $attribute = $attributes['dob'];
         $this->assertEquals('dob', $attribute['$id']);

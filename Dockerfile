@@ -12,7 +12,7 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-FROM appwrite/utopia-base:8.4-1.0.0 AS compile
+FROM appwrite/utopia-base:php-8.4-1.0.0 AS compile
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 

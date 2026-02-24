@@ -17,13 +17,18 @@ FROM appwrite/utopia-base:php-8.4-1.0.0 AS compile
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && apk add --no-cache \
+    libpq \
     libpq-dev \
     make \
     automake \
     autoconf \
     gcc \
     g++ \
+    git \
+    brotli-dev \
     linux-headers \
+    docker-cli \
+    docker-cli-compose \
  && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*

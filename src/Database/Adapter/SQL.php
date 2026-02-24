@@ -2277,6 +2277,116 @@ abstract class SQL extends Adapter
     abstract protected function getSQLCondition(Query $query, array &$binds): string;
 
     /**
+     * Render Query conditions for use inside a subquery (without table alias prefix).
+     *
+     * Delegates to getSQLCondition() and strips the default alias so columns
+     * are unqualified, which is correct for single-table subqueries.
+     *
+     * @param array<Query> $queries
+     * @param array<string, mixed> $binds
+     * @return string
+     */
+    protected function renderConditionsForSubquery(array $queries, array &$binds): string
+    {
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $conditions = [];
+
+        foreach ($queries as $query) {
+            $q = clone $query;
+            $condition = $this->getSQLCondition($q, $binds);
+            if (!empty($condition)) {
+                $condition = \str_replace("{$alias}.", '', $condition);
+                $conditions[] = $condition;
+            }
+        }
+
+        return \implode(' AND ', $conditions);
+    }
+
+    /**
+     * Render a TYPE_IN_SUBQUERY or TYPE_IN_SUBQUERY_ALL condition.
+     *
+     * Shared between MariaDB and Postgres adapters.
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias Quoted alias for the outer table
+     * @param string $attribute Quoted attribute name on the outer table
+     * @param string $placeholder Unique placeholder prefix
+     * @return string
+     */
+    protected function getSQLSubqueryCondition(Query $query, array &$binds, string $alias, string $attribute, string $placeholder): string
+    {
+        $meta = $query->getValue();
+        $subqueryTable = $this->getSQLTable($meta['table']);
+        $selectCol = $this->quote($this->filter($meta['column']));
+
+        $tenantCondition = '';
+        if ($this->sharedTables) {
+            $tenantKey = ":{$placeholder}_sub_tenant";
+            $binds[$tenantKey] = $this->getTenant();
+            $tenantCondition = " AND {$this->quote('_tenant')} = {$tenantKey}";
+        }
+
+        // Direct conditions on the subquery table
+        if (isset($meta['conditions'])) {
+            $whereClause = $this->renderConditionsForSubquery($meta['conditions'], $binds);
+
+            if (empty($whereClause) && empty($tenantCondition)) {
+                return "{$alias}.{$attribute} IN (" .
+                    "SELECT {$selectCol}" .
+                    " FROM {$subqueryTable}" .
+                ")";
+            }
+
+            if (empty($whereClause)) {
+                $whereClause = '1=1';
+            }
+
+            return "{$alias}.{$attribute} IN (" .
+                "SELECT {$selectCol}" .
+                " FROM {$subqueryTable}" .
+                " WHERE {$whereClause}{$tenantCondition}" .
+            ")";
+        }
+
+        // Literal filter values
+        $filterCol = $this->quote($this->filter($meta['filterColumn']));
+        $filterValues = $meta['filterValues'];
+
+        if (empty($filterValues)) {
+            return '1 = 0';
+        }
+
+        $valuePlaceholders = [];
+        foreach ($filterValues as $i => $val) {
+            $key = ":{$placeholder}_sub_{$i}";
+            $binds[$key] = $val;
+            $valuePlaceholders[] = $key;
+        }
+
+        $inClause = implode(', ', $valuePlaceholders);
+
+        if ($query->getMethod() === Query::TYPE_IN_SUBQUERY_ALL) {
+            $countKey = ":{$placeholder}_sub_count";
+            $binds[$countKey] = count($filterValues);
+            return "{$alias}.{$attribute} IN (" .
+                "SELECT {$selectCol}" .
+                " FROM {$subqueryTable}" .
+                " WHERE {$filterCol} IN ({$inClause}){$tenantCondition}" .
+                " GROUP BY {$selectCol}" .
+                " HAVING COUNT(DISTINCT {$filterCol}) = {$countKey}" .
+            ")";
+        }
+
+        return "{$alias}.{$attribute} IN (" .
+            "SELECT {$selectCol}" .
+            " FROM {$subqueryTable}" .
+            " WHERE {$filterCol} IN ({$inClause}){$tenantCondition}" .
+        ")";
+    }
+
+    /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
@@ -3602,5 +3712,65 @@ abstract class SQL extends Adapter
     public function getSupportForNestedTransactions(): bool
     {
         return true;
+    }
+
+    public function getSupportForSubqueries(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function findJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
+    {
+        if (empty($parentIds)) {
+            return [];
+        }
+
+        $name = $this->filter($collection->getId());
+        $table = $this->getSQLTable($name);
+        $parentColInternal = $this->quote($this->filter($parentColumn));
+        $childColInternal = $this->quote($this->filter($childColumn));
+        // Alias to original (unfiltered) names so callers can access with the key they have.
+        // Relationship keys may contain special chars (e.g. $symbols_coll.ection) that filter() strips.
+        $parentColAlias = $this->quote($parentColumn);
+        $childColAlias = $this->quote($childColumn);
+
+        $allRows = [];
+
+        // Chunk to avoid exceeding database parameter limits
+        foreach (\array_chunk($parentIds, 5000) as $chunkIndex => $chunk) {
+            $binds = [];
+            $placeholders = [];
+            foreach ($chunk as $i => $id) {
+                $key = ":jm_{$chunkIndex}_{$i}";
+                $binds[$key] = $id;
+                $placeholders[] = $key;
+            }
+
+            $sql = "SELECT {$parentColInternal} AS {$parentColAlias}, {$childColInternal} AS {$childColAlias} FROM {$table} WHERE {$parentColInternal} IN (" . implode(', ', $placeholders) . ")";
+
+            if ($this->sharedTables) {
+                $binds[':_tenant'] = $this->tenant;
+                $sql .= " AND {$this->quote('_tenant')} = :_tenant";
+            }
+
+            try {
+                $stmt = $this->getPDO()->prepare($sql);
+                foreach ($binds as $key => $value) {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+                $this->execute($stmt);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            $stmt->closeCursor();
+            \array_push($allRows, ...$rows);
+        }
+
+        return $allRows;
     }
 }

@@ -3702,6 +3702,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForSubqueries(): bool
+    {
+        return false;
+    }
+
     protected function isExtendedISODatetime(string $val): bool
     {
         /**

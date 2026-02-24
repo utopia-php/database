@@ -68,6 +68,10 @@ class Query
     public const TYPE_OR = 'or';
     public const TYPE_CONTAINS_ALL = 'containsAll';
     public const TYPE_ELEM_MATCH = 'elemMatch';
+
+    // Internal-only subquery types (not in TYPES array or parseQuery)
+    public const TYPE_IN_SUBQUERY = 'inSubquery';
+    public const TYPE_IN_SUBQUERY_ALL = 'inSubqueryAll';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -847,6 +851,56 @@ class Query
     public static function containsAll(string $attribute, array $values): self
     {
         return new self(self::TYPE_CONTAINS_ALL, $attribute, $values);
+    }
+
+    /**
+     * Create an internal subquery filter (ANY match).
+     *
+     * @param string $attribute Attribute on the outer table to filter (e.g. '$id')
+     * @param string $table Junction collection ID
+     * @param string $column Column to SELECT from the junction table
+     * @param string $filterColumn Column to filter on in the junction table
+     * @param array<string> $filterValues Values for the filter column
+     * @return self
+     */
+    public static function inSubquery(string $attribute, string $table, string $column, string $filterColumn, array $filterValues): self
+    {
+        return new self(self::TYPE_IN_SUBQUERY, $attribute, [['table' => $table, 'column' => $column, 'filterColumn' => $filterColumn, 'filterValues' => $filterValues]]);
+    }
+
+    /**
+     * Create an internal subquery filter (ALL match via GROUP BY / HAVING).
+     *
+     * @param string $attribute Attribute on the outer table to filter (e.g. '$id')
+     * @param string $table Junction collection ID
+     * @param string $column Column to SELECT from the junction table
+     * @param string $filterColumn Column to filter on in the junction table
+     * @param array<string> $filterValues Values for the filter column (all must match)
+     * @return self
+     */
+    public static function inSubqueryAll(string $attribute, string $table, string $column, string $filterColumn, array $filterValues): self
+    {
+        return new self(self::TYPE_IN_SUBQUERY_ALL, $attribute, [['table' => $table, 'column' => $column, 'filterColumn' => $filterColumn, 'filterValues' => $filterValues]]);
+    }
+
+    /**
+     * Create an internal direct subquery filter (no junction table).
+     *
+     * Generates: attr IN (SELECT column FROM table WHERE [conditions])
+     *
+     * @param string $attribute Attribute on the outer table to filter
+     * @param string $table Collection ID to subquery
+     * @param string $column Column to SELECT (e.g. '_uid' or a twoWayKey)
+     * @param array<Query> $conditions Filter conditions on the subquery table
+     * @return self
+     */
+    public static function inSubqueryDirect(string $attribute, string $table, string $column, array $conditions): self
+    {
+        return new self(self::TYPE_IN_SUBQUERY, $attribute, [[
+            'table' => $table,
+            'column' => $column,
+            'conditions' => $conditions,
+        ]]);
     }
 
     /**

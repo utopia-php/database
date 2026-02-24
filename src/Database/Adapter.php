@@ -1368,6 +1368,26 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get the expected column type for a given attribute type.
+     *
+     * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
+     * that would be used when creating a column for the given attribute parameters.
+     * Returns an empty string if the adapter does not support this operation.
+     *
+     * @param string $type
+     * @param int $size
+     * @param bool $signed
+     * @param bool $array
+     * @param bool $required
+     * @return string
+     * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
+     */
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        return '';
+    }
+
+    /**
      * Get the query to check for tenant when in shared tables mode
      *
      * @param string $collection   The collection being queried

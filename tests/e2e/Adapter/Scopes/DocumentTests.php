@@ -5907,6 +5907,8 @@ trait DocumentTests
         $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
         $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
 
+        sleep(1); // Ensure $updatedAt differs when adapter timestamp precision is seconds
+
         $doc4->setAttribute('$updatedAt', null);
         $doc4->setAttribute('$createdAt', null);
         $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);

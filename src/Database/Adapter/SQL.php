@@ -1841,6 +1841,14 @@ abstract class SQL extends Adapter
     ): string;
 
     /**
+     * @throws DatabaseException For unknown type values.
+     */
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        return $this->getSQLType($type, $size, $signed, $array, $required);
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type
@@ -3346,12 +3354,16 @@ abstract class SQL extends Adapter
                 }
             }
 
+        try {
             $this->execute($stmt);
-            $result = $stmt->fetchAll();
-            $stmt->closeCursor();
-
         } catch (PDOException $e) {
             throw $this->processException($e);
+        }
+
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
         }
 
         return $result[0]['sum'] ?? 0;
@@ -3428,7 +3440,11 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $this->execute($stmt);
+        try {
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();

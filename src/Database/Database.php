@@ -150,6 +150,22 @@ class Database
         self::PERMISSION_DELETE,
     ];
 
+    /**
+     * Check if bulk relationship write optimizations are enabled.
+     * Controlled via environment variable DB_RELATIONSHIP_BULK_WRITES (default: enabled).
+     *
+     * @return bool
+     */
+    private function shouldUseRelationshipBulkWrites(): bool
+    {
+        $val = getenv('DB_RELATIONSHIP_BULK_WRITES');
+        if ($val === false || $val === '') {
+            return true;
+        }
+        $val = strtolower((string)$val);
+        return !in_array($val, ['0', 'false', 'off'], true);
+    }
+
     // Collections
     public const METADATA = '_metadata';
 
@@ -5707,39 +5723,107 @@ class Database
                         }
 
                         // List of documents or IDs
+                        $idRelations = [];
+                        $objectRelations = [];
                         foreach ($value as $related) {
                             switch (\gettype($related)) {
                                 case 'object':
                                     if (!$related instanceof Document) {
                                         throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                                     }
-                                    $this->relateDocuments(
-                                        $collection,
-                                        $relatedCollection,
-                                        $key,
-                                        $document,
-                                        $related,
-                                        $relationType,
-                                        $twoWay,
-                                        $twoWayKey,
-                                        $side,
-                                    );
+                                    $objectRelations[] = $related;
                                     break;
                                 case 'string':
-                                    $this->relateDocumentsById(
-                                        $collection,
-                                        $relatedCollection,
-                                        $key,
-                                        $document->getId(),
-                                        $related,
-                                        $relationType,
-                                        $twoWay,
-                                        $twoWayKey,
-                                        $side,
-                                    );
+                                    $idRelations[] = $related;
                                     break;
                                 default:
                                     throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                            }
+                        }
+
+                        // Process object relations: detect nested relationships and handle appropriately
+                        $idOnlyDocs = [];
+                        $richDocsNoNesting = [];
+
+                        foreach ($objectRelations as $objRel) {
+                            // Check if document has nested relationships
+                            $hasNestedRelationships = false;
+                            foreach ($objRel->getAttributes() as $attrKey => $attrValue) {
+                                if ($attrKey === '$id' || $attrKey === '$permissions') {
+                                    continue;
+                                }
+                                // Check if attribute is a Document or array of Documents (nested relationship)
+                                if ($attrValue instanceof Document ||
+                                    (is_array($attrValue) && !empty($attrValue) && isset($attrValue[0]) && $attrValue[0] instanceof Document)) {
+                                    $hasNestedRelationships = true;
+                                    break;
+                                }
+                            }
+
+                            if ($hasNestedRelationships) {
+                                // Use original method for nested relationships - handles everything including links
+                                $this->relateDocuments(
+                                    $collection,
+                                    $relatedCollection,
+                                    $key,
+                                    $document,
+                                    $objRel,
+                                    $relationType,
+                                    $twoWay,
+                                    $twoWayKey,
+                                    $side
+                                );
+                            } elseif ($this->isIdOnlyDocument($objRel)) {
+                                $idOnlyDocs[] = $objRel;
+                            } else {
+                                $richDocsNoNesting[] = $objRel;
+                            }
+                        }
+
+                        // Ensure ID-only docs in batch (create missing) and collect their IDs
+                        $ensuredIds = $this->batchEnsureIdOnlyDocuments($relatedCollection, $idOnlyDocs, $document);
+
+                        // Ensure rich docs (without nesting) one-by-one
+                        foreach ($richDocsNoNesting as $relatedDoc) {
+                            $ensuredIds[] = $this->ensureRelatedDocumentAndGetId(
+                                $relatedCollection,
+                                $relatedDoc,
+                                $document,
+                                $relationType,
+                                $twoWay,
+                                $twoWayKey,
+                                $side
+                            );
+                        }
+
+                        $linkIds = [...$ensuredIds, ...$idRelations];
+
+                        if (!empty($linkIds)) {
+                            switch ($relationType) {
+                                case Database::RELATION_MANY_TO_MANY:
+                                    $this->batchCreateJunctionLinks(
+                                        $collection,
+                                        $relatedCollection,
+                                        $side,
+                                        $key,
+                                        $twoWayKey,
+                                        $document->getId(),
+                                        $linkIds
+                                    );
+                                    break;
+                                case Database::RELATION_ONE_TO_MANY:
+                                case Database::RELATION_MANY_TO_ONE:
+                                    $this->batchUpdateBackReferences(
+                                        $collection,
+                                        $relatedCollection,
+                                        $relationType,
+                                        $side,
+                                        $key,
+                                        $twoWayKey,
+                                        $document->getId(),
+                                        $linkIds
+                                    );
+                                    break;
                             }
                         }
                         $document->removeAttribute($key);
@@ -5981,6 +6065,339 @@ class Database
                 ])));
                 break;
         }
+    }
+
+
+    /**
+     * Batch insert junction links for many-to-many relationships.
+     *
+     * Optimizes bulk relationship creation by using bulk insert operations
+     * instead of individual document inserts for each junction link.
+     *
+     * @param Document $collection Parent collection
+     * @param Document $relatedCollection Related collection
+     * @param string $side Relationship side (parent/child)
+     * @param string $key Relationship attribute key
+     * @param string $twoWayKey Two-way relationship key
+     * @param string $documentId Parent document ID
+     * @param array<string> $relationIds Array of related document IDs to link
+     * @return void
+     */
+    private function batchCreateJunctionLinks(
+        Document $collection,
+        Document $relatedCollection,
+        string $side,
+        string $key,
+        string $twoWayKey,
+        string $documentId,
+        array $relationIds
+    ): void {
+        if (!$this->shouldUseRelationshipBulkWrites()) {
+            foreach ($relationIds as $rid) {
+                $this->relateDocumentsById(
+                    $collection,
+                    $relatedCollection,
+                    $key,
+                    $documentId,
+                    (string)$rid,
+                    Database::RELATION_MANY_TO_MANY,
+                    true,
+                    $twoWayKey,
+                    $side,
+                );
+            }
+            return;
+        }
+        $junctionDocs = [];
+        $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
+        foreach ($relationIds as $rid) {
+            $this->purgeCachedDocument($relatedCollection->getId(), $rid);
+            $junctionDocs[] = new Document([
+                $key => $rid,
+                $twoWayKey => $documentId,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ]
+            ]);
+        }
+        $this->skipRelationships(fn () => $this->createDocuments($junction, $junctionDocs));
+    }
+
+    /**
+     * Batch update back-references for one-to-many and many-to-one relationships.
+     *
+     * Optimizes bulk relationship updates by using SQL UPDATE with IN clause
+     * instead of individual document updates for each relationship.
+     *
+     * @param Document $collection Parent collection
+     * @param Document $relatedCollection Related collection
+     * @param string $relationType Type of relationship (O2M or M2O)
+     * @param string $side Relationship side (parent/child)
+     * @param string $key Relationship attribute key
+     * @param string $twoWayKey Two-way relationship key
+     * @param string $documentId Parent document ID
+     * @param array<string|Document> $relationIds Array of related document IDs to update
+     * @return void
+     */
+    private function batchUpdateBackReferences(
+        Document $collection,
+        Document $relatedCollection,
+        string $relationType,
+        string $side,
+        string $key,
+        string $twoWayKey,
+        string $documentId,
+        array $relationIds
+    ): void {
+        // Only for string IDs; fall back otherwise
+        $allStrings = true;
+        foreach ($relationIds as $rid) {
+            if (!\is_string($rid)) {
+                $allStrings = false;
+                break;
+            }
+        }
+        if (!$allStrings) {
+            foreach ($relationIds as $rid) {
+                $this->relateDocumentsById(
+                    $collection,
+                    $relatedCollection,
+                    $key,
+                    $documentId,
+                    $rid instanceof Document ? $rid->getId() : (string)$rid,
+                    $relationType,
+                    true,
+                    $twoWayKey,
+                    $side,
+                );
+            }
+            return;
+        }
+
+        // At this point, all elements are confirmed to be strings
+        /** @var array<string> $stringIds */
+        $stringIds = $relationIds;
+
+        $this->skipRelationships(function () use ($relatedCollection, $twoWayKey, $documentId, $stringIds) {
+            // Prefilter allowed IDs when documentSecurity is enabled by issuing a single authorized find
+            $relatedDocSecurity = $relatedCollection->getAttribute('documentSecurity', false);
+            $idsAllowed = $stringIds;
+            if ($relatedDocSecurity) {
+                // Skip authorization to match original relateDocumentsById behavior
+                $allowedDocs = Authorization::skip(fn () => $this->silent(fn () => $this->find(
+                    $relatedCollection->getId(),
+                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $stringIds), Query::limit(count($stringIds))]
+                )));
+                $idsAllowed = array_map(fn ($d) => $d->getId(), $allowedDocs);
+                if (empty($idsAllowed)) {
+                    return; // nothing to update
+                }
+                // Conflict check vs request timestamp
+                if (!\is_null($this->timestamp)) {
+                    foreach ($allowedDocs as $docAllowed) {
+                        $oldUpdatedAt = new \DateTime($docAllowed->getUpdatedAt());
+                        if ($oldUpdatedAt > $this->timestamp) {
+                            throw new ConflictException('Document was updated after the request timestamp');
+                        }
+                    }
+                }
+            } else {
+                // Skip authorization to match original relateDocumentsById behavior
+                $found = Authorization::skip(fn () => $this->silent(fn () => $this->find(
+                    $relatedCollection->getId(),
+                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $stringIds), Query::limit(count($stringIds))]
+                )));
+                // Conflict check vs request timestamp
+                if (!\is_null($this->timestamp)) {
+                    foreach ($found as $docFound) {
+                        $oldUpdatedAt = new \DateTime($docFound->getUpdatedAt());
+                        if ($oldUpdatedAt > $this->timestamp) {
+                            throw new ConflictException('Document was updated after the request timestamp');
+                        }
+                    }
+                }
+            }
+
+            // Prepare update payload with full parity: encode + partial structure + updatedAt
+            $now = DateTime::now();
+            $updateDoc = new Document([
+                $twoWayKey => $documentId,
+                '$updatedAt' => $now,
+            ]);
+
+            $updateEncoded = $this->encode($relatedCollection, $updateDoc, applyDefaults: false);
+
+            $structureValidator = new PartialStructure(
+                $relatedCollection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
+            if (!$structureValidator->isValid($updateEncoded)) {
+                throw new StructureException($structureValidator->getDescription());
+            }
+
+            if (!$this->shouldUseRelationshipBulkWrites()) {
+                // Use standard updateDocuments (parity path)
+                $this->updateDocuments(
+                    $relatedCollection->getId(),
+                    $updateEncoded,
+                    [Query::equal('$id', $idsAllowed)]
+                );
+                return;
+            }
+
+            $modified = $this->withTransaction(function () use ($relatedCollection, $updateEncoded, $idsAllowed) {
+                return $this->adapter->updateManyByIds($relatedCollection, $idsAllowed, $updateEncoded->getAttributes());
+            });
+
+            foreach ($idsAllowed as $id) {
+                $this->purgeCachedDocument($relatedCollection->getId(), (string)$id);
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
+                '$collection' => $relatedCollection->getId(),
+                'modified' => $modified
+            ]));
+        });
+    }
+
+    /**
+     * Detect if a Document contains only ID and permissions metadata.
+     *
+     * @param Document $doc Document to check
+     * @return bool True if document has only $id and optionally $permissions
+     */
+    private function isIdOnlyDocument(Document $doc): bool
+    {
+        foreach ($doc->getAttributes() as $k => $_) {
+            if ($k === '$id' || $k === '$permissions') {
+                continue;
+            }
+            // Any other attribute (including other '$' keys) makes it a rich document
+            return false;
+        }
+        return !empty($doc->getId());
+    }
+
+    /**
+     * Batch ensure ID-only related Documents exist (create missing) and return their IDs.
+     * Uses createDocuments for missing IDs to preserve validation and events.
+     *
+     * @param Document $relatedCollection
+     * @param array<Document> $docs
+     * @param Document $parent Parent document (for inheriting permissions if missing)
+     * @return array<string>
+     */
+    private function batchEnsureIdOnlyDocuments(Document $relatedCollection, array $docs, Document $parent): array
+    {
+        if (empty($docs)) {
+            return [];
+        }
+
+        // Collect requested IDs and per-doc permissions (if provided)
+        $ids = [];
+        $idPerms = [];
+        foreach ($docs as $d) {
+            $ids[] = $d->getId();
+            $idPerms[$d->getId()] = $d->getPermissions();
+        }
+
+        // Fetch existing IDs in one call
+        $existing = $this->skipRelationships(fn () => $this->find(
+            $relatedCollection->getId(),
+            [Query::select(['$id']), Query::equal('$id', $ids), Query::limit(count($ids))]
+        ));
+        $found = array_map(fn (Document $d) => $d->getId(), $existing);
+
+        // Compute missing and create them
+        $missing = array_values(array_diff($ids, $found));
+        foreach ($missing as $missingId) {
+            $perms = $idPerms[$missingId] ?? $parent->getPermissions();
+            $newDoc = new Document([
+                '$id' => $missingId,
+                '$permissions' => $perms
+            ]);
+            $this->skipRelationships(fn () => $this->createDocument($relatedCollection->getId(), $newDoc));
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Ensure a related Document exists (create or update) and return its ID.
+     *
+     * This method creates the related document if it doesn't exist, or updates it if it does.
+     * It does not handle junction table writes or back-reference updates.
+     *
+     * @param Document $relatedCollection Collection containing the related document
+     * @param Document $relation Related document to ensure
+     * @param Document $parent Parent document
+     * @param string $relationType Type of relationship
+     * @param bool $twoWay Whether this is a two-way relationship
+     * @param string $twoWayKey Two-way relationship key
+     * @param string $side Relationship side (parent/child)
+     * @return string ID of the ensured document
+     */
+    private function ensureRelatedDocumentAndGetId(
+        Document $relatedCollection,
+        Document $relation,
+        Document $parent,
+        string $relationType,
+        bool $twoWay,
+        string $twoWayKey,
+        string $side
+    ): string {
+        // Set back-reference attribute on the relation document BEFORE create/update
+        // This is critical for documents that only have READ permission (not UPDATE)
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($twoWay) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+        }
+
+        // Try to get the related document
+        $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relation->getId()));
+
+        if ($related->isEmpty()) {
+            // If the related document doesn't exist, create it, inheriting permissions if none are set
+            if (!isset($relation['$permissions'])) {
+                $relation->setAttribute('$permissions', $parent->getPermissions());
+            }
+
+            // This method is only called for documents without nested relationships,
+            // so we can safely skip relationship processing
+            $created = $this->skipRelationships(fn () => $this->createDocument($relatedCollection->getId(), $relation));
+            return $created->getId();
+        }
+
+        // If the related document exists and the data is not the same, update it
+        $needsUpdate = ($related->getAttributes() != $relation->getAttributes());
+        if ($needsUpdate) {
+            foreach ($relation->getAttributes() as $attribute => $value) {
+                $related->setAttribute($attribute, $value);
+            }
+
+            $updated = $this->skipRelationships(fn () => $this->updateDocument($relatedCollection->getId(), $related->getId(), $related));
+            return $updated->getId();
+        }
+
+        return $related->getId();
     }
 
     /**

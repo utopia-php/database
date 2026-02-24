@@ -17,30 +17,14 @@ FROM appwrite/utopia-base:php-8.4-1.0.0 AS compile
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && apk add --no-cache \
-    libpq \
     libpq-dev \
     make \
     automake \
     autoconf \
     gcc \
     g++ \
-    git \
-    brotli-dev \
     linux-headers \
-    docker-cli \
-    docker-cli-compose \
- && (pecl install mongodb-$PHP_MONGODB_VERSION \
-    || (git clone --depth 1 --branch $PHP_MONGODB_VERSION --recurse-submodules https://github.com/mongodb/mongo-php-driver.git /tmp/mongodb \
-      && cd /tmp/mongodb \
-      && git submodule update --init --recursive \
-      && phpize \
-      && ./configure \
-      && make \
-      && make install \
-      && cd / \
-      && rm -rf /tmp/mongodb)) \
- && docker-php-ext-enable mongodb \
- && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+ && docker-php-ext-install opcache pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 

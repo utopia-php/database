@@ -1581,7 +1581,7 @@ abstract class Adapter
      * @param string $parentColumn Column name for parent FK
      * @param string $childColumn Column name for child FK
      * @param array<string> $parentIds Parent document IDs to look up
-     * @return array<array{string, string}>
+     * @return array<array<string, string>>
      */
     public function findJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
     {

@@ -9819,7 +9819,7 @@ class Database
                 if (isset($result['subquery'])) {
                     $additionalQueries[] = $this->createSubqueryFromResult($result);
                     $usedSubqueries = true;
-                } else {
+                } elseif (isset($result['ids'])) {
                     $resolvedAttribute = $result['attribute'];
                     $parentIdSets[] = $result['ids'];
                 }
@@ -9928,7 +9928,7 @@ class Database
 
                 if (isset($result['subquery'])) {
                     $additionalQueries[] = $this->createSubqueryFromResult($result);
-                } else {
+                } elseif (isset($result['ids'])) {
                     $additionalQueries[] = Query::equal($result['attribute'], $result['ids']);
                 }
 

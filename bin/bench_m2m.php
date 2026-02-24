@@ -146,7 +146,10 @@ function bench(string $label, callable $fn, int $warmup, int $runs): void
     printf(
         "  %-45s  median: %7.1f ms  mean: %7.1f ms  min: %7.1f ms  p95: %7.1f ms  (%d docs)\n",
         $label,
-        $median, $mean, $min, $p95,
+        $median,
+        $mean,
+        $min,
+        $p95,
         $resultCount
     );
 }
@@ -162,48 +165,56 @@ echo "--- General Queries (plain find, no relationship traversal) ---\n\n";
 bench(
     "getDocument('articles', id)",
     fn () => $database->getDocument('articles', $allArticleIds[0]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // skipRelationships find (raw, no population)
 bench(
     "find('articles') skip-rels limit(100)",
     fn () => $database->skipRelationships(fn () => $database->find('articles', [Query::limit(100)])),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 bench(
     "find('articles') skip-rels limit(1000)",
     fn () => $database->skipRelationships(fn () => $database->find('articles', [Query::limit(1000)])),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 bench(
     "find('articles') skip-rels limit(5000)",
     fn () => $database->skipRelationships(fn () => $database->find('articles', [Query::limit(5000)])),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // find WITH relationship population (authors populated on each article)
 bench(
     "find('articles') + rels limit(100)",
     fn () => $database->find('articles', [Query::limit(100)]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 bench(
     "find('articles') + rels limit(500)",
     fn () => $database->find('articles', [Query::limit(500)]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // find authors WITH relationship population (articles populated on each author)
 bench(
     "find('authors') + rels limit(25)",
     fn () => $database->find('authors', [Query::limit(25)]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 bench(
     "find('authors') + rels limit(100)",
     fn () => $database->find('authors', [Query::limit(100)]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // Filter queries (no relationship traversal)
@@ -213,7 +224,8 @@ bench(
         Query::equal('genre', ['fashion']),
         Query::limit(5000),
     ])),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // Pagination
@@ -236,7 +248,8 @@ bench(
         } while ($count === 100);
         return range(1, $total);
     },
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 echo "\n--- M2M Relationship Queries ---\n\n";
@@ -253,7 +266,8 @@ bench(
         Query::equal('articles.$id', [$singleArticleId]),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 2) equal('articles.$id', [3 values])
@@ -263,7 +277,8 @@ bench(
         Query::equal('articles.$id', $threeArticleIds),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 3) containsAll('articles.$id', [2 values])
@@ -273,7 +288,8 @@ bench(
         Query::containsAll('articles.$id', $twoArticleIds),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 4) Reverse: find articles by author
@@ -283,7 +299,8 @@ bench(
         Query::equal('authors.$id', ['author_000']),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 5) equal('articles.$id', [1]) + attribute filter
@@ -294,7 +311,8 @@ bench(
         Query::equal('name', ['Alice 0']),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 6) Non-$id attribute query (genre) — not optimized by subquery, baseline comparison
@@ -304,7 +322,8 @@ bench(
         Query::equal('articles.genre', ['fashion']),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 7) Genre query with select (no relationship population)
@@ -315,7 +334,8 @@ bench(
         Query::select(['$id', 'name']),
         Query::limit(5000),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 // 8) Genre query with small limit
@@ -325,7 +345,8 @@ bench(
         Query::equal('articles.genre', ['fashion']),
         Query::limit(5),
     ]),
-    $warmup, $runs
+    $warmup,
+    $runs
 );
 
 echo "\n=== Done ===\n";

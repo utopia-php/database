@@ -10007,7 +10007,7 @@ class Database
                 Query::TYPE_TOUCHES, Query::TYPE_NOT_TOUCHES,
             ];
             foreach ($relatedQueries as $rq) {
-                if (\in_array($rq->getMethod(), $spatialMethods)) {
+                if (\in_array($rq->getMethod(), $spatialMethods) || $rq->isSpatialAttribute()) {
                     $canUseSubquery = false;
                     break;
                 }

@@ -4711,11 +4711,14 @@ class Database
             $selections
         );
 
-        try {
-            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $cached = null;
+        $cached = null;
+        if (!$forUpdate) {
+            try {
+                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+                $cached = null;
+            }
         }
 
         if ($cached) {
@@ -4788,7 +4791,7 @@ class Database
         );
 
         // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
+        if (!$forUpdate && empty($relationships)) {
             try {
                 $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);
@@ -6038,6 +6041,12 @@ class Database
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
 
+            // Build attribute type map for type-safe comparison
+            $attributeTypes = [];
+            foreach ($collection->getAttribute('attributes', []) as $attr) {
+                $attributeTypes[$attr['$id'] ?? ''] = $attr['type'] ?? '';
+            }
+
             $shouldUpdate = false;
 
             if ($collection->getId() !== self::METADATA) {
@@ -6134,6 +6143,27 @@ class Database
                     }
 
                     $oldValue = $old->getAttribute($key);
+
+                    // Cast both values to attribute type for consistent comparison
+                    // (e.g. cache JSON round-trip turns float 1.0 into int 1,
+                    //  and some adapters may not cast floats on read)
+                    $attrType = $attributeTypes[$key] ?? null;
+                    if ($attrType !== null && !($value instanceof Operator)) {
+                        switch ($attrType) {
+                            case self::VAR_FLOAT:
+                                $value = \is_null($value) ? null : (float)$value;
+                                $oldValue = \is_null($oldValue) ? null : (float)$oldValue;
+                                break;
+                            case self::VAR_INTEGER:
+                                $value = \is_null($value) ? null : (int)$value;
+                                $oldValue = \is_null($oldValue) ? null : (int)$oldValue;
+                                break;
+                            case self::VAR_BOOLEAN:
+                                $value = \is_null($value) ? null : (bool)$value;
+                                $oldValue = \is_null($oldValue) ? null : (bool)$oldValue;
+                                break;
+                        }
+                    }
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {

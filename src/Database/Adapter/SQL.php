@@ -3273,7 +3273,11 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $this->execute($stmt);
+        try {
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -3355,7 +3359,11 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $this->execute($stmt);
+        try {
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();

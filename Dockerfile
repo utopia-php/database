@@ -24,7 +24,7 @@ RUN apk update && apk add --no-cache \
     gcc \
     g++ \
     linux-headers \
- && docker-php-ext-install opcache pgsql \
+ && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 

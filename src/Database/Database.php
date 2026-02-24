@@ -444,6 +444,11 @@ class Database
      */
     protected array $documentTypes = [];
 
+    /**
+     * Document transformer callback
+     * @var callable|null
+     */
+    protected $transformer = null;
 
     /**
      * @var Authorization
@@ -1133,6 +1138,47 @@ class Database
     public function getInstanceFilters(): array
     {
         return $this->instanceFilters;
+    }
+
+    /**
+     * Set document transformer
+     *
+     * Called after decode for every document retrieved, including nested relationships.
+     * Transformer receives custom document types (if mapped via setDocumentType) and
+     * should return the same type.
+     *
+     * @param callable|null $transformer fn(Document $document, Document $collection, Database $db): Document
+     * @return static
+     */
+    public function setTransformer(?callable $transformer): static
+    {
+        $this->transformer = $transformer;
+        return $this;
+    }
+
+    /**
+     * Get document transformer
+     *
+     * @return callable|null
+     */
+    public function getTransformer(): ?callable
+    {
+        return $this->transformer;
+    }
+
+    /**
+     * Transform a document using the configured transformer
+     *
+     * @param Document $document
+     * @param Document $collection
+     * @return Document
+     */
+    protected function transform(Document $document, Document $collection): Document
+    {
+        if ($this->transformer === null || $document->isEmpty()) {
+            return $document;
+        }
+        return ($this->transformer)($document, $collection, $this);
     }
 
     /**
@@ -4782,6 +4828,8 @@ class Database
             $document = $documents[0];
         }
 
+        $document = $this->transform($document, $collection);
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
@@ -5536,6 +5584,8 @@ class Database
             $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
         }
 
+        $document = $this->transform($document, $collection);
+
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
         return $document;
@@ -6237,6 +6287,8 @@ class Database
         if (isset($this->documentTypes[$collection->getId()])) {
             $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
         }
+
+        $document = $this->transform($document, $collection);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -7277,6 +7329,8 @@ class Database
                 if (!$hasOperators) {
                     $doc = $this->decode($collection, $doc);
                 }
+
+                $doc = $this->transform($doc, $collection);
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
@@ -8347,6 +8401,7 @@ class Database
                 $node->setAttribute('$collection', $collection->getId());
             }
 
+            $node = $this->transform($node, $collection);
             $results[$index] = $node;
         }
 

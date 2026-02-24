@@ -10006,10 +10006,24 @@ class Database
                 Query::TYPE_OVERLAPS, Query::TYPE_NOT_OVERLAPS,
                 Query::TYPE_TOUCHES, Query::TYPE_NOT_TOUCHES,
             ];
+            // Dual-purpose methods (contains, equal) that are spatial when values are arrays
+            $dualPurposeMethods = [
+                Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS,
+                Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL,
+            ];
             foreach ($relatedQueries as $rq) {
                 if (\in_array($rq->getMethod(), $spatialMethods) || $rq->isSpatialAttribute()) {
                     $canUseSubquery = false;
                     break;
+                }
+                // Spatial queries carry array values (coordinates); string queries carry strings
+                if (\in_array($rq->getMethod(), $dualPurposeMethods)) {
+                    foreach ($rq->getValues() as $val) {
+                        if (\is_array($val)) {
+                            $canUseSubquery = false;
+                            break 2;
+                        }
+                    }
                 }
             }
         }

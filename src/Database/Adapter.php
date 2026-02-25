@@ -1583,7 +1583,7 @@ abstract class Adapter
      * @param array<string> $parentIds Parent document IDs to look up
      * @return array<array<string, string>>
      */
-    public function findJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
+    public function getJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
     {
         // Default: use find() with select (adapters can override for raw performance)
         $results = $this->find(

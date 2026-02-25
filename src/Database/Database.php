@@ -5319,7 +5319,7 @@ class Database
         if ($this->adapter->getSupportForSubqueries()) {
             // Lightweight junction fetch: raw arrays, no Document hydration
             $junctionDoc = $this->silent(fn () => $this->getCollection($junction));
-            $rows = $this->authorization->skip(fn () => $this->adapter->findJunctionMapping(
+            $rows = $this->authorization->skip(fn () => $this->adapter->getJunctionMapping(
                 $junctionDoc,
                 $twoWayKey,
                 $key,

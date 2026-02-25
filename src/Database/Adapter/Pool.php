@@ -719,7 +719,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function findJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
+    public function getJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

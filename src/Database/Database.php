@@ -8378,16 +8378,6 @@ class Database
             );
         }
 
-        var_dump($collection->getId());
-        var_dump('$relationships===');
-        var_dump($relationships);
-        var_dump('$selects===');
-        var_dump($selects);
-        var_dump('$nestedSelections===');
-        var_dump($nestedSelections);
-        var_dump(!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections)));
-        var_dump($results);
-
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
                 $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
@@ -9641,6 +9631,8 @@ class Database
             // Resolve each value independently, then intersect parent IDs
             $parentIdSets = [];
             $resolvedAttribute = '$id';
+
+
             foreach ($query->getValues() as $value) {
                 $relatedQuery = Query::equal($nestedAttribute, [$value]);
                 $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery], $collection);

@@ -1563,4 +1563,52 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * Does the adapter support inline subqueries for junction table resolution?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSubqueries(): bool;
+
+    /**
+     * Fetch junction table mappings as lightweight arrays (no Document hydration).
+     *
+     * Returns array of [parentColumn => parentId, childColumn => childId] rows.
+     * Override in SQL adapters for maximum performance; default falls back to find().
+     *
+     * @param Document $collection Junction collection document
+     * @param string $parentColumn Column name for parent FK
+     * @param string $childColumn Column name for child FK
+     * @param array<string> $parentIds Parent document IDs to look up
+     * @return array<array<string, string>>
+     */
+    public function getJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
+    {
+        // Default: use find() with select (adapters can override for raw performance)
+        $results = $this->find(
+            $collection,
+            [
+                Query::equal($parentColumn, $parentIds),
+                Query::select([$parentColumn, $childColumn]),
+                Query::limit(PHP_INT_MAX),
+            ],
+            PHP_INT_MAX
+        );
+
+        $mappings = [];
+        foreach ($results as $doc) {
+            $parentId = $doc->getAttribute($parentColumn);
+            $childId = $doc->getAttribute($childColumn);
+            if ($parentId === null || $childId === null) {
+                continue;
+            }
+            $mappings[] = [
+                $parentColumn => (string) $parentId,
+                $childColumn => (string) $childId,
+            ];
+        }
+
+        return $mappings;
+    }
 }

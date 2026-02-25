@@ -1171,7 +1171,9 @@ class Database
     public function skipValidation(callable $callback): mixed
     {
         $initial = $this->validate;
-        $this->disableValidation();
+        // Direct property assignment avoids delegation in subclasses (e.g. Mirror)
+        // that override disableValidation() to propagate to child instances.
+        $this->validate = false;
 
         try {
             return $callback();
@@ -5311,45 +5313,72 @@ class Database
 
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-        $junctions = [];
-
-        foreach (\array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
-            $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
-                Query::equal($twoWayKey, $chunk),
-                Query::limit(PHP_INT_MAX)
-            ]));
-            \array_push($junctions, ...$chunkJunctions);
-        }
-
         $relatedIds = [];
         $junctionsByDocumentId = [];
 
-        foreach ($junctions as $junctionDoc) {
-            $documentId = $junctionDoc->getAttribute($twoWayKey);
-            $relatedId = $junctionDoc->getAttribute($key);
+        if ($this->adapter->getSupportForSubqueries()) {
+            // Lightweight junction fetch: raw arrays, no Document hydration
+            $junctionDoc = $this->silent(fn () => $this->getCollection($junction));
+            $rows = $this->authorization->skip(fn () => $this->adapter->getJunctionMapping(
+                $junctionDoc,
+                $twoWayKey,
+                $key,
+                $documentIds
+            ));
 
-            if (!\is_null($documentId) && !\is_null($relatedId)) {
-                if (!isset($junctionsByDocumentId[$documentId])) {
-                    $junctionsByDocumentId[$documentId] = [];
+            foreach ($rows as $row) {
+                $documentId = $row[$twoWayKey] ?? null;
+                $relatedId = $row[$key] ?? null;
+
+                if (!\is_null($documentId) && !\is_null($relatedId)) {
+                    $junctionsByDocumentId[$documentId][] = $relatedId;
+                    $relatedIds[] = $relatedId;
                 }
-                $junctionsByDocumentId[$documentId][] = $relatedId;
-                $relatedIds[] = $relatedId;
+            }
+        } else {
+            $junctions = [];
+            foreach (\array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
+                    Query::equal($twoWayKey, $chunk),
+                    Query::limit(PHP_INT_MAX)
+                ]));
+                \array_push($junctions, ...$chunkJunctions);
+            }
+
+            foreach ($junctions as $junctionDoc) {
+                $documentId = $junctionDoc->getAttribute($twoWayKey);
+                $relatedId = $junctionDoc->getAttribute($key);
+
+                if (!\is_null($documentId) && !\is_null($relatedId)) {
+                    $junctionsByDocumentId[$documentId][] = $relatedId;
+                    $relatedIds[] = $relatedId;
+                }
             }
         }
 
         $related = [];
         $allRelatedDocs = [];
         if (!empty($relatedIds)) {
-            $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
 
-            foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
-                $chunkDocs = $this->find($relatedCollection->getId(), [
-                    Query::equal('$id', $chunk),
+            if ($this->adapter->getSupportForSubqueries()) {
+                // Single subquery replaces multiple chunked queries:
+                // SELECT * FROM articles WHERE _uid IN (SELECT key FROM junction WHERE twoWayKey IN (:parentIds))
+                $foundRelated = $this->skipValidation(fn () => $this->find($relatedCollection->getId(), [
+                    Query::inSubquery('$id', $junction, $key, $twoWayKey, $documentIds),
                     Query::limit(PHP_INT_MAX),
                     ...$queries
-                ]);
-                \array_push($foundRelated, ...$chunkDocs);
+                ]));
+            } else {
+                $uniqueRelatedIds = array_unique($relatedIds);
+                foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                    $chunkDocs = $this->find($relatedCollection->getId(), [
+                        Query::equal('$id', $chunk),
+                        Query::limit(PHP_INT_MAX),
+                        ...$queries
+                    ]);
+                    \array_push($foundRelated, ...$chunkDocs);
+                }
             }
 
             $allRelatedDocs = $foundRelated;
@@ -8333,22 +8362,7 @@ class Database
             }
         }
 
-        foreach ($results as $index => $node) {
-            $node = $this->adapter->castingAfter($collection, $node);
-            $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node, $selections);
-
-            // Convert to custom document type if mapped
-            if (isset($this->documentTypes[$collection->getId()])) {
-                $node = $this->createDocumentInstance($collection->getId(), $node->getArrayCopy());
-            }
-
-            if (!$node->isEmpty()) {
-                $node->setAttribute('$collection', $collection->getId());
-            }
-
-            $results[$index] = $node;
-        }
+        $this->castAndDecodeBatch($collection, $results, $selections);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -8789,6 +8803,202 @@ class Database
             }
         }
         return $document;
+    }
+
+    /**
+     * Batch cast and decode for multiple documents.
+     *
+     * Combines casting() and decode() into a single pass per document,
+     * pre-computing attribute metadata once to avoid redundant work.
+     * Only processes attributes that actually need transformation.
+     *
+     * @param Document $collection
+     * @param array<Document> $results
+     * @param array<string> $selections
+     * @return void
+     */
+    private function castAndDecodeBatch(
+        Document $collection,
+        array &$results,
+        array $selections = []
+    ): void {
+        if (empty($results)) {
+            return;
+        }
+
+        $supportsCasting = $this->adapter->getSupportForCasting();
+        $collectionId = $collection->getId();
+        $hasDocumentTypes = isset($this->documentTypes[$collectionId]);
+
+        // Pre-compute attribute metadata once
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $internalAttributes = $this->getInternalAttributes();
+
+        // Separate relationships for key renaming
+        $relationshipRenames = [];
+        $regularAttributes = [];
+
+        foreach ($collectionAttributes as $attribute) {
+            if (($attribute['type'] ?? '') === self::VAR_RELATIONSHIP) {
+                $key = $attribute['$id'] ?? '';
+                $filteredKey = $this->adapter->filter($key);
+                if ($filteredKey !== $key) {
+                    $relationshipRenames[] = ['key' => $key, 'filteredKey' => $filteredKey];
+                }
+            } else {
+                $regularAttributes[] = $attribute;
+            }
+        }
+
+        // Merge non-relationship + internal attributes
+        $allAttributes = $regularAttributes;
+        foreach ($internalAttributes as $attr) {
+            $allAttributes[] = $attr;
+        }
+
+        // Pre-compute which attributes need work (casting, decoding, or filtered key fallback)
+        $workAttributes = [];
+
+        foreach ($allAttributes as $attr) {
+            $key = $attr['$id'] ?? '';
+            $type = $attr['type'] ?? '';
+            $array = $attr['array'] ?? false;
+            $filters = $attr['filters'] ?? [];
+
+            if ($key === '$permissions') {
+                continue;
+            }
+
+            $needsCasting = $supportsCasting && \in_array($type, [
+                self::VAR_ID, self::VAR_BOOLEAN, self::VAR_INTEGER, self::VAR_FLOAT
+            ]);
+            $needsDecoding = !empty($filters);
+            $filteredKey = $this->adapter->filter($key);
+            $hasFilteredKey = ($filteredKey !== $key);
+
+            // Array attributes need json_decode even without casting/filters
+            if ($needsCasting || $needsDecoding || $hasFilteredKey || $array) {
+                $workAttributes[] = [
+                    'key' => $key,
+                    'type' => $type,
+                    'array' => $array,
+                    'needsCasting' => $needsCasting,
+                    'filters' => $needsDecoding ? \array_reverse($filters) : [],
+                    'filteredKey' => $hasFilteredKey ? $filteredKey : null,
+                ];
+            }
+        }
+
+        // Pre-compute selection info
+        $hasSelections = !empty($selections);
+        $hasWildcard = $hasSelections && \in_array('*', $selections);
+        $selectionsMap = [];
+        $hasRelationshipSelections = false;
+
+        if ($hasSelections) {
+            foreach ($selections as $sel) {
+                $selectionsMap[$sel] = true;
+                if (\str_contains($sel, '.')) {
+                    $hasRelationshipSelections = true;
+                }
+            }
+        }
+
+        foreach ($results as $index => $node) {
+            $node = $this->adapter->castingAfter($collection, $node);
+            foreach ($relationshipRenames as $rename) {
+                if (
+                    \array_key_exists($rename['key'], (array)$node)
+                    || \array_key_exists($rename['filteredKey'], (array)$node)
+                ) {
+                    $value = $node->getAttribute($rename['key']);
+                    $value ??= $node->getAttribute($rename['filteredKey']);
+                    $node->removeAttribute($rename['filteredKey']);
+                    $node->setAttribute($rename['key'], $value);
+                }
+            }
+
+            $filteredValues = $hasRelationshipSelections ? [] : null;
+
+            foreach ($workAttributes as $attr) {
+                $value = $node->getAttribute($attr['key'], null);
+                if ($value === null && $attr['filteredKey'] !== null) {
+                    $value = $node->getAttribute($attr['filteredKey']);
+                    if ($value !== null) {
+                        $node->removeAttribute($attr['filteredKey']);
+                    }
+                }
+
+                if ($value === null) {
+                    if (empty($attr['filters'])) {
+                        continue;
+                    }
+                }
+
+                if ($value instanceof Operator) {
+                    continue;
+                }
+
+                if ($attr['array']) {
+                    $value = \is_string($value) ? \json_decode($value, true) : $value;
+                    $value = ($value === null) ? [] : $value;
+                } else {
+                    $value = [$value];
+                }
+
+                foreach ($value as $vi => $v) {
+                    // Cast (skip null — original casting() skips nulls)
+                    if ($attr['needsCasting'] && $v !== null) {
+                        $v = match ($attr['type']) {
+                            self::VAR_ID => (string)$v,
+                            self::VAR_BOOLEAN => (bool)$v,
+                            self::VAR_INTEGER => (int)$v,
+                            self::VAR_FLOAT => (float)$v,
+                            default => $v,
+                        };
+                    }
+
+                    // Decode filters
+                    foreach ($attr['filters'] as $filter) {
+                        $v = $this->decodeAttribute($filter, $v, $node, $attr['key']);
+                    }
+
+                    $value[$vi] = $v;
+                }
+
+                $finalValue = $attr['array'] ? $value : $value[0];
+
+                if ($filteredValues !== null) {
+                    $filteredValues[$attr['key']] = $finalValue;
+                }
+
+                if (!$hasSelections || $hasWildcard || isset($selectionsMap[$attr['key']])) {
+                    $node->setAttribute($attr['key'], $finalValue);
+                }
+            }
+
+            if ($hasRelationshipSelections && $hasSelections && !$hasWildcard) {
+                foreach ($regularAttributes as $attribute) {
+                    $key = $attribute['$id'] ?? '';
+                    if ($key === '$permissions') {
+                        continue;
+                    }
+                    if (!isset($selectionsMap[$key]) && isset($filteredValues[$key])) {
+                        $node->setAttribute($key, $filteredValues[$key]);
+                    }
+                }
+            }
+
+            if ($hasDocumentTypes) {
+                $node = $this->createDocumentInstance($collectionId, $node->getArrayCopy());
+            }
+
+            if (!$node->isEmpty()) {
+                $node->setAttribute('$collection', $collectionId);
+            }
+
+            $results[$index] = $node;
+        }
     }
 
     /**
@@ -9570,9 +9780,36 @@ class Database
                 continue;
             }
 
-            // Resolve each value independently, then intersect parent IDs
+            $relationType = $relationship->getAttribute('options')['relationType'];
+            $relSide = $relationship->getAttribute('options')['side'];
+
+            // Subquery optimization for M2M containsAll on $id
+            if (
+                $nestedAttribute === '$id'
+                && $relationType === self::RELATION_MANY_TO_MANY
+                && $collection !== null
+                && $this->adapter->getSupportForSubqueries()
+            ) {
+                $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+                $relatedCollectionDoc = $this->silent(fn () => $this->getCollection(
+                    $relationship->getAttribute('options')['relatedCollection']
+                ));
+                $junction = $this->getJunctionCollection($collection, $relatedCollectionDoc, $relSide);
+
+                $additionalQueries[] = Query::inSubqueryAll(
+                    '$id',
+                    $junction,
+                    $twoWayKey,
+                    $relationshipKey,
+                    $query->getValues()
+                );
+                $indicesToRemove[] = $index;
+                continue;
+            }
+
             $parentIdSets = [];
             $resolvedAttribute = '$id';
+            $usedSubqueries = false;
             foreach ($query->getValues() as $value) {
                 $relatedQuery = Query::equal($nestedAttribute, [$value]);
                 $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery], $collection);
@@ -9581,10 +9818,34 @@ class Database
                     return null;
                 }
 
-                $resolvedAttribute = $result['attribute'];
-                $parentIdSets[] = $result['ids'];
+                if (isset($result['subquery'])) {
+                    $additionalQueries[] = $this->createSubqueryFromResult($result);
+                    $usedSubqueries = true;
+                } elseif (isset($result['ids'])) {
+                    $resolvedAttribute = $result['attribute'];
+                    $parentIdSets[] = $result['ids'];
+                }
             }
 
+            if ($usedSubqueries) {
+                // If we also collected non-subquery ID sets, intersect them and add as an equal() constraint
+                if (!empty($parentIdSets)) {
+                    $ids = \count($parentIdSets) > 1
+                        ? \array_values(\array_intersect(...$parentIdSets))
+                        : $parentIdSets[0];
+
+                    if (empty($ids)) {
+                        return null;
+                    }
+
+                    $additionalQueries[] = Query::equal($resolvedAttribute, $ids);
+                }
+
+                $indicesToRemove[] = $index;
+                continue;
+            }
+
+            // Non-subquery path: intersect ID sets
             $ids = \count($parentIdSets) > 1
                 ? \array_values(\array_intersect(...$parentIdSets))
                 : ($parentIdSets[0] ?? []);
@@ -9667,7 +9928,11 @@ class Database
                     return null;
                 }
 
-                $additionalQueries[] = Query::equal($result['attribute'], $result['ids']);
+                if (isset($result['subquery'])) {
+                    $additionalQueries[] = $this->createSubqueryFromResult($result);
+                } elseif (isset($result['ids'])) {
+                    $additionalQueries[] = Query::equal($result['attribute'], $result['ids']);
+                }
 
                 foreach ($group['indices'] as $originalIndex) {
                     $indicesToRemove[] = $originalIndex;
@@ -9694,7 +9959,7 @@ class Database
      * @param Document $relationship
      * @param array<Query> $relatedQueries Queries on the related collection
      * @param Document|null $collection The parent collection document (needed for junction table lookups)
-     * @return array{attribute: string, ids: string[]}|null
+     * @return array{attribute: string, ids?: string[], subquery?: array<string, mixed>}|null
      */
     private function resolveRelationshipGroupToIds(
         Document $relationship,
@@ -9731,6 +9996,40 @@ class Database
             ));
         }
 
+        // Check if subqueries can be used — spatial queries need the full find() pipeline
+        // because renderConditionsForSubquery can't set attribute types on Query objects
+        $canUseSubquery = $this->adapter->getSupportForSubqueries();
+        if ($canUseSubquery) {
+            $spatialMethods = [
+                Query::TYPE_CROSSES, Query::TYPE_NOT_CROSSES,
+                Query::TYPE_DISTANCE_EQUAL, Query::TYPE_DISTANCE_NOT_EQUAL,
+                Query::TYPE_DISTANCE_GREATER_THAN, Query::TYPE_DISTANCE_LESS_THAN,
+                Query::TYPE_INTERSECTS, Query::TYPE_NOT_INTERSECTS,
+                Query::TYPE_OVERLAPS, Query::TYPE_NOT_OVERLAPS,
+                Query::TYPE_TOUCHES, Query::TYPE_NOT_TOUCHES,
+            ];
+            // Dual-purpose methods (contains, equal) that are spatial when values are arrays
+            $dualPurposeMethods = [
+                Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS,
+                Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL,
+            ];
+            foreach ($relatedQueries as $rq) {
+                if (\in_array($rq->getMethod(), $spatialMethods) || $rq->isSpatialAttribute()) {
+                    $canUseSubquery = false;
+                    break;
+                }
+                // Spatial queries carry array values (coordinates); string queries carry strings
+                if (\in_array($rq->getMethod(), $dualPurposeMethods)) {
+                    foreach ($rq->getValues() as $val) {
+                        if (\is_array($val)) {
+                            $canUseSubquery = false;
+                            break 2;
+                        }
+                    }
+                }
+            }
+        }
+
         $needsParentResolution = (
             ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
             ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
@@ -9738,26 +10037,70 @@ class Database
         );
 
         if ($relationType === self::RELATION_MANY_TO_MANY && $needsParentResolution && $collection !== null) {
-            // For many-to-many, query the junction table directly instead of relying
-            // on relationship population (which fails when resolveRelationships is false,
-            // e.g. when the outer find() is wrapped in skipRelationships()).
-            $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
-                $relatedCollection,
-                \array_merge($relatedQueries, [
-                    Query::select(['$id']),
-                    Query::limit(PHP_INT_MAX),
-                ])
-            )));
-
-            $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
-
-            if (empty($matchingIds)) {
-                return null;
-            }
-
             $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
             $relatedCollectionDoc = $this->silent(fn () => $this->getCollection($relatedCollection));
             $junction = $this->getJunctionCollection($collection, $relatedCollectionDoc, $side);
+
+            // Check if all queries are $id equals (IDs already known)
+            $allIdEquals = true;
+            $directIds = [];
+            foreach ($relatedQueries as $rq) {
+                if ($rq->getMethod() === Query::TYPE_EQUAL && $rq->getAttribute() === '$id') {
+                    foreach ($rq->getValues() as $v) {
+                        $directIds[] = $v;
+                    }
+                } else {
+                    $allIdEquals = false;
+                    break;
+                }
+            }
+
+            if ($canUseSubquery) {
+                if ($allIdEquals && !empty($directIds)) {
+                    // Mode 1: Literal filter values — IDs already known
+                    return [
+                        'attribute' => '$id',
+                        'subquery' => [
+                            'table' => $junction,
+                            'column' => $twoWayKey,
+                            'filterColumn' => $relationshipKey,
+                            'filterValues' => $directIds,
+                        ],
+                    ];
+                }
+
+                // Nested subquery: pushes the entire filter into SQL
+                // WHERE _uid IN (SELECT twoWayKey FROM junction WHERE relationshipKey IN (SELECT _uid FROM related WHERE [conditions]))
+                return [
+                    'attribute' => '$id',
+                    'subquery' => [
+                        'table' => $junction,
+                        'column' => $twoWayKey,
+                        'conditions' => [
+                            Query::inSubqueryDirect($relationshipKey, $relatedCollection, '_uid', $relatedQueries)
+                        ],
+                    ],
+                ];
+            }
+
+            // Fallback for non-SQL adapters (e.g. Mongo)
+            if ($allIdEquals && !empty($directIds)) {
+                $matchingIds = $directIds;
+            } else {
+                $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                    $relatedCollection,
+                    \array_merge($relatedQueries, [
+                        Query::select(['$id']),
+                        Query::limit(PHP_INT_MAX),
+                    ])
+                )));
+
+                $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+
+                if (empty($matchingIds)) {
+                    return null;
+                }
+            }
 
             $junctionDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find($junction, [
                 Query::equal($relationshipKey, $matchingIds),
@@ -9774,8 +10117,22 @@ class Database
 
             return empty($parentIds) ? null : ['attribute' => '$id', 'ids' => $parentIds];
         } elseif ($needsParentResolution) {
-            // For one-to-many/many-to-one parent resolution, we need relationship
-            // population to read the twoWayKey attribute from the related documents.
+            // O2M PARENT or M2O CHILD: the related collection has a FK column (twoWayKey)
+            // pointing back to this collection. Use: WHERE _uid IN (SELECT twoWayKey FROM related WHERE [conditions])
+            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+
+            if ($canUseSubquery) {
+                return [
+                    'attribute' => '$id',
+                    'subquery' => [
+                        'table' => $relatedCollection,
+                        'column' => $twoWayKey,
+                        'conditions' => $relatedQueries,
+                    ],
+                ];
+            }
+
+            // Fallback: execute find with relationship population
             $matchingDocs = $this->silent(fn () => $this->find(
                 $relatedCollection,
                 \array_merge($relatedQueries, [
@@ -9783,7 +10140,6 @@ class Database
                 ])
             ));
 
-            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
             $parentIds = [];
 
             foreach ($matchingDocs as $doc) {
@@ -9810,6 +10166,19 @@ class Database
 
             return empty($parentIds) ? null : ['attribute' => '$id', 'ids' => $parentIds];
         } else {
+            if ($canUseSubquery) {
+                // Simple FK resolution: WHERE relationshipKey IN (SELECT _uid FROM relatedTable WHERE [conditions])
+                return [
+                    'attribute' => $relationshipKey,
+                    'subquery' => [
+                        'table' => $relatedCollection,
+                        'column' => '_uid',
+                        'conditions' => $relatedQueries,
+                    ],
+                ];
+            }
+
+            // Fallback for non-SQL adapters
             $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                 $relatedCollection,
                 \array_merge($relatedQueries, [
@@ -9821,6 +10190,34 @@ class Database
             $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
             return empty($matchingIds) ? null : ['attribute' => $relationshipKey, 'ids' => $matchingIds];
         }
+    }
+
+    /**
+     * Create a Query object from a subquery result returned by resolveRelationshipGroupToIds.
+     *
+     * @param array{attribute: string, subquery: array<string, mixed>} $result
+     * @return Query
+     */
+    private function createSubqueryFromResult(array $result): Query
+    {
+        $sub = $result['subquery'];
+
+        if (isset($sub['conditions'])) {
+            return Query::inSubqueryDirect(
+                $result['attribute'],
+                $sub['table'],
+                $sub['column'],
+                $sub['conditions']
+            );
+        }
+
+        return Query::inSubquery(
+            $result['attribute'],
+            $sub['table'],
+            $sub['column'],
+            $sub['filterColumn'],
+            $sub['filterValues']
+        );
     }
 
     /**

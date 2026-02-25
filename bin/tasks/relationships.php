@@ -227,6 +227,7 @@ $cli
                 'batch1000' => benchmarkBatch1000($database),
                 'batch5000' => benchmarkBatch5000($database),
                 'pagination' => benchmarkPagination($database),
+                'm2m' => benchmarkM2M($database),
             ];
         }
 
@@ -458,6 +459,116 @@ function benchmarkPagination(Database $database): array
 }
 
 /**
+ * Benchmark M2M relationship queries (authors <-> articles).
+ *
+ * Tests the key query patterns that the subquery optimization targets:
+ * - equal('articles.$id', [...])      — single ID lookup
+ * - equal('articles.$id', [...])      — multi-ID lookup (3 IDs)
+ * - containsAll('articles.$id', [...]) — must match ALL IDs
+ */
+function benchmarkM2M(Database $database): array
+{
+    $results = [];
+
+    // Grab some article IDs to query against
+    $articles = $database->skipRelationships(fn () => $database->find('articles', [
+        Query::select(['$id']),
+        Query::limit(10),
+    ]));
+
+    if (count($articles) < 3) {
+        Console::warning('Not enough articles for M2M benchmark');
+        return $results;
+    }
+
+    $singleId = $articles[0]->getId();
+    $threeIds = [$articles[0]->getId(), $articles[1]->getId(), $articles[2]->getId()];
+    $twoIds   = [$articles[0]->getId(), $articles[1]->getId()];
+
+    $warmup = 2;
+    $iterations = 10;
+
+    // --- equal.$id with single value ---
+    for ($i = 0; $i < $warmup; $i++) {
+        $database->find('authors', [
+            Query::equal('articles.$id', [$singleId]),
+            Query::limit(5000),
+        ]);
+    }
+    $start = microtime(true);
+    for ($i = 0; $i < $iterations; $i++) {
+        $docs = $database->find('authors', [
+            Query::equal('articles.$id', [$singleId]),
+            Query::limit(5000),
+        ]);
+    }
+    $results['equal_single'] = (microtime(true) - $start) / $iterations;
+    $results['equal_single_count'] = count($docs);
+
+    // --- equal.$id with 3 values ---
+    for ($i = 0; $i < $warmup; $i++) {
+        $database->find('authors', [
+            Query::equal('articles.$id', $threeIds),
+            Query::limit(5000),
+        ]);
+    }
+    $start = microtime(true);
+    for ($i = 0; $i < $iterations; $i++) {
+        $docs = $database->find('authors', [
+            Query::equal('articles.$id', $threeIds),
+            Query::limit(5000),
+        ]);
+    }
+    $results['equal_multi'] = (microtime(true) - $start) / $iterations;
+    $results['equal_multi_count'] = count($docs);
+
+    // --- containsAll.$id with 2 values ---
+    for ($i = 0; $i < $warmup; $i++) {
+        $database->find('authors', [
+            Query::containsAll('articles.$id', $twoIds),
+            Query::limit(5000),
+        ]);
+    }
+    $start = microtime(true);
+    for ($i = 0; $i < $iterations; $i++) {
+        $docs = $database->find('authors', [
+            Query::containsAll('articles.$id', $twoIds),
+            Query::limit(5000),
+        ]);
+    }
+    $results['containsAll'] = (microtime(true) - $start) / $iterations;
+    $results['containsAll_count'] = count($docs);
+
+    // --- Reverse direction: find articles by author.$id ---
+    $authors = $database->skipRelationships(fn () => $database->find('authors', [
+        Query::select(['$id']),
+        Query::limit(1),
+    ]));
+
+    if (!empty($authors)) {
+        $authorId = $authors[0]->getId();
+
+        for ($i = 0; $i < $warmup; $i++) {
+            $database->find('articles', [
+                Query::equal('authors.$id', [$authorId]),
+                Query::limit(5000),
+            ]);
+        }
+        $start = microtime(true);
+        for ($i = 0; $i < $iterations; $i++) {
+            $docs = $database->find('articles', [
+                Query::equal('authors.$id', [$authorId]),
+                Query::limit(5000),
+            ]);
+        }
+        $results['reverse_equal'] = (microtime(true) - $start) / $iterations;
+        $results['reverse_equal_count'] = count($docs);
+    }
+
+    return $results;
+}
+
+/**
  * Display relationship structure diagram
  */
 function displayRelationshipStructure(): void
@@ -550,4 +661,55 @@ function displayBenchmarkResults(array $results, int $runs): void
     }
 
     Console::log('');
+
+    // --- M2M Benchmark Results ---
+    $m2mKeys = ['equal_single', 'equal_multi', 'containsAll', 'reverse_equal'];
+    $m2mLabels = [
+        'equal_single'  => "equal(\$id, [1 val])",
+        'equal_multi'   => "equal(\$id, [3 vals])",
+        'containsAll'   => "containsAll(\$id, [2 vals])",
+        'reverse_equal' => "reverse equal(\$id, [1 val])",
+    ];
+
+    $hasM2M = false;
+    foreach ($results as $run) {
+        if (!empty($run['m2m'])) {
+            $hasM2M = true;
+            break;
+        }
+    }
+
+    if ($hasM2M) {
+        Console::success("\n========================================");
+        Console::success("M2M Relationship Query Benchmarks");
+        Console::success("========================================\n");
+
+        $labelWidth = 32;
+        $header = str_pad('Query', $labelWidth) . ' | ' . str_pad('Avg Time', $timeWidth) . ' | ' . 'Results';
+        Console::info($header);
+        Console::info(str_repeat('-', strlen($header) + 10));
+
+        foreach ($m2mKeys as $key) {
+            $total = 0;
+            $count = 0;
+            $resultCount = '?';
+            foreach ($results as $run) {
+                if (isset($run['m2m'][$key])) {
+                    $total += $run['m2m'][$key];
+                    $count++;
+                    $resultCount = $run['m2m'][$key . '_count'] ?? '?';
+                }
+            }
+            if ($count > 0) {
+                $avg = $total / $count;
+                $time = number_format($avg * 1000, 2);
+                $row = str_pad($m2mLabels[$key] ?? $key, $labelWidth) . ' | '
+                     . str_pad($time . ' ms', $timeWidth) . ' | '
+                     . $resultCount . ' docs';
+                Console::log($row);
+            }
+        }
+
+        Console::log('');
+    }
 }

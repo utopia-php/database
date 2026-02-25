@@ -3354,7 +3354,6 @@ abstract class SQL extends Adapter
                 }
             }
 
-        try {
             $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -3366,7 +3365,7 @@ abstract class SQL extends Adapter
             $result = $result[0];
         }
 
-        return $result[0]['sum'] ?? 0;
+        return $result['sum'] ?? 0;
     }
 
     /**
@@ -3434,13 +3433,17 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
-        }
-
         try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
             $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);

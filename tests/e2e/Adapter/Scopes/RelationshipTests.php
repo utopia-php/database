@@ -3129,6 +3129,8 @@ trait RelationshipTests
         $this->assertCount(1, $posts);
         $this->assertEquals('post3', $posts[0]->getId());
 
+        var_dump('==========================================================================');
+
         // Filter authors by their posts' published status
         $authors = $database->find('authorsFilter', [
             Query::equal('posts.published', [true]),

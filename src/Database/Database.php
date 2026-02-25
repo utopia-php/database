@@ -8316,6 +8316,7 @@ class Database
         $offset = Query::getOffsetQuery($queries, 0);
         $orders = Query::getOrderQueries($queries);
         $vectors = Query::getVectorQueries($queries);
+        $joins = Query::getJoinQueries($queries);
 
         $uniqueOrderBy = false;
         foreach ($orders as $order) {
@@ -8362,7 +8363,6 @@ class Database
         } else {
             $queries = $queriesOrNull;
             $filters = Query::getFilterQueries($queries);
-
             $results = $this->adapter->find(
                 $context,
                 $limit ?? 25,
@@ -8377,6 +8377,16 @@ class Database
                 orderQueries: $orders
             );
         }
+
+        var_dump($collection->getId());
+        var_dump('$relationships===');
+        var_dump($relationships);
+        var_dump('$selects===');
+        var_dump($selects);
+        var_dump('$nestedSelections===');
+        var_dump($nestedSelections);
+        var_dump(!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections)));
+        var_dump($results);
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
@@ -8575,8 +8585,10 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $queries = Query::getFilterQueries($queries);
         $queries = $this->convertQueries($context, $queries);
+
+        $joins = Query::getJoinQueries($queries);
+        $queries = Query::getFilterQueries($queries);
 
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
@@ -9577,7 +9589,7 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>|null Returns null if relationship filters cannot match any documents
      */
-    private function convertRelationshipFiltersToSubqueries(
+    private function convertRelationshipQueries(
         array $relationships,
         array $queries,
         ?Document $collection = null,

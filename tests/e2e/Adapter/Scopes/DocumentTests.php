@@ -5918,7 +5918,8 @@ trait DocumentTests
             '$id' => 'doc11',
             '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
             'string' => 'no_dates',
-            '$createdAt' => $customDate
+            '$createdAt' => $customDate,
+            '$updatedAt' => $customDate
         ]));
 
         $newUpdatedAt = $doc11->getUpdatedAt();

@@ -2352,7 +2352,7 @@ abstract class SQL extends Adapter
 
         // Literal filter values
         $filterCol = $this->quote($this->filter($meta['filterColumn']));
-        $filterValues = $meta['filterValues'];
+        $filterValues = \array_values(\array_unique($meta['filterValues'], SORT_REGULAR));
 
         if (empty($filterValues)) {
             return '1 = 0';

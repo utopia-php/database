@@ -1598,9 +1598,14 @@ abstract class Adapter
 
         $mappings = [];
         foreach ($results as $doc) {
+            $parentId = $doc->getAttribute($parentColumn);
+            $childId = $doc->getAttribute($childColumn);
+            if ($parentId === null || $childId === null) {
+                continue;
+            }
             $mappings[] = [
-                $parentColumn => $doc->getAttribute($parentColumn),
-                $childColumn => $doc->getAttribute($childColumn),
+                $parentColumn => (string) $parentId,
+                $childColumn => (string) $childId,
             ];
         }
 

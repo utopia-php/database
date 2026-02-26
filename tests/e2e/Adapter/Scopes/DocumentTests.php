@@ -2177,6 +2177,46 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(1, count($documents));
+
+        $phrases = [
+            '+',             // lone plus operator
+            '-',             // lone minus operator
+            '~',             // lone negation
+            '*',             // wildcard alone
+            '"',             // just a quote
+            '(',             // opening paren
+            ')',             // closing paren
+            '+(',            // plus + unmatched paren
+            '-(',            // minus + unmatched paren
+            '("',            // unmatched paren + quote
+            '+("',           // combination of +, paren, quote
+            ')+',            // closing paren + operator
+            '""',            // double quote alone
+            '(((',           // multiple unmatched parens
+            ')))',           // multiple unmatched closing parens
+            '+~',            // plus + negation
+            '--',            // double minus
+            '~~',            // double negation
+            '+*',            // plus + wildcard
+            '-*',            // minus + wildcard
+            '+"test',        // plus + unmatched quote
+            '"test',         // unmatched quote
+            '"test\0',       // unmatched quote + null byte
+            '+("test\0',     // combination + unmatched quote + null byte
+            "\0",            // null byte alone
+            "\x01",          // control char 1
+            "\x02",          // control char 2
+            "\x1f",          // control char 31
+        ];
+        foreach ($phrases as $phrase) {
+            $documents = $database->find($collection, [
+                Query::search('ft', $phrase),
+            ]);
+        }
+
+        $this->assertEquals(12, 222);
+
+        var_dump($documents);
     }
 
     public function testFindMultipleConditions(): void

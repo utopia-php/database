@@ -8378,6 +8378,13 @@ class Database
             );
         }
 
+        var_dump('find =================================');
+        var_dump($collection->getId());
+        //var_dump($queriesOrNull);
+        var_dump($selects);
+        var_dump($nestedSelections);
+        var_dump($results);
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
                 $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
@@ -9366,6 +9373,7 @@ class Database
          */
         if (!empty($relationships)) {
             [$queries, $idAdded] = QueryContext::addSelect($queries, Query::select('$id', system: true));
+          //  [$queries, $idAdded] = QueryContext::addSelect($queries, Query::select('*', system: true));
         }
 
         return [$queries, $nestedSelections];

@@ -9639,8 +9639,6 @@ class Database
             // Resolve each value independently, then intersect parent IDs
             $parentIdSets = [];
             $resolvedAttribute = '$id';
-
-
             foreach ($query->getValues() as $value) {
                 $relatedQuery = Query::equal($nestedAttribute, [$value]);
                 $result = $this->resolveRelationshipGroupToIds($relationship, [$relatedQuery], $collection);
@@ -9843,7 +9841,7 @@ class Database
             $matchingDocs = $this->silent(fn () => $this->find(
                 $relatedCollection,
                 \array_merge($relatedQueries, [
-                    Query::select('$id'),
+                    //Query::select('$id'),
                     Query::limit(PHP_INT_MAX),
                 ])
             ));

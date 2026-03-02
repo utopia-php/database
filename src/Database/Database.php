@@ -9841,7 +9841,6 @@ class Database
             $matchingDocs = $this->silent(fn () => $this->find(
                 $relatedCollection,
                 \array_merge($relatedQueries, [
-                    //Query::select('$id'),
                     Query::limit(PHP_INT_MAX),
                 ])
             ));

@@ -40,7 +40,8 @@
         "utopia-php/framework": "0.33.*",
         "utopia-php/cache": "1.*",
         "utopia-php/pools": "1.*",
-        "utopia-php/mongo": "1.*"
+        "utopia-php/mongo": "1.*",
+        "utopia-php/query": "0.1.*"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",
@@ -58,6 +59,12 @@
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
 
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "git@github.com:utopia-php/query.git"
+        }
+    ],
     "config": {
         "allow-plugins": {
             "php-http/discovery": false,

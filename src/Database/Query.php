@@ -6,6 +6,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Query\Exception as BaseQueryException;
 use Utopia\Query\Query as BaseQuery;
 
+/** @phpstan-consistent-constructor */
 class Query extends BaseQuery
 {
     protected bool $isObjectAttribute = false;
@@ -23,11 +24,9 @@ class Query extends BaseQuery
     }
 
     /**
-     * @param string $query
-     * @return self
      * @throws QueryException
      */
-    public static function parse(string $query): self
+    public static function parse(string $query): static
     {
         try {
             return parent::parse($query);
@@ -38,10 +37,9 @@ class Query extends BaseQuery
 
     /**
      * @param array<string, mixed> $query
-     * @return self
      * @throws QueryException
      */
-    public static function parseQuery(array $query): self
+    public static function parseQuery(array $query): static
     {
         try {
             return parent::parseQuery($query);
@@ -51,25 +49,19 @@ class Query extends BaseQuery
     }
 
     /**
-     * Helper method to create Query with cursorAfter method
-     *
      * @param Document $value
-     * @return Query
      */
-    public static function cursorAfter(mixed $value): self
+    public static function cursorAfter(mixed $value): static
     {
-        return new self(self::TYPE_CURSOR_AFTER, values: [$value]);
+        return new static(self::TYPE_CURSOR_AFTER, values: [$value]);
     }
 
     /**
-     * Helper method to create Query with cursorBefore method
-     *
      * @param Document $value
-     * @return Query
      */
-    public static function cursorBefore(mixed $value): self
+    public static function cursorBefore(mixed $value): static
     {
-        return new self(self::TYPE_CURSOR_BEFORE, values: [$value]);
+        return new static(self::TYPE_CURSOR_BEFORE, values: [$value]);
     }
 
     /**

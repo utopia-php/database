@@ -2287,16 +2287,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "601490f2967f7b628d4fb62994ba39fe119907db"
+                "reference": "964a10ed3185490505f4c0062f2eb7b89287fb27"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/601490f2967f7b628d4fb62994ba39fe119907db",
-                "reference": "601490f2967f7b628d4fb62994ba39fe119907db",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/964a10ed3185490505f4c0062f2eb7b89287fb27",
+                "reference": "964a10ed3185490505f4c0062f2eb7b89287fb27",
                 "shasum": ""
             },
             "require": {
@@ -2344,10 +2344,10 @@
                 "utopia"
             ],
             "support": {
-                "source": "https://github.com/utopia-php/query/tree/0.1.0",
+                "source": "https://github.com/utopia-php/query/tree/0.1.1",
                 "issues": "https://github.com/utopia-php/query/issues"
             },
-            "time": "2026-03-03T07:49:53+00:00"
+            "time": "2026-03-03T09:05:14+00:00"
         },
         {
             "name": "utopia-php/telemetry",

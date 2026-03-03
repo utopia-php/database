@@ -1,0 +1,3 @@
+parameters:
+    stubFiles:
+        - stubs/Query.stub

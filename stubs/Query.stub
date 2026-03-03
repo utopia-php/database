@@ -1,0 +1,314 @@
+<?php
+
+namespace Utopia\Query;
+
+/** @phpstan-consistent-constructor */
+class Query
+{
+    /** @param array<mixed> $values */
+    public function __construct(string $method, string $attribute = '', array $values = []) {}
+
+    /** @return static */
+    public static function parse(string $query): self {}
+
+    /**
+     * @param array<string, mixed> $query
+     * @return static
+     */
+    public static function parseQuery(array $query): self {}
+
+    /**
+     * @param array<string> $queries
+     * @return array<static>
+     */
+    public static function parseQueries(array $queries): array {}
+
+    /**
+     * @param array<string|int|float|bool|array<mixed,mixed>> $values
+     * @return static
+     */
+    public static function equal(string $attribute, array $values): self {}
+
+    /**
+     * @param string|int|float|bool|array<mixed,mixed> $value
+     * @return static
+     */
+    public static function notEqual(string $attribute, string|int|float|bool|array $value): self {}
+
+    /** @return static */
+    public static function lessThan(string $attribute, string|int|float|bool $value): self {}
+
+    /** @return static */
+    public static function lessThanEqual(string $attribute, string|int|float|bool $value): self {}
+
+    /** @return static */
+    public static function greaterThan(string $attribute, string|int|float|bool $value): self {}
+
+    /** @return static */
+    public static function greaterThanEqual(string $attribute, string|int|float|bool $value): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function contains(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function containsAny(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function notContains(string $attribute, array $values): self {}
+
+    /** @return static */
+    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self {}
+
+    /** @return static */
+    public static function notBetween(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self {}
+
+    /** @return static */
+    public static function search(string $attribute, string $value): self {}
+
+    /** @return static */
+    public static function notSearch(string $attribute, string $value): self {}
+
+    /**
+     * @param array<string> $attributes
+     * @return static
+     */
+    public static function select(array $attributes): self {}
+
+    /** @return static */
+    public static function orderDesc(string $attribute = ''): self {}
+
+    /** @return static */
+    public static function orderAsc(string $attribute = ''): self {}
+
+    /** @return static */
+    public static function orderRandom(): self {}
+
+    /** @return static */
+    public static function limit(int $value): self {}
+
+    /** @return static */
+    public static function offset(int $value): self {}
+
+    /** @return static */
+    public static function cursorAfter(mixed $value): self {}
+
+    /** @return static */
+    public static function cursorBefore(mixed $value): self {}
+
+    /** @return static */
+    public static function isNull(string $attribute): self {}
+
+    /** @return static */
+    public static function isNotNull(string $attribute): self {}
+
+    /** @return static */
+    public static function startsWith(string $attribute, string $value): self {}
+
+    /** @return static */
+    public static function notStartsWith(string $attribute, string $value): self {}
+
+    /** @return static */
+    public static function endsWith(string $attribute, string $value): self {}
+
+    /** @return static */
+    public static function notEndsWith(string $attribute, string $value): self {}
+
+    /** @return static */
+    public static function createdBefore(string $value): self {}
+
+    /** @return static */
+    public static function createdAfter(string $value): self {}
+
+    /** @return static */
+    public static function updatedBefore(string $value): self {}
+
+    /** @return static */
+    public static function updatedAfter(string $value): self {}
+
+    /** @return static */
+    public static function createdBetween(string $start, string $end): self {}
+
+    /** @return static */
+    public static function updatedBetween(string $start, string $end): self {}
+
+    /**
+     * @param array<Query> $queries
+     * @return static
+     */
+    public static function or(array $queries): self {}
+
+    /**
+     * @param array<Query> $queries
+     * @return static
+     */
+    public static function and(array $queries): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function containsAll(string $attribute, array $values): self {}
+
+    /**
+     * @param array<Query> $queries
+     * @return static
+     */
+    public static function elemMatch(string $attribute, array $queries): self {}
+
+    /**
+     * @param array<static> $queries
+     * @param array<string> $types
+     * @return array<static>
+     */
+    public static function getByType(array $queries, array $types, bool $clone = true): array {}
+
+    /**
+     * @param array<static> $queries
+     * @return array<static>
+     */
+    public static function getCursorQueries(array $queries, bool $clone = true): array {}
+
+    /**
+     * @param array<mixed> $queries
+     * @return array{
+     *     filters: array<static>,
+     *     selections: array<static>,
+     *     limit: int|null,
+     *     offset: int|null,
+     *     orderAttributes: array<string>,
+     *     orderTypes: array<string>,
+     *     cursor: mixed,
+     *     cursorDirection: string|null
+     * }
+     */
+    public static function groupByType(array $queries): array {}
+
+    /** @return static */
+    public function setMethod(string $method): self {}
+
+    /** @return static */
+    public function setAttribute(string $attribute): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public function setValues(array $values): self {}
+
+    /** @return static */
+    public function setValue(mixed $value): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function distanceEqual(string $attribute, array $values, int|float $distance, bool $meters = false): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function distanceNotEqual(string $attribute, array $values, int|float $distance, bool $meters = false): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance, bool $meters = false): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function distanceLessThan(string $attribute, array $values, int|float $distance, bool $meters = false): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function intersects(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function notIntersects(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function crosses(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function notCrosses(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function overlaps(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function notOverlaps(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function touches(string $attribute, array $values): self {}
+
+    /**
+     * @param array<mixed> $values
+     * @return static
+     */
+    public static function notTouches(string $attribute, array $values): self {}
+
+    /**
+     * @param array<float> $vector
+     * @return static
+     */
+    public static function vectorDot(string $attribute, array $vector): self {}
+
+    /**
+     * @param array<float> $vector
+     * @return static
+     */
+    public static function vectorCosine(string $attribute, array $vector): self {}
+
+    /**
+     * @param array<float> $vector
+     * @return static
+     */
+    public static function vectorEuclidean(string $attribute, array $vector): self {}
+
+    /** @return static */
+    public static function regex(string $attribute, string $pattern): self {}
+
+    /**
+     * @param array<string> $attributes
+     * @return static
+     */
+    public static function exists(array $attributes): self {}
+
+    /**
+     * @param string|int|float|bool|array<mixed,mixed> $attribute
+     * @return static
+     */
+    public static function notExists(string|int|float|bool|array $attribute): self {}
+}

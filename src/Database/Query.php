@@ -32,9 +32,6 @@ class Query extends BaseQuery
         try {
             return parent::parse($query);
         } catch (BaseQueryException $e) {
-            if ($e instanceof QueryException) {
-                throw $e;
-            }
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -49,9 +46,6 @@ class Query extends BaseQuery
         try {
             return parent::parseQuery($query);
         } catch (BaseQueryException $e) {
-            if ($e instanceof QueryException) {
-                throw $e;
-            }
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -109,7 +103,7 @@ class Query extends BaseQuery
     /**
      * Iterates through queries and groups them by type
      *
-     * @param array<BaseQuery> $queries
+     * @param array<Query> $queries
      * @return array{
      *     filters: array<Query>,
      *     selections: array<Query>,
@@ -133,7 +127,7 @@ class Query extends BaseQuery
         $cursorDirection = null;
 
         foreach ($queries as $query) {
-            if (!$query instanceof BaseQuery) {
+            if (!$query instanceof self) {
                 continue;
             }
 

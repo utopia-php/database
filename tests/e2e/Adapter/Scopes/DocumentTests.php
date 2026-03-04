@@ -2181,7 +2181,7 @@ trait DocumentTests
         $phrases = ["Álvaro"];
 
         foreach ($phrases as $phrase) {
-            $documents = $database->find($collection, [
+            $database->find($collection, [
                 Query::search('ft', $phrase),
             ]);
         }

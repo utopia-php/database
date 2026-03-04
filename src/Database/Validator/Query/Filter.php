@@ -267,7 +267,7 @@ class Filter extends Base
         if (
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS]) &&
-            $attributeSchema['type'] !== Database::VAR_STRING &&
+            !in_array($attributeSchema['type'], Database::STRING_TYPES) &&
             $attributeSchema['type'] !== Database::VAR_OBJECT &&
             !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
         ) {

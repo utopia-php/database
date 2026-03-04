@@ -69,6 +69,15 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
+    // All string types
+    public const STRING_TYPES = [
+        self::VAR_STRING,
+        self::VAR_VARCHAR,
+        self::VAR_TEXT,
+        self::VAR_MEDIUMTEXT,
+        self::VAR_LONGTEXT,
+    ];
+
     // All spatial types
     public const SPATIAL_TYPES = [
         self::VAR_POINT,
@@ -1683,7 +1692,7 @@ class Database
                         /**
                          * mysql does not save length in collection when length = attributes size
                          */
-                        if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
+                        if (in_array($collectionAttribute->getAttribute('type'), self::STRING_TYPES)) {
                             if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = null;
                             }
@@ -4478,7 +4487,7 @@ class Database
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
-                    if ($attributeType === self::VAR_STRING) {
+                    if (in_array($attributeType, self::STRING_TYPES)) {
                         if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }

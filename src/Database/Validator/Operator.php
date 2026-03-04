@@ -402,7 +402,7 @@ class Operator extends Validator
 
                 break;
             case DatabaseOperator::TYPE_STRING_CONCAT:
-                if ($type !== Database::VAR_STRING || $isArray) {
+                if (!in_array($type, Database::STRING_TYPES) || $isArray) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -412,7 +412,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === Database::VAR_STRING) {
+                if ($this->currentDocument !== null && in_array($type, Database::STRING_TYPES)) {
                     $currentString = $this->currentDocument->getAttribute($operator->getAttribute()) ?? '';
                     $concatValue = $values[0];
                     $predictedLength = strlen($currentString) + strlen($concatValue);
@@ -430,7 +430,7 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_STRING_REPLACE:
                 // Replace only works on string types
-                if ($type !== Database::VAR_STRING) {
+                if (!in_array($type, Database::STRING_TYPES)) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }

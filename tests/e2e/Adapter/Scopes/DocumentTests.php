@@ -2179,6 +2179,95 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
     }
 
+    /**
+     * Regression: accented characters and non-operator special chars
+     * previously caused SQLSTATE[42000] syntax error in FTS BOOLEAN MODE.
+     *
+     * @see https://appwrite.sentry.io/issues/5628237003
+     */
+    public function testFindFulltextAccentedAndSpecialChars(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'full_text_unicode';
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ]);
+
+        $this->assertTrue($database->createAttribute($collection, 'nombre', Database::VAR_STRING, 128, true));
+        $this->assertTrue($database->createIndex($collection, 'nombre-ft', Database::INDEX_FULLTEXT, ['nombre']));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Luis García'
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Álvaro Yair Cuéllar'
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Fernando naïve über'
+        ]));
+
+        /**
+         * Accented characters must not cause FTS parser errors
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'García'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'Álvaro'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'Cuéllar'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        /**
+         * Non-operator special chars (! . #) were not stripped by old code,
+         * producing values like "!!!...###*" that crash MySQL's FTS parser.
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '!!!...###'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', '$$$%%%^^^'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        /**
+         * FTS operator-only input also must not error
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '+-*@<>~'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        /**
+         * Mixed special chars + accented word should still find results
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '@García!'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+    }
+
     public function testFindMultipleConditions(): void
     {
         /** @var Database $database */

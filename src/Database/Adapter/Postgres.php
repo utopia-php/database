@@ -1921,8 +1921,8 @@ class Postgres extends SQL
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
 
-        /** Keep only unicode letters, numbers, and whitespace. */
-        $value = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $value);
+        /** Keep only unicode letters, numbers, underscores, and whitespace. */
+        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value);
         $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
         $value = trim($value);
 

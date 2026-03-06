@@ -9206,12 +9206,8 @@ class Database
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
-            $hashParts = [];
-
-            if (!empty($selects)) {
-                \sort($selects);
-                $hashParts[] = \json_encode($selects);
-            }
+            $sortedSelects = $selects;
+            \sort($sortedSelects);
 
             $allFilters = \array_merge(
                 \array_keys(self::$filters),
@@ -9221,14 +9217,13 @@ class Database
                 ? \array_values(\array_diff($allFilters, \array_keys($this->disabledFilters ?? [])))
                 : [];
             \sort($enabled);
-            $hashParts[] = \json_encode([
-                $this->resolveRelationships ? '1' : '0',
-                $enabled,
-            ]);
 
-            if (!empty($hashParts)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode('|', $hashParts));
-            }
+            $payload = \json_encode([
+                'selects' => $sortedSelects,
+                'relationships' => $this->resolveRelationships,
+                'filters' => $enabled,
+            ]);
+            $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 
         return [

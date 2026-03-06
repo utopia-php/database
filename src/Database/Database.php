@@ -9222,7 +9222,7 @@ class Database
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
                 'filters' => $enabled,
-            ]);
+            ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 

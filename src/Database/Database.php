@@ -9206,8 +9206,28 @@ class Database
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
+            $hashParts = [];
+
             if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
+                $hashParts[] = \implode($selects);
+            }
+
+            // Include non-default config state to prevent cache poisoning when
+            // documents are fetched with filters/relationships disabled
+            if (!$this->filter || !$this->resolveRelationships || !empty($this->disabledFilters)) {
+                $configParts = [$this->filter ? '1' : '0', $this->resolveRelationships ? '1' : '0'];
+
+                if (!empty($this->disabledFilters)) {
+                    $disabled = \array_keys($this->disabledFilters);
+                    \sort($disabled);
+                    $configParts[] = \implode(',', $disabled);
+                }
+
+                $hashParts[] = \implode(':', $configParts);
+            }
+
+            if (!empty($hashParts)) {
+                $documentHashKey = $documentKey . ':' . \md5(\implode('|', $hashParts));
             }
         }
 

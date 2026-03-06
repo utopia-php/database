@@ -3148,11 +3148,13 @@ abstract class SQL extends Adapter
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
+var_dump($sql);
         try {
             $stmt = $this->getPDO()->prepare($sql);
 
             foreach ($binds as $key => $value) {
+                var_dump($key);
+                var_dump($value);
                 if (gettype($value) === 'double') {
                     $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
                 } else {

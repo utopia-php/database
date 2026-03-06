@@ -9209,7 +9209,8 @@ class Database
             $hashParts = [];
 
             if (!empty($selects)) {
-                $hashParts[] = \implode($selects);
+                \sort($selects);
+                $hashParts[] = \json_encode($selects);
             }
 
             $allFilters = \array_merge(

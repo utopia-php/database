@@ -9207,7 +9207,7 @@ class Database
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
             if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode('', $selects));
+                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
             }
         }
 

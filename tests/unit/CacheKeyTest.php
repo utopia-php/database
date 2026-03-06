@@ -10,6 +10,9 @@ use Utopia\Database\Database;
 
 class CacheKeyTest extends TestCase
 {
+    /**
+     * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
+     */
     private function createDatabase(array $instanceFilters = []): Database
     {
         $adapter = $this->createMock(Adapter::class);

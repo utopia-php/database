@@ -9220,10 +9220,10 @@ class Database
                 if (!empty($this->disabledFilters)) {
                     $disabled = \array_keys($this->disabledFilters);
                     \sort($disabled);
-                    $configParts[] = \implode(',', $disabled);
+                    $configParts[] = \json_encode($disabled);
                 }
 
-                $hashParts[] = \implode(':', $configParts);
+                $hashParts[] = \json_encode($configParts);
             }
 
             if (!empty($hashParts)) {

@@ -471,6 +471,10 @@ class Database
     ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        foreach ($filters as $name => $callbacks) {
+            $filters[$name]['signature'] = self::computeCallableSignature($callbacks['encode'])
+                . ':' . self::computeCallableSignature($callbacks['decode']);
+        }
         $this->instanceFilters = $filters;
 
         $this->setAuthorization(new Authorization());
@@ -8610,6 +8614,7 @@ class Database
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,
+            'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
     }
 
@@ -9209,19 +9214,34 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $allFilters = \array_merge(
-                \array_keys(self::$filters),
-                \array_keys($this->instanceFilters)
-            );
-            $enabled = $this->filter
-                ? \array_values(\array_diff($allFilters, \array_keys($this->disabledFilters ?? [])))
-                : [];
-            \sort($enabled);
+            $filterSignatures = [];
+            if ($this->filter) {
+                $disabled = $this->disabledFilters ?? [];
+
+                foreach (self::$filters as $name => $callbacks) {
+                    if (isset($disabled[$name])) {
+                        continue;
+                    }
+                    if (\array_key_exists($name, $this->instanceFilters)) {
+                        continue;
+                    }
+                    $filterSignatures[$name] = $callbacks['signature'];
+                }
+
+                foreach ($this->instanceFilters as $name => $callbacks) {
+                    if (isset($disabled[$name])) {
+                        continue;
+                    }
+                    $filterSignatures[$name] = $callbacks['signature'];
+                }
+
+                \ksort($filterSignatures);
+            }
 
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
-                'filters' => $enabled,
+                'filters' => $filterSignatures,
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -9231,6 +9251,21 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    private static function computeCallableSignature(callable $callable): string
+    {
+        if (\is_string($callable)) {
+            return $callable;
+        }
+
+        if (\is_array($callable)) {
+            $class = \is_object($callable[0]) ? \get_class($callable[0]) : $callable[0];
+            return $class . '::' . $callable[1];
+        }
+
+        $ref = new \ReflectionFunction($callable);
+        return $ref->getFileName() . ':' . $ref->getStartLine();
     }
 
     /**

@@ -9212,19 +9212,18 @@ class Database
                 $hashParts[] = \implode($selects);
             }
 
-            // Include non-default config state to prevent cache poisoning when
-            // documents are fetched with filters/relationships disabled
-            if (!$this->filter || !$this->resolveRelationships || !empty($this->disabledFilters)) {
-                $configParts = [$this->filter ? '1' : '0', $this->resolveRelationships ? '1' : '0'];
-
-                if (!empty($this->disabledFilters)) {
-                    $disabled = \array_keys($this->disabledFilters);
-                    \sort($disabled);
-                    $configParts[] = \json_encode($disabled);
-                }
-
-                $hashParts[] = \json_encode($configParts);
-            }
+            $allFilters = \array_merge(
+                \array_keys(self::$filters),
+                \array_keys($this->instanceFilters)
+            );
+            $enabled = $this->filter
+                ? \array_values(\array_diff($allFilters, \array_keys($this->disabledFilters ?? [])))
+                : [];
+            \sort($enabled);
+            $hashParts[] = \json_encode([
+                $this->resolveRelationships ? '1' : '0',
+                $enabled,
+            ]);
 
             if (!empty($hashParts)) {
                 $documentHashKey = $documentKey . ':' . \md5(\implode('|', $hashParts));

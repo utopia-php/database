@@ -2589,6 +2589,78 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Bulk update attributes for many documents by their IDs
+     *
+     * @param Document $collection
+     * @param array<string> $ids
+     * @param array<string,mixed> $attributes Public attribute keys (e.g. "$updatedAt", "author")
+     * @return int Number of rows updated
+     * @throws \Exception
+     */
+    public function updateManyByIds(Document $collection, array $ids, array $attributes): int
+    {
+        if (empty($ids) || empty($attributes)) {
+            return 0;
+        }
+
+        $collectionId = $this->filter($collection->getId());
+
+        // Map attribute keys to internal column names and build bindings
+        $binds = [];
+        $setParts = [];
+        $bindIndex = 0;
+
+        foreach ($attributes as $key => $value) {
+            $internal = $this->filter($this->getInternalKeyForAttribute($key));
+
+            // JSON encode arrays/objects; cast bools to int
+            if (\is_array($value)) {
+                $value = \json_encode($value);
+            } elseif (\is_bool($value)) {
+                $value = (int) $value;
+            }
+
+            $bindKey = ":val_{$bindIndex}";
+            $setParts[] = "{$this->quote($internal)} = {$bindKey}";
+            $binds[$bindKey] = $value;
+            $bindIndex++;
+        }
+
+        // Build IN list for IDs
+        $idPlaceholders = [];
+        foreach ($ids as $i => $id) {
+            $ph = ":id_{$i}";
+            $idPlaceholders[] = $ph;
+            $binds[$ph] = $id;
+        }
+
+        $tenantClause = '';
+        if ($this->sharedTables) {
+            $tenantClause = " AND {$this->quote('_tenant')} = :_tenant";
+            $binds[':_tenant'] = $this->getTenant();
+        }
+
+        $setSQL = \implode(', ', $setParts);
+        $inSQL = \implode(', ', $idPlaceholders);
+
+        $sql = "
+            UPDATE {$this->getSQLTable($collectionId)}
+            SET {$setSQL}
+            WHERE {$this->quote('_uid')} IN ({$inSQL}){$tenantClause}
+        ";
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $val) {
+            $stmt->bindValue($key, $val, $this->getPDOType($val));
+        }
+
+        $this->execute($stmt);
+
+        return $stmt->rowCount();
+    }
+
+    /**
      * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes

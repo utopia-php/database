@@ -812,18 +812,33 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $vectors
+     * @param array<Query> $orderQueries
+     *
      * @return array<Document>
      */
-    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(
+        QueryContext $context,
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $vectors = [],
+        array $orderQueries = []
+    ): array;
 
     /**
      * Sum an attribute
@@ -840,13 +855,19 @@ abstract class Adapter
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param QueryContext $context
      * @param int|null $max
+     * @param array<Query> $filters
+     * @param array<Query> $joins
      *
      * @return int
      */
-    abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(
+        QueryContext $context,
+        ?int $max,
+        array $filters,
+        array $joins,
+    ): int;
 
     /**
      * Get Collection Size of the raw data
@@ -1187,6 +1208,13 @@ abstract class Adapter
     abstract public function getSupportForOrderRandom(): bool;
 
     /**
+     * Does the adapter support for joins
+     *
+     * @return bool
+     */
+    abstract public function getSupportForJoins(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1243,36 +1271,10 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * Get an attribute projection given a list of selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
+     * @param array<Query> $selects
      * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
-
-    /**
-     * Get all selected attributes from queries
-     *
-     * @param Query[] $queries
-     * @return string[]
-     */
-    protected function getAttributeSelections(array $queries): array
-    {
-        $selections = [];
-
-        foreach ($queries as $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        $selections[] = $value;
-                    }
-                    break;
-            }
-        }
-
-        return $selections;
-    }
+    abstract protected function getAttributeProjection(array $selects): mixed;
 
     /**
      * Filter Keys

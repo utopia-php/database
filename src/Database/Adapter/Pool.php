@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -293,8 +294,19 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
+    public function find(
+        QueryContext $context,
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $vectors = [],
+        array $orderQueries = []
+    ): array {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -303,8 +315,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
-    {
+    public function count(
+        QueryContext $context,
+        ?int $max,
+        array $filters,
+        array $joins,
+    ): int {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -503,6 +519,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForJoins(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getCountOfAttributes(Document $collection): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -538,7 +559,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    protected function getAttributeProjection(array $selects): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

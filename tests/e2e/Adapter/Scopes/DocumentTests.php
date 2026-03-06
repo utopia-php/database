@@ -4403,6 +4403,63 @@ trait DocumentTests
             new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
+
+    /**
+     * Regression: encode() with applyDefaults:false must not coerce
+     * unspecified optional array attributes to [], which would clear
+     * their stored values during partial updates.
+     */
+    public function testEncodePartialUpdatePreservesArrayAttributes(): void
+    {
+        $collection = new Document([
+            '$collection' => ID::custom(Database::METADATA),
+            '$id' => ID::custom('items'),
+            'name' => 'Items',
+            'attributes' => [
+                [
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 256,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => ID::custom('tags'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => true,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        // Partial update: only 'title' is provided, 'tags' is absent
+        $partialUpdate = new Document([
+            '$id' => ID::custom('doc1'),
+            'title' => 'Updated Title',
+        ]);
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $result = $database->encode($collection, $partialUpdate, applyDefaults: false);
+
+        $this->assertEquals('Updated Title', $result->getAttribute('title'));
+        $this->assertNull(
+            $result->getAttribute('tags'),
+            'Unspecified optional array attribute must remain null during partial update, not be coerced to []'
+        );
+    }
+
     /**
      * @depends testGetDocument
      */

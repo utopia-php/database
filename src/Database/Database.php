@@ -372,12 +372,12 @@ class Database
     protected string $cacheName = 'default';
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected static array $filters = [];
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
 
@@ -9264,8 +9264,9 @@ class Database
             return $class . '::' . $callable[1];
         }
 
-        $ref = new \ReflectionFunction($callable);
-        return $ref->getFileName() . ':' . $ref->getStartLine();
+        $closure = \Closure::fromCallable($callable);
+        $ref = new \ReflectionFunction($closure);
+        return ($ref->getFileName() ?: 'unknown') . ':' . $ref->getStartLine();
     }
 
     /**

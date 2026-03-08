@@ -9267,15 +9267,7 @@ class Database
         );
 
         if ($documentId) {
-            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
-
-            shmuel
-//            if (!empty($selects)) {
-//                $documentHashKey = $documentKey . ':' . \md5(\serialize($selects));
-//            }
-
-            $sortedSelects = $selects;
-            \sort($sortedSelects);
+            $documentKey = "{$collectionKey}:{$documentId}";
 
             $filterSignatures = [];
             if ($this->filter) {
@@ -9302,10 +9294,11 @@ class Database
             }
 
             $payload = \json_encode([
-                'selects' => $sortedSelects,
+                'selects' => \md5(\serialize($selects)),
                 'relationships' => $this->resolveRelationships,
                 'filters' => $filterSignatures,
             ]) ?: '';
+
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 

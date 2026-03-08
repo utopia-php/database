@@ -874,6 +874,118 @@ trait DocumentTests
         }
     }
 
+    public function testUpsertDocumentsIncSkipPreRead(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Mirrors the stats workflow: no permissions, authorization disabled
+        $database->getAuthorization()->disable();
+
+        try {
+            $database->createCollection(__FUNCTION__);
+            $database->createAttribute(__FUNCTION__, 'value', Database::VAR_INTEGER, 0, false);
+            $database->createAttribute(__FUNCTION__, 'metric', Database::VAR_STRING, 128, false);
+
+            // Step 1: Create-via-upsert (documents don't exist yet — no pre-read needed)
+            $documents = [
+                new Document([
+                    '$id' => 'stat_a',
+                    'value' => 10,
+                    'metric' => 'network.requests',
+                ]),
+                new Document([
+                    '$id' => 'stat_b',
+                    'value' => 20,
+                    'metric' => 'documents.count',
+                ]),
+            ];
+
+            $count = $database->upsertDocumentsWithIncrease(
+                collection: __FUNCTION__,
+                attribute: 'value',
+                documents: $documents
+            );
+            $this->assertSame(2, $count);
+
+            $results = $database->find(__FUNCTION__);
+            $this->assertCount(2, $results);
+
+            $byId = [];
+            foreach ($results as $doc) {
+                $byId[$doc->getId()] = $doc;
+            }
+
+            $this->assertSame(10, $byId['stat_a']->getAttribute('value'));
+            $this->assertSame(20, $byId['stat_b']->getAttribute('value'));
+            $this->assertSame('network.requests', $byId['stat_a']->getAttribute('metric'));
+            $this->assertSame('documents.count', $byId['stat_b']->getAttribute('metric'));
+
+            $createdAtA = $byId['stat_a']->getCreatedAt();
+            $createdAtB = $byId['stat_b']->getCreatedAt();
+            $this->assertNotNull($createdAtA);
+            $this->assertNotNull($createdAtB);
+
+            // Step 2: Increment existing documents (update-via-upsert)
+            $documents[0]->setAttribute('value', 5);
+            $documents[1]->setAttribute('value', 3);
+
+            $count = $database->upsertDocumentsWithIncrease(
+                collection: __FUNCTION__,
+                attribute: 'value',
+                documents: $documents
+            );
+            $this->assertSame(2, $count);
+
+            $results = $database->find(__FUNCTION__);
+            $byId = [];
+            foreach ($results as $doc) {
+                $byId[$doc->getId()] = $doc;
+            }
+
+            $this->assertSame(15, $byId['stat_a']->getAttribute('value'));
+            $this->assertSame(23, $byId['stat_b']->getAttribute('value'));
+
+            // Non-increment attribute must not change on duplicate key update
+            $this->assertSame('network.requests', $byId['stat_a']->getAttribute('metric'));
+            $this->assertSame('documents.count', $byId['stat_b']->getAttribute('metric'));
+
+            // Step 3: Verify $createdAt is preserved after increment
+            $this->assertSame($createdAtA, $byId['stat_a']->getCreatedAt());
+            $this->assertSame($createdAtB, $byId['stat_b']->getCreatedAt());
+
+            // Step 4: Third increment to confirm repeated upserts work
+            $documents[0]->setAttribute('value', 1);
+            $documents[1]->setAttribute('value', 1);
+
+            $database->upsertDocumentsWithIncrease(
+                collection: __FUNCTION__,
+                attribute: 'value',
+                documents: $documents
+            );
+
+            $results = $database->find(__FUNCTION__);
+            $byId = [];
+            foreach ($results as $doc) {
+                $byId[$doc->getId()] = $doc;
+            }
+
+            $this->assertSame(16, $byId['stat_a']->getAttribute('value'));
+            $this->assertSame(24, $byId['stat_b']->getAttribute('value'));
+            $this->assertSame('network.requests', $byId['stat_a']->getAttribute('metric'));
+            $this->assertSame('documents.count', $byId['stat_b']->getAttribute('metric'));
+            $this->assertSame($createdAtA, $byId['stat_a']->getCreatedAt());
+            $this->assertSame($createdAtB, $byId['stat_b']->getCreatedAt());
+        } finally {
+            $database->getAuthorization()->reset();
+        }
+    }
+
     public function testUpsertDocumentsPermissions(): void
     {
         /** @var Database $database */

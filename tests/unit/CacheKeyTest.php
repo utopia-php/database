@@ -42,8 +42,13 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        [, , $hashA] = $db->getCacheKeys('col', 'doc1', ['name']);
-        [, , $hashB] = $db->getCacheKeys('col', 'doc1', ['email']);
+        [, , $hashA] = $db->getCacheKeys('col', 'doc1', [
+            Query::select('name'),
+        ]);
+
+        [, , $hashB] = $db->getCacheKeys('col', 'doc1', [
+            Query::select('email'),
+        ]);
 
         $this->assertNotEquals($hashA, $hashB);
     }

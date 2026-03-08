@@ -20,7 +20,7 @@ use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
-class V2 extends Validator
+class Queries extends Validator
 {
     protected string $message = 'Invalid query';
 

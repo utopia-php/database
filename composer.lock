@@ -1383,16 +1383,16 @@
         },
         {
             "name": "symfony/http-client",
-            "version": "v7.4.6",
+            "version": "v7.4.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/http-client.git",
-                "reference": "2bde8afd5ab2fe0b05a9c2d4c3c0e28ceb98a154"
+                "reference": "1010624285470eb60e88ed10035102c75b4ea6af"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/http-client/zipball/2bde8afd5ab2fe0b05a9c2d4c3c0e28ceb98a154",
-                "reference": "2bde8afd5ab2fe0b05a9c2d4c3c0e28ceb98a154",
+                "url": "https://api.github.com/repos/symfony/http-client/zipball/1010624285470eb60e88ed10035102c75b4ea6af",
+                "reference": "1010624285470eb60e88ed10035102c75b4ea6af",
                 "shasum": ""
             },
             "require": {
@@ -1460,7 +1460,7 @@
                 "http"
             ],
             "support": {
-                "source": "https://github.com/symfony/http-client/tree/v7.4.6"
+                "source": "https://github.com/symfony/http-client/tree/v7.4.7"
             },
             "funding": [
                 {
@@ -1480,7 +1480,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-02-18T09:46:18+00:00"
+            "time": "2026-03-05T11:16:58+00:00"
         },
         {
             "name": "symfony/http-client-contracts",
@@ -2124,16 +2124,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.33.40",
+            "version": "0.33.41",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "0ba25e1282c6a2f849053f7ccf28d567c2c321b1"
+                "reference": "0f3bf2377c867e547c929c3733b8224afee6ef06"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/0ba25e1282c6a2f849053f7ccf28d567c2c321b1",
-                "reference": "0ba25e1282c6a2f849053f7ccf28d567c2c321b1",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/0f3bf2377c867e547c929c3733b8224afee6ef06",
+                "reference": "0f3bf2377c867e547c929c3733b8224afee6ef06",
                 "shasum": ""
             },
             "require": {
@@ -2167,9 +2167,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.33.40"
+                "source": "https://github.com/utopia-php/http/tree/0.33.41"
             },
-            "time": "2026-02-19T13:00:08+00:00"
+            "time": "2026-02-24T12:01:28+00:00"
         },
         {
             "name": "utopia-php/mongo",

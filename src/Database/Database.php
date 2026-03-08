@@ -32,7 +32,7 @@ use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
-use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Queries as DocumentsValidator;
 use Utopia\Database\Validator\Spatial;
 use Utopia\Database\Validator\Structure;
 
@@ -8556,7 +8556,7 @@ class Database
 
         foreach ($context->getCollections() as $contextCollection) {
             $documentSecurity = $contextCollection->getAttribute('documentSecurity', false);
-            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $_collection->getRead()));
+            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $contextCollection->getRead()));
 
             if (!$skipAuth && !$documentSecurity && $contextCollection->getId() !== self::METADATA) {
                 throw new AuthorizationException($this->authorization->getDescription());

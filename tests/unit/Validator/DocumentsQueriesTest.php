@@ -9,7 +9,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Queries as DocumentsValidator;
 
 class DocumentsQueriesTest extends TestCase
 {

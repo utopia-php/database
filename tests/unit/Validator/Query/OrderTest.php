@@ -8,7 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Queries as DocumentsValidator;
 
 class OrderTest extends TestCase
 {

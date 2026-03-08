@@ -2177,6 +2177,16 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(1, count($documents));
+
+        $phrases = ["Álvaro"];
+
+        foreach ($phrases as $phrase) {
+            $database->find($collection, [
+                Query::search('ft', $phrase),
+            ]);
+        }
+
+        $this->assertEquals(999, 999999);
     }
 
     public function testFindMultipleConditions(): void

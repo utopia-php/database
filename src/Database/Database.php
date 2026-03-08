@@ -7054,7 +7054,7 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        $skipPreRead = !empty($attribute);
+        $skipPreRead = !empty($attribute) && !$this->authorization->getStatus();
         foreach ($documents as $key => $document) {
             if ($skipPreRead) {
                 $old = new Document();

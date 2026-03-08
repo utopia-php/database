@@ -8284,15 +8284,15 @@ class Database
             );
         }
 
-        foreach ($context->getCollections() as $_collection) {
-            $documentSecurity = $_collection->getAttribute('documentSecurity', false);
-            $skipAuth = $this->authorization->isValid(new Input($forPermission, $_collection->getPermissionsByType($forPermission)));
+        foreach ($context->getCollections() as $contextCollection) {
+            $documentSecurity = $contextCollection->getAttribute('documentSecurity', false);
+            $skipAuth = $this->authorization->isValid(new Input($forPermission, $contextCollection->getPermissionsByType($forPermission)));
 
-            if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
+            if (!$skipAuth && !$documentSecurity && $contextCollection->getId() !== self::METADATA) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
 
-            $context->addSkipAuth($this->adapter->filter($_collection->getId()), $forPermission, $skipAuth);
+            $context->addSkipAuth($this->adapter->filter($contextCollection->getId()), $forPermission, $skipAuth);
         }
 
         $this->checkQueryTypes($queries);
@@ -8554,15 +8554,15 @@ class Database
             );
         }
 
-        foreach ($context->getCollections() as $_collection) {
-            $documentSecurity = $_collection->getAttribute('documentSecurity', false);
+        foreach ($context->getCollections() as $contextCollection) {
+            $documentSecurity = $contextCollection->getAttribute('documentSecurity', false);
             $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $_collection->getRead()));
 
-            if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
+            if (!$skipAuth && !$documentSecurity && $contextCollection->getId() !== self::METADATA) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
 
-            $context->addSkipAuth($this->adapter->filter($_collection->getId()), self::PERMISSION_READ, $skipAuth);
+            $context->addSkipAuth($this->adapter->filter($contextCollection->getId()), self::PERMISSION_READ, $skipAuth);
         }
 
         $this->checkQueryTypes($queries);
@@ -8792,11 +8792,11 @@ class Database
             $internals[$attribute['$id']] = $attribute;
         }
 
-        foreach ($context->getCollections() as $collection) {
-            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+        foreach ($context->getCollections() as $contextCollection) {
+            foreach ($contextCollection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
                 $key = $this->adapter->filter($key);
-                $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
+                $schema[$contextCollection->getId()][$key] = $attribute->getArrayCopy();
             }
         }
 
@@ -8891,11 +8891,11 @@ class Database
             $internals[$attribute['$id']] = $attribute;
         }
 
-        foreach ($context->getCollections() as $collection) {
-            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+        foreach ($context->getCollections() as $contextCollection) {
+            foreach ($contextCollection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
                 $key = $this->adapter->filter($key);
-                $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
+                $schema[$contextCollection->getId()][$key] = $attribute->getArrayCopy();
             }
         }
 

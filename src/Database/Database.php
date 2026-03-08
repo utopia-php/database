@@ -9266,6 +9266,10 @@ class Database
             $collectionId
         );
 
+        usort($selects, function ($a, $b) {
+            return strcmp($a->getAttribute(), $b->getAttribute());
+        });
+
         if ($documentId) {
             $documentKey = "{$collectionKey}:{$documentId}";
 

@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
+use Utopia\Database\Query;
 
 class CacheKeyTest extends TestCase
 {
@@ -51,8 +52,16 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        [, , $hashA] = $db->getCacheKeys('col', 'doc1', ['name', 'email']);
-        [, , $hashB] = $db->getCacheKeys('col', 'doc1', ['email', 'name']);
+
+        [, , $hashA] = $db->getCacheKeys('col', 'doc1', [
+            Query::select('email'),
+            Query::select('name'),
+        ]);
+
+        [, , $hashB] = $db->getCacheKeys('col', 'doc1', [
+            Query::select('name'),
+            Query::select('email'),
+        ]);
 
         $this->assertEquals($hashA, $hashB);
     }

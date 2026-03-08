@@ -9266,6 +9266,8 @@ class Database
             $collectionId
         );
 
+        $selects = Query::getSelectQueries($selects); // Detach
+
         usort($selects, function ($a, $b) {
             return strcmp($a->getAttribute(), $b->getAttribute());
         });

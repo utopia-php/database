@@ -5504,7 +5504,7 @@ class Database
         }
 
         $document = $this->encode($collection, $document);
-var_dump($document);
+
         if ($this->validate) {
             $validator = new Permissions();
             if (!$validator->isValid($document->getPermissions())) {
@@ -8653,8 +8653,6 @@ var_dump($document);
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
-            //$offset = $document->offsetExists($key);
-
             if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
                 $document->setAttribute($key, null);
                 continue;
@@ -8666,7 +8664,6 @@ var_dump($document);
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
-                //$document->setAttribute($key, null);
                 continue;
             }
 

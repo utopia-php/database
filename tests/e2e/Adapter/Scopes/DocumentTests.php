@@ -1538,6 +1538,32 @@ trait DocumentTests
     }
 
     /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseDecreasePreserveDates(Document $document): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->setPreserveDates(true);
+
+        $before = $database->getDocument('increase_decrease', $document->getId());
+        $updatedAt = $before->getUpdatedAt();
+
+        $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1);
+
+        $after = $database->getDocument('increase_decrease', $document->getId());
+        $this->assertSame($updatedAt, $after->getUpdatedAt());
+
+        $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1);
+
+        $after = $database->getDocument('increase_decrease', $document->getId());
+        $this->assertSame($updatedAt, $after->getUpdatedAt());
+
+        $database->setPreserveDates(false);
+    }
+
+    /**
       * @depends testCreateDocument
       */
     public function testGetDocument(Document $document): Document

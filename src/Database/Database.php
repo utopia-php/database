@@ -7396,7 +7396,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -7496,7 +7496,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(

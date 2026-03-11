@@ -6,6 +6,7 @@ use Exception;
 use PDOException;
 use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -378,7 +379,7 @@ abstract class SQL extends Adapter
             {$this->getTenantQuery($collection, $alias)}
 		";
 
-        if ($this->getSupportForUpdateLock()) {
+        if ($this->supports(Capability::UpdateLock)) {
             $sql .= " {$forUpdate}";
         }
 
@@ -566,7 +567,7 @@ abstract class SQL extends Adapter
             }
 
             $bindKey = 'key_' . $keyIndex;
-            if ($this->getSupportForIntegerBooleans()) {
+            if ($this->supports(Capability::IntegerBooleans)) {
                 $value = (\is_bool($value)) ? (int)$value : $value;
             }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
@@ -1692,7 +1693,7 @@ abstract class SQL extends Adapter
         $srid = $srid ?? Database::DEFAULT_SRID;
         $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
 
-        if ($this->getSupportForSpatialAxisOrder()) {
+        if ($this->supports(Capability::SpatialAxisOrder)) {
             $geomFromText .= ", " . $this->getSpatialAxisOrderSpec();
         }
 
@@ -2524,7 +2525,7 @@ abstract class SQL extends Adapter
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
-                        if ($this->getSupportForIntegerBooleans()) {
+                        if ($this->supports(Capability::IntegerBooleans)) {
                             $value = (\is_bool($value)) ? (int)$value : $value;
                         }
                         $bindKey = 'key_' . $bindIndex;
@@ -2687,7 +2688,7 @@ abstract class SQL extends Adapter
                             $bindKey = 'key_' . $bindIndex;
                             $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                         } else {
-                            if ($this->getSupportForIntegerBooleans()) {
+                            if ($this->supports(Capability::IntegerBooleans)) {
                                 $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                             }
                             $bindKey = 'key_' . $bindIndex;
@@ -2814,7 +2815,7 @@ abstract class SQL extends Adapter
                                 $bindKey = 'key_' . $bindIndex;
                                 $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                             } else {
-                                if ($this->getSupportForIntegerBooleans()) {
+                                if ($this->supports(Capability::IntegerBooleans)) {
                                     $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                                 }
                                 $bindKey = 'key_' . $bindIndex;
@@ -3587,7 +3588,7 @@ abstract class SQL extends Adapter
 
     public function getLockType(): string
     {
-        if ($this->getSupportForAlterLocks() && $this->alterLocks) {
+        if ($this->supports(Capability::AlterLocks) && $this->alterLocks) {
             return ',LOCK=SHARED';
         }
 

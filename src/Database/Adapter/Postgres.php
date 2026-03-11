@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use Swoole\Database\PDOStatementProxy;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -126,7 +127,7 @@ class Postgres extends SQL
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
         if ($milliseconds <= 0) {
@@ -2007,7 +2008,7 @@ class Postgres extends SQL
      */
     protected function getSQLSchema(): string
     {
-        if (!$this->getSupportForSchemas()) {
+        if (!$this->supports(Capability::Schemas)) {
             return '';
         }
 

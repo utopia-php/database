@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait SchemalessTests
 {
@@ -23,7 +24,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -121,7 +122,7 @@ trait SchemalessTests
         $database = $this->getDatabase();
 
         // test to ensure internal attributes are checked during creating schemaless document
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -159,7 +160,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -206,7 +207,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -260,7 +261,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -314,7 +315,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -372,7 +373,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -415,12 +416,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -510,12 +511,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -592,12 +593,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -680,7 +681,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -726,7 +727,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -758,7 +759,7 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only run for schemaless adapters that support object attributes
-        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+        if ($database->getAdapter()->supports(Capability::Attributes) || !$database->getAdapter()->supports(Capability::Object)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -813,7 +814,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -885,7 +886,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -995,7 +996,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1307,7 +1308,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1424,7 +1425,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1534,7 +1535,7 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1687,7 +1688,7 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1782,7 +1783,7 @@ trait SchemalessTests
 
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1960,7 +1961,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
         }
 
@@ -2245,7 +2246,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2365,7 +2366,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2510,7 +2511,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2623,12 +2624,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2765,12 +2766,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2858,7 +2859,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2988,12 +2989,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3158,7 +3159,7 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only meaningful for schemaless adapters
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3248,7 +3249,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3376,7 +3377,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }

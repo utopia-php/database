@@ -22,6 +22,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait GeneralTests
 {
@@ -40,7 +41,7 @@ trait GeneralTests
      */
     public function testQueryTimeout(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+        if (!$this->getDatabase()->getAdapter()->supports(Capability::Timeouts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -95,7 +96,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -195,7 +196,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -325,7 +326,7 @@ trait GeneralTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -441,7 +442,7 @@ trait GeneralTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -517,7 +518,7 @@ trait GeneralTests
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
-        if ($database->getAdapter()->getSupportForUpserts()) {
+        if ($database->getAdapter()->supports(Capability::Upserts)) {
             // Test upsert with tenant per doc
             $doc3Id = ID::unique();
             $database
@@ -636,7 +637,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        if (!$database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -705,7 +706,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        if (!$database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -906,7 +907,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTransactionRetries()) {
+        if (!$database->getAdapter()->supports(Capability::TransactionRetries)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -944,7 +945,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForNestedTransactions()) {
+        if (!$database->getAdapter()->supports(Capability::NestedTransactions)) {
             $this->expectNotToPerformAssertions();
             return;
         }

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use PDOException;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
@@ -23,7 +24,7 @@ class MySQL extends MariaDB
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
         if ($milliseconds <= 0) {
@@ -139,7 +140,7 @@ class MySQL extends MariaDB
 
     public function getSupportForCastIndexArray(): bool
     {
-        if (!$this->getSupportForIndexArray()) {
+        if (!$this->supports(Capability::IndexArray)) {
             return false;
         }
 
@@ -210,7 +211,7 @@ class MySQL extends MariaDB
         switch ($type) {
             case Database::VAR_POINT:
                 $type = 'POINT SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -221,7 +222,7 @@ class MySQL extends MariaDB
 
             case Database::VAR_LINESTRING:
                 $type = 'LINESTRING SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -233,7 +234,7 @@ class MySQL extends MariaDB
 
             case Database::VAR_POLYGON:
                 $type = 'POLYGON SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {

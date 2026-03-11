@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Index;
+use Utopia\Database\Capability;
 
 trait IndexTests
 {
@@ -28,7 +29,7 @@ trait IndexTests
          * Check ticks sounding cast index for reserved words
          */
         $database->createAttribute('indexes', 'int', Database::VAR_INTEGER, 8, false, array:true);
-        if ($database->getAdapter()->getSupportForIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
             $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
         }
 
@@ -167,21 +168,21 @@ trait IndexTests
             $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialIndexNull(),
-            $database->getAdapter()->getSupportForSpatialIndexOrder(),
-            $database->getAdapter()->getSupportForVectors(),
-            $database->getAdapter()->getSupportForAttributes(),
-            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes(),
-            $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
-            $database->getAdapter()->getSupportForIndex(),
-            $database->getAdapter()->getSupportForUniqueIndex(),
-            $database->getAdapter()->getSupportForFulltextIndex()
+            $database->getAdapter()->supports(Capability::IndexArray),
+            $database->getAdapter()->supports(Capability::SpatialIndexNull),
+            $database->getAdapter()->supports(Capability::SpatialIndexOrder),
+            $database->getAdapter()->supports(Capability::Vectors),
+            $database->getAdapter()->supports(Capability::Attributes),
+            $database->getAdapter()->supports(Capability::MultipleFulltextIndexes),
+            $database->getAdapter()->supports(Capability::IdenticalIndexes),
+            $database->getAdapter()->supports(Capability::Object),
+            $database->getAdapter()->supports(Capability::TrigramIndex),
+            $database->getAdapter()->supports(Capability::SpatialAttributes),
+            $database->getAdapter()->supports(Capability::Index),
+            $database->getAdapter()->supports(Capability::UniqueIndex),
+            $database->getAdapter()->supports(Capability::FulltextIndex)
         );
-        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
+        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -208,7 +209,7 @@ trait IndexTests
 
         $collection->setAttribute('indexes', $indexes);
 
-        if ($database->getAdapter()->getSupportForAttributes() && $database->getAdapter()->getMaxIndexLength() > 0) {
+        if ($database->getAdapter()->supports(Capability::Attributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -264,38 +265,38 @@ trait IndexTests
             $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialIndexNull(),
-            $database->getAdapter()->getSupportForSpatialIndexOrder(),
-            $database->getAdapter()->getSupportForVectors(),
-            $database->getAdapter()->getSupportForAttributes(),
-            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes(),
-            $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
-            $database->getAdapter()->getSupportForIndex(),
-            $database->getAdapter()->getSupportForUniqueIndex(),
-            $database->getAdapter()->getSupportForFulltextIndex()
+            $database->getAdapter()->supports(Capability::IndexArray),
+            $database->getAdapter()->supports(Capability::SpatialIndexNull),
+            $database->getAdapter()->supports(Capability::SpatialIndexOrder),
+            $database->getAdapter()->supports(Capability::Vectors),
+            $database->getAdapter()->supports(Capability::Attributes),
+            $database->getAdapter()->supports(Capability::MultipleFulltextIndexes),
+            $database->getAdapter()->supports(Capability::IdenticalIndexes),
+            $database->getAdapter()->supports(Capability::Object),
+            $database->getAdapter()->supports(Capability::TrigramIndex),
+            $database->getAdapter()->supports(Capability::SpatialAttributes),
+            $database->getAdapter()->supports(Capability::Index),
+            $database->getAdapter()->supports(Capability::UniqueIndex),
+            $database->getAdapter()->supports(Capability::FulltextIndex)
         );
 
         $this->assertFalse($validator->isValid($newIndex));
 
-        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+        if (!$database->getAdapter()->supports(Capability::FulltextIndex)) {
             $this->assertEquals('Fulltext index is not supported', $validator->getDescription());
-        } elseif (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+        } elseif (!$database->getAdapter()->supports(Capability::MultipleFulltextIndexes)) {
             $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
-        } elseif ($database->getAdapter()->getSupportForAttributes()) {
+        } elseif ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
         }
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+            if (!$database->getAdapter()->supports(Capability::FulltextIndex)) {
                 $this->assertEquals('Fulltext index is not supported', $e->getMessage());
             } else {
                 $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
@@ -312,7 +313,7 @@ trait IndexTests
                 'orders' => [],
             ]),
         ];
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $errorMessage = 'Negative index length provided for title1';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -351,7 +352,7 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -450,7 +451,7 @@ trait IndexTests
 
     public function testListDocumentSearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -514,7 +515,7 @@ trait IndexTests
 
     public function testEmptySearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -542,7 +543,7 @@ trait IndexTests
     public function testMultipleFulltextIndexValidation(): void
     {
 
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -559,7 +560,7 @@ trait IndexTests
             $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 256, false);
             $database->createIndex($collectionId, 'fulltext_title', Database::INDEX_FULLTEXT, ['title']);
 
-            $supportsMultipleFulltext = $database->getAdapter()->getSupportForMultipleFulltextIndexes();
+            $supportsMultipleFulltext = $database->getAdapter()->supports(Capability::MultipleFulltextIndexes);
 
             // Try to add second fulltext index
             try {
@@ -599,7 +600,7 @@ trait IndexTests
 
             $database->createIndex($collectionId, 'index1', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC, Database::ORDER_DESC]);
 
-            $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
+            $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
 
             // Try to add identical index (failure)
             try {
@@ -666,7 +667,7 @@ trait IndexTests
 
     public function testTrigramIndex(): void
     {
-        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
         if (!$trigramSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -715,7 +716,7 @@ trait IndexTests
 
     public function testTrigramIndexValidation(): void
     {
-        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
         if (!$trigramSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -791,7 +792,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -905,7 +906,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }

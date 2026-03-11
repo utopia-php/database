@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Capability;
 
 trait PermissionTests
 {
@@ -302,7 +303,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -944,7 +945,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1026,7 +1027,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return [];
         }
@@ -1259,7 +1260,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }

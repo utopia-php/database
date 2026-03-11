@@ -9,6 +9,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Capability;
 
 trait VectorTests
 {
@@ -17,7 +18,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -62,7 +63,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -83,7 +84,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -104,7 +105,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -155,7 +156,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -307,7 +308,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -331,7 +332,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -387,7 +388,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -415,7 +416,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -458,7 +459,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -498,7 +499,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -540,7 +541,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -582,7 +583,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -636,7 +637,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -713,7 +714,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -788,7 +789,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -852,7 +853,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -918,7 +919,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -964,7 +965,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1007,7 +1008,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1050,7 +1051,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1080,7 +1081,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1110,7 +1111,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1143,7 +1144,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1173,7 +1174,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1203,7 +1204,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1246,7 +1247,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1327,7 +1328,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1393,7 +1394,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1443,7 +1444,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1483,7 +1484,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1527,7 +1528,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1565,7 +1566,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1640,7 +1641,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1686,7 +1687,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1736,7 +1737,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1793,7 +1794,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1829,7 +1830,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1871,7 +1872,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1915,7 +1916,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1964,7 +1965,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2012,7 +2013,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2047,7 +2048,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2086,7 +2087,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2110,7 +2111,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2152,7 +2153,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2191,7 +2192,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2249,7 +2250,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2292,7 +2293,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2326,7 +2327,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2361,7 +2362,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2403,7 +2404,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2447,7 +2448,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2501,7 +2502,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2547,7 +2548,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2587,7 +2588,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2630,7 +2631,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2659,7 +2660,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2716,7 +2717,7 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForVectors()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
             return;
         }

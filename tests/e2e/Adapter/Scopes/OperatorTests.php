@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait OperatorTests
 {
@@ -20,7 +21,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -126,7 +127,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -203,7 +204,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -353,7 +354,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -435,7 +436,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -474,7 +475,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -511,7 +512,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -549,7 +550,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -638,7 +639,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -694,7 +695,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -740,7 +741,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -797,7 +798,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -835,7 +836,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -883,7 +884,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -940,7 +941,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1000,7 +1001,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1042,7 +1043,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1084,7 +1085,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1114,7 +1115,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1152,7 +1153,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1187,7 +1188,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1246,7 +1247,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1291,7 +1292,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1326,7 +1327,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1361,7 +1362,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1390,7 +1391,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1425,7 +1426,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1464,7 +1465,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1505,7 +1506,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1554,7 +1555,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1583,7 +1584,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1627,7 +1628,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1675,7 +1676,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1718,7 +1719,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1756,7 +1757,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1796,7 +1797,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1856,7 +1857,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1913,7 +1914,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1961,7 +1962,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1997,7 +1998,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2026,7 +2027,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2063,7 +2064,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2108,7 +2109,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2160,7 +2161,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2203,7 +2204,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2246,7 +2247,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2290,7 +2291,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2367,7 +2368,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2455,7 +2456,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2514,7 +2515,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2576,7 +2577,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2658,7 +2659,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2730,7 +2731,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2837,7 +2838,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2886,7 +2887,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2922,7 +2923,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2969,7 +2970,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3026,7 +3027,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3076,7 +3077,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3146,7 +3147,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3194,7 +3195,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3242,7 +3243,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3294,7 +3295,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3344,7 +3345,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3417,7 +3418,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3461,7 +3462,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3528,7 +3529,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3584,7 +3585,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3634,7 +3635,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3678,7 +3679,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3722,7 +3723,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3782,7 +3783,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3825,7 +3826,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3866,7 +3867,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3932,7 +3933,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4029,7 +4030,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4096,7 +4097,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4229,7 +4230,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4460,7 +4461,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4522,7 +4523,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }

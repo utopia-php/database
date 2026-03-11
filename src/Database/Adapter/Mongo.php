@@ -7,6 +7,7 @@ use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -79,7 +80,7 @@ class Mongo extends Adapter
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
 
@@ -1262,7 +1263,7 @@ class Mongo extends Adapter
      */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        if (!$this->getSupportForInternalCasting()) {
+        if (!$this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1317,7 +1318,7 @@ class Mongo extends Adapter
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
-        if (!$this->getSupportForAttributes()) {
+        if (!$this->supports(Capability::Attributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {
@@ -1355,7 +1356,7 @@ class Mongo extends Adapter
      */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        if (!$this->getSupportForInternalCasting()) {
+        if (!$this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1409,7 +1410,7 @@ class Mongo extends Adapter
         $indexes = $collection->getAttribute('indexes');
         $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === Database::INDEX_TTL);
 
-        if (!$this->getSupportForAttributes()) {
+        if (!$this->supports(Capability::Attributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
                     continue;
@@ -1724,7 +1725,7 @@ class Mongo extends Adapter
     {
         $unsetFields = [];
 
-        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
+        if ($this->supports(Capability::Attributes) || $oldDocument->isEmpty()) {
             return $unsetFields;
         }
 
@@ -2629,7 +2630,7 @@ class Mongo extends Adapter
     {
         // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
         // so they can be correctly compared against datetime fields stored in MongoDB.
-        if (!$this->getSupportForAttributes() || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
+        if (!$this->supports(Capability::Attributes) || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
             $values = $query->getValues();
             foreach ($values as $k => $value) {
                 if (is_string($value) && $this->isExtendedISODatetime($value)) {

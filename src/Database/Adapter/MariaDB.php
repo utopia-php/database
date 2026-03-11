@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -130,7 +131,7 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-                if ($indexType === Database::INDEX_SPATIAL && !$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
+                if ($indexType === Database::INDEX_SPATIAL && !$this->supports(Capability::SpatialIndexOrder) && !empty($indexOrder)) {
                     throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
                 $indexAttribute = $this->getInternalKeyForAttribute($attribute);
@@ -142,7 +143,7 @@ class MariaDB extends SQL
 
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
 
-                if (!empty($hash[$indexAttribute]['array']) && $this->getSupportForCastIndexArray()) {
+                if (!empty($hash[$indexAttribute]['array']) && $this->supports(Capability::CastIndexArray)) {
                     $indexAttributes[$nested] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
                 }
             }
@@ -749,7 +750,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
+            if ($this->supports(Capability::CastIndexArray) && !empty($attribute['array'])) {
                 $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -1854,7 +1855,7 @@ class MariaDB extends SQL
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
         if ($milliseconds <= 0) {
@@ -2253,7 +2254,7 @@ class MariaDB extends SQL
         $srid = Database::DEFAULT_SRID;
         $nullability = '';
 
-        if (!$this->getSupportForSpatialIndexNull()) {
+        if (!$this->supports(Capability::SpatialIndexNull)) {
             if ($required) {
                 $nullability = ' NOT NULL';
             } else {

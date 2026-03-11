@@ -11,6 +11,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait ManyToManyTests
 {
@@ -19,7 +20,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -330,7 +331,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -784,7 +785,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -895,7 +896,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -995,7 +996,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1109,7 +1110,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1213,7 +1214,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1256,7 +1257,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1322,7 +1323,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1390,7 +1391,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1458,7 +1459,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1524,7 +1525,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1602,7 +1603,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1723,7 +1724,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1801,8 +1802,8 @@ trait ManyToManyTests
         $database = $this->getDatabase();
 
         if (
-            !$database->getAdapter()->getSupportForRelationships() ||
-            !$database->getAdapter()->getSupportForBatchOperations()
+            !$database->getAdapter()->supports(Capability::Relationships) ||
+            !$database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1885,7 +1886,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1945,7 +1946,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2014,7 +2015,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2099,12 +2100,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2261,7 +2262,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }

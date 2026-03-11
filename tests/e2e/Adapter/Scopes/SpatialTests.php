@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait SpatialTests
 {
@@ -20,7 +21,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = $this->getDatabase();
         $collectionName = "test_spatial_Col";
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         };
@@ -94,7 +95,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -106,9 +107,9 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes using createAttribute method
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
@@ -174,7 +175,7 @@ trait SpatialTests
             ];
 
             foreach ($lineQueries as $queryType => $query) {
-                if (!$database->getAdapter()->getSupportForBoundaryInclusiveContains() && in_array($queryType, ['contains','notContains'])) {
+                if (!$database->getAdapter()->supports(Capability::BoundaryInclusiveContains) && in_array($queryType, ['contains','notContains'])) {
                     continue;
                 }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
@@ -217,7 +218,7 @@ trait SpatialTests
             ];
 
             foreach ($polyQueries as $queryType => $query) {
-                if (!$database->getAdapter()->getSupportForBoundaryInclusiveContains() && in_array($queryType, ['contains','notContains'])) {
+                if (!$database->getAdapter()->supports(Capability::BoundaryInclusiveContains) && in_array($queryType, ['contains','notContains'])) {
                     continue;
                 }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
@@ -248,7 +249,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -352,7 +353,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -361,14 +362,14 @@ trait SpatialTests
         try {
             $database->createCollection($collectionName);
 
-            $required = $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true;
+            $required = $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true;
             $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required));
             $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required));
             $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
-            if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+            if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
                 $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
             } else {
                 // Attribute was created as required above; directly create index once
@@ -400,7 +401,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -512,7 +513,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -617,7 +618,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -722,7 +723,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -748,7 +749,7 @@ trait SpatialTests
         }
 
         // Edge cases: Spatial Index Order support (createCollection and createIndex)
-        $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
+        $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
 
         // createCollection with orders
         $collOrderCreate = 'spatial_idx_order_create';
@@ -808,7 +809,7 @@ trait SpatialTests
         }
 
         // Edge cases: Spatial Index Nullability (createCollection and createIndex)
-        $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
+        $nullSupported = $database->getAdapter()->supports(Capability::SpatialIndexNull);
 
         // createCollection with required=false
         $collNullCreate = 'spatial_idx_null_create_' . uniqid();
@@ -919,7 +920,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -974,7 +975,7 @@ trait SpatialTests
             $this->assertInstanceOf(Document::class, $createdDoc2);
 
             // Test rectangle contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $insideRect1 = $database->find($collectionName, [
                     Query::contains('rectangle', [[5, 5]]) // Point inside first rectangle
                 ], Database::PERMISSION_READ);
@@ -983,7 +984,7 @@ trait SpatialTests
             }
 
             // Test rectangle doesn't contain point outside
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsideRect1 = $database->find($collectionName, [
                     Query::notContains('rectangle', [[25, 25]]) // Point outside first rectangle
                 ], Database::PERMISSION_READ);
@@ -991,7 +992,7 @@ trait SpatialTests
             }
 
             // Test failure case: rectangle should NOT contain distant point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $distantPoint = $database->find($collectionName, [
                     Query::contains('rectangle', [[100, 100]]) // Point far outside rectangle
                 ], Database::PERMISSION_READ);
@@ -999,7 +1000,7 @@ trait SpatialTests
             }
 
             // Test failure case: rectangle should NOT contain point outside
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsidePoint = $database->find($collectionName, [
                     Query::contains('rectangle', [[-1, -1]]) // Point clearly outside rectangle
                 ], Database::PERMISSION_READ);
@@ -1017,7 +1018,7 @@ trait SpatialTests
 
 
             // Test square contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $insideSquare1 = $database->find($collectionName, [
                     Query::contains('square', [[10, 10]]) // Point inside first square
                 ], Database::PERMISSION_READ);
@@ -1026,7 +1027,7 @@ trait SpatialTests
             }
 
             // Test rectangle contains square (shape contains shape)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $rectContainsSquare = $database->find($collectionName, [
                     Query::contains('rectangle', [[[5, 2], [5, 8], [15, 8], [15, 2], [5, 2]]]) // Square geometry that fits within rectangle
                 ], Database::PERMISSION_READ);
@@ -1035,7 +1036,7 @@ trait SpatialTests
             }
 
             // Test rectangle contains triangle (shape contains shape)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $rectContainsTriangle = $database->find($collectionName, [
                     Query::contains('rectangle', [[[10, 2], [18, 2], [14, 8], [10, 2]]]) // Triangle geometry that fits within rectangle
                 ], Database::PERMISSION_READ);
@@ -1044,7 +1045,7 @@ trait SpatialTests
             }
 
             // Test L-shaped polygon contains smaller rectangle (shape contains shape)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $lShapeContainsRect = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[[5, 5], [5, 10], [10, 10], [10, 5], [5, 5]]]) // Small rectangle inside L-shape
                 ], Database::PERMISSION_READ);
@@ -1053,7 +1054,7 @@ trait SpatialTests
             }
 
             // Test T-shaped polygon contains smaller square (shape contains shape)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $tShapeContainsSquare = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[[35, 5], [35, 10], [40, 10], [40, 5], [35, 5]]]) // Small square inside T-shape
                 ], Database::PERMISSION_READ);
@@ -1062,7 +1063,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain rectangle (smaller shape cannot contain larger shape)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $squareNotContainsRect = $database->find($collectionName, [
                     Query::notContains('square', [[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]]]) // Larger rectangle
                 ], Database::PERMISSION_READ);
@@ -1070,7 +1071,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain rectangle
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $triangleNotContainsRect = $database->find($collectionName, [
                     Query::notContains('triangle', [[[20, 0], [20, 25], [30, 25], [30, 0], [20, 0]]]) // Rectangle that extends beyond triangle
                 ], Database::PERMISSION_READ);
@@ -1078,7 +1079,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shape should NOT contain T-shape (different complex polygons)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $lShapeNotContainsTShape = $database->find($collectionName, [
                     Query::notContains('complex_polygon', [[[30, 0], [30, 20], [50, 20], [50, 0], [30, 0]]]) // T-shape geometry
                 ], Database::PERMISSION_READ);
@@ -1086,7 +1087,7 @@ trait SpatialTests
             }
 
             // Test square doesn't contain point outside
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsideSquare1 = $database->find($collectionName, [
                     Query::notContains('square', [[20, 20]]) // Point outside first square
                 ], Database::PERMISSION_READ);
@@ -1094,7 +1095,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain distant point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $distantPointSquare = $database->find($collectionName, [
                     Query::contains('square', [[100, 100]]) // Point far outside square
                 ], Database::PERMISSION_READ);
@@ -1102,7 +1103,7 @@ trait SpatialTests
             }
 
             // Test failure case: square should NOT contain point on boundary
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $boundaryPointSquare = $database->find($collectionName, [
                     Query::contains('square', [[5, 5]]) // Point on square boundary (should be empty if boundary not inclusive)
                 ], Database::PERMISSION_READ);
@@ -1110,7 +1111,7 @@ trait SpatialTests
             }
 
             // Test square equals same geometry using contains when supported, otherwise intersects
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $exactSquare = $database->find($collectionName, [
                     Query::contains('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]])
                 ], Database::PERMISSION_READ);
@@ -1129,7 +1130,7 @@ trait SpatialTests
             $this->assertNotEmpty($differentSquare);
 
             // Test triangle contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $insideTriangle1 = $database->find($collectionName, [
                     Query::contains('triangle', [[25, 10]]) // Point inside first triangle
                 ], Database::PERMISSION_READ);
@@ -1138,7 +1139,7 @@ trait SpatialTests
             }
 
             // Test triangle doesn't contain point outside
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsideTriangle1 = $database->find($collectionName, [
                     Query::notContains('triangle', [[25, 25]]) // Point outside first triangle
                 ], Database::PERMISSION_READ);
@@ -1146,7 +1147,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain distant point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $distantPointTriangle = $database->find($collectionName, [
                     Query::contains('triangle', [[100, 100]]) // Point far outside triangle
                 ], Database::PERMISSION_READ);
@@ -1154,7 +1155,7 @@ trait SpatialTests
             }
 
             // Test failure case: triangle should NOT contain point outside its area
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsideTriangleArea = $database->find($collectionName, [
                     Query::contains('triangle', [[35, 25]]) // Point outside triangle area
                 ], Database::PERMISSION_READ);
@@ -1174,7 +1175,7 @@ trait SpatialTests
             $this->assertNotEmpty($nonIntersectingTriangle);
 
             // Test L-shaped polygon contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $insideLShape = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[10, 10]]) // Point inside L-shape
                 ], Database::PERMISSION_READ);
@@ -1183,7 +1184,7 @@ trait SpatialTests
             }
 
             // Test L-shaped polygon doesn't contain point in "hole"
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $inHole = $database->find($collectionName, [
                     Query::notContains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
                 ], Database::PERMISSION_READ);
@@ -1191,7 +1192,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shaped polygon should NOT contain distant point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $distantPointLShape = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[100, 100]]) // Point far outside L-shape
                 ], Database::PERMISSION_READ);
@@ -1199,7 +1200,7 @@ trait SpatialTests
             }
 
             // Test failure case: L-shaped polygon should NOT contain point in the hole
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $holePoint = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
                 ], Database::PERMISSION_READ);
@@ -1207,7 +1208,7 @@ trait SpatialTests
             }
 
             // Test T-shaped polygon contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $insideTShape = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[40, 5]]) // Point inside T-shape
                 ], Database::PERMISSION_READ);
@@ -1216,7 +1217,7 @@ trait SpatialTests
             }
 
             // Test failure case: T-shaped polygon should NOT contain distant point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $distantPointTShape = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[100, 100]]) // Point far outside T-shape
                 ], Database::PERMISSION_READ);
@@ -1224,7 +1225,7 @@ trait SpatialTests
             }
 
             // Test failure case: T-shaped polygon should NOT contain point outside its area
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $outsideTShapeArea = $database->find($collectionName, [
                     Query::contains('complex_polygon', [[25, 25]]) // Point outside T-shape area
                 ], Database::PERMISSION_READ);
@@ -1238,7 +1239,7 @@ trait SpatialTests
             $this->assertNotEmpty($intersectingLine);
 
             // Test linestring contains point
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $onLine1 = $database->find($collectionName, [
                     Query::contains('multi_linestring', [[5, 5]]) // Point on first line segment
                 ], Database::PERMISSION_READ);
@@ -1246,7 +1247,7 @@ trait SpatialTests
             }
 
             // Test linestring doesn't contain point off line
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $offLine1 = $database->find($collectionName, [
                     Query::notContains('multi_linestring', [[5, 15]]) // Point not on any line
                 ], Database::PERMISSION_READ);
@@ -1350,7 +1351,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1404,7 +1405,7 @@ trait SpatialTests
 
             // Test complex spatial queries with logical combinations
             // Test AND combination: parks within area AND near specific location
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $nearbyAndInArea = $database->find($collectionName, [
                     Query::and([
                         Query::distanceLessThan('location', [40.7829, -73.9654], 0.01), // Near Central Park
@@ -1481,7 +1482,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1784,7 +1785,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1850,7 +1851,7 @@ trait SpatialTests
             $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesFar));
 
             // COUNT and SUM with polygon contains filter (adapter-dependent boundary inclusivity)
-            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+            if ($database->getAdapter()->supports(Capability::BoundaryInclusiveContains)) {
                 $queriesContain = [
                     Query::contains('area', [[10.0, 10.0]])
                 ];
@@ -1872,7 +1873,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1916,7 +1917,7 @@ trait SpatialTests
             }
 
             // 2) required=true -> create index -> update required=false
-            $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
+            $nullSupported = $database->getAdapter()->supports(Capability::SpatialIndexNull);
             if ($nullSupported) {
                 // Should succeed on adapters that allow nullable spatial indexes
                 $database->updateAttribute($collectionName, 'geom', required: false);
@@ -1937,7 +1938,7 @@ trait SpatialTests
             }
 
             // 3) Spatial index order support: providing orders should fail if not supported
-            $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
+            $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
             if ($orderSupported) {
                 $this->assertTrue($database->createIndex($collectionName, 'idx_geom_desc', Database::INDEX_SPATIAL, ['geom'], [], [Database::ORDER_DESC]));
                 // cleanup
@@ -1959,7 +1960,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2064,7 +2065,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2170,7 +2171,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2241,12 +2242,12 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+        if (!$database->getAdapter()->supports(Capability::DistanceBetweenMultiDimensionGeometryInMeters)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2373,12 +2374,12 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+        if ($database->getAdapter()->supports(Capability::DistanceBetweenMultiDimensionGeometryInMeters)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2458,7 +2459,7 @@ trait SpatialTests
 
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2500,7 +2501,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2552,11 +2553,11 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+        if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2587,7 +2588,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2649,7 +2650,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2659,7 +2660,7 @@ trait SpatialTests
         $database->createCollection($collectionName);
 
         // Create spatial attributes using createAttribute method
-        $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+        $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));
 
         // Create test document
         $doc1 = new Document(
@@ -2681,7 +2682,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2773,16 +2774,16 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+        if ($database->getAdapter()->supports(Capability::SpatialIndexNull)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if ($database->getAdapter()->getSupportForOptionalSpatialAttributeWithExistingRows()) {
+        if ($database->getAdapter()->supports(Capability::OptionalSpatialAttributeWithExistingRows)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2812,7 +2813,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::SpatialAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2823,8 +2824,8 @@ trait SpatialTests
             $database->createCollection($collectionName);
             // Use required=true for spatial attributes to support spatial indexes (MariaDB requires this)
             $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true);
-            $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
-            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
+            $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true);
+            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true);
             $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 100, false);
 
             // Create indexes for spatial queries

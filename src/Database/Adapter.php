@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\NotSupported as NotSupportedException;
 use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
@@ -938,8 +939,69 @@ abstract class Adapter
     }
 
     /**
+     * Check if the adapter supports a given capability.
+     *
+     * @param Capability $capability
+     * @return bool
+     */
+    public function supports(Capability $capability): bool
+    {
+        return match ($capability) {
+            Capability::Schemas => $this->getSupportForSchemas(),
+            Capability::Attributes => $this->getSupportForAttributes(),
+            Capability::SchemaAttributes => $this->getSupportForSchemaAttributes(),
+            Capability::Index => $this->getSupportForIndex(),
+            Capability::IndexArray => $this->getSupportForIndexArray(),
+            Capability::CastIndexArray => $this->getSupportForCastIndexArray(),
+            Capability::UniqueIndex => $this->getSupportForUniqueIndex(),
+            Capability::FulltextIndex => $this->getSupportForFulltextIndex(),
+            Capability::FulltextWildcardIndex => $this->getSupportForFulltextWildcardIndex(),
+            Capability::Casting => $this->getSupportForCasting(),
+            Capability::QueryContains => $this->getSupportForQueryContains(),
+            Capability::Timeouts => $this->getSupportForTimeouts(),
+            Capability::Relationships => $this->getSupportForRelationships(),
+            Capability::UpdateLock => $this->getSupportForUpdateLock(),
+            Capability::BatchOperations => $this->getSupportForBatchOperations(),
+            Capability::AttributeResizing => $this->getSupportForAttributeResizing(),
+            Capability::GetConnectionId => $this->getSupportForGetConnectionId(),
+            Capability::Upserts => $this->getSupportForUpserts(),
+            Capability::Vectors => $this->getSupportForVectors(),
+            Capability::CacheSkipOnFailure => $this->getSupportForCacheSkipOnFailure(),
+            Capability::Reconnection => $this->getSupportForReconnection(),
+            Capability::Hostname => $this->getSupportForHostname(),
+            Capability::BatchCreateAttributes => $this->getSupportForBatchCreateAttributes(),
+            Capability::SpatialAttributes => $this->getSupportForSpatialAttributes(),
+            Capability::Object => $this->getSupportForObject(),
+            Capability::ObjectIndexes => $this->getSupportForObjectIndexes(),
+            Capability::SpatialIndexNull => $this->getSupportForSpatialIndexNull(),
+            Capability::Operators => $this->getSupportForOperators(),
+            Capability::OptionalSpatialAttributeWithExistingRows => $this->getSupportForOptionalSpatialAttributeWithExistingRows(),
+            Capability::SpatialIndexOrder => $this->getSupportForSpatialIndexOrder(),
+            Capability::SpatialAxisOrder => $this->getSupportForSpatialAxisOrder(),
+            Capability::BoundaryInclusiveContains => $this->getSupportForBoundaryInclusiveContains(),
+            Capability::DistanceBetweenMultiDimensionGeometryInMeters => $this->getSupportForDistanceBetweenMultiDimensionGeometryInMeters(),
+            Capability::MultipleFulltextIndexes => $this->getSupportForMultipleFulltextIndexes(),
+            Capability::IdenticalIndexes => $this->getSupportForIdenticalIndexes(),
+            Capability::OrderRandom => $this->getSupportForOrderRandom(),
+            Capability::InternalCasting => $this->getSupportForInternalCasting(),
+            Capability::UTCCasting => $this->getSupportForUTCCasting(),
+            Capability::IntegerBooleans => $this->getSupportForIntegerBooleans(),
+            Capability::AlterLocks => $this->getSupportForAlterLocks(),
+            Capability::NonUtfCharacters => $this->getSupportNonUtfCharacters(),
+            Capability::TrigramIndex => $this->getSupportForTrigramIndex(),
+            Capability::PCRERegex => $this->getSupportForPCRERegex(),
+            Capability::POSIXRegex => $this->getSupportForPOSIXRegex(),
+            Capability::Regex => $this->getSupportForRegex(),
+            Capability::TTLIndexes => $this->getSupportForTTLIndexes(),
+            Capability::TransactionRetries => $this->getSupportForTransactionRetries(),
+            Capability::NestedTransactions => $this->getSupportForNestedTransactions(),
+        };
+    }
+
+    /**
      * Is schemas supported?
      *
+     * @deprecated Use supports(Capability::Schemas) instead
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;

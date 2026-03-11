@@ -8,6 +8,7 @@ use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotSupported as NotSupportedException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
@@ -1300,7 +1301,7 @@ class Database
      */
     public function enableLocks(bool $enabled): static
     {
-        if ($this->adapter->getSupportForAlterLocks()) {
+        if ($this->adapter->supports(Capability::AlterLocks)) {
             $this->adapter->enableAlterLocks($enabled);
         }
 
@@ -1676,7 +1677,7 @@ class Database
         }
 
         // Enforce single TTL index per collection
-        if ($this->validate && $this->getAdapter()->getSupportForTTLIndexes()) {
+        if ($this->validate && $this->getAdapter()->supports(Capability::TTLIndexes)) {
             $ttlIndexes = array_filter($indexes, fn (Document $idx) => $idx->getAttribute('type') === self::INDEX_TTL);
             if (count($ttlIndexes) > 1) {
                 throw new IndexException('There can be only one TTL index in a collection');
@@ -1734,21 +1735,21 @@ class Database
                 [],
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialIndexNull(),
-                $this->adapter->getSupportForSpatialIndexOrder(),
-                $this->adapter->getSupportForVectors(),
-                $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForMultipleFulltextIndexes(),
-                $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObjectIndexes(),
-                $this->adapter->getSupportForTrigramIndex(),
-                $this->adapter->getSupportForSpatialAttributes(),
-                $this->adapter->getSupportForIndex(),
-                $this->adapter->getSupportForUniqueIndex(),
-                $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportForTTLIndexes(),
-                $this->adapter->getSupportForObject()
+                $this->adapter->supports(Capability::IndexArray),
+                $this->adapter->supports(Capability::SpatialIndexNull),
+                $this->adapter->supports(Capability::SpatialIndexOrder),
+                $this->adapter->supports(Capability::Vectors),
+                $this->adapter->supports(Capability::Attributes),
+                $this->adapter->supports(Capability::MultipleFulltextIndexes),
+                $this->adapter->supports(Capability::IdenticalIndexes),
+                $this->adapter->supports(Capability::ObjectIndexes),
+                $this->adapter->supports(Capability::TrigramIndex),
+                $this->adapter->supports(Capability::SpatialAttributes),
+                $this->adapter->supports(Capability::Index),
+                $this->adapter->supports(Capability::UniqueIndex),
+                $this->adapter->supports(Capability::FulltextIndex),
+                $this->adapter->supports(Capability::TTLIndexes),
+                $this->adapter->supports(Capability::Object)
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2094,7 +2095,7 @@ class Database
 
         $existsInSchema = false;
 
-        $schemaAttributes = $this->adapter->getSupportForSchemaAttributes()
+        $schemaAttributes = $this->adapter->supports(Capability::SchemaAttributes)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -2247,7 +2248,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $schemaAttributes = $this->adapter->getSupportForSchemaAttributes()
+        $schemaAttributes = $this->adapter->supports(Capability::SchemaAttributes)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -2476,7 +2477,7 @@ class Database
 
         $validator = new AttributeValidator(
             attributes: $collection->getAttribute('attributes', []),
-            schemaAttributes: $schemaAttributes ?? ($this->adapter->getSupportForSchemaAttributes()
+            schemaAttributes: $schemaAttributes ?? ($this->adapter->supports(Capability::SchemaAttributes)
                 ? $this->getSchemaAttributes($collection->getId())
                 : []),
             maxAttributes: $this->adapter->getLimitForAttributes(),
@@ -2484,10 +2485,10 @@ class Database
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
-            supportForSchemaAttributes: $this->adapter->getSupportForSchemaAttributes(),
-            supportForVectors: $this->adapter->getSupportForVectors(),
-            supportForSpatialAttributes: $this->adapter->getSupportForSpatialAttributes(),
-            supportForObject: $this->adapter->getSupportForObject(),
+            supportForSchemaAttributes: $this->adapter->supports(Capability::SchemaAttributes),
+            supportForVectors: $this->adapter->supports(Capability::Vectors),
+            supportForSpatialAttributes: $this->adapter->supports(Capability::SpatialAttributes),
+            supportForObject: $this->adapter->supports(Capability::Object),
             attributeCountCallback: fn () => $this->adapter->getCountOfAttributes($collectionClone),
             attributeWidthCallback: fn () => $this->adapter->getAttributeWidth($collectionClone),
             filterCallback: fn ($id) => $this->adapter->filter($id),
@@ -2584,10 +2585,10 @@ class Database
                     self::VAR_DATETIME,
                     self::VAR_RELATIONSHIP
                 ];
-                if ($this->adapter->getSupportForVectors()) {
+                if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = self::VAR_VECTOR;
                 }
-                if ($this->adapter->getSupportForSpatialAttributes()) {
+                if ($this->adapter->supports(Capability::SpatialAttributes)) {
                     \array_push($supportedTypes, ...self::SPATIAL_TYPES);
                 }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
@@ -2844,7 +2845,7 @@ class Database
         }
 
         // we need to alter table attribute type to NOT NULL/NULL for change in required
-        if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+        if (!$this->adapter->supports(Capability::SpatialIndexNull) && in_array($type, Database::SPATIAL_TYPES)) {
             $altering = true;
         }
 
@@ -2889,7 +2890,7 @@ class Database
                 }
                 break;
             case self::VAR_OBJECT:
-                if (!$this->adapter->getSupportForObject()) {
+                if (!$this->adapter->supports(Capability::Object)) {
                     throw new DatabaseException('Object attributes are not supported');
                 }
                 if (!empty($size)) {
@@ -2902,7 +2903,7 @@ class Database
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
-                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                if (!$this->adapter->supports(Capability::SpatialAttributes)) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
                 if (!empty($size)) {
@@ -2913,7 +2914,7 @@ class Database
                 }
                 break;
             case self::VAR_VECTOR:
-                if (!$this->adapter->getSupportForVectors()) {
+                if (!$this->adapter->supports(Capability::Vectors)) {
                     throw new DatabaseException('Vector types are not supported by the current database');
                 }
                 if ($array) {
@@ -2952,10 +2953,10 @@ class Database
                     self::VAR_DATETIME,
                     self::VAR_RELATIONSHIP
                 ];
-                if ($this->adapter->getSupportForVectors()) {
+                if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = self::VAR_VECTOR;
                 }
-                if ($this->adapter->getSupportForSpatialAttributes()) {
+                if ($this->adapter->supports(Capability::SpatialAttributes)) {
                     \array_push($supportedTypes, ...self::SPATIAL_TYPES);
                 }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
@@ -3005,7 +3006,7 @@ class Database
             throw new LimitException('Row width limit reached. Cannot update attribute.');
         }
 
-        if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
+        if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->supports(Capability::SpatialIndexNull)) {
             $attributeMap = [];
             foreach ($attributes as $attrDoc) {
                 $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
@@ -3053,7 +3054,7 @@ class Database
                  */
                 $validator = new IndexDependencyValidator(
                     $collectionDoc->getAttribute('indexes', []),
-                    $this->adapter->getSupportForCastIndexArray(),
+                    $this->adapter->supports(Capability::CastIndexArray),
                 );
 
                 if (!$validator->isValid($attribute)) {
@@ -3070,21 +3071,21 @@ class Database
                     $originalIndexes,
                     $this->adapter->getMaxIndexLength(),
                     $this->adapter->getInternalIndexesKeys(),
-                    $this->adapter->getSupportForIndexArray(),
-                    $this->adapter->getSupportForSpatialIndexNull(),
-                    $this->adapter->getSupportForSpatialIndexOrder(),
-                    $this->adapter->getSupportForVectors(),
-                    $this->adapter->getSupportForAttributes(),
-                    $this->adapter->getSupportForMultipleFulltextIndexes(),
-                    $this->adapter->getSupportForIdenticalIndexes(),
-                    $this->adapter->getSupportForObjectIndexes(),
-                    $this->adapter->getSupportForTrigramIndex(),
-                    $this->adapter->getSupportForSpatialAttributes(),
-                    $this->adapter->getSupportForIndex(),
-                    $this->adapter->getSupportForUniqueIndex(),
-                    $this->adapter->getSupportForFulltextIndex(),
-                    $this->adapter->getSupportForTTLIndexes(),
-                    $this->adapter->getSupportForObject()
+                    $this->adapter->supports(Capability::IndexArray),
+                    $this->adapter->supports(Capability::SpatialIndexNull),
+                    $this->adapter->supports(Capability::SpatialIndexOrder),
+                    $this->adapter->supports(Capability::Vectors),
+                    $this->adapter->supports(Capability::Attributes),
+                    $this->adapter->supports(Capability::MultipleFulltextIndexes),
+                    $this->adapter->supports(Capability::IdenticalIndexes),
+                    $this->adapter->supports(Capability::ObjectIndexes),
+                    $this->adapter->supports(Capability::TrigramIndex),
+                    $this->adapter->supports(Capability::SpatialAttributes),
+                    $this->adapter->supports(Capability::Index),
+                    $this->adapter->supports(Capability::UniqueIndex),
+                    $this->adapter->supports(Capability::FulltextIndex),
+                    $this->adapter->supports(Capability::TTLIndexes),
+                    $this->adapter->supports(Capability::Object)
                 );
 
                 foreach ($indexes as $index) {
@@ -3214,7 +3215,7 @@ class Database
         if ($this->validate) {
             $validator = new IndexDependencyValidator(
                 $collection->getAttribute('indexes', []),
-                $this->adapter->getSupportForCastIndexArray(),
+                $this->adapter->supports(Capability::CastIndexArray),
             );
 
             if (!$validator->isValid($attribute)) {
@@ -3330,7 +3331,7 @@ class Database
         if ($this->validate) {
             $validator = new IndexDependencyValidator(
                 $collection->getAttribute('indexes', []),
-                $this->adapter->getSupportForCastIndexArray(),
+                $this->adapter->supports(Capability::CastIndexArray),
             );
 
             if (!$validator->isValid($attribute)) {
@@ -3360,7 +3361,7 @@ class Database
             // partial failure where rename succeeded but metadata update failed).
             // We verified $new doesn't exist in metadata (above), so if $new
             // exists in schema, it must be from a prior rename.
-            if ($this->adapter->getSupportForSchemaAttributes()) {
+            if ($this->adapter->supports(Capability::SchemaAttributes)) {
                 $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                 $filteredNew = $this->adapter->filter($new);
                 $newExistsInSchema = false;
@@ -3909,7 +3910,7 @@ class Database
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
-                if ($this->adapter->getSupportForSchemaAttributes()) {
+                if ($this->adapter->supports(Capability::SchemaAttributes)) {
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;
@@ -4526,21 +4527,21 @@ class Database
                 $collection->getAttribute('indexes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialIndexNull(),
-                $this->adapter->getSupportForSpatialIndexOrder(),
-                $this->adapter->getSupportForVectors(),
-                $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForMultipleFulltextIndexes(),
-                $this->adapter->getSupportForIdenticalIndexes(),
-                $this->adapter->getSupportForObjectIndexes(),
-                $this->adapter->getSupportForTrigramIndex(),
-                $this->adapter->getSupportForSpatialAttributes(),
-                $this->adapter->getSupportForIndex(),
-                $this->adapter->getSupportForUniqueIndex(),
-                $this->adapter->getSupportForFulltextIndex(),
-                $this->adapter->getSupportForTTLIndexes(),
-                $this->adapter->getSupportForObject()
+                $this->adapter->supports(Capability::IndexArray),
+                $this->adapter->supports(Capability::SpatialIndexNull),
+                $this->adapter->supports(Capability::SpatialIndexOrder),
+                $this->adapter->supports(Capability::Vectors),
+                $this->adapter->supports(Capability::Attributes),
+                $this->adapter->supports(Capability::MultipleFulltextIndexes),
+                $this->adapter->supports(Capability::IdenticalIndexes),
+                $this->adapter->supports(Capability::ObjectIndexes),
+                $this->adapter->supports(Capability::TrigramIndex),
+                $this->adapter->supports(Capability::SpatialAttributes),
+                $this->adapter->supports(Capability::Index),
+                $this->adapter->supports(Capability::UniqueIndex),
+                $this->adapter->supports(Capability::FulltextIndex),
+                $this->adapter->supports(Capability::TTLIndexes),
+                $this->adapter->supports(Capability::Object)
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -4701,7 +4702,7 @@ class Database
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes, $this->adapter->getSupportForAttributes());
+            $validator = new DocumentValidator($attributes, $this->adapter->supports(Capability::Attributes));
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -4817,7 +4818,7 @@ class Database
 
     private function isTtlExpired(Document $collection, Document $document): bool
     {
-        if (!$this->adapter->getSupportForTTLIndexes()) {
+        if (!$this->adapter->supports(Capability::TTLIndexes)) {
             return false;
         }
         foreach ($collection->getAttribute('indexes', []) as $index) {
@@ -5518,7 +5519,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
             if (!$structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -5626,7 +5627,7 @@ class Database
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
-                    $this->adapter->getSupportForAttributes()
+                    $this->adapter->supports(Capability::Attributes)
                 );
                 if (!$validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
@@ -6194,7 +6195,7 @@ class Database
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
-                    $this->adapter->getSupportForAttributes(),
+                    $this->adapter->supports(Capability::Attributes),
                     $old
                 );
                 if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
@@ -6316,7 +6317,7 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
 
             if (!$validator->isValid($queries)) {
@@ -6360,7 +6361,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
+                $this->adapter->supports(Capability::Attributes),
                 null // No old document available in bulk updates
             );
 
@@ -7206,7 +7207,7 @@ class Database
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
-                    $this->adapter->getSupportForAttributes(),
+                    $this->adapter->supports(Capability::Attributes),
                     $old->isEmpty() ? null : $old
                 );
 
@@ -7350,7 +7351,7 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($this->adapter->getSupportForAttributes()) {
+        if ($this->adapter->supports(Capability::Attributes)) {
             $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
                 return $a['$id'] === $attribute;
             });
@@ -7448,7 +7449,7 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($this->adapter->getSupportForAttributes()) {
+        if ($this->adapter->supports(Capability::Attributes)) {
             $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
                 return $a['$id'] === $attribute;
             });
@@ -8022,7 +8023,7 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
 
             if (!$validator->isValid($queries)) {
@@ -8244,7 +8245,7 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8500,7 +8501,7 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8573,7 +8574,7 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->supports(Capability::Attributes)
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8825,7 +8826,7 @@ class Database
      */
     public function casting(Document $collection, Document $document): Document
     {
-        if (!$this->adapter->getSupportForCasting()) {
+        if (!$this->adapter->supports(Capability::Casting)) {
             return $document;
         }
 
@@ -8996,7 +8997,7 @@ class Database
                 $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
-        if ($this->adapter->getSupportForAttributes()) {
+        if ($this->adapter->supports(Capability::Attributes)) {
             $invalid = \array_diff($selections, $keys);
             if (!empty($invalid) && !\in_array('*', $invalid)) {
                 throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
@@ -9119,7 +9120,7 @@ class Database
         }
 
         $queryAttribute = $query->getAttribute();
-        $isNestedQueryAttribute = $this->getAdapter()->getSupportForAttributes() && $this->getAdapter()->getSupportForObject() && \str_contains($queryAttribute, '.');
+        $isNestedQueryAttribute = $this->getAdapter()->supports(Capability::Attributes) && $this->getAdapter()->supports(Capability::Object) && \str_contains($queryAttribute, '.');
 
         $attribute = new Document();
 
@@ -9143,7 +9144,7 @@ class Database
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {
-                        $values[$valueIndex] = $this->adapter->getSupportForUTCCasting()
+                        $values[$valueIndex] = $this->adapter->supports(Capability::UTCCasting)
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (\Throwable $e) {
@@ -9152,10 +9153,10 @@ class Database
                 }
                 $query->setValues($values);
             }
-        } elseif (!$this->adapter->getSupportForAttributes()) {
+        } elseif (!$this->adapter->supports(Capability::Attributes)) {
             $values = $query->getValues();
             // setting attribute type to properly apply filters in the adapter level
-            if ($this->adapter->getSupportForObject() && $this->isCompatibleObjectValue($values)) {
+            if ($this->adapter->supports(Capability::Object) && $this->isCompatibleObjectValue($values)) {
                 $query->setAttributeType(Database::VAR_OBJECT);
             }
         }
@@ -9199,7 +9200,7 @@ class Database
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
     {
-        if ($this->adapter->getSupportForHostname()) {
+        if ($this->adapter->supports(Capability::Hostname)) {
             $hostname = $this->adapter->getHostname();
         }
 

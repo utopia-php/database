@@ -21,6 +21,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait DocumentTests
 {
@@ -29,7 +30,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportNonUtfCharacters()) {
+        if (!$database->getAdapter()->supports(Capability::NonUtfCharacters)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -273,7 +274,7 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertTrue($e instanceof StructureException);
                 $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
             }
@@ -294,7 +295,7 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertTrue($e instanceof StructureException);
                 $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
             }
@@ -318,7 +319,7 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertTrue($e instanceof StructureException);
                 $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
             }
@@ -620,7 +621,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -688,7 +689,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -807,7 +808,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -879,7 +880,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -968,7 +969,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1012,7 +1013,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertTrue($e instanceof StructureException, $e->getMessage());
             }
         }
@@ -1082,7 +1083,7 @@ trait DocumentTests
 
     public function testUpsertDocumentsNoop(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForUpserts()) {
+        if (!$this->getDatabase()->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1112,7 +1113,7 @@ trait DocumentTests
     public function testUpsertDuplicateIds(): void
     {
         $db = $this->getDatabase();
-        if (!$db->getAdapter()->getSupportForUpserts()) {
+        if (!$db->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1134,7 +1135,7 @@ trait DocumentTests
     public function testUpsertMixedPermissionDelta(): void
     {
         $db = $this->getDatabase();
-        if (!$db->getAdapter()->getSupportForUpserts()) {
+        if (!$db->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1183,7 +1184,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1192,7 +1193,7 @@ trait DocumentTests
 
         $database->createCollection($collectionName);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 128, true);
         }
 
@@ -1302,11 +1303,11 @@ trait DocumentTests
                 ]),
             ]);
             // Schemaless adapters may not validate sequence type, so only fail for schemaful
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->fail('Expected StructureException for invalid sequence');
             }
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertInstanceOf(StructureException::class, $e);
                 $this->assertStringContainsString('sequence', $e->getMessage());
             }
@@ -2071,7 +2072,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForQueryContains()) {
+        if (!$database->getAdapter()->supports(Capability::QueryContains)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2116,7 +2117,7 @@ trait DocumentTests
         /**
          * Fulltext search
          */
-        if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+        if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex)) {
             $success = $database->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
             $this->assertEquals(true, $success);
 
@@ -2133,7 +2134,7 @@ trait DocumentTests
             // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
             // TODO: I think this needs a changes? how do we distinguish between regular full text and wildcard?
 
-            if ($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
+            if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcardIndex)) {
                 $documents = $database->find('movies', [
                     Query::search('name', 'cap'),
                 ]);
@@ -2149,7 +2150,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+        if (!$database->getAdapter()->supports(Capability::FulltextIndex)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2182,7 +2183,7 @@ trait DocumentTests
             Query::search('ft', 'al@ba.io'), // === al ba io*
         ]);
 
-        if ($database->getAdapter()->getSupportForFulltextWildcardIndex()) {
+        if ($database->getAdapter()->supports(Capability::FulltextWildcardIndex)) {
             $this->assertEquals(0, count($documents));
         } else {
             $this->assertEquals(1, count($documents));
@@ -3532,7 +3533,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForQueryContains()) {
+        if (!$database->getAdapter()->supports(Capability::QueryContains)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3595,7 +3596,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // Only test if fulltext search is supported
-        if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+        if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex)) {
             // Ensure fulltext index exists (may already exist from previous tests)
             try {
                 $database->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
@@ -3621,7 +3622,7 @@ trait DocumentTests
             $this->assertEquals(6, count($documents));
 
             // Test notSearch with partial term
-            if ($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
+            if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcardIndex)) {
                 $documents = $database->find('movies', [
                     Query::notSearch('name', 'cap'),
                 ]);
@@ -3768,7 +3769,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOrderRandom()) {
+        if (!$database->getAdapter()->supports(Capability::OrderRandom)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4591,7 +4592,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4785,7 +4786,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5049,7 +5050,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUniqueIndex()) {
+        if (!$database->getAdapter()->supports(Capability::UniqueIndex)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5166,7 +5167,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5307,7 +5308,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5372,7 +5373,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5496,7 +5497,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5560,9 +5561,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectException(Exception::class);
-            if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            if (!$this->getDatabase()->getAdapter()->supports(Capability::FulltextIndex)) {
                 $this->expectExceptionMessage('Fulltext index is not supported');
             } else {
                 $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
@@ -6101,7 +6102,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6368,7 +6369,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForUpserts()) {
+        if (!$database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6484,7 +6485,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
         // for schemaless the validation will be automatically skipped
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6529,7 +6530,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6605,7 +6606,7 @@ trait DocumentTests
         }
 
         // 3) updateDocuments setting required to null should fail when validation enabled, pass when disabled
-        if ($database->getAdapter()->getSupportForBatchOperations()) {
+        if ($database->getAdapter()->supports(Capability::BatchOperations)) {
             try {
                 $database->updateDocuments($collection, new Document([
                     'name' => null,
@@ -6624,7 +6625,7 @@ trait DocumentTests
         }
 
         // 4) upsertDocumentsWithIncrease with null required should fail when validation enabled, pass when disabled
-        if ($database->getAdapter()->getSupportForUpserts()) {
+        if ($database->getAdapter()->supports(Capability::Upserts)) {
             try {
                 $database->upsertDocumentsWithIncrease(
                     collection: $collection,
@@ -6662,7 +6663,7 @@ trait DocumentTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -6850,14 +6851,14 @@ trait DocumentTests
         $database = static::getDatabase();
 
         // Skip test if regex is not supported
-        if (!$database->getAdapter()->getSupportForRegex()) {
+        if (!$database->getAdapter()->supports(Capability::Regex)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         // Determine regex support type
-        $supportsPCRE = $database->getAdapter()->getSupportForPCRERegex();
-        $supportsPOSIX = $database->getAdapter()->getSupportForPOSIXRegex();
+        $supportsPCRE = $database->getAdapter()->supports(Capability::PCRERegex);
+        $supportsPOSIX = $database->getAdapter()->supports(Capability::POSIXRegex);
 
         // Determine word boundary pattern based on support
         $wordBoundaryPattern = null;
@@ -6877,13 +6878,13 @@ trait DocumentTests
             Permission::delete(Role::any()),
         ]);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->assertEquals(true, $database->createAttribute('moviesRegex', 'name', Database::VAR_STRING, 128, true));
             $this->assertEquals(true, $database->createAttribute('moviesRegex', 'director', Database::VAR_STRING, 128, true));
             $this->assertEquals(true, $database->createAttribute('moviesRegex', 'year', Database::VAR_INTEGER, 0, true));
         }
 
-        if ($database->getAdapter()->getSupportForTrigramIndex()) {
+        if ($database->getAdapter()->supports(Capability::TrigramIndex)) {
             $database->createIndex('moviesRegex', 'trigram_name', Database::INDEX_TRIGRAM, ['name']);
             $database->createIndex('moviesRegex', 'trigram_director', Database::INDEX_TRIGRAM, ['director']);
         }
@@ -7346,7 +7347,7 @@ trait DocumentTests
         $database = static::getDatabase();
 
         // Skip test if regex is not supported
-        if (!$database->getAdapter()->getSupportForRegex()) {
+        if (!$database->getAdapter()->supports(Capability::Regex)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -7359,7 +7360,7 @@ trait DocumentTests
             Permission::delete(Role::any()),
         ]);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
         }
 
@@ -7501,7 +7502,7 @@ trait DocumentTests
     //        $database = static::getDatabase();
     //
     //        // Skip test if regex is not supported
-    //        if (!$database->getAdapter()->getSupportForRegex()) {
+    //        if (!$database->getAdapter()->supports(Capability::Regex)) {
     //            $this->expectNotToPerformAssertions();
     //            return;
     //        }
@@ -7514,7 +7515,7 @@ trait DocumentTests
     //            Permission::delete(Role::any()),
     //        ]);
     //
-    //        if ($database->getAdapter()->getSupportForAttributes()) {
+    //        if ($database->getAdapter()->supports(Capability::Attributes)) {
     //            $this->assertEquals(true, $database->createAttribute($collectionName, 'text', Database::VAR_STRING, 1000, true));
     //        }
     //
@@ -7572,7 +7573,7 @@ trait DocumentTests
     //            '(.*)+b',      // Generic nested quantifiers
     //        ];
     //
-    //        $supportsTimeout = $database->getAdapter()->getSupportForTimeouts();
+    //        $supportsTimeout = $database->getAdapter()->supports(Capability::Timeouts);
     //
     //        if ($supportsTimeout) {
     //            $database->setTimeout(2000);

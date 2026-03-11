@@ -24,6 +24,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -753,7 +754,7 @@ function benchmarkOperatorAcrossOperations(
 
     foreach ($operationTypes as $opType => $method) {
         // Skip upsert operations if not supported
-        if (str_contains($method, 'upsert') && !$database->getAdapter()->getSupportForUpserts()) {
+        if (str_contains($method, 'upsert') && !$database->getAdapter()->supports(Capability::Upserts)) {
             Console::warning("  Skipping {$opType} (not supported by adapter)");
             continue;
         }

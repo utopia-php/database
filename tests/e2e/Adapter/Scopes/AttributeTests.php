@@ -23,6 +23,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
+use Utopia\Database\Capability;
 
 trait AttributeTests
 {
@@ -434,7 +435,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -496,7 +497,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -701,7 +702,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -750,7 +751,7 @@ trait AttributeTests
         $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
         $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
-        $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
+        $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
 
         try {
             // Check empty newKey doesn't cause issues
@@ -1103,7 +1104,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributeResizing()) {
+        if (!$database->getAdapter()->supports(Capability::AttributeResizing)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1408,7 +1409,7 @@ trait AttributeTests
             $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
             }
         }
@@ -1430,7 +1431,7 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
             }
         }
@@ -1441,7 +1442,7 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
             }
         }
@@ -1452,7 +1453,7 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
@@ -1463,7 +1464,7 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid unsigned 32-bit integer between 0 and 4,294,967,295', $e->getMessage());
             }
         }
@@ -1490,14 +1491,14 @@ trait AttributeTests
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
             /**
              * Functional index dependency cannot be dropped or rename
              */
             $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
         }
 
-        if ($database->getAdapter()->getSupportForCastIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::CastIndexArray)) {
             /**
              * Delete attribute
              */
@@ -1536,14 +1537,14 @@ trait AttributeTests
             $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
         }
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
-                if ($database->getAdapter()->getSupportForAttributes()) {
+                if ($database->getAdapter()->supports(Capability::Attributes)) {
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->getSupportForFulltextIndex()) {
+                if ($database->getAdapter()->supports(Capability::FulltextIndex)) {
                     $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
                 } else {
                     $this->assertEquals('Fulltext index is not supported', $e->getMessage());
@@ -1552,11 +1553,11 @@ trait AttributeTests
 
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
-                if ($database->getAdapter()->getSupportForAttributes()) {
+                if ($database->getAdapter()->supports(Capability::Attributes)) {
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->getSupportForAttributes()) {
+                if ($database->getAdapter()->supports(Capability::Attributes)) {
                     $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
                 } else {
                     $this->assertEquals('Index already exists', $e->getMessage());
@@ -1573,8 +1574,8 @@ trait AttributeTests
             array: true
         ));
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            if ($database->getAdapter()->getSupportForAttributes() && $database->getAdapter()->getMaxIndexLength() > 0) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
+            if ($database->getAdapter()->supports(Capability::Attributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
                 // If getMaxIndexLength() > 0 We clear length for array attributes
                 $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
                 $database->deleteIndex($collection, 'indx1');
@@ -1589,7 +1590,7 @@ trait AttributeTests
             }
 
             try {
-                if ($database->getAdapter()->getSupportForAttributes()) {
+                if ($database->getAdapter()->supports(Capability::Attributes)) {
                     $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
                     $this->fail('Failed to throw exception');
                 }
@@ -1601,7 +1602,7 @@ trait AttributeTests
             $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
         }
 
-        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+        if ($this->getDatabase()->getAdapter()->supports(Capability::QueryContains)) {
             try {
                 $database->find($collection, [
                     Query::equal('names', ['Joe']),
@@ -1730,7 +1731,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $database->createCollection('datetime');
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             $this->assertEquals(true, $database->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
             $this->assertEquals(true, $database->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
         }
@@ -1739,11 +1740,11 @@ trait AttributeTests
             $database->createDocument('datetime', new Document([
                 'date' => ['2020-01-01'], // array
             ]));
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertInstanceOf(StructureException::class, $e);
             }
         }
@@ -1791,11 +1792,11 @@ trait AttributeTests
                 '$id' => 'datenew1',
                 'date' => "1975-12-06 00:00:61", // 61 seconds is invalid,
             ]));
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertInstanceOf(StructureException::class, $e);
             }
         }
@@ -1804,11 +1805,11 @@ trait AttributeTests
             $database->createDocument('datetime', new Document([
                 'date' => '+055769-02-14T17:56:18.000Z'
             ]));
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::Attributes)) {
                 $this->assertInstanceOf(StructureException::class, $e);
             }
         }
@@ -1834,7 +1835,7 @@ trait AttributeTests
                 $database->find('datetime', [
                     Query::equal('date', [$date])
                 ]);
-                if ($database->getAdapter()->getSupportForAttributes()) {
+                if ($database->getAdapter()->supports(Capability::Attributes)) {
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
@@ -1910,7 +1911,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1930,7 +1931,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1955,7 +1956,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1980,7 +1981,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2005,7 +2006,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2030,7 +2031,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2058,7 +2059,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2085,7 +2086,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2113,7 +2114,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2141,7 +2142,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2168,7 +2169,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2197,7 +2198,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2226,7 +2227,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2271,7 +2272,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2384,7 +2385,7 @@ trait AttributeTests
         $this->assertEquals([\str_repeat('x', 1000), \str_repeat('y', 2000)], $doc3->getAttribute('text_array'));
 
         // Test VARCHAR size constraint (should fail) - only for adapters that support attributes
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             try {
                 $database->createDocument('stringTypes', new Document([
                     '$id' => ID::custom('doc4'),

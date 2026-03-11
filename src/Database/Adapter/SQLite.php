@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use Swoole\Database\PDOStatementProxy;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -813,7 +814,7 @@ class SQLite extends MariaDB
             if (isset($operators[$attribute])) {
                 $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
                 $columns .= $operatorSQL;
-            } elseif ($this->getSupportForSpatialAttributes() && \in_array($attribute, $spatialAttributes, true)) {
+            } elseif ($this->supports(Capability::SpatialAttributes) && \in_array($attribute, $spatialAttributes, true)) {
                 $bindKey = 'key_' . $keyIndex;
                 $columns .= "`{$column}` = " . $this->getSpatialGeomFromText(':' . $bindKey);
                 $keyIndex++;

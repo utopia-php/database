@@ -16,6 +16,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait CollectionTests
 {
@@ -24,7 +25,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -454,7 +455,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         // SQLite does not support fulltext indexes
-        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+        if (!$database->getAdapter()->supports(Capability::FulltextIndex)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -528,7 +529,7 @@ trait CollectionTests
 
     public function testSchemaAttributes(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForSchemaAttributes()) {
+        if (!$this->getDatabase()->getAdapter()->supports(Capability::SchemaAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -687,7 +688,7 @@ trait CollectionTests
             ]),
         ];
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
             $indexes[] = new Document([
                 '$id' => ID::custom('idx_cards'),
                 'type' => Database::INDEX_KEY,
@@ -713,7 +714,7 @@ trait CollectionTests
         $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], 99);
         $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], Database::ORDER_DESC);
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
             $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
             $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::MAX_ARRAY_INDEX_LENGTH);
             $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], null);
@@ -780,7 +781,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForGetConnectionId()) {
+        if (!$database->getAdapter()->supports(Capability::GetConnectionId)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -944,7 +945,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -982,7 +983,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1065,7 +1066,7 @@ trait CollectionTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1140,7 +1141,7 @@ trait CollectionTests
 
         $this->assertCount(1, $database->listCollections());
 
-        if ($database->getAdapter()->getSupportForFulltextIndex()) {
+        if ($database->getAdapter()->supports(Capability::FulltextIndex)) {
             $database->createIndex(
                 collection: 'people',
                 id: 'idx_lifeStory',
@@ -1269,7 +1270,7 @@ trait CollectionTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1381,7 +1382,7 @@ trait CollectionTests
                 $this->assertEquals($shifted, $event);
             });
 
-            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+            if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
                 $database->setDatabase('hellodb');
                 $database->create();
             } else {
@@ -1586,7 +1587,7 @@ trait CollectionTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }

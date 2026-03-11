@@ -13,6 +13,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
 
 trait ObjectAttributeTests
 {
@@ -31,7 +32,7 @@ trait ObjectAttributeTests
      */
     private function createAttribute(Database $database, string $collectionId, string $attributeId, string $type, int $size, bool $required, $default = null): bool
     {
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             return true;
         }
 
@@ -46,7 +47,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Object)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -581,7 +582,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 
@@ -690,7 +691,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Object) || !$database->getAdapter()->supports(Capability::Attributes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -889,7 +890,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Object) || !$database->getAdapter()->supports(Capability::Attributes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -969,7 +970,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip if adapter doesn't support either vectors or object attributes
-        if (!$database->getAdapter()->getSupportForVectors() || !$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors) || !$database->getAdapter()->supports(Capability::Object)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1124,11 +1125,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1200,11 +1201,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Attributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1330,7 +1331,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Object)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1379,7 +1380,7 @@ trait ObjectAttributeTests
             ])
         ]);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::Attributes)) {
             try {
                 $database->find($collectionId, [
                     Query::equal('profile.level1.level2.level3.level4.value', [10])
@@ -1815,7 +1816,7 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
-        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
+        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
             $created = $database->createIndex($collectionId, 'idx_unique_email', Database::INDEX_UNIQUE, ['profile.user.email']);
             $this->assertTrue($created);
 

@@ -38,8 +38,8 @@
         "ext-mongodb": "*",
         "ext-mbstring": "*",
         "utopia-php/framework": "0.33.*",
-        "utopia-php/cache": "0.13.*",
-        "utopia-php/pools": "0.8.*",
+        "utopia-php/cache": "1.*",
+        "utopia-php/pools": "dev-main#8bb77d46 as 1.0.99",
         "utopia-php/mongo": "0.11.*"
     },
     "require-dev": {

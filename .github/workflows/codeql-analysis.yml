@@ -31,5 +31,4 @@ jobs:
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
            composer install --profile --ignore-platform-reqs && \
            if [ -L vendor/utopia-php/query ]; then rm vendor/utopia-php/query && cp -r /query vendor/utopia-php/query; fi && \
-           composer dump-autoload && \
            composer check"

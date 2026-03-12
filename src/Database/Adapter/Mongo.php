@@ -32,6 +32,7 @@ use Utopia\Database\Hook\MongoPermissionFilter;
 use Utopia\Database\Hook\MongoTenantFilter;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Hook\TenantWrite;
+use Utopia\Database\Adapter\Mongo\RetryClient;
 use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -64,7 +65,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         '$exists'
     ];
 
-    protected Client $client;
+    protected RetryClient $client;
 
     /**
      * @var list<Read>
@@ -94,7 +95,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      */
     public function __construct(Client $client)
     {
-        $this->client = $client;
+        $this->client = new RetryClient($client);
         $this->client->connect();
     }
 
@@ -496,6 +497,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
         } catch (MongoException $e) {
+            // Client throws "Collection Exists" (code 0) if it already exists
+            if (\str_contains($e->getMessage(), 'Collection Exists')) {
+                return true;
+            }
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
                 return true;
@@ -2401,11 +2406,11 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @return Client
+     * @return RetryClient
      *
      * @throws Exception
      */
-    protected function getClient(): Client
+    protected function getClient(): RetryClient
     {
         return $this->client;
     }

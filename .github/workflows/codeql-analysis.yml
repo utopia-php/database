@@ -26,15 +26,11 @@ jobs:
 
       - name: Run CodeQL
         run: |
-          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
-          "sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
+          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 php:8.4-cli-alpine sh -c \
+          "php -r \"copy('https://getcomposer.org/installer', '/tmp/composer-setup.php');\" && \
+           php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
+           sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
            sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
            composer install --profile --ignore-platform-reqs && \
-           rm -rf vendor/utopia-php/query && cp -r /query vendor/utopia-php/query && \
-           echo '--- Debug: checking vendor query lib ---' && \
-           ls -la vendor/utopia-php/query/ && \
-           ls vendor/utopia-php/query/src/Query/Schema/ && \
-           cat vendor/composer/autoload_psr4.php | grep -i query && \
-           echo '--- End debug ---' && \
            composer check"

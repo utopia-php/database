@@ -33,5 +33,5 @@ jobs:
            sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
            composer install --profile --ignore-platform-reqs && \
-           composer update phpstan/phpstan --ignore-platform-reqs && \
+           composer require --dev phpstan/phpstan:'^2.0' --ignore-platform-reqs --with-all-dependencies && \
            composer check"

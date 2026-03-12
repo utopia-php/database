@@ -21,14 +21,8 @@ RUN COMPOSER_MIRROR_PATH_REPOS=1 composer install \
     --prefer-dist
 
 # Replace symlink with actual copy (composer path repos may still symlink)
-RUN echo "=== Before copy ===" && \
-    ls -la /usr/local/src/vendor/utopia-php/query && \
-    rm -rf /usr/local/src/vendor/utopia-php/query && \
-    cp -r /usr/local/query /usr/local/src/vendor/utopia-php/query && \
-    echo "=== After copy ===" && \
-    ls /usr/local/src/vendor/utopia-php/query/src/Query/Schema/ && \
-    echo "=== Autoloader ===" && \
-    grep -i query /usr/local/src/vendor/composer/autoload_psr4.php
+RUN rm -rf /usr/local/src/vendor/utopia-php/query && \
+    cp -r /usr/local/query /usr/local/src/vendor/utopia-php/query
 
 FROM php:8.4.18-cli-alpine3.22 AS compile
 
@@ -123,6 +117,8 @@ RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
+# Ensure query lib is copied (not symlinked) in vendor
+COPY query /usr/src/code/vendor/utopia-php/query
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20240924/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20240924/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20240924/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/

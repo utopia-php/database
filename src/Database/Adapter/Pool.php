@@ -58,6 +58,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setTenantPerDocument($this->getTenantPerDocument());
             $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
@@ -141,6 +142,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setTenantPerDocument($this->getTenantPerDocument());
             $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {

@@ -32,4 +32,9 @@ jobs:
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
            composer install --profile --ignore-platform-reqs && \
            rm -rf vendor/utopia-php/query && cp -r /query vendor/utopia-php/query && \
+           echo '--- Debug: checking vendor query lib ---' && \
+           ls -la vendor/utopia-php/query/ && \
+           ls vendor/utopia-php/query/src/Query/Schema/ && \
+           cat vendor/composer/autoload_psr4.php | grep -i query && \
+           echo '--- End debug ---' && \
            composer check"

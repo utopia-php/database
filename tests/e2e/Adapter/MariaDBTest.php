@@ -30,7 +30,7 @@ class MariaDBTest extends Base
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-        $redis = new Redis;
+        $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(0);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));

@@ -29,7 +29,7 @@ $cli
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->action(function (string $adapter, string $name, bool $sharedTables) {
         $namespace = '_ns';
-        $cache = new Cache(new NoCache);
+        $cache = new Cache(new NoCache());
 
         $dbAdapters = [
             'mariadb' => [

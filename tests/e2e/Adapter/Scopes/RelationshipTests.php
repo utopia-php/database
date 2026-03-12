@@ -1978,7 +1978,7 @@ trait RelationshipTests
 
         $database->createDocument('invalid1', new Document([
             '$id' => ID::unique(),
-            'invalid2' => new \stdClass,
+            'invalid2' => new \stdClass(),
         ]));
     }
 

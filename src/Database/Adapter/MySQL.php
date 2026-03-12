@@ -164,7 +164,7 @@ class MySQL extends MariaDB
 
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\MySQL;
+        return new \Utopia\Query\Builder\MySQL();
     }
 
     /**

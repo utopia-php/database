@@ -14,9 +14,13 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     /**
      * @throws Exception

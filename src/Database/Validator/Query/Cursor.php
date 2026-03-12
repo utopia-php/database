@@ -9,7 +9,9 @@ use Utopia\Database\Validator\UID;
 
 class Cursor extends Base
 {
-    public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH) {}
+    public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
+    {
+    }
 
     /**
      * Is valid.

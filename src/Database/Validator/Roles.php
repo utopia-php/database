@@ -245,8 +245,8 @@ class Roles extends Validator
         string $dimension
     ): bool {
         $identifierValidator = match ($role) {
-            self::ROLE_LABEL => new Label,
-            default => new Key,
+            self::ROLE_LABEL => new Label(),
+            default => new Key(),
         };
         /**
          * For project-specific permissions, roles will be in the format `project-<projectId>-<role>`.

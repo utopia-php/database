@@ -41,7 +41,7 @@ class PostgresTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, Postgres::getPDOAttributes());
-        $redis = new Redis;
+        $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(9);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));

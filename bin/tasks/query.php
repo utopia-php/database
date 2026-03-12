@@ -42,7 +42,7 @@ $cli
         };
 
         $namespace = '_ns';
-        $cache = new Cache(new NoCache);
+        $cache = new Cache(new NoCache());
 
         // ------------------------------------------------------------------
         // Adapter configuration

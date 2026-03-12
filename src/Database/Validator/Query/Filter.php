@@ -160,11 +160,11 @@ class Filter extends Base
                     break;
 
                 case ColumnType::Double->value:
-                    $validator = new FloatValidator;
+                    $validator = new FloatValidator();
                     break;
 
                 case ColumnType::Boolean->value:
-                    $validator = new Boolean;
+                    $validator = new Boolean();
                     break;
 
                 case ColumnType::Datetime->value:

@@ -43,7 +43,7 @@ $cli
     ->param('name', 'operator_benchmark_'.uniqid(), new Text(0), 'Name of test database', true)
     ->action(function (string $adapter, int $iterations, int $seed, string $name) {
         $namespace = '_ns';
-        $cache = new Cache(new NoCache);
+        $cache = new Cache(new NoCache());
 
         Console::info('=============================================================');
         Console::info('  OPERATOR PERFORMANCE BENCHMARK');

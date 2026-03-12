@@ -15,7 +15,8 @@ class Relationship
         public string $twoWayKey = '',
         public ForeignKeyAction $onDelete = ForeignKeyAction::Restrict,
         public RelationSide $side = RelationSide::Parent,
-    ) {}
+    ) {
+    }
 
     public function toDocument(): Document
     {

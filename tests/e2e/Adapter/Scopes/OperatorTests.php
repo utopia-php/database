@@ -261,8 +261,8 @@ trait OperatorTests
                 'diff_items' => ['x', 'y', 'z', 'w'],
                 'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 'active' => $i % 2 === 0,
-                'last_update' => DateTime::addSeconds(new \DateTime, -86400),
-                'next_update' => DateTime::addSeconds(new \DateTime, 86400),
+                'last_update' => DateTime::addSeconds(new \DateTime(), -86400),
+                'next_update' => DateTime::addSeconds(new \DateTime(), 86400),
             ]));
         }
 
@@ -2052,7 +2052,7 @@ trait OperatorTests
         $this->assertNotEmpty($result);
 
         // Verify it's a recent timestamp (within last minute)
-        $now = new \DateTime;
+        $now = new \DateTime();
         $resultDate = new \DateTime($result);
         $diff = $now->getTimestamp() - $resultDate->getTimestamp();
         $this->assertLessThan(60, $diff); // Should be within 60 seconds
@@ -4285,8 +4285,8 @@ trait OperatorTests
             'diff_items' => ['x', 'y', 'z', 'w'],
             'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             'active' => false,
-            'date_field1' => DateTime::addSeconds(new \DateTime, -86400),
-            'date_field2' => DateTime::addSeconds(new \DateTime, 86400),
+            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400),
         ]));
 
         $database->createDocument($collectionId, new Document([
@@ -4309,8 +4309,8 @@ trait OperatorTests
             'diff_items' => ['x', 'y', 'z', 'w'],
             'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             'active' => true,
-            'date_field1' => DateTime::addSeconds(new \DateTime, -86400),
-            'date_field2' => DateTime::addSeconds(new \DateTime, 86400),
+            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400),
         ]));
 
         // Prepare upsert documents: 2 updates + 1 new insert with ALL operators

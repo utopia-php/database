@@ -11,10 +11,12 @@ class KeyTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->object = new Key;
+        $this->object = new Key();
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_values(): void
     {

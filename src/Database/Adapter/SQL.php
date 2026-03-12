@@ -1478,7 +1478,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
     protected function syncWriteHooks(): void
     {
         if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof PermissionWrite))) {
-            $this->addWriteHook(new PermissionWrite);
+            $this->addWriteHook(new PermissionWrite());
         }
 
         $this->removeWriteHook(TenantWrite::class);

@@ -36,7 +36,8 @@ class RelationshipHandler implements Relationship
 
     public function __construct(
         private Database $db,
-    ) {}
+    ) {
+    }
 
     public function isEnabled(): bool
     {
@@ -1302,7 +1303,7 @@ class RelationshipHandler implements Relationship
                 }
             } else {
                 foreach ($docs as $document) {
-                    $document->setAttribute($key, new Document);
+                    $document->setAttribute($key, new Document());
                 }
             }
         }

@@ -20,7 +20,8 @@ class Attribute
         public array $filters = [],
         public ?string $status = null,
         public ?array $options = null,
-    ) {}
+    ) {
+    }
 
     public function toDocument(): Document
     {

@@ -11,10 +11,12 @@ class LabelTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->object = new Label;
+        $this->object = new Label();
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_values(): void
     {

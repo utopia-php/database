@@ -4,4 +4,6 @@ namespace Utopia\Database\Exception;
 
 use Utopia\Database\Exception;
 
-class Dependency extends Exception {}
+class Dependency extends Exception
+{
+}

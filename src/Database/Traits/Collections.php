@@ -59,7 +59,7 @@ trait Collections
         ];
 
         if ($this->validate) {
-            $validator = new Permissions;
+            $validator = new Permissions();
             if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
@@ -228,7 +228,7 @@ trait Collections
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
         if ($this->validate) {
-            $validator = new Permissions;
+            $validator = new Permissions();
             if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
@@ -278,7 +278,7 @@ trait Collections
             && $collection->getTenant() !== null
             && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
-            return new Document;
+            return new Document();
         }
 
         try {

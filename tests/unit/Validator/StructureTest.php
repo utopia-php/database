@@ -168,7 +168,9 @@ class StructureTest extends TestCase
         ];
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_document_instance(): void
     {
@@ -192,7 +194,7 @@ class StructureTest extends TestCase
             ColumnType::Integer->value
         );
 
-        $this->assertEquals(false, $validator->isValid(new Document));
+        $this->assertEquals(false, $validator->isValid(new Document()));
 
         $this->assertEquals('Invalid document structure: Missing collection attribute $collection', $validator->getDescription());
     }
@@ -200,7 +202,7 @@ class StructureTest extends TestCase
     public function test_collection(): void
     {
         $validator = new Structure(
-            new Document,
+            new Document(),
             ColumnType::Integer->value
         );
 

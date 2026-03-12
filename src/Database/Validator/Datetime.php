@@ -70,7 +70,7 @@ class Datetime extends Validator
 
         try {
             $date = new \DateTime($value);
-            $now = new \DateTime;
+            $now = new \DateTime();
 
             if ($this->requireDateInFuture === true && $date < $now) {
                 return false;

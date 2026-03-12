@@ -33,7 +33,7 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
-        $redis = new Redis;
+        $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(4);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));

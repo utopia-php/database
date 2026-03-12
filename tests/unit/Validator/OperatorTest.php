@@ -58,7 +58,9 @@ class OperatorTest extends TestCase
         ]);
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     // Test parsing string operators (new functionality)
     public function test_parse_string_operator(): void

@@ -9,16 +9,20 @@ use Utopia\Database\Validator\Roles;
 
 class RolesTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     /**
      * @throws \Exception
      */
     public function test_valid_role(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertTrue($object->isValid([Role::users()->toString()]));
         $this->assertTrue($object->isValid([Role::users(Roles::DIMENSION_VERIFIED)->toString()]));
         $this->assertTrue($object->isValid([Role::users(Roles::DIMENSION_UNVERIFIED)->toString()]));
@@ -30,7 +34,7 @@ class RolesTest extends TestCase
 
     public function test_not_an_array(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertFalse($object->isValid('not an array'));
         $this->assertEquals('Roles must be an array of strings.', $object->getDescription());
     }
@@ -48,7 +52,7 @@ class RolesTest extends TestCase
 
     public function test_not_all_strings(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertFalse($object->isValid([
             Role::users()->toString(),
             123,
@@ -58,14 +62,14 @@ class RolesTest extends TestCase
 
     public function test_obsolete_wildcard_role(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertFalse($object->isValid(['*']));
         $this->assertEquals('Wildcard role "*" has been replaced. Use "any" instead.', $object->getDescription());
     }
 
     public function test_obsolete_role_prefix(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertFalse($object->isValid(['read("role:123")']));
         $this->assertEquals('Roles using the "role:" prefix have been removed. Use "users", "guests", or "any" instead.', $object->getDescription());
     }
@@ -79,7 +83,7 @@ class RolesTest extends TestCase
 
     public function test_labels(): void
     {
-        $object = new Roles;
+        $object = new Roles();
         $this->assertTrue($object->isValid(['label:123']));
         $this->assertFalse($object->isValid(['label:not-alphanumeric']));
     }

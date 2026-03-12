@@ -1158,7 +1158,7 @@ trait Attributes
          */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = new Document;
+        $attribute = new Document();
 
         foreach ($attributes as $value) {
             if ($value->getId() === $old) {

@@ -4387,7 +4387,7 @@ trait DocumentTests
             'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new \stdClass,
+            'prefs' => new \stdClass(),
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],
@@ -4543,12 +4543,12 @@ trait DocumentTests
     {
         $document = $this->initDocumentsFixture();
         $document->setAttribute('integer_signed', 7);
-        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime, function () use ($document) {
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
         $this->assertEquals(7, $result->getAttribute('integer_signed'));
 
-        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $document->setAttribute('integer_signed', 8);
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
@@ -4564,7 +4564,7 @@ trait DocumentTests
     public function testDeleteDocumentConflict(): void
     {
         $document = $this->initDocumentsFixture();
-        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);
         $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
             return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
@@ -4684,7 +4684,7 @@ trait DocumentTests
         }
 
         // TEST: Can't delete documents in the past
-        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection, $database) {
@@ -5211,7 +5211,7 @@ trait DocumentTests
         $this->assertEquals(5, \count($docs));
 
         // TEST (FAIL): Can't delete documents in the past
-        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {

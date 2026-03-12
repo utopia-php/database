@@ -92,7 +92,7 @@ trait Documents
         }
 
         if (empty($id)) {
-            return new Document;
+            return new Document();
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -244,7 +244,7 @@ trait Documents
                 try {
                     $start = new \DateTime($val);
 
-                    return (new \DateTime) > (clone $start)->modify("+{$ttlSeconds} seconds");
+                    return (new \DateTime()) > (clone $start)->modify("+{$ttlSeconds} seconds");
                 } catch (\Throwable) {
                     return false;
                 }
@@ -359,7 +359,7 @@ trait Documents
         $document = $this->encode($collection, $document);
 
         if ($this->validate) {
-            $validator = new Permissions;
+            $validator = new Permissions();
             if (! $validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());
             }
@@ -551,7 +551,7 @@ trait Documents
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
-                return new Document;
+                return new Document();
             }
 
             $skipPermissionsUpdate = true;
@@ -2109,7 +2109,7 @@ trait Documents
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
 
         if (! $found) {
-            return new Document;
+            return new Document();
         }
 
         return $found;

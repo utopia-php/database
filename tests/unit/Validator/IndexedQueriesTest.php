@@ -17,36 +17,40 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexedQueriesTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_empty_queries(): void
     {
-        $validator = new IndexedQueries;
+        $validator = new IndexedQueries();
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_query(): void
     {
-        $validator = new IndexedQueries;
+        $validator = new IndexedQueries();
 
         $this->assertEquals(false, $validator->isValid(['this.is.invalid']));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new IndexedQueries;
+        $validator = new IndexedQueries();
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new IndexedQueries([], [], [new Limit]);
+        $validator = new IndexedQueries([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit]);
+        $validator = new IndexedQueries([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
@@ -76,10 +80,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor,
+                new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit,
-                new Offset,
+                new Limit(),
+                new Offset(),
                 new Order($attributes),
             ]
         );
@@ -139,10 +143,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor,
+                new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit,
-                new Offset,
+                new Limit(),
+                new Offset(),
                 new Order($attributes),
             ]
         );
@@ -192,10 +196,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor,
+                new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit,
-                new Offset,
+                new Limit(),
+                new Offset(),
                 new Order($attributes),
             ]
         );

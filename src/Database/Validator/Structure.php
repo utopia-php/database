@@ -107,7 +107,8 @@ class Structure extends Validator
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
         private readonly ?Document $currentDocument = null
-    ) {}
+    ) {
+    }
 
     /**
      * Remove a Validator
@@ -350,13 +351,13 @@ class Structure extends Validator
 
                 case ColumnType::Double->value:
                     // We need both Float and Range because Range implicitly casts non-numeric values
-                    $validators[] = new FloatValidator;
+                    $validators[] = new FloatValidator();
                     $min = $signed ? -Database::MAX_DOUBLE : 0;
                     $validators[] = new Range($min, Database::MAX_DOUBLE, ColumnType::Double->value);
                     break;
 
                 case ColumnType::Boolean->value:
-                    $validators[] = new Boolean;
+                    $validators[] = new Boolean();
                     break;
 
                 case ColumnType::Datetime->value:
@@ -367,7 +368,7 @@ class Structure extends Validator
                     break;
 
                 case ColumnType::Object->value:
-                    $validators[] = new ObjectValidator;
+                    $validators[] = new ObjectValidator();
                     break;
 
                 case ColumnType::Point->value:

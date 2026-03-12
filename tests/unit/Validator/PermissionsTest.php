@@ -13,16 +13,20 @@ use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     /**
      * @throws DatabaseException
      */
     public function test_single_method_single_value(): void
     {
-        $object = new Permissions;
+        $object = new Permissions();
 
         $document = new Document([
             '$id' => ID::unique(),
@@ -93,7 +97,7 @@ class PermissionsTest extends TestCase
 
     public function test_multiple_method_single_value(): void
     {
-        $object = new Permissions;
+        $object = new Permissions();
 
         $document = new Document([
             '$id' => ID::unique(),
@@ -151,7 +155,7 @@ class PermissionsTest extends TestCase
 
     public function test_multiple_method_multiple_values(): void
     {
-        $object = new Permissions;
+        $object = new Permissions();
 
         $document = new Document([
             '$id' => ID::unique(),
@@ -187,7 +191,7 @@ class PermissionsTest extends TestCase
 
     public function test_invalid_permissions(): void
     {
-        $object = new Permissions;
+        $object = new Permissions();
 
         $this->assertFalse($object->isValid(Permission::create(Role::any())));
         $this->assertEquals('Permissions must be an array of strings.', $object->getDescription());
@@ -306,7 +310,7 @@ class PermissionsTest extends TestCase
       */
     public function test_duplicate_methods(): void
     {
-        $validator = new Permissions;
+        $validator = new Permissions();
 
         $user = ID::unique();
 

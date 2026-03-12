@@ -72,7 +72,7 @@ class SQLite extends MariaDB
 
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\SQLite;
+        return new \Utopia\Query\Builder\SQLite();
     }
 
     /**

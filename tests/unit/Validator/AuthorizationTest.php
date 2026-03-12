@@ -17,10 +17,12 @@ class AuthorizationTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->authorization = new Authorization;
+        $this->authorization = new Authorization();
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_values(): void
     {

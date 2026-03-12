@@ -21,13 +21,21 @@ class PermissionWrite implements Write
         return $row;
     }
 
-    public function afterCreate(string $table, array $metadata, mixed $context): void {}
+    public function afterCreate(string $table, array $metadata, mixed $context): void
+    {
+    }
 
-    public function afterUpdate(string $table, array $metadata, mixed $context): void {}
+    public function afterUpdate(string $table, array $metadata, mixed $context): void
+    {
+    }
 
-    public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void {}
+    public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void
+    {
+    }
 
-    public function afterDelete(string $table, array $ids, mixed $context): void {}
+    public function afterDelete(string $table, array $ids, mixed $context): void
+    {
+    }
 
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {

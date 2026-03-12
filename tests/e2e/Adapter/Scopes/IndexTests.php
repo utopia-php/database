@@ -864,7 +864,7 @@ trait IndexTests
         $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
-        $now = new \DateTime;
+        $now = new \DateTime();
         $future1 = (clone $now)->modify('+2 hours');
         $future2 = (clone $now)->modify('+1 hour');
         $past = (clone $now)->modify('-1 hour');

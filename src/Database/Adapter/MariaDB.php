@@ -1289,7 +1289,7 @@ class MariaDB extends SQL implements Feature\Timeouts
      */
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\MariaDB;
+        return new \Utopia\Query\Builder\MariaDB();
     }
 
     /**
@@ -1321,7 +1321,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
     protected function createSchemaBuilder(): \Utopia\Query\Schema
     {
-        return new \Utopia\Query\Schema\MySQL;
+        return new \Utopia\Query\Schema\MySQL();
     }
 
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string

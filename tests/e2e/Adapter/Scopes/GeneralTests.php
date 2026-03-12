@@ -997,7 +997,7 @@ trait GeneralTests
         for ($i = 0; $i < $maxRetries; $i++) {
             usleep($delayMs * 1000);
             try {
-                $redis = new \Redis;
+                $redis = new \Redis();
                 $redis->connect('redis', 6379, 1.0);
                 $redis->ping();
                 $redis->close();

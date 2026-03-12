@@ -33,7 +33,7 @@ class SQLiteTest extends Base
         // $dsn = 'memory'; // Overwrite for fast tests
         $pdo = new PDO('sqlite:'.$dsn, null, null, SQLite::getPDOAttributes());
 
-        $redis = new Redis;
+        $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(3);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));

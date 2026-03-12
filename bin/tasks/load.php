@@ -61,7 +61,7 @@ $cli
 
         $start = null;
         $namespace = '_ns';
-        $cache = new Cache(new NoCache);
+        $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
@@ -125,7 +125,7 @@ $cli
         );
 
         $pool = new PDOPool(
-            (new PDOConfig)
+            (new PDOConfig())
                 ->withDriver($cfg['driver'])
                 ->withHost($cfg['host'])
                 ->withPort($cfg['port'])

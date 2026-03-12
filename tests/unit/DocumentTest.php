@@ -50,10 +50,12 @@ class DocumentTest extends TestCase
             ],
         ]);
 
-        $this->empty = new Document;
+        $this->empty = new Document();
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_document_nulls(): void
     {
@@ -192,7 +194,7 @@ class DocumentTest extends TestCase
                 Permission::delete(Role::user('new')),
             ],
             'email' => 'joe@example.com',
-            'prefs' => new \stdClass,
+            'prefs' => new \stdClass(),
         ]);
 
         $document->setAttributes($otherDocument->getArrayCopy());
@@ -399,7 +401,7 @@ class DocumentTest extends TestCase
 
     public function test_empty_document_sequence(): void
     {
-        $empty = new Document;
+        $empty = new Document();
 
         $this->assertNull($empty->getSequence());
         $this->assertNotSame('', $empty->getSequence());

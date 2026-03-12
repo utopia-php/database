@@ -1027,7 +1027,7 @@ class Mirror extends Database
     protected function getUpgradeStatus(string $collection): ?Document
     {
         if ($collection === 'upgrades' || $collection === Database::METADATA) {
-            return new Document;
+            return new Document();
         }
 
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {

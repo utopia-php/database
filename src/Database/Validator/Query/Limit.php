@@ -39,7 +39,7 @@ class Limit extends Base
 
         $limit = $value->getValue();
 
-        $validator = new Numeric;
+        $validator = new Numeric();
         if (! $validator->isValid($limit)) {
             $this->message = 'Invalid limit: '.$validator->getDescription();
 

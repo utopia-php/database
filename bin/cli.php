@@ -7,7 +7,7 @@ use Utopia\CLI\Console;
 
 ini_set('memory_limit', '-1');
 
-$cli = new CLI;
+$cli = new CLI();
 
 include 'tasks/load.php';
 include 'tasks/index.php';

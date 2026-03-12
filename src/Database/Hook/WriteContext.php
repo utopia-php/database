@@ -22,5 +22,6 @@ readonly class WriteContext
         public Closure $decorateRow,
         public Closure $createBuilder,
         public Closure $getTableRaw,
-    ) {}
+    ) {
+    }
 }

@@ -10,7 +10,8 @@ class TenantFilter implements Filter
     public function __construct(
         private int|string $tenant,
         private string $metadataCollection = ''
-    ) {}
+    ) {
+    }
 
     public function filter(string $table): Condition
     {

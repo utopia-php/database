@@ -38,7 +38,7 @@ class MySQLTest extends Base
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-        $redis = new Redis;
+        $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->select(1);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));

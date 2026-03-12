@@ -2289,7 +2289,7 @@ trait SchemalessTests
         $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
-        $now = new \DateTime;
+        $now = new \DateTime();
         $future1 = (clone $now)->modify('+2 hours');
         $future2 = (clone $now)->modify('+1 hour');
         $past = (clone $now)->modify('-1 hour');
@@ -2613,7 +2613,7 @@ trait SchemalessTests
             $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
-        $now = new \DateTime;
+        $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
         $futureTime = (clone $now)->modify('+120 seconds'); // Will expire in 2 minutes
 
@@ -2749,7 +2749,7 @@ trait SchemalessTests
             $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
-        $now = new \DateTime;
+        $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired from TTL perspective
 
         $expiredDoc = $database->createDocument($col, new Document([
@@ -2967,7 +2967,7 @@ trait SchemalessTests
             $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
-        $now = new \DateTime;
+        $now = new \DateTime();
         $expiredTime = (clone $now)->modify('-10 seconds'); // Already expired
         $futureTime = (clone $now)->modify('+120 seconds'); // Will expire in 2 minutes
 

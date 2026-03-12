@@ -24,15 +24,19 @@ class DateTimeTest extends TestCase
         $this->maxAllowed = new \DateTime($this->maxString);
     }
 
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_create_datetime(): void
     {
         $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
 
-        $this->assertGreaterThan(DateTime::addSeconds(new \DateTime, -3), DateTime::now());
+        $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
         $this->assertEquals(true, $dateValidator->isValid('2022-12-04'));
         $this->assertEquals(true, $dateValidator->isValid('2022-1-4 11:31'));
         $this->assertEquals(true, $dateValidator->isValid('2022-12-04 11:31:52'));
@@ -76,8 +80,8 @@ class DateTimeTest extends TestCase
             requireDateInFuture: true,
         );
 
-        $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, -3)));
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, 5)));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
         $this->assertEquals("Value must be valid date in the future and between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
 
         $dateValidator = new DatetimeValidator(
@@ -86,8 +90,8 @@ class DateTimeTest extends TestCase
             requireDateInFuture: false
         );
 
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, -3)));
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, 5)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
         $this->assertEquals("Value must be valid date between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
     }
 
@@ -158,7 +162,7 @@ class DateTimeTest extends TestCase
             offset: 60
         );
 
-        $time = (new \DateTime);
+        $time = (new \DateTime());
         $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
         $time = $time->add(new \DateInterval('PT50S'));
         $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
@@ -173,7 +177,7 @@ class DateTimeTest extends TestCase
             offset: 60
         );
 
-        $time = (new \DateTime);
+        $time = (new \DateTime());
         $time = $time->add(new \DateInterval('PT50S'));
         $time = $time->add(new \DateInterval('PT20S'));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));

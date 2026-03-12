@@ -34,7 +34,7 @@ class Offset extends Base
 
         $offset = $value->getValue();
 
-        $validator = new Numeric;
+        $validator = new Numeric();
         if (! $validator->isValid($offset)) {
             $this->message = 'Invalid limit: '.$validator->getDescription();
 

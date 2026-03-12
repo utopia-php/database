@@ -7,7 +7,8 @@ class Change
     public function __construct(
         protected Document $old,
         protected Document $new,
-    ) {}
+    ) {
+    }
 
     public function getOld(): Document
     {

@@ -56,8 +56,8 @@ class Documents extends IndexedQueries
         ]);
 
         $validators = [
-            new Limit,
-            new Offset,
+            new Limit(),
+            new Offset(),
             new Cursor($maxUIDLength),
             new Filter(
                 $attributes,

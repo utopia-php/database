@@ -8,7 +8,8 @@ class Role
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
-    ) {}
+    ) {
+    }
 
     /**
      * Create a role string from this Role instance

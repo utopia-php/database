@@ -53,7 +53,7 @@ abstract class Base extends TestCase
         $this->testDatabase = 'utopiaTests_'.static::getTestToken();
 
         if (is_null(self::$authorization)) {
-            self::$authorization = new Authorization;
+            self::$authorization = new Authorization();
         }
 
         self::$authorization->addRole('any');

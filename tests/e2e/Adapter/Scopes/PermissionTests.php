@@ -391,7 +391,7 @@ trait PermissionTests
         /**
          * Validate the decode function does not add $permissions null entry when no permissions are provided
          */
-        $document = $database->createDocument(__FUNCTION__, new Document);
+        $document = $database->createDocument(__FUNCTION__, new Document());
 
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertEquals([], $document->getAttribute('$permissions'));
@@ -399,7 +399,7 @@ trait PermissionTests
         $documents = [];
 
         for ($i = 0; $i < 2; $i++) {
-            $documents[] = new Document;
+            $documents[] = new Document();
         }
 
         $results = [];

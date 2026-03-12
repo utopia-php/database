@@ -9,7 +9,7 @@ class ObjectTest extends TestCase
 {
     public function test_valid_associative_objects(): void
     {
-        $validator = new ObjectValidator;
+        $validator = new ObjectValidator();
 
         $this->assertTrue($validator->isValid(['key' => 'value']));
         $this->assertTrue($validator->isValid([
@@ -48,7 +48,7 @@ class ObjectTest extends TestCase
 
     public function test_invalid_structures(): void
     {
-        $validator = new ObjectValidator;
+        $validator = new ObjectValidator();
 
         $this->assertFalse($validator->isValid(['a', 'b', 'c']));
 
@@ -61,7 +61,7 @@ class ObjectTest extends TestCase
 
     public function test_empty_cases(): void
     {
-        $validator = new ObjectValidator;
+        $validator = new ObjectValidator();
 
         $this->assertTrue($validator->isValid([]));
 

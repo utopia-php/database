@@ -362,7 +362,7 @@ class Database
         $this->cache = $cache;
         $this->instanceFilters = $filters;
 
-        $this->setAuthorization(new Authorization);
+        $this->setAuthorization(new Authorization());
 
         self::addFilter(
             'json',
@@ -1704,7 +1704,7 @@ class Database
         $queryAttribute = $query->getAttribute();
         $isNestedQueryAttribute = $this->getAdapter()->supports(Capability::DefinedAttributes) && $this->adapter->supports(Capability::Objects) && \str_contains($queryAttribute, '.');
 
-        $attribute = new Document;
+        $attribute = new Document();
 
         foreach ($attributes as $attr) {
             if ($attr->getId() === $query->getAttribute()) {

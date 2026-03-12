@@ -10,11 +10,13 @@ class DateTime
 
     protected static string $formatTz = 'Y-m-d\TH:i:s.vP';
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     public static function now(): string
     {
-        $date = new \DateTime;
+        $date = new \DateTime();
 
         return self::format($date);
     }

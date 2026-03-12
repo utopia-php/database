@@ -14,7 +14,8 @@ abstract class Filter
     public function init(
         Database $source,
         ?Database $destination,
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called after all actions are executed, when the filter is destructed.
@@ -22,7 +23,8 @@ abstract class Filter
     public function shutdown(
         Database $source,
         ?Database $destination,
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called before collection is created in the destination database
@@ -55,7 +57,8 @@ abstract class Filter
         Database $source,
         Database $destination,
         string $collectionId,
-    ): void {}
+    ): void {
+    }
 
     public function beforeCreateAttribute(
         Database $source,
@@ -82,7 +85,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         string $attributeId,
-    ): void {}
+    ): void {
+    }
 
     // Indexes
 
@@ -111,7 +115,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         string $indexId,
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called before document is created in the destination database
@@ -183,7 +188,8 @@ abstract class Filter
         string $collectionId,
         Document $updates,
         array $queries
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called before document is deleted in the destination database
@@ -193,7 +199,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         string $documentId,
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called after document is deleted in the destination database
@@ -203,7 +210,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         string $documentId,
-    ): void {}
+    ): void {
+    }
 
     /**
      * @param  array<Query>  $queries
@@ -213,7 +221,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         array $queries
-    ): void {}
+    ): void {
+    }
 
     /**
      * @param  array<Query>  $queries
@@ -223,7 +232,8 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         array $queries
-    ): void {}
+    ): void {
+    }
 
     /**
      * Called before document is upserted in the destination database

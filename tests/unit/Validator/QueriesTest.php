@@ -16,29 +16,33 @@ use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_empty_queries(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
 
-        $validator = new Queries([new Limit]);
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new Queries([new Limit]);
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::limit(-1)]));
     }
 
@@ -64,10 +68,10 @@ class QueriesTest extends TestCase
 
         $validator = new Queries(
             [
-                new Cursor,
+                new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit,
-                new Offset,
+                new Limit(),
+                new Offset(),
                 new Order($attributes),
             ]
         );

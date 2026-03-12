@@ -45,7 +45,7 @@ $cli
     ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) {
         $start = null;
         $namespace = '_ns';
-        $cache = new Cache(new NoCache);
+        $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
@@ -176,7 +176,7 @@ $cli
         $pdo = null;
 
         $pool = new PDOPool(
-            (new PDOConfig)
+            (new PDOConfig())
                 ->withHost($cfg['host'])
                 ->withPort($cfg['port'])
                 ->withDbName($name)

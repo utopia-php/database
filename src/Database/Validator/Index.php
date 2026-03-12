@@ -310,7 +310,7 @@ class Index extends Validator
         }
         if ($index->getAttribute('type') === IndexType::Fulltext->value) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
-                $attribute = $this->attributes[\strtolower($attribute)] ?? new Document;
+                $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 $attributeType = $attribute->getAttribute('type', '');
                 $validFulltextTypes = [
                     ColumnType::String->value,
@@ -341,7 +341,7 @@ class Index extends Validator
 
         $arrayAttributes = [];
         foreach ($attributes as $attributePosition => $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
 
             if ($attribute->getAttribute('array', false)) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
@@ -496,7 +496,7 @@ class Index extends Validator
         }
 
         foreach ($attributes as $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
 
             if (! \in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
@@ -534,7 +534,7 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
 
         foreach ($attributes as $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
 
             if (\in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
@@ -576,7 +576,7 @@ class Index extends Validator
             return false;
         }
 
-        $attribute = $this->attributes[\strtolower($attributes[0])] ?? new Document;
+        $attribute = $this->attributes[\strtolower($attributes[0])] ?? new Document();
         if ($attribute->getAttribute('type') !== ColumnType::Vector->value) {
             $this->message = 'Vector index can only be created on vector attributes';
 
@@ -622,7 +622,7 @@ class Index extends Validator
         ];
 
         foreach ($attributes as $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             if (! in_array($attribute->getAttribute('type', ''), $validStringTypes)) {
                 $this->message = 'Trigram index can only be created on string type attributes';
 
@@ -766,7 +766,7 @@ class Index extends Validator
             return false;
         }
 
-        $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+        $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
         if ($attributeType !== ColumnType::Object->value) {
@@ -796,7 +796,7 @@ class Index extends Validator
         }
 
         $attributeName = $attributes[0] ?? '';
-        $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document;
+        $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
         if ($this->supportForAttributes && $attributeType !== ColumnType::Datetime->value) {

@@ -8,6 +8,8 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\OrderDirection;
+use Utopia\Database\Hook\Relationship as RelationshipHook;
+use Utopia\Database\Hook\RelationshipHandler;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
@@ -1064,6 +1066,24 @@ class Mirror extends Database
         }
         if (isset($this->destination)) {
             $this->destination->setAuthorization($authorization);
+        }
+
+        return $this;
+    }
+
+    public function setRelationshipHook(?RelationshipHook $hook): self
+    {
+        parent::setRelationshipHook($hook);
+
+        if (isset($this->source)) {
+            $this->source->setRelationshipHook(
+                $hook !== null ? new RelationshipHandler($this->source) : null
+            );
+        }
+        if (isset($this->destination)) {
+            $this->destination->setRelationshipHook(
+                $hook !== null ? new RelationshipHandler($this->destination) : null
+            );
         }
 
         return $this;

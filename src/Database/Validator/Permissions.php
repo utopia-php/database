@@ -2,8 +2,8 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Database;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\PermissionType;
 
 class Permissions extends Roles
 {
@@ -22,7 +22,7 @@ class Permissions extends Roles
      * @param int $length maximum amount of permissions. 0 means unlimited.
      * @param array<string> $allowed allowed permissions. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = [...Database::PERMISSIONS, Database::PERMISSION_WRITE])
+    public function __construct(int $length = 0, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value, PermissionType::Write->value])
     {
         $this->length = $length;
         $this->allowed = $allowed;

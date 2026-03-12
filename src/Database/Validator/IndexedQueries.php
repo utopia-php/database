@@ -3,10 +3,10 @@
 namespace Utopia\Database\Validator;
 
 use Exception;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
+use Utopia\Query\Schema\IndexType;
 
 class IndexedQueries extends Queries
 {
@@ -35,17 +35,17 @@ class IndexedQueries extends Queries
         $this->attributes = $attributes;
 
         $this->indexes[] = new Document([
-            'type' => Database::INDEX_UNIQUE,
+            'type' => IndexType::Unique->value,
             'attributes' => ['$id']
         ]);
 
         $this->indexes[] = new Document([
-            'type' => Database::INDEX_KEY,
+            'type' => IndexType::Key->value,
             'attributes' => ['$createdAt']
         ]);
 
         $this->indexes[] = new Document([
-            'type' => Database::INDEX_KEY,
+            'type' => IndexType::Key->value,
             'attributes' => ['$updatedAt']
         ]);
 
@@ -116,7 +116,7 @@ class IndexedQueries extends Queries
             return false;
         }
 
-        $grouped = Query::groupByType($queries);
+        $grouped = Query::groupForDatabase($queries);
         $filters = $grouped['filters'];
 
         foreach ($filters as $filter) {
@@ -128,7 +128,7 @@ class IndexedQueries extends Queries
 
                 foreach ($this->indexes as $index) {
                     if (
-                        $index->getAttribute('type') === Database::INDEX_FULLTEXT
+                        $index->getAttribute('type') === IndexType::Fulltext->value
                         && $index->getAttribute('attributes') === [$filter->getAttribute()]
                     ) {
                         $matched = true;

@@ -13,95 +13,6 @@ use Utopia\Database\Exception\Operator as OperatorException;
  */
 class Operator
 {
-    // Numeric operation types
-    public const TYPE_INCREMENT = 'increment';
-    public const TYPE_DECREMENT = 'decrement';
-    public const TYPE_MODULO = 'modulo';
-    public const TYPE_POWER = 'power';
-    public const TYPE_MULTIPLY = 'multiply';
-    public const TYPE_DIVIDE = 'divide';
-
-    // Array operation types
-    public const TYPE_ARRAY_APPEND = 'arrayAppend';
-    public const TYPE_ARRAY_PREPEND = 'arrayPrepend';
-    public const TYPE_ARRAY_INSERT = 'arrayInsert';
-    public const TYPE_ARRAY_REMOVE = 'arrayRemove';
-    public const TYPE_ARRAY_UNIQUE = 'arrayUnique';
-    public const TYPE_ARRAY_INTERSECT = 'arrayIntersect';
-    public const TYPE_ARRAY_DIFF = 'arrayDiff';
-    public const TYPE_ARRAY_FILTER = 'arrayFilter';
-
-    // String operation types
-    public const TYPE_STRING_CONCAT = 'stringConcat';
-    public const TYPE_STRING_REPLACE = 'stringReplace';
-
-    // Boolean operation types
-    public const TYPE_TOGGLE = 'toggle';
-
-    // Date operation types
-    public const TYPE_DATE_ADD_DAYS = 'dateAddDays';
-    public const TYPE_DATE_SUB_DAYS = 'dateSubDays';
-    public const TYPE_DATE_SET_NOW = 'dateSetNow';
-
-    public const TYPES = [
-        self::TYPE_INCREMENT,
-        self::TYPE_DECREMENT,
-        self::TYPE_MULTIPLY,
-        self::TYPE_DIVIDE,
-        self::TYPE_MODULO,
-        self::TYPE_POWER,
-        self::TYPE_STRING_CONCAT,
-        self::TYPE_STRING_REPLACE,
-        self::TYPE_ARRAY_APPEND,
-        self::TYPE_ARRAY_PREPEND,
-        self::TYPE_ARRAY_INSERT,
-        self::TYPE_ARRAY_REMOVE,
-        self::TYPE_ARRAY_UNIQUE,
-        self::TYPE_ARRAY_INTERSECT,
-        self::TYPE_ARRAY_DIFF,
-        self::TYPE_ARRAY_FILTER,
-        self::TYPE_TOGGLE,
-        self::TYPE_DATE_ADD_DAYS,
-        self::TYPE_DATE_SUB_DAYS,
-        self::TYPE_DATE_SET_NOW,
-    ];
-
-    protected const NUMERIC_TYPES = [
-        self::TYPE_INCREMENT,
-        self::TYPE_DECREMENT,
-        self::TYPE_MULTIPLY,
-        self::TYPE_DIVIDE,
-        self::TYPE_MODULO,
-        self::TYPE_POWER,
-    ];
-
-    protected const ARRAY_TYPES = [
-        self::TYPE_ARRAY_APPEND,
-        self::TYPE_ARRAY_PREPEND,
-        self::TYPE_ARRAY_INSERT,
-        self::TYPE_ARRAY_REMOVE,
-        self::TYPE_ARRAY_UNIQUE,
-        self::TYPE_ARRAY_INTERSECT,
-        self::TYPE_ARRAY_DIFF,
-        self::TYPE_ARRAY_FILTER,
-    ];
-
-    protected const STRING_TYPES = [
-        self::TYPE_STRING_CONCAT,
-        self::TYPE_STRING_REPLACE,
-    ];
-
-    protected const BOOLEAN_TYPES = [
-        self::TYPE_TOGGLE,
-    ];
-
-
-    protected const DATE_TYPES = [
-        self::TYPE_DATE_ADD_DAYS,
-        self::TYPE_DATE_SUB_DAYS,
-        self::TYPE_DATE_SET_NOW,
-    ];
-
     protected string $method = '';
     protected string $attribute = '';
 
@@ -225,29 +136,7 @@ class Operator
      */
     public static function isMethod(string $value): bool
     {
-        return match ($value) {
-            self::TYPE_INCREMENT,
-            self::TYPE_DECREMENT,
-            self::TYPE_MULTIPLY,
-            self::TYPE_DIVIDE,
-            self::TYPE_MODULO,
-            self::TYPE_POWER,
-            self::TYPE_STRING_CONCAT,
-            self::TYPE_STRING_REPLACE,
-            self::TYPE_ARRAY_APPEND,
-            self::TYPE_ARRAY_PREPEND,
-            self::TYPE_ARRAY_INSERT,
-            self::TYPE_ARRAY_REMOVE,
-            self::TYPE_ARRAY_UNIQUE,
-            self::TYPE_ARRAY_INTERSECT,
-            self::TYPE_ARRAY_DIFF,
-            self::TYPE_ARRAY_FILTER,
-            self::TYPE_TOGGLE,
-            self::TYPE_DATE_ADD_DAYS,
-            self::TYPE_DATE_SUB_DAYS,
-            self::TYPE_DATE_SET_NOW => true,
-            default => false,
-        };
+        return OperatorType::tryFrom($value) !== null;
     }
 
     /**
@@ -257,7 +146,8 @@ class Operator
      */
     public function isNumericOperation(): bool
     {
-        return \in_array($this->method, self::NUMERIC_TYPES);
+        $type = OperatorType::tryFrom($this->method);
+        return $type !== null && $type->isNumeric();
     }
 
     /**
@@ -267,7 +157,8 @@ class Operator
      */
     public function isArrayOperation(): bool
     {
-        return \in_array($this->method, self::ARRAY_TYPES);
+        $type = OperatorType::tryFrom($this->method);
+        return $type !== null && $type->isArray();
     }
 
     /**
@@ -277,7 +168,8 @@ class Operator
      */
     public function isStringOperation(): bool
     {
-        return \in_array($this->method, self::STRING_TYPES);
+        $type = OperatorType::tryFrom($this->method);
+        return $type !== null && $type->isString();
     }
 
     /**
@@ -287,7 +179,8 @@ class Operator
      */
     public function isBooleanOperation(): bool
     {
-        return \in_array($this->method, self::BOOLEAN_TYPES);
+        $type = OperatorType::tryFrom($this->method);
+        return $type !== null && $type->isBoolean();
     }
 
 
@@ -298,7 +191,8 @@ class Operator
      */
     public function isDateOperation(): bool
     {
-        return \in_array($this->method, self::DATE_TYPES);
+        $type = OperatorType::tryFrom($this->method);
+        return $type !== null && $type->isDate();
     }
 
     /**
@@ -412,7 +306,7 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
-        return new self(self::TYPE_INCREMENT, '', $values);
+        return new self(OperatorType::Increment->value, '', $values);
     }
 
     /**
@@ -428,7 +322,7 @@ class Operator
         if ($min !== null) {
             $values[] = $min;
         }
-        return new self(self::TYPE_DECREMENT, '', $values);
+        return new self(OperatorType::Decrement->value, '', $values);
     }
 
 
@@ -440,7 +334,7 @@ class Operator
      */
     public static function arrayAppend(array $values): self
     {
-        return new self(self::TYPE_ARRAY_APPEND, '', $values);
+        return new self(OperatorType::ArrayAppend->value, '', $values);
     }
 
     /**
@@ -451,7 +345,7 @@ class Operator
      */
     public static function arrayPrepend(array $values): self
     {
-        return new self(self::TYPE_ARRAY_PREPEND, '', $values);
+        return new self(OperatorType::ArrayPrepend->value, '', $values);
     }
 
     /**
@@ -463,7 +357,7 @@ class Operator
      */
     public static function arrayInsert(int $index, mixed $value): self
     {
-        return new self(self::TYPE_ARRAY_INSERT, '', [$index, $value]);
+        return new self(OperatorType::ArrayInsert->value, '', [$index, $value]);
     }
 
     /**
@@ -474,7 +368,7 @@ class Operator
      */
     public static function arrayRemove(mixed $value): self
     {
-        return new self(self::TYPE_ARRAY_REMOVE, '', [$value]);
+        return new self(OperatorType::ArrayRemove->value, '', [$value]);
     }
 
     /**
@@ -485,7 +379,7 @@ class Operator
      */
     public static function stringConcat(mixed $value): self
     {
-        return new self(self::TYPE_STRING_CONCAT, '', [$value]);
+        return new self(OperatorType::StringConcat->value, '', [$value]);
     }
 
     /**
@@ -497,7 +391,7 @@ class Operator
      */
     public static function stringReplace(string $search, string $replace): self
     {
-        return new self(self::TYPE_STRING_REPLACE, '', [$search, $replace]);
+        return new self(OperatorType::StringReplace->value, '', [$search, $replace]);
     }
 
     /**
@@ -513,7 +407,7 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
-        return new self(self::TYPE_MULTIPLY, '', $values);
+        return new self(OperatorType::Multiply->value, '', $values);
     }
 
     /**
@@ -533,7 +427,7 @@ class Operator
         if ($min !== null) {
             $values[] = $min;
         }
-        return new self(self::TYPE_DIVIDE, '', $values);
+        return new self(OperatorType::Divide->value, '', $values);
     }
 
     /**
@@ -543,7 +437,7 @@ class Operator
      */
     public static function toggle(): self
     {
-        return new self(self::TYPE_TOGGLE, '', []);
+        return new self(OperatorType::Toggle->value, '', []);
     }
 
 
@@ -555,7 +449,7 @@ class Operator
      */
     public static function dateAddDays(int $days): self
     {
-        return new self(self::TYPE_DATE_ADD_DAYS, '', [$days]);
+        return new self(OperatorType::DateAddDays->value, '', [$days]);
     }
 
     /**
@@ -566,7 +460,7 @@ class Operator
      */
     public static function dateSubDays(int $days): self
     {
-        return new self(self::TYPE_DATE_SUB_DAYS, '', [$days]);
+        return new self(OperatorType::DateSubDays->value, '', [$days]);
     }
 
     /**
@@ -576,7 +470,7 @@ class Operator
      */
     public static function dateSetNow(): self
     {
-        return new self(self::TYPE_DATE_SET_NOW, '', []);
+        return new self(OperatorType::DateSetNow->value, '', []);
     }
 
     /**
@@ -591,7 +485,7 @@ class Operator
         if ($divisor == 0) {
             throw new OperatorException('Modulo by zero is not allowed');
         }
-        return new self(self::TYPE_MODULO, '', [$divisor]);
+        return new self(OperatorType::Modulo->value, '', [$divisor]);
     }
 
     /**
@@ -607,7 +501,7 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
-        return new self(self::TYPE_POWER, '', $values);
+        return new self(OperatorType::Power->value, '', $values);
     }
 
 
@@ -618,7 +512,7 @@ class Operator
      */
     public static function arrayUnique(): self
     {
-        return new self(self::TYPE_ARRAY_UNIQUE, '', []);
+        return new self(OperatorType::ArrayUnique->value, '', []);
     }
 
     /**
@@ -629,7 +523,7 @@ class Operator
      */
     public static function arrayIntersect(array $values): self
     {
-        return new self(self::TYPE_ARRAY_INTERSECT, '', $values);
+        return new self(OperatorType::ArrayIntersect->value, '', $values);
     }
 
     /**
@@ -640,7 +534,7 @@ class Operator
      */
     public static function arrayDiff(array $values): self
     {
-        return new self(self::TYPE_ARRAY_DIFF, '', $values);
+        return new self(OperatorType::ArrayDiff->value, '', $values);
     }
 
     /**
@@ -652,7 +546,7 @@ class Operator
      */
     public static function arrayFilter(string $condition, mixed $value = null): self
     {
-        return new self(self::TYPE_ARRAY_FILTER, '', [$condition, $value]);
+        return new self(OperatorType::ArrayFilter->value, '', [$condition, $value]);
     }
 
     /**

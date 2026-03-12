@@ -80,22 +80,13 @@ class Datetime extends Validator
             }
 
             // Constants from: https://www.php.net/manual/en/datetime.format.php
-            $denyConstants = [];
-
-            switch ($this->precision) {
-                case self::PRECISION_DAYS:
-                    $denyConstants = [ 'H', 'i', 's', 'v' ];
-                    break;
-                case self::PRECISION_HOURS:
-                    $denyConstants = [ 'i', 's', 'v' ];
-                    break;
-                case self::PRECISION_MINUTES:
-                    $denyConstants = [ 's', 'v' ];
-                    break;
-                case self::PRECISION_SECONDS:
-                    $denyConstants = [ 'v' ];
-                    break;
-            }
+            $denyConstants = match ($this->precision) {
+                self::PRECISION_DAYS => ['H', 'i', 's', 'v'],
+                self::PRECISION_HOURS => ['i', 's', 'v'],
+                self::PRECISION_MINUTES => ['s', 'v'],
+                self::PRECISION_SECONDS => ['v'],
+                default => [],
+            };
 
             foreach ($denyConstants as $constant) {
                 if (\intval($date->format($constant)) !== 0) {

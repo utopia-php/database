@@ -9,11 +9,32 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Capability;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\ColumnType;
 
 class MySQL extends MariaDB
 {
+    public function capabilities(): array
+    {
+        $remove = [
+            Capability::BoundaryInclusive,
+            Capability::SpatialIndexOrder,
+            Capability::OptionalSpatial,
+        ];
+
+        return array_values(array_filter(
+            array_merge(parent::capabilities(), [
+                Capability::SpatialAxisOrder,
+                Capability::MultiDimensionDistance,
+                Capability::CastIndexArray,
+            ]),
+            fn (Capability $c) => !in_array($c, $remove, true)
+        ));
+    }
+
     /**
      * Set max execution time
      * @param int $milliseconds
@@ -23,7 +44,7 @@ class MySQL extends MariaDB
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
         if ($milliseconds <= 0) {
@@ -101,22 +122,13 @@ class MySQL extends MariaDB
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
-        switch ($query->getMethod()) {
-            case Query::TYPE_DISTANCE_EQUAL:
-                $operator = '=';
-                break;
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $operator = '!=';
-                break;
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-                $operator = '>';
-                break;
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                $operator = '<';
-                break;
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        $operator = match ($query->getMethod()) {
+            Query::TYPE_DISTANCE_EQUAL => '=',
+            Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
+            Query::TYPE_DISTANCE_GREATER_THAN => '>',
+            Query::TYPE_DISTANCE_LESS_THAN => '<',
+            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+        };
 
         if ($useMeters) {
             $attr = "ST_SRID({$alias}.{$attribute}, " . Database::DEFAULT_SRID . ")";
@@ -129,22 +141,6 @@ class MySQL extends MariaDB
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
     }
 
-    public function getSupportForIndexArray(): bool
-    {
-        /**
-         * @link https://bugs.mysql.com/bug.php?id=111037
-         */
-        return true;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        if (!$this->getSupportForIndexArray()) {
-            return false;
-        }
-
-        return true;
-    }
 
     protected function processException(PDOException $e): \Exception
     {
@@ -173,33 +169,10 @@ class MySQL extends MariaDB
 
         return parent::processException($e);
     }
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-    */
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
 
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return true;
+        return new \Utopia\Query\Builder\MySQL();
     }
 
     /**
@@ -208,9 +181,9 @@ class MySQL extends MariaDB
     public function getSpatialSQLType(string $type, bool $required): string
     {
         switch ($type) {
-            case Database::VAR_POINT:
+            case ColumnType::Point->value:
                 $type = 'POINT SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -219,9 +192,9 @@ class MySQL extends MariaDB
                 }
                 return $type;
 
-            case Database::VAR_LINESTRING:
+            case ColumnType::Linestring->value:
                 $type = 'LINESTRING SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -231,9 +204,9 @@ class MySQL extends MariaDB
                 return $type;
 
 
-            case Database::VAR_POLYGON:
+            case ColumnType::Polygon->value:
                 $type = 'POLYGON SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (!$this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
@@ -245,20 +218,6 @@ class MySQL extends MariaDB
         return '';
     }
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
-    }
 
     /**
      * Get the spatial axis order specification string for MySQL
@@ -271,15 +230,6 @@ class MySQL extends MariaDB
         return "'axis-order=long-lat'";
     }
 
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
 
     /**
      * Get SQL expression for operator
@@ -296,17 +246,17 @@ class MySQL extends MariaDB
         $method = $operator->getMethod();
 
         switch ($method) {
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique->value:
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM (
@@ -320,8 +270,4 @@ class MySQL extends MariaDB
         return parent::getOperatorSQL($column, $operator, $bindIndex);
     }
 
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
-    }
 }

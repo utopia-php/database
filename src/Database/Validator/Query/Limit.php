@@ -35,7 +35,7 @@ class Limit extends Base
         }
 
         if ($value->getMethod() !== Query::TYPE_LIMIT) {
-            $this->message = 'Invalid query method: ' . $value->getMethod();
+            $this->message = 'Invalid query method: ' . $value->getMethod()->value;
             return false;
         }
 

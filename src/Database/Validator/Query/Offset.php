@@ -31,7 +31,7 @@ class Offset extends Base
         $method = $value->getMethod();
 
         if ($method !== Query::TYPE_OFFSET) {
-            $this->message = 'Query method invalid: ' . $method;
+            $this->message = 'Query method invalid: ' . $method->value;
             return false;
         }
 

@@ -5,8 +5,14 @@ namespace Utopia\Database;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Index;
 use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\OrderDirection;
+use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
+use Utopia\Query\Schema\IndexType;
 
 class Mirror extends Database
 {
@@ -301,63 +307,29 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, Attribute $attribute): bool
     {
-        $result = $this->source->createAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters
-        );
+        $result = $this->source->createAttribute($collection, $attribute);
 
         if ($this->destination === null) {
             return $result;
         }
 
         try {
-            $document = new Document([
-                '$id' => $id,
-                'type' => $type,
-                'size' => $size,
-                'required' => $required,
-                'default' => $default,
-                'signed' => $signed,
-                'array' => $array,
-                'format' => $format,
-                'formatOptions' => $formatOptions,
-                'filters' => $filters,
-            ]);
+            $document = $attribute->toDocument();
 
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
-                    attributeId: $id,
+                    attributeId: $attribute->key,
                     attribute: $document,
                 );
             }
 
-            $result = $this->destination->createAttribute(
-                $collection,
-                $document->getId(),
-                $document->getAttribute('type'),
-                $document->getAttribute('size'),
-                $document->getAttribute('required'),
-                $document->getAttribute('default'),
-                $document->getAttribute('signed'),
-                $document->getAttribute('array'),
-                $document->getAttribute('format'),
-                $document->getAttribute('formatOptions'),
-                $document->getAttribute('filters'),
-            );
+            $filteredAttribute = Attribute::fromDocument($document);
+            $result = $this->destination->createAttribute($collection, $filteredAttribute);
         } catch (\Throwable $err) {
             $this->logError('createAttribute', $err);
         }
@@ -374,23 +346,26 @@ class Mirror extends Database
         }
 
         try {
-            foreach ($attributes as &$attribute) {
+            $filteredAttributes = [];
+            foreach ($attributes as $attribute) {
+                $document = $attribute->toDocument();
+
                 foreach ($this->writeFilters as $filter) {
                     $document = $filter->beforeCreateAttribute(
                         source: $this->source,
                         destination: $this->destination,
                         collectionId: $collection,
-                        attributeId: $attribute['$id'],
-                        attribute: new Document($attribute),
+                        attributeId: $attribute->key,
+                        attribute: $document,
                     );
-
-                    $attribute = $document->getArrayCopy();
                 }
+
+                $filteredAttributes[] = Attribute::fromDocument($document);
             }
 
             $result = $this->destination->createAttributes(
                 $collection,
-                $attributes,
+                $filteredAttributes,
             );
         } catch (\Throwable $err) {
             $this->logError('createAttributes', $err);
@@ -399,7 +374,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $document = $this->source->updateAttribute(
             $collection,
@@ -478,42 +453,29 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
+    public function createIndex(string $collection, Index $index): bool
     {
-        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl);
+        $result = $this->source->createIndex($collection, $index);
 
         if ($this->destination === null) {
             return $result;
         }
 
         try {
-            $document = new Document([
-                '$id' => $id,
-                'type' => $type,
-                'attributes' => $attributes,
-                'lengths' => $lengths,
-                'orders' => $orders,
-            ]);
+            $document = $index->toDocument();
 
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
-                    indexId: $id,
+                    indexId: $index->key,
                     index: $document,
                 );
             }
 
-            $result = $this->destination->createIndex(
-                $collection,
-                $document->getId(),
-                $document->getAttribute('type'),
-                $document->getAttribute('attributes'),
-                $document->getAttribute('lengths'),
-                $document->getAttribute('orders'),
-                $document->getAttribute('ttl', 0)
-            );
+            $filteredIndex = Index::fromDocument($document);
+            $result = $this->destination->createIndex($collection, $filteredIndex);
         } catch (\Throwable $err) {
             $this->logError('createIndex', $err);
         }
@@ -983,16 +945,9 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        ?string $id = null,
-        ?string $twoWayKey = null,
-        string $onDelete = Database::RELATION_MUTATE_RESTRICT
-    ): bool {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+    public function createRelationship(Relationship $relationship): bool
+    {
+        return $this->delegate(__FUNCTION__, [$relationship]);
     }
 
     public function updateRelationship(
@@ -1001,7 +956,7 @@ class Mirror extends Database
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
         ?bool $twoWay = null,
-        ?string $onDelete = null
+        ?ForeignKeyAction $onDelete = null
     ): bool {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -1043,44 +998,33 @@ class Mirror extends Database
         $this->source->createCollection(
             id: 'upgrades',
             attributes: [
-                new Document([
-                    '$id' => ID::custom('collectionId'),
-                    'type' => Database::VAR_STRING,
-                    'size' => Database::LENGTH_KEY,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                    'default' => null,
-                    'format' => ''
-                ]),
-                new Document([
-                    '$id' => ID::custom('status'),
-                    'type' => Database::VAR_STRING,
-                    'size' => Database::LENGTH_KEY,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                    'default' => null,
-                    'format' => ''
-                ]),
+                new Attribute(
+                    key: 'collectionId',
+                    type: ColumnType::String,
+                    size: Database::LENGTH_KEY,
+                    required: true,
+                ),
+                new Attribute(
+                    key: 'status',
+                    type: ColumnType::String,
+                    size: Database::LENGTH_KEY,
+                    required: false,
+                ),
             ],
             indexes: [
-                new Document([
-                    '$id' => ID::custom('_unique_collection'),
-                    'type' => Database::INDEX_UNIQUE,
-                    'attributes' => ['collectionId'],
-                    'lengths' => [Database::LENGTH_KEY],
-                    'orders' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('_status_index'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => ['status'],
-                    'lengths' => [Database::LENGTH_KEY],
-                    'orders' => [Database::ORDER_ASC],
-                ]),
+                new Index(
+                    key: '_unique_collection',
+                    type: IndexType::Unique,
+                    attributes: ['collectionId'],
+                    lengths: [Database::LENGTH_KEY],
+                ),
+                new Index(
+                    key: '_status_index',
+                    type: IndexType::Key,
+                    attributes: ['status'],
+                    lengths: [Database::LENGTH_KEY],
+                    orders: [OrderDirection::ASC->value],
+                ),
             ],
         );
     }

@@ -7,7 +7,9 @@ use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
 use Utopia\Database\Adapter;
+use Utopia\Database\Attribute;
 use Utopia\Database\Change;
+use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -16,12 +18,26 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Index;
+use Utopia\Database\OrderDirection;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Capability;
+use Utopia\Database\Hook\MongoPermissionFilter;
+use Utopia\Database\Hook\MongoTenantFilter;
+use Utopia\Database\Hook\Read;
+use Utopia\Database\Hook\TenantWrite;
 use Utopia\Mongo\Client;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 use Utopia\Mongo\Exception as MongoException;
 
-class Mongo extends Adapter
+class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, Feature\Timeouts, Feature\InternalCasting, Feature\UTCCasting
 {
     /**
      * @var array<string>
@@ -51,6 +67,11 @@ class Mongo extends Adapter
     protected Client $client;
 
     /**
+     * @var list<Read>
+     */
+    protected array $readHooks = [];
+
+    /**
      * Default batch size for cursor operations
      */
     private const DEFAULT_BATCH_SIZE = 1000;
@@ -77,9 +98,60 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    protected function syncWriteHooks(): void
+    {
+        $this->removeWriteHook(TenantWrite::class);
+        if ($this->sharedTables && $this->tenant !== null) {
+            $this->addWriteHook(new TenantWrite($this->tenant));
+        }
+    }
+
+    protected function syncReadHooks(): void
+    {
+        $this->readHooks = [];
+
+        $this->readHooks[] = new MongoTenantFilter(
+            $this->tenant,
+            $this->sharedTables,
+            fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
+        );
+
+        $this->readHooks[] = new MongoPermissionFilter($this->authorization);
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    protected function applyReadFilters(array $filters, string $collection, string $forPermission = 'read'): array
+    {
+        foreach ($this->readHooks as $hook) {
+            $filters = $hook->applyFilters($filters, $collection, $forPermission);
+        }
+        return $filters;
+    }
+
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Objects,
+            Capability::Fulltext,
+            Capability::TTLIndexes,
+            Capability::Regex,
+            Capability::BatchCreateAttributes,
+            Capability::Hostname,
+            Capability::PCRE,
+            Capability::Relationships,
+            Capability::Upserts,
+            Capability::Timeouts,
+            Capability::InternalCasting,
+            Capability::UTCCasting,
+        ]);
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
+        if (!$this->supports(Capability::Timeouts)) {
             return;
         }
 
@@ -405,8 +477,8 @@ class Mongo extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
+     * @param array<Attribute> $attributes
+     * @param array<Index> $indexes
      * @return bool
      * @throws Exception
      */
@@ -433,7 +505,7 @@ class Mongo extends Adapter
 
         $internalIndex = [
             [
-                'key' => ['_uid' => $this->getOrder(Database::ORDER_ASC)],
+                'key' => ['_uid' => $this->getOrder(OrderDirection::ASC->value)],
                 'name' => '_uid',
                 'unique' => true,
                 'collation' => [
@@ -442,22 +514,22 @@ class Mongo extends Adapter
                 ],
             ],
             [
-                'key' => ['_createdAt' => $this->getOrder(Database::ORDER_ASC)],
+                'key' => ['_createdAt' => $this->getOrder(OrderDirection::ASC->value)],
                 'name' => '_createdAt',
             ],
             [
-                'key' => ['_updatedAt' => $this->getOrder(Database::ORDER_ASC)],
+                'key' => ['_updatedAt' => $this->getOrder(OrderDirection::ASC->value)],
                 'name' => '_updatedAt',
             ],
             [
-                'key' => ['_permissions' => $this->getOrder(Database::ORDER_ASC)],
+                'key' => ['_permissions' => $this->getOrder(OrderDirection::ASC->value)],
                 'name' => '_permissions',
             ]
         ];
 
         if ($this->sharedTables) {
             foreach ($internalIndex as &$index) {
-                $index['key'] = array_merge(['_tenant' => $this->getOrder(Database::ORDER_ASC)], $index['key']);
+                $index['key'] = array_merge(['_tenant' => $this->getOrder(OrderDirection::ASC->value)], $index['key']);
             }
             unset($index);
         }
@@ -489,32 +561,31 @@ class Mongo extends Adapter
 
                 $key = [];
                 $unique = false;
-                $attributes = $index->getAttribute('attributes');
-                $orders = $index->getAttribute('orders');
+                $attributes = $index->attributes;
+                $orders = $index->orders;
 
                 // If sharedTables, always add _tenant as the first key
                 if ($this->shouldAddTenantToIndex($index)) {
-                    $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
+                    $key['_tenant'] = $this->getOrder(OrderDirection::ASC->value);
                 }
 
                 foreach ($attributes as $j => $attribute) {
                     $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
-                    switch ($index->getAttribute('type')) {
-                        case Database::INDEX_KEY:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
+                    switch ($index->type) {
+                        case IndexType::Key:
+                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
                             break;
-                        case Database::INDEX_FULLTEXT:
+                        case IndexType::Fulltext:
                             // MongoDB fulltext index is just 'text'
-                            // Not using Database::INDEX_KEY for clarity
                             $order = 'text';
                             break;
-                        case Database::INDEX_UNIQUE:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
+                        case IndexType::Unique:
+                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
                             $unique = true;
                             break;
-                        case Database::INDEX_TTL:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
+                        case IndexType::Ttl:
+                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
                             break;
                         default:
                             // index not supported
@@ -526,34 +597,34 @@ class Mongo extends Adapter
 
                 $newIndexes[$i] = [
                     'key' => $key,
-                    'name' => $this->filter($index->getId()),
+                    'name' => $this->filter($index->key),
                     'unique' => $unique
                 ];
 
-                if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                if ($index->type === IndexType::Fulltext) {
                     $newIndexes[$i]['default_language'] = 'none';
                 }
 
                 // Handle TTL indexes
-                if ($index->getAttribute('type') === Database::INDEX_TTL) {
-                    $ttl = $index->getAttribute('ttl', 0);
+                if ($index->type === IndexType::Ttl) {
+                    $ttl = $index->ttl;
                     if ($ttl > 0) {
                         $newIndexes[$i]['expireAfterSeconds'] = $ttl;
                     }
                 }
 
                 // Add partial filter for indexes to avoid indexing null values
-                if (in_array($index->getAttribute('type'), [
-                    Database::INDEX_UNIQUE,
-                    Database::INDEX_KEY
+                if (in_array($index->type, [
+                    IndexType::Unique,
+                    IndexType::Key
                 ])) {
                     $partialFilter = [];
                     foreach ($attributes as $attr) {
                         // Find the matching attribute in collectionAttributes to get its type
                         $attrType = 'string'; // Default fallback
                         foreach ($collectionAttributes as $collectionAttr) {
-                            if ($collectionAttr->getId() === $attr) {
-                                $attrType = $this->getMongoTypeCode($collectionAttr->getAttribute('type'));
+                            if ($collectionAttr->key === $attr) {
+                                $attrType = $this->getMongoTypeCode($collectionAttr->type->value);
                                 break;
                             }
                         }
@@ -674,14 +745,10 @@ class Mongo extends Adapter
      * Create Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
+     * @param Attribute $attribute
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    public function createAttribute(string $collection, Attribute $attribute): bool
     {
         return true;
     }
@@ -690,7 +757,7 @@ class Mongo extends Adapter
      * Create Attributes
      *
      * @param string $collection
-     * @param array<array<string, mixed>> $attributes
+     * @param array<Attribute> $attributes
      * @return bool
      * @throws DatabaseException
      */
@@ -753,27 +820,16 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $id
-     * @param string $twoWayKey
+     * @param Relationship $relationship
      * @return bool
      */
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    public function createRelationship(Relationship $relationship): bool
     {
         return true;
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
+     * @param Relationship $relationship
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
@@ -781,22 +837,16 @@ class Mongo extends Adapter
      * @throws MongoException
      */
     public function updateRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side,
+        Relationship $relationship,
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
-        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+        $collectionName = $this->getNamespace() . '_' . $this->filter($relationship->collection);
+        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relationship->relatedCollection);
 
-        $escapedKey = $this->escapeMongoFieldName($key);
+        $escapedKey = $this->escapeMongoFieldName($relationship->key);
         $escapedNewKey = !\is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
-        $escapedTwoWayKey = $this->escapeMongoFieldName($twoWayKey);
+        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
         $escapedNewTwoWayKey = !\is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
 
         $renameKey = [
@@ -811,42 +861,42 @@ class Mongo extends Adapter
             ]
         ];
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey) && $key !== $newKey) {
+        switch ($relationship->type) {
+            case RelationType::OneToOne:
+                if (!\is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+            case RelationType::OneToMany:
+                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey) && $key !== $newKey) {
+            case RelationType::ManyToOne:
+                if (!\is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
+            case RelationType::ManyToMany:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
+                $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
+                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
 
                 if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $side === Database::RELATION_SIDE_PARENT
+                $junction = $relationship->side === RelationSide::Parent
                     ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
                     : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
 
-                if (!\is_null($newKey) && $key !== $newKey) {
+                if (!\is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
+                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -858,69 +908,57 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
+     * @param Relationship $relationship
      * @return bool
      * @throws MongoException
      * @throws Exception
      */
     public function deleteRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side
+        Relationship $relationship
     ): bool {
-        $collectionName = $this->getNamespace() . '_' . $this->filter($collection);
-        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relatedCollection);
-        $escapedKey = $this->escapeMongoFieldName($key);
-        $escapedTwoWayKey = $this->escapeMongoFieldName($twoWayKey);
+        $collectionName = $this->getNamespace() . '_' . $this->filter($relationship->collection);
+        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relationship->relatedCollection);
+        $escapedKey = $this->escapeMongoFieldName($relationship->key);
+        $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+        switch ($relationship->type) {
+            case RelationType::OneToOne:
+                if ($relationship->side === RelationSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
-                    if ($twoWay) {
+                    if ($relationship->twoWay) {
                         $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                     }
-                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                } elseif ($relationship->side === RelationSide::Child) {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
-                    if ($twoWay) {
+                    if ($relationship->twoWay) {
                         $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                     }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationType::OneToMany:
+                if ($relationship->side === RelationSide::Parent) {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationType::ManyToOne:
+                if ($relationship->side === RelationSide::Parent) {
                     $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
                 } else {
                     $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
+            case RelationType::ManyToMany:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collectionDoc = $this->getDocument($metadataCollection, $collection);
-                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
+                $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
+                $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
 
                 if ($collectionDoc->isEmpty() || $relatedCollectionDoc->isEmpty()) {
                     throw new DatabaseException('Collection or related collection not found');
                 }
 
-                $junction = $side === Database::RELATION_SIDE_PARENT
+                $junction = $relationship->side === RelationSide::Parent
                     ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
                     : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
 
@@ -937,33 +975,32 @@ class Mongo extends Adapter
      * Create Index
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
+     * @param Index $index
      * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
-     * @param int $ttl
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $attributes = $index->attributes;
+        $orders = $index->orders;
+        $ttl = $index->ttl;
         $indexes = [];
         $options = [];
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
         if ($this->shouldAddTenantToIndex($type)) {
-            $indexes['key']['_tenant'] = $this->getOrder(Database::ORDER_ASC);
+            $indexes['key']['_tenant'] = $this->getOrder(OrderDirection::ASC->value);
         }
 
         foreach ($attributes as $i => $attribute) {
 
-            if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === Database::VAR_OBJECT) {
+            if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value) {
                 $dottedAttributes = \explode('.', $attribute);
                 $expandedAttributes = array_map(fn ($attr) => $this->filter($attr), $dottedAttributes);
                 $attributes[$i] = implode('.', $expandedAttributes);
@@ -971,19 +1008,19 @@ class Mongo extends Adapter
                 $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+            $orderType = $this->getOrder($this->filter($orders[$i] ?? OrderDirection::ASC->value));
             $indexes['key'][$attributes[$i]] = $orderType;
 
             switch ($type) {
-                case Database::INDEX_KEY:
+                case IndexType::Key:
                     break;
-                case Database::INDEX_FULLTEXT:
+                case IndexType::Fulltext:
                     $indexes['key'][$attributes[$i]] = 'text';
                     break;
-                case Database::INDEX_UNIQUE:
+                case IndexType::Unique:
                     $indexes['unique'] = true;
                     break;
-                case Database::INDEX_TTL:
+                case IndexType::Ttl:
                     break;
                 default:
                     return false;
@@ -997,7 +1034,7 @@ class Mongo extends Adapter
          *  3.  Avoid adding collation to fulltext index
          */
         if (!empty($collation) &&
-            $type !== Database::INDEX_FULLTEXT) {
+            $type !== IndexType::Fulltext) {
             $indexes['collation'] = [
                 'locale' => 'en',
                 'strength' => 1,
@@ -1009,20 +1046,20 @@ class Mongo extends Adapter
          * Set to 'none' to disable stop words (words like 'other', 'the', 'a', etc.)
          * This ensures all words are indexed and searchable
          */
-        if ($type === Database::INDEX_FULLTEXT) {
+        if ($type === IndexType::Fulltext) {
             $indexes['default_language'] = 'none';
         }
 
         // Handle TTL indexes
-        if ($type === Database::INDEX_TTL && $ttl > 0) {
+        if ($type === IndexType::Ttl && $ttl > 0) {
             $indexes['expireAfterSeconds'] = $ttl;
         }
 
         // Add partial filter for indexes to avoid indexing null values
-        if (in_array($type, [Database::INDEX_UNIQUE, Database::INDEX_KEY])) {
+        if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = $indexAttributeTypes[$i] ?? Database::VAR_STRING; // Default to string if type not provided
+                $attrType = $indexAttributeTypes[$i] ?? ColumnType::String->value; // Default to string if type not provided
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
@@ -1036,7 +1073,7 @@ class Mongo extends Adapter
             // Wait for unique index to be fully built before returning
             // MongoDB builds indexes asynchronously, so we need to wait for completion
             // to ensure unique constraints are enforced immediately
-            if ($type === Database::INDEX_UNIQUE) {
+            if ($type === IndexType::Unique->value) {
                 $maxRetries = 10;
                 $retryCount = 0;
                 $baseDelay = 50000; // 50ms
@@ -1133,7 +1170,14 @@ class Mongo extends Adapter
                 throw new DatabaseException('Index not found: ' . $old);
             }
             $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, [], $index['ttl'] ?? 0);
+            $createdindex = $this->createIndex($collection, new Index(
+                key: $new,
+                type: IndexType::from($index['type']),
+                attributes: $index['attributes'],
+                lengths: $index['lengths'] ?? [],
+                orders: $index['orders'] ?? [],
+                ttl: $index['ttl'] ?? 0,
+            ), $indexAttributeTypes);
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -1179,10 +1223,8 @@ class Mongo extends Adapter
 
         $filters = ['_uid' => $id];
 
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
-
+        $this->syncReadHooks();
+        $filters = $this->applyReadFilters($filters, $collection->getId());
 
         $options = $this->getTransactionOptions();
 
@@ -1227,17 +1269,16 @@ class Mongo extends Adapter
      */
     public function createDocument(Document $collection, Document $document): Document
     {
+        $this->syncWriteHooks();
+
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $sequence = $document->getSequence();
 
         $document->removeAttribute('$sequence');
 
-        if ($this->sharedTables) {
-            $document->setAttribute('$tenant', $this->getTenant());
-        }
-
         $record = $this->replaceChars('$', '_', (array)$document);
+        $record = $this->decorateRow($record, $this->documentMetadata($document));
 
         // Insert manual id if set
         if (!empty($sequence)) {
@@ -1262,7 +1303,7 @@ class Mongo extends Adapter
      */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        if (!$this->getSupportForInternalCasting()) {
+        if (!$this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1297,13 +1338,13 @@ class Mongo extends Adapter
 
             foreach ($value as &$node) {
                 switch ($type) {
-                    case Database::VAR_INTEGER:
+                    case ColumnType::Integer->value:
                         $node = (int)$node;
                         break;
-                    case Database::VAR_DATETIME:
+                    case ColumnType::Datetime->value:
                         $node = $this->convertUTCDateToString($node);
                         break;
-                    case Database::VAR_OBJECT:
+                    case ColumnType::Object->value:
                         // Convert stdClass objects to arrays for object attributes
                         if (is_object($node) && get_class($node) === stdClass::class) {
                             $node = $this->convertStdClassToArray($node);
@@ -1317,7 +1358,7 @@ class Mongo extends Adapter
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
-        if (!$this->getSupportForAttributes()) {
+        if (!$this->supports(Capability::DefinedAttributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {
@@ -1355,7 +1396,7 @@ class Mongo extends Adapter
      */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        if (!$this->getSupportForInternalCasting()) {
+        if (!$this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1391,12 +1432,12 @@ class Mongo extends Adapter
 
             foreach ($value as &$node) {
                 switch ($type) {
-                    case Database::VAR_DATETIME:
+                    case ColumnType::Datetime->value:
                         if (!($node instanceof UTCDateTime)) {
                             $node = new UTCDateTime(new \DateTime($node));
                         }
                         break;
-                    case Database::VAR_OBJECT:
+                    case ColumnType::Object->value:
                         $node = json_decode($node);
                         break;
                     default:
@@ -1407,9 +1448,9 @@ class Mongo extends Adapter
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
         $indexes = $collection->getAttribute('indexes');
-        $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === Database::INDEX_TTL);
+        $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === IndexType::Ttl->value);
 
-        if (!$this->getSupportForAttributes()) {
+        if (!$this->supports(Capability::DefinedAttributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
                     continue;
@@ -1441,6 +1482,8 @@ class Mongo extends Adapter
      */
     public function createDocuments(Document $collection, array $documents): array
     {
+        $this->syncWriteHooks();
+
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
@@ -1458,6 +1501,7 @@ class Mongo extends Adapter
             }
 
             $record = $this->replaceChars('$', '_', (array)$document);
+            $record = $this->decorateRow($record, $this->documentMetadata($document));
 
             if (!empty($sequence)) {
                 $record['_id'] = $sequence;
@@ -1494,12 +1538,7 @@ class Mongo extends Adapter
     {
         try {
             $result = $this->client->insert($name, $document, $options);
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-
-            if ($this->sharedTables) {
-                $filters['_tenant'] = $this->getTenantFilters($name);
-            }
+            $filters = ['_uid' => $document['_uid']];
 
             try {
                 $result = $this->client->find(
@@ -1535,12 +1574,8 @@ class Mongo extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-        $filters = [];
-        $filters['_uid'] = $id;
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
+        $filters = ['_uid' => $id];
+        $filters = $this->applyReadFilters($filters, $collection->getId());
 
         try {
             unset($record['_id']); // Don't update _id
@@ -1580,10 +1615,7 @@ class Mongo extends Adapter
         ];
 
         $filters = $this->buildFilters($queries);
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
+        $filters = $this->applyReadFilters($filters, $collection->getId());
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
@@ -1618,6 +1650,9 @@ class Mongo extends Adapter
             return $changes;
         }
 
+        $this->syncWriteHooks();
+        $this->syncReadHooks();
+
         try {
             $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
             $attribute = $this->filter($attribute);
@@ -1636,18 +1671,12 @@ class Mongo extends Adapter
                     $attributes['_id'] = $document->getSequence();
                 }
 
-                if ($this->sharedTables) {
-                    $attributes['_tenant'] = $document->getTenant();
-                }
-
                 $record = $this->replaceChars('$', '_', $attributes);
+                $record = $this->decorateRow($record, $this->documentMetadata($document));
 
                 // Build filter for upsert
                 $filters = ['_uid' => $document->getId()];
-
-                if ($this->sharedTables) {
-                    $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-                }
+                $filters = $this->applyReadFilters($filters, $collection->getId());
 
                 unset($record['_id']); // Don't update _id
 
@@ -1724,7 +1753,7 @@ class Mongo extends Adapter
     {
         $unsetFields = [];
 
-        if ($this->getSupportForAttributes() || $oldDocument->isEmpty()) {
+        if ($this->supports(Capability::DefinedAttributes) || $oldDocument->isEmpty()) {
             return $unsetFields;
         }
 
@@ -1851,10 +1880,7 @@ class Mongo extends Adapter
     {
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
-        }
+        $filters = $this->applyReadFilters($filters, $collection);
 
         if ($max !== null || $min !== null) {
             $filters[$attribute] = [];
@@ -1897,12 +1923,8 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $filters = [];
-        $filters['_uid'] = $id;
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
-        }
+        $filters = ['_uid' => $id];
+        $filters = $this->applyReadFilters($filters, $collection);
 
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
@@ -1928,10 +1950,7 @@ class Mongo extends Adapter
         }
 
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
-        }
+        $filters = $this->applyReadFilters($filters, $collection);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
@@ -1952,19 +1971,15 @@ class Mongo extends Adapter
     /**
      * Update Attribute.
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param string $newKey
+     * @param Attribute $attribute
+     * @param string|null $newKey
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (!empty($newKey) && $newKey !== $id) {
-            return $this->renameAttribute($collection, $id, $newKey);
+        if (!empty($newKey) && $newKey !== $attribute->key) {
+            return $this->renameAttribute($collection, $attribute->key, $newKey);
         }
         return true;
     }
@@ -2008,7 +2023,7 @@ class Mongo extends Adapter
      * @throws Exception
      * @throws TimeoutException
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -2019,15 +2034,8 @@ class Mongo extends Adapter
 
         $filters = $this->buildFilters($queries);
 
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
-
-        // permissions
-        if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
-        }
+        $this->syncReadHooks();
+        $filters = $this->applyReadFilters($filters, $collection->getId(), $forPermission);
 
         $options = [];
 
@@ -2057,22 +2065,22 @@ class Mongo extends Adapter
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orderType = $this->filter($orderTypes[$i] ?? OrderDirection::ASC->value);
             $direction = $orderType;
 
             /** Get sort direction  ASC || DESC **/
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+            if ($cursorDirection === CursorDirection::Before->value) {
+                $direction = ($direction === OrderDirection::ASC->value)
+                    ? OrderDirection::DESC->value
+                    : OrderDirection::ASC->value;
             }
 
             $options['sort'][$attribute] = $this->getOrder($direction);
 
             /** Get operator sign  '$lt' ? '$gt' **/
-            $operator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+            $operator = $cursorDirection === CursorDirection::After->value
+                ? ($orderType === OrderDirection::DESC->value ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === OrderDirection::DESC->value ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
             $operator = $this->getQueryOperator($operator);
 
@@ -2169,7 +2177,7 @@ class Mongo extends Adapter
             }
         }
 
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
+        if ($cursorDirection === CursorDirection::Before->value) {
             $found = array_reverse($found);
         }
 
@@ -2193,17 +2201,17 @@ class Mongo extends Adapter
     private function getMongoTypeCode(string $appwriteType): string
     {
         return match ($appwriteType) {
-            Database::VAR_STRING => 'string',
-            Database::VAR_VARCHAR => 'string',
-            Database::VAR_TEXT => 'string',
-            Database::VAR_MEDIUMTEXT => 'string',
-            Database::VAR_LONGTEXT => 'string',
-            Database::VAR_INTEGER => 'int',
-            Database::VAR_FLOAT => 'double',
-            Database::VAR_BOOLEAN => 'bool',
-            Database::VAR_DATETIME => 'date',
-            Database::VAR_ID => 'string',
-            Database::VAR_UUID7 => 'string',
+            ColumnType::String->value => 'string',
+            ColumnType::Varchar->value => 'string',
+            ColumnType::Text->value => 'string',
+            ColumnType::MediumText->value => 'string',
+            ColumnType::LongText->value => 'string',
+            ColumnType::Integer->value => 'int',
+            ColumnType::Double->value => 'double',
+            ColumnType::Boolean->value => 'bool',
+            ColumnType::Datetime->value => 'date',
+            ColumnType::Id->value => 'string',
+            ColumnType::Uuid7->value => 'string',
             default => 'string'
         };
     }
@@ -2280,15 +2288,8 @@ class Mongo extends Adapter
         // Build filters from queries
         $filters = $this->buildFilters($queries);
 
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
-
-        // Add permissions filter if authorization is enabled
-        if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
-        }
+        $this->syncReadHooks();
+        $filters = $this->applyReadFilters($filters, $collection->getId());
 
         /**
          * Use MongoDB aggregation pipeline for accurate counting
@@ -2370,15 +2371,8 @@ class Mongo extends Adapter
         $queries = array_map(fn ($query) => clone $query, $queries);
         $filters = $this->buildFilters($queries);
 
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-        }
-
-        // permissions
-        if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
-        }
+        $this->syncReadHooks();
+        $filters = $this->applyReadFilters($filters, $collection->getId());
 
         // using aggregation to get sum an attribute as described in
         // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
@@ -2478,7 +2472,7 @@ class Mongo extends Adapter
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
-            if ($type === Database::VAR_RELATIONSHIP && !$document->offsetExists($key)) {
+            if ($type === ColumnType::Relationship->value && !$document->offsetExists($key)) {
                 $options = $attribute['options'] ?? [];
                 $twoWay = $options['twoWay'] ?? false;
                 $side = $options['side'] ?? '';
@@ -2487,10 +2481,10 @@ class Mongo extends Adapter
                 // Determine if this relationship stores data on this collection's documents
                 // Only set null defaults for relationships that would have a column in SQL
                 $storesData = match ($relationType) {
-                    Database::RELATION_ONE_TO_ONE => $side === Database::RELATION_SIDE_PARENT || $twoWay,
-                    Database::RELATION_ONE_TO_MANY => $side === Database::RELATION_SIDE_CHILD,
-                    Database::RELATION_MANY_TO_ONE => $side === Database::RELATION_SIDE_PARENT,
-                    Database::RELATION_MANY_TO_MANY => false,
+                    RelationType::OneToOne->value => $side === RelationSide::Parent->value || $twoWay,
+                    RelationType::OneToMany->value => $side === RelationSide::Child->value,
+                    RelationType::ManyToOne->value => $side === RelationSide::Parent->value,
+                    RelationType::ManyToMany->value => false,
                     default => false,
                 };
 
@@ -2595,7 +2589,7 @@ class Mongo extends Adapter
     protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-        $queries = Query::groupByType($queries)['filters'];
+        $queries = Query::groupForDatabase($queries)['filters'];
 
         foreach ($queries as $query) {
             /* @var $query Query */
@@ -2629,7 +2623,7 @@ class Mongo extends Adapter
     {
         // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
         // so they can be correctly compared against datetime fields stored in MongoDB.
-        if (!$this->getSupportForAttributes() || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
+        if (!$this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
             $values = $query->getValues();
             foreach ($values as $k => $value) {
                 if (is_string($value) && $this->isExtendedISODatetime($value)) {
@@ -2724,10 +2718,10 @@ class Mongo extends Adapter
             } else {
                 $filter['$text'][$operator] = $value;
             }
-        } elseif ($operator === Query::TYPE_BETWEEN) {
+        } elseif ($query->getMethod() === Query::TYPE_BETWEEN) {
             $filter[$attribute]['$lte'] = $value[1];
             $filter[$attribute]['$gte'] = $value[0];
-        } elseif ($operator === Query::TYPE_NOT_BETWEEN) {
+        } elseif ($query->getMethod() === Query::TYPE_NOT_BETWEEN) {
             $filter['$or'] = [
                 [$attribute => ['$lt' => $value[0]]],
                 [$attribute => ['$gt' => $value[1]]]
@@ -2836,12 +2830,12 @@ class Mongo extends Adapter
     /**
      * Get Query Operator
      *
-     * @param string $operator
+     * @param \Utopia\Query\Method $operator
      *
      * @return string
      * @throws Exception
      */
-    protected function getQueryOperator(string $operator): string
+    protected function getQueryOperator(\Utopia\Query\Method $operator): string
     {
         return match ($operator) {
             Query::TYPE_EQUAL,
@@ -2870,26 +2864,17 @@ class Mongo extends Adapter
             Query::TYPE_EXISTS,
             Query::TYPE_NOT_EXISTS => '$exists',
             Query::TYPE_ELEM_MATCH => '$elemMatch',
-            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_NOT_BETWEEN . ', ' . Query::TYPE_STARTS_WITH . ', ' . Query::TYPE_NOT_STARTS_WITH . ', ' . Query::TYPE_ENDS_WITH . ', ' . Query::TYPE_NOT_ENDS_WITH . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_NOT_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_NOT_SEARCH . ', ' . Query::TYPE_SELECT),
+            default => throw new DatabaseException('Unknown operator: ' . $operator->value),
         };
     }
 
-    protected function getQueryValue(string $method, mixed $value): mixed
+    protected function getQueryValue(\Utopia\Query\Method $method, mixed $value): mixed
     {
-        switch ($method) {
-            case Query::TYPE_STARTS_WITH:
-                $value = preg_quote($value, '/');
-                return $value . '.*';
-            case Query::TYPE_NOT_STARTS_WITH:
-                return $value;
-            case Query::TYPE_ENDS_WITH:
-                $value = preg_quote($value, '/');
-                return '.*' . $value;
-            case Query::TYPE_NOT_ENDS_WITH:
-                return $value;
-            default:
-                return $value;
-        }
+        return match ($method) {
+            Query::TYPE_STARTS_WITH => preg_quote($value, '/') . '.*',
+            Query::TYPE_ENDS_WITH => '.*' . preg_quote($value, '/'),
+            default => $value,
+        };
     }
 
     /**
@@ -2903,9 +2888,9 @@ class Mongo extends Adapter
     protected function getOrder(string $order): int
     {
         return match ($order) {
-            Database::ORDER_ASC => 1,
-            Database::ORDER_DESC => -1,
-            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
+            OrderDirection::ASC->value => 1,
+            OrderDirection::DESC->value => -1,
+            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . OrderDirection::ASC->value . ', ' . OrderDirection::DESC->value),
         };
     }
 
@@ -2915,17 +2900,23 @@ class Mongo extends Adapter
      * @param Document|string $indexOrType Index document or index type string
      * @return bool
      */
-    protected function shouldAddTenantToIndex(Document|string $indexOrType): bool
+    protected function shouldAddTenantToIndex(Index|Document|string|IndexType $indexOrType): bool
     {
         if (!$this->sharedTables) {
             return false;
         }
 
-        $indexType = $indexOrType instanceof Document
-            ? $indexOrType->getAttribute('type')
-            : $indexOrType;
+        if ($indexOrType instanceof Index) {
+            $indexType = $indexOrType->type;
+        } elseif ($indexOrType instanceof Document) {
+            $indexType = IndexType::tryFrom($indexOrType->getAttribute('type')) ?? IndexType::Key;
+        } elseif ($indexOrType instanceof IndexType) {
+            $indexType = $indexOrType;
+        } else {
+            $indexType = IndexType::tryFrom($indexOrType) ?? IndexType::Key;
+        }
 
-        return $indexType !== Database::INDEX_TTL;
+        return $indexType !== IndexType::Ttl;
     }
 
     /**
@@ -3019,236 +3010,17 @@ class Mongo extends Adapter
         return new \DateTime('-9999-01-01 00:00:00');
     }
 
-    /**
-     * Is schemas supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSchemas(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is internal casting supported?
-     *
-     * @return bool
-     */
-    public function getSupportForInternalCasting(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return true;
-    }
-
     public function setUTCDatetime(string $value): mixed
     {
         return new UTCDateTime(new \DateTime($value));
     }
 
 
-    /**
-     * Are attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForAttributes(): bool
-    {
-        return $this->supportForAttributes;
-    }
 
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
         return $this->supportForAttributes;
-    }
-
-    /**
-     * Is unique index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is fulltext Wildcard index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter handle Query Array Contains?
-     *
-     * @return bool
-     */
-    public function getSupportForQueryContains(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForAttributeResizing(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Are batch operations supported?
-     *
-     * @return bool
-     */
-    public function getSupportForBatchOperations(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is get connection id supported?
-     *
-     * @return bool
-     */
-    public function getSupportForGetConnectionId(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is PCRE regex supported?
-     *
-     * @return bool
-     */
-    public function getSupportForPCRERegex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is POSIX regex supported?
-     *
-     * @return bool
-     */
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is cache fallback supported?
-     *
-     * @return bool
-     */
-    public function getSupportForCacheSkipOnFailure(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is hostname supported?
-     *
-     * @return bool
-     */
-    public function getSupportForHostname(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is get schema attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForReconnection(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Are object (JSON) indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
     }
 
     /**
@@ -3320,138 +3092,6 @@ class Mongo extends Adapter
     public function getAttributeWidth(Document $collection): int
     {
         return 0;
-    }
-
-    /**
-     * Is casting supported?
-     *
-     * @return bool
-     */
-    public function getSupportForCasting(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Is spatial attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Get Support for Null Values in Spatial Indexes
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support operators?
-     *
-     * @return bool
-     */
-    public function getSupportForOperators(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter require booleans to be converted to integers (0/1)?
-     *
-     * @return bool
-     */
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support multiple fulltext indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support identical indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support random order for queries?
-     *
-     * @return bool
-     */
-    public function getSupportForOrderRandom(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForVectors(): bool
-    {
-        return false;
     }
 
     /**
@@ -3565,7 +3205,7 @@ class Mongo extends Adapter
      */
     public function getIdAttributeType(): string
     {
-        return Database::VAR_UUID7;
+        return ColumnType::Uuid7->value;
     }
 
     /**
@@ -3584,17 +3224,7 @@ class Mongo extends Adapter
         return 255;
     }
 
-    public function getConnectionId(): string
-    {
-        return '0';
-    }
-
     public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
@@ -3672,32 +3302,7 @@ class Mongo extends Adapter
         return '';
     }
 
-    public function getSupportForAlterLocks(): bool
-    {
-        return false;
-    }
-
     public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTTLIndexes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForTransactionRetries(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForNestedTransactions(): bool
     {
         return false;
     }

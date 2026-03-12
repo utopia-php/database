@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 use Utopia\Validator\Range;
 
@@ -45,16 +46,10 @@ class Sequence extends Validator
             return false;
         }
 
-        switch ($this->idAttributeType) {
-            case Database::VAR_UUID7: //UUID7
-                return preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1;
-            case Database::VAR_INTEGER:
-                $start = ($this->primary) ? 1 : 0;
-                $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);
-                return $validator->isValid($value);
-
-            default:
-                return false;
-        }
+        return match ($this->idAttributeType) {
+            ColumnType::Uuid7->value => preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1,
+            ColumnType::Integer->value => (new Range($this->primary ? 1 : 0, Database::MAX_BIG_INT, ColumnType::Integer->value))->isValid($value),
+            default => false,
+        };
     }
 }

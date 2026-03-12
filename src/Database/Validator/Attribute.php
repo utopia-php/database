@@ -7,6 +7,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
 class Attribute extends Validator
@@ -221,7 +222,7 @@ class Attribute extends Validator
     protected function getRequiredFilters(?string $type): array
     {
         return match ($type) {
-            Database::VAR_DATETIME => ['datetime'],
+            ColumnType::Datetime->value => ['datetime'],
             default => [],
         };
     }
@@ -291,45 +292,45 @@ class Attribute extends Validator
         $default = $attribute->getAttribute('default');
 
         switch ($type) {
-            case Database::VAR_ID:
+            case ColumnType::Id->value:
                 break;
 
-            case Database::VAR_STRING:
+            case ColumnType::String->value:
                 if ($size > $this->maxStringLength) {
                     $this->message = 'Max size allowed for string is: ' . number_format($this->maxStringLength);
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case Database::VAR_VARCHAR:
+            case ColumnType::Varchar->value:
                 if ($size > $this->maxVarcharLength) {
                     $this->message = 'Max size allowed for varchar is: ' . number_format($this->maxVarcharLength);
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case Database::VAR_TEXT:
+            case ColumnType::Text->value:
                 if ($size > 65535) {
                     $this->message = 'Max size allowed for text is: 65535';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case Database::VAR_MEDIUMTEXT:
+            case ColumnType::MediumText->value:
                 if ($size > 16777215) {
                     $this->message = 'Max size allowed for mediumtext is: 16777215';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case Database::VAR_LONGTEXT:
+            case ColumnType::LongText->value:
                 if ($size > 4294967295) {
                     $this->message = 'Max size allowed for longtext is: 4294967295';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case Database::VAR_INTEGER:
+            case ColumnType::Integer->value:
                 $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: ' . number_format($limit);
@@ -337,13 +338,13 @@ class Attribute extends Validator
                 }
                 break;
 
-            case Database::VAR_FLOAT:
-            case Database::VAR_BOOLEAN:
-            case Database::VAR_DATETIME:
-            case Database::VAR_RELATIONSHIP:
+            case ColumnType::Double->value:
+            case ColumnType::Boolean->value:
+            case ColumnType::Datetime->value:
+            case ColumnType::Relationship->value:
                 break;
 
-            case Database::VAR_OBJECT:
+            case ColumnType::Object->value:
                 if (!$this->supportForObject) {
                     $this->message = 'Object attributes are not supported';
                     throw new DatabaseException($this->message);
@@ -358,9 +359,9 @@ class Attribute extends Validator
                 }
                 break;
 
-            case Database::VAR_POINT:
-            case Database::VAR_LINESTRING:
-            case Database::VAR_POLYGON:
+            case ColumnType::Point->value:
+            case ColumnType::Linestring->value:
+            case ColumnType::Polygon->value:
                 if (!$this->supportForSpatialAttributes) {
                     $this->message = 'Spatial attributes are not supported';
                     throw new DatabaseException($this->message);
@@ -375,7 +376,7 @@ class Attribute extends Validator
                 }
                 break;
 
-            case Database::VAR_VECTOR:
+            case ColumnType::Vector->value:
                 if (!$this->supportForVectors) {
                     $this->message = 'Vector types are not supported by the current database';
                     throw new DatabaseException($this->message);
@@ -414,25 +415,25 @@ class Attribute extends Validator
 
             default:
                 $supportedTypes = [
-                    Database::VAR_STRING,
-                    Database::VAR_VARCHAR,
-                    Database::VAR_TEXT,
-                    Database::VAR_MEDIUMTEXT,
-                    Database::VAR_LONGTEXT,
-                    Database::VAR_INTEGER,
-                    Database::VAR_FLOAT,
-                    Database::VAR_BOOLEAN,
-                    Database::VAR_DATETIME,
-                    Database::VAR_RELATIONSHIP
+                    ColumnType::String->value,
+                    ColumnType::Varchar->value,
+                    ColumnType::Text->value,
+                    ColumnType::MediumText->value,
+                    ColumnType::LongText->value,
+                    ColumnType::Integer->value,
+                    ColumnType::Double->value,
+                    ColumnType::Boolean->value,
+                    ColumnType::Datetime->value,
+                    ColumnType::Relationship->value
                 ];
                 if ($this->supportForVectors) {
-                    $supportedTypes[] = Database::VAR_VECTOR;
+                    $supportedTypes[] = ColumnType::Vector->value;
                 }
                 if ($this->supportForSpatialAttributes) {
-                    \array_push($supportedTypes, ...Database::SPATIAL_TYPES);
+                    \array_push($supportedTypes, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value);
                 }
                 if ($this->supportForObject) {
-                    $supportedTypes[] = Database::VAR_OBJECT;
+                    $supportedTypes[] = ColumnType::Object->value;
                 }
                 $this->message = 'Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes);
                 throw new DatabaseException($this->message);
@@ -465,7 +466,7 @@ class Attribute extends Validator
         }
 
         // Reject array defaults for non-array attributes (except vectors, spatial types, and objects which use arrays internally)
-        if (\is_array($default) && !$array && !\in_array($type, [Database::VAR_VECTOR, Database::VAR_OBJECT, ...Database::SPATIAL_TYPES], true)) {
+        if (\is_array($default) && !$array && !\in_array($type, [ColumnType::Vector->value, ColumnType::Object->value, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
             $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }
@@ -495,7 +496,7 @@ class Attribute extends Validator
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::VAR_OBJECT) {
+            if (!in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]) && $type != ColumnType::Object->value) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -504,31 +505,31 @@ class Attribute extends Validator
         }
 
         switch ($type) {
-            case Database::VAR_STRING:
-            case Database::VAR_VARCHAR:
-            case Database::VAR_TEXT:
-            case Database::VAR_MEDIUMTEXT:
-            case Database::VAR_LONGTEXT:
+            case ColumnType::String->value:
+            case ColumnType::Varchar->value:
+            case ColumnType::Text->value:
+            case ColumnType::MediumText->value:
+            case ColumnType::LongText->value:
                 if ($defaultType !== 'string') {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case Database::VAR_INTEGER:
-            case Database::VAR_FLOAT:
-            case Database::VAR_BOOLEAN:
+            case ColumnType::Integer->value:
+            case ColumnType::Double->value:
+            case ColumnType::Boolean->value:
                 if ($type !== $defaultType) {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case Database::VAR_DATETIME:
-                if ($defaultType !== Database::VAR_STRING) {
+            case ColumnType::Datetime->value:
+                if ($defaultType !== ColumnType::String->value) {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case Database::VAR_VECTOR:
+            case ColumnType::Vector->value:
                 // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {
                     $this->message = 'Vector components must be numeric values (float or integer)';
@@ -537,22 +538,22 @@ class Attribute extends Validator
                 break;
             default:
                 $supportedTypes = [
-                    Database::VAR_STRING,
-                    Database::VAR_VARCHAR,
-                    Database::VAR_TEXT,
-                    Database::VAR_MEDIUMTEXT,
-                    Database::VAR_LONGTEXT,
-                    Database::VAR_INTEGER,
-                    Database::VAR_FLOAT,
-                    Database::VAR_BOOLEAN,
-                    Database::VAR_DATETIME,
-                    Database::VAR_RELATIONSHIP
+                    ColumnType::String->value,
+                    ColumnType::Varchar->value,
+                    ColumnType::Text->value,
+                    ColumnType::MediumText->value,
+                    ColumnType::LongText->value,
+                    ColumnType::Integer->value,
+                    ColumnType::Double->value,
+                    ColumnType::Boolean->value,
+                    ColumnType::Datetime->value,
+                    ColumnType::Relationship->value
                 ];
                 if ($this->supportForVectors) {
-                    $supportedTypes[] = Database::VAR_VECTOR;
+                    $supportedTypes[] = ColumnType::Vector->value;
                 }
                 if ($this->supportForSpatialAttributes) {
-                    \array_push($supportedTypes, ...Database::SPATIAL_TYPES);
+                    \array_push($supportedTypes, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value);
                 }
                 $this->message = 'Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes);
                 throw new DatabaseException($this->message);

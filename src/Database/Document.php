@@ -5,15 +5,14 @@ namespace Utopia\Database;
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\PermissionType;
+use Utopia\Database\SetType;
 
 /**
  * @extends ArrayObject<string, mixed>
  */
 class Document extends ArrayObject
 {
-    public const SET_TYPE_ASSIGN = 'assign';
-    public const SET_TYPE_PREPEND = 'prepend';
-    public const SET_TYPE_APPEND = 'append';
 
     /**
      * Construct.
@@ -100,7 +99,7 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_READ);
+        return $this->getPermissionsByType(PermissionType::Read->value);
     }
 
     /**
@@ -108,7 +107,7 @@ class Document extends ArrayObject
      */
     public function getCreate(): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_CREATE);
+        return $this->getPermissionsByType(PermissionType::Create->value);
     }
 
     /**
@@ -116,7 +115,7 @@ class Document extends ArrayObject
      */
     public function getUpdate(): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_UPDATE);
+        return $this->getPermissionsByType(PermissionType::Update->value);
     }
 
     /**
@@ -124,7 +123,7 @@ class Document extends ArrayObject
      */
     public function getDelete(): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_DELETE);
+        return $this->getPermissionsByType(PermissionType::Delete->value);
     }
 
     /**
@@ -241,17 +240,17 @@ class Document extends ArrayObject
      *
      * @return static
      */
-    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): static
+    public function setAttribute(string $key, mixed $value, SetType $type = SetType::Assign): static
     {
         switch ($type) {
-            case self::SET_TYPE_ASSIGN:
+            case SetType::Assign:
                 $this[$key] = $value;
                 break;
-            case self::SET_TYPE_APPEND:
+            case SetType::Append:
                 $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
                 \array_push($this[$key], $value);
                 break;
-            case self::SET_TYPE_PREPEND:
+            case SetType::Prepend:
                 $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
                 \array_unshift($this[$key], $value);
                 break;

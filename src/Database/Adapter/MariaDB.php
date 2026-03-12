@@ -4,6 +4,9 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -16,11 +19,34 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
+use Utopia\Query\Schema\Blueprint;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
-class MariaDB extends SQL
+class MariaDB extends SQL implements Feature\Timeouts
 {
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::IntegerBooleans,
+            Capability::NumericCasting,
+            Capability::AlterLock,
+            Capability::JSONOverlaps,
+            Capability::FulltextWildcard,
+            Capability::PCRE,
+            Capability::SpatialIndexOrder,
+            Capability::OptionalSpatial,
+            Capability::Timeouts,
+        ]);
+    }
+
     /**
      * Create Database
      *
@@ -37,9 +63,8 @@ class MariaDB extends SQL
             return true;
         }
 
-        $sql = "CREATE DATABASE `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
-
-        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
+        $result = $this->createSchemaBuilder()->createDatabase($name);
+        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $result->query);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -58,9 +83,8 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
-        $sql = "DROP DATABASE `{$name}`;";
-
-        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
+        $result = $this->createSchemaBuilder()->dropDatabase($name);
+        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $result->query);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -71,8 +95,8 @@ class MariaDB extends SQL
      * Create Collection
      *
      * @param string $name
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
+     * @param array<Attribute> $attributes
+     * @param array<Index> $indexes
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -80,147 +104,144 @@ class MariaDB extends SQL
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($name);
+        $schema = $this->createSchemaBuilder();
+        $sharedTables = $this->sharedTables;
 
-        /** @var array<string> $attributeStrings */
-        $attributeStrings = [];
-
-        /** @var array<string> $indexStrings */
-        $indexStrings = [];
-
+        // Pre-build attribute hash for array lookups during index construction
         $hash = [];
-
-        foreach ($attributes as $key => $attribute) {
-            $attrId = $this->filter($attribute->getId());
+        foreach ($attributes as $attribute) {
+            $attrId = $this->filter($attribute->key);
             $hash[$attrId] = $attribute;
+        }
 
-            $attrType = $this->getSQLType(
-                $attribute->getAttribute('type'),
-                $attribute->getAttribute('size', 0),
-                $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false),
-                $attribute->getAttribute('required', false)
-            );
+        // Build main collection table using schema builder
+        $collectionResult = $schema->create($this->getSQLTableRaw($id), function (Blueprint $table) use ($attributes, $indexes, $hash, $sharedTables) {
+            // System columns
+            $table->id('_id');
+            $table->string('_uid', 255);
+            $table->datetime('_createdAt', 3)->nullable()->default(null);
+            $table->datetime('_updatedAt', 3)->nullable()->default(null);
+            $table->mediumText('_permissions')->nullable()->default(null);
 
-            // Ignore relationships with virtual attributes
-            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
-                $options = $attribute->getAttribute('options', []);
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
+            // User-defined attribute columns (raw SQL via getSQLType())
+            foreach ($attributes as $attribute) {
+                $attrId = $this->filter($attribute->key);
 
-                if (
-                    $relationType === Database::RELATION_MANY_TO_MANY
-                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
-                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
-                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
-                ) {
-                    continue;
+                // Skip virtual relationship attributes
+                if ($attribute->type === ColumnType::Relationship) {
+                    $options = $attribute->options ?? [];
+                    $relationType = $options['relationType'] ?? null;
+                    $twoWay = $options['twoWay'] ?? false;
+                    $side = $options['side'] ?? null;
+
+                    if (
+                        $relationType === RelationType::ManyToMany->value
+                        || ($relationType === RelationType::OneToOne->value && !$twoWay && $side === RelationSide::Child->value)
+                        || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
+                        || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
+                    ) {
+                        continue;
+                    }
                 }
+
+                $attrType = $this->getSQLType(
+                    $attribute->type->value,
+                    $attribute->size,
+                    $attribute->signed,
+                    $attribute->array,
+                    $attribute->required
+                );
+                $table->rawColumn("`{$attrId}` {$attrType}");
             }
 
-            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
-        }
+            // User-defined indexes
+            foreach ($indexes as $index) {
+                $indexId = $this->filter($index->key);
+                $indexType = $index->type;
+                $indexAttributes = $index->attributes;
 
-        foreach ($indexes as $key => $index) {
-            $indexId = $this->filter($index->getId());
-            $indexType = $index->getAttribute('type');
+                $regularColumns = [];
+                $indexLengths = [];
+                $indexOrders = [];
+                $rawCastColumns = [];
 
-            $indexAttributes = $index->getAttribute('attributes');
-            foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-                $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-                if ($indexType === Database::INDEX_SPATIAL && !$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
-                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                foreach ($indexAttributes as $nested => $attribute) {
+                    $indexLength = $index->lengths[$nested] ?? '';
+                    $indexOrder = $index->orders[$nested] ?? '';
+
+                    if ($indexType === IndexType::Spatial && !$this->supports(Capability::SpatialIndexOrder) && !empty($indexOrder)) {
+                        throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                    }
+
+                    $indexAttribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+
+                    if ($indexType === IndexType::Fulltext) {
+                        $indexOrder = '';
+                    }
+
+                    if (!empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
+                        $rawCastColumns[] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
+                    } else {
+                        $regularColumns[] = $indexAttribute;
+                        if (!empty($indexLength)) {
+                            $indexLengths[$indexAttribute] = (int)$indexLength;
+                        }
+                        if (!empty($indexOrder)) {
+                            $indexOrders[$indexAttribute] = $indexOrder;
+                        }
+                    }
                 }
-                $indexAttribute = $this->getInternalKeyForAttribute($attribute);
-                $indexAttribute = $this->filter($indexAttribute);
 
-                if ($indexType === Database::INDEX_FULLTEXT) {
-                    $indexOrder = '';
+                if ($sharedTables && $indexType !== IndexType::Fulltext && $indexType !== IndexType::Spatial) {
+                    \array_unshift($regularColumns, '_tenant');
                 }
 
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
-
-                if (!empty($hash[$indexAttribute]['array']) && $this->getSupportForCastIndexArray()) {
-                    $indexAttributes[$nested] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
-                }
+                $table->addIndex(
+                    $indexId,
+                    $regularColumns,
+                    $indexType,
+                    $indexLengths,
+                    $indexOrders,
+                    rawColumns: $rawCastColumns,
+                );
             }
 
-            $indexAttributes = \implode(", ", $indexAttributes);
-
-            if ($this->sharedTables && $indexType !== Database::INDEX_FULLTEXT && $indexType !== Database::INDEX_SPATIAL) {
-                // Add tenant as first index column for best performance
-                $indexAttributes = "_tenant, {$indexAttributes}";
+            // Tenant column and system indexes
+            if ($sharedTables) {
+                $table->rawColumn('_tenant INT(11) UNSIGNED DEFAULT NULL');
+                $table->uniqueIndex(['_uid', '_tenant'], '_uid');
+                $table->index(['_tenant', '_createdAt'], '_created_at');
+                $table->index(['_tenant', '_updatedAt'], '_updated_at');
+                $table->index(['_tenant', '_id'], '_tenant_id');
+            } else {
+                $table->uniqueIndex(['_uid'], '_uid');
+                $table->index(['_createdAt'], '_created_at');
+                $table->index(['_updatedAt'], '_updated_at');
             }
+        });
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionResult->query);
 
-            $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
-        }
+        // Build permissions table using schema builder
+        $permsResult = $schema->create($this->getSQLTableRaw($id . '_perms'), function (Blueprint $table) use ($sharedTables) {
+            $table->id('_id');
+            $table->string('_type', 12);
+            $table->string('_permission', 255);
+            $table->string('_document', 255);
 
-        $collection = "
-			CREATE TABLE {$this->getSQLTable($id)} (
-				_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-				_uid VARCHAR(255) NOT NULL,
-				_createdAt DATETIME(3) DEFAULT NULL,
-				_updatedAt DATETIME(3) DEFAULT NULL,
-				_permissions MEDIUMTEXT DEFAULT NULL,
-				PRIMARY KEY (_id),
-				" . \implode(' ', $attributeStrings) . "
-				" . \implode(' ', $indexStrings) . "
-		";
-
-        if ($this->sharedTables) {
-            $collection .= "
-            	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid (_uid, _tenant),
-				KEY _created_at (_tenant, _createdAt),
-				KEY _updated_at (_tenant, _updatedAt),
-				KEY _tenant_id (_tenant, _id)
-			";
-        } else {
-            $collection .= "
-				UNIQUE KEY _uid (_uid),
-				KEY _created_at (_createdAt),
-				KEY _updated_at (_updatedAt)
-			";
-        }
-
-        $collection .= ")";
-        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
-
-        $permissions = "
-            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-                _type VARCHAR(12) NOT NULL,
-                _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL,
-                PRIMARY KEY (_id),
-        ";
-
-        if ($this->sharedTables) {
-            $permissions .= "
-                _tenant INT(11) UNSIGNED DEFAULT NULL,
-                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-                INDEX _permission (_tenant, _permission, _type)
-            ";
-        } else {
-            $permissions .= "
-                UNIQUE INDEX _index1 (_document, _type, _permission),
-                INDEX _permission (_permission, _type)
-            ";
-        }
-
-        $permissions .= ")";
-        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
+            if ($sharedTables) {
+                $table->integer('_tenant')->unsigned()->nullable()->default(null);
+                $table->uniqueIndex(['_document', '_tenant', '_type', '_permission'], '_index1');
+                $table->index(['_tenant', '_permission', '_type'], '_permission');
+            } else {
+                $table->uniqueIndex(['_document', '_type', '_permission'], '_index1');
+                $table->index(['_permission', '_type'], '_permission');
+            }
+        });
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permsResult->query);
 
         try {
-            $this->getPDO()
-                ->prepare($collection)
-                ->execute();
-
-            $this->getPDO()
-                ->prepare($permissions)
-                ->execute();
+            $this->getPDO()->prepare($collection)->execute();
+            $this->getPDO()->prepare($permissions)->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -243,20 +264,29 @@ class MariaDB extends SQL
         $name = $database . '/' . $collection;
         $permissions = $database . '/' . $collection . '_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
-            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
-            FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
-            WHERE NAME = :name
-         ");
+        $builder = $this->createBuilder();
 
-        $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
-            FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
-            WHERE NAME = :permissions
-        ");
+        $collectionResult = $builder
+            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
+            ->filter([\Utopia\Query\Query::equal('NAME', [$name])])
+            ->build();
 
-        $collectionSize->bindParam(':name', $name);
-        $permissionsSize->bindParam(':permissions', $permissions);
+        $permissionsResult = $builder->reset()
+            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
+            ->filter([\Utopia\Query\Query::equal('NAME', [$permissions])])
+            ->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
 
         try {
             $collectionSize->execute();
@@ -283,24 +313,35 @@ class MariaDB extends SQL
         $database = $this->getDatabase();
         $permissions = $collection . '_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_name = :name AND
-            table_schema = :database
-         ");
+        $builder = $this->createBuilder();
 
-        $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_name = :permissions AND
-            table_schema = :database
-        ");
+        $collectionResult = $builder
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('SUM(data_length + index_length)')
+            ->filter([
+                \Utopia\Query\Query::equal('table_name', [$collection]),
+                \Utopia\Query\Query::equal('table_schema', [$database]),
+            ])
+            ->build();
 
-        $collectionSize->bindParam(':name', $collection);
-        $collectionSize->bindParam(':database', $database);
-        $permissionsSize->bindParam(':permissions', $permissions);
-        $permissionsSize->bindParam(':database', $database);
+        $permissionsResult = $builder->reset()
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('SUM(data_length + index_length)')
+            ->filter([
+                \Utopia\Query\Query::equal('table_name', [$permissions]),
+                \Utopia\Query\Query::equal('table_schema', [$database]),
+            ])
+            ->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
 
         try {
             $collectionSize->execute();
@@ -325,8 +366,11 @@ class MariaDB extends SQL
     {
         $id = $this->filter($id);
 
-        $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};";
+        $schema = $this->createSchemaBuilder();
+        $mainResult = $schema->drop($this->getSQLTableRaw($id));
+        $permsResult = $schema->drop($this->getSQLTableRaw($id . '_perms'));
 
+        $sql = $mainResult->query . '; ' . $permsResult->query;
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         try {
@@ -349,7 +393,8 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
 
-        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+        $result = $this->createSchemaBuilder()->analyzeTable($this->getSQLTableRaw($name));
+        $sql = $result->query;
 
         $stmt = $this->getPDO()->prepare($sql);
         return $stmt->execute();
@@ -408,29 +453,28 @@ class MariaDB extends SQL
      * Update Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
+     * @param Attribute $attribute
      * @param string|null $newKey
-     * @param bool $required
      * @return bool
      * @throws DatabaseException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($attribute->key);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+        $sqlType = $this->getSQLType($attribute->type->value, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        /** @var \Utopia\Query\Schema\MySQL $schema */
+        $schema = $this->createSchemaBuilder();
+        $tableRaw = $this->getSQLTableRaw($name);
+
         if (!empty($newKey)) {
-            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` `{$newKey}` {$type};";
+            $result = $schema->changeColumn($tableRaw, $id, $newKey, $sqlType);
         } else {
-            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+            $result = $schema->modifyColumn($tableRaw, $id, $sqlType);
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $result->query);
 
         try {
             return $this->getPDO()
@@ -442,49 +486,36 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param string $relatedCollection
-     * @param bool $twoWay
-     * @param string $twoWayKey
+     * @param Relationship $relationship
      * @return bool
      * @throws DatabaseException
      */
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        string $id = '',
-        string $twoWayKey = ''
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($id);
-        $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
+    public function createRelationship(Relationship $relationship): bool
+    {
+        $name = $this->filter($relationship->collection);
+        $relatedName = $this->filter($relationship->relatedCollection);
+        $id = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
 
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
+        $schema = $this->createSchemaBuilder();
+        $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+                $table->string($columnId, 255)->nullable()->default(null);
+            });
+            return $result->query;
+        };
 
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                return true;
-            default:
-                throw new DatabaseException('Invalid relationship type');
+        $sql = match ($type) {
+            RelationType::OneToOne => $addRelColumn($name, $id) . ';' . ($twoWay ? $addRelColumn($relatedName, $twoWayKey) . ';' : ''),
+            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey) . ';',
+            RelationType::ManyToOne => $addRelColumn($name, $id) . ';',
+            RelationType::ManyToMany => null,
+        };
+
+        if ($sql === null) {
+            return true;
         }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
@@ -495,35 +526,26 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
+     * @param Relationship $relationship
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
      * @throws DatabaseException
      */
     public function updateRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side,
+        Relationship $relationship,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
+        $side = $relationship->side;
 
         if (!\is_null($newKey)) {
             $newKey = $this->filter($newKey);
@@ -532,51 +554,59 @@ class MariaDB extends SQL
             $newTwoWayKey = $this->filter($newTwoWayKey);
         }
 
+        $schema = $this->createSchemaBuilder();
+        $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
+                $table->renameColumn($from, $to);
+            });
+            return $result->query;
+        };
+
         $sql = '';
 
         switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
+            case RelationType::OneToOne:
                 if ($key !== $newKey) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                    $sql = $renameCol($name, $key, $newKey) . ';';
                 }
                 if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
                     if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
                 } else {
                     if ($key !== $newKey) {
-                        $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                        $sql = $renameCol($name, $key, $newKey) . ';';
                     }
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Child) {
                     if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
                     }
                 } else {
                     if ($key !== $newKey) {
-                        $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                        $sql = $renameCol($name, $key, $newKey) . ';';
                     }
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
+            case RelationType::ManyToMany:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
+                $junctionName = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
 
                 if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                    $sql = $renameCol($junctionName, $key, $newKey) . ';';
                 }
                 if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey) . ';';
                 }
                 break;
             default:
@@ -595,74 +625,71 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
+     * @param Relationship $relationship
      * @return bool
      * @throws DatabaseException
      */
-    public function deleteRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side
-    ): bool {
+    public function deleteRelationship(Relationship $relationship): bool
+    {
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
+        $side = $relationship->side;
+
+        $schema = $this->createSchemaBuilder();
+        $dropCol = function (string $tableName, string $columnId) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+                $table->dropColumn($columnId);
+            });
+            return $result->query;
+        };
 
         switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+            case RelationType::OneToOne:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($name, $key) . ';';
                     if ($twoWay) {
-                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                        $sql .= $dropCol($relatedName, $twoWayKey) . ';';
                     }
-                } elseif ($side === Database::RELATION_SIDE_CHILD) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                } elseif ($side === RelationSide::Child) {
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
                     if ($twoWay) {
-                        $sql .= "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                        $sql .= $dropCol($name, $key) . ';';
                     }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
                 } else {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                    $sql = $dropCol($name, $key) . ';';
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($name, $key) . ';';
                 } else {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
                 }
                 break;
-            case Database::RELATION_MANY_TO_MANY:
+            case RelationType::ManyToMany:
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
-                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence());
+                $junctionName = $side === RelationSide::Parent
+                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
 
-                $perms = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence() . '_perms')
-                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence() . '_perms');
+                $junctionResult = $schema->drop($this->getSQLTableRaw($junctionName));
+                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName . '_perms'));
 
-                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
+                $sql = $junctionResult->query . '; ' . $permsResult->query;
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
@@ -694,9 +721,8 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;";
-
-        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
+        $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
+        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $result->query);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -707,16 +733,13 @@ class MariaDB extends SQL
      * Create Index
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
+     * @param Index $index
      * @param array<string,string> $indexAttributeTypes
+     * @param array<string, mixed> $collation
      * @return bool
      * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $metadataCollection = new Document(['$id' => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $collection);
@@ -725,12 +748,21 @@ class MariaDB extends SQL
             throw new NotFoundException('Collection not found');
         }
 
-        /**
-         * We do not have sequence's added to list, since we check only for array field
-         */
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $attributes = $index->attributes;
+        $lengths = $index->lengths;
+        $orders = $index->orders;
 
-        $id = $this->filter($id);
+        $schema = $this->createSchemaBuilder();
+        $tableName = $this->getSQLTableRaw($collection->getId());
+
+        // Build column lists, separating regular columns from raw CAST ARRAY expressions
+        $schemaColumns = [];
+        $schemaLengths = [];
+        $schemaOrders = [];
+        $rawExpressions = [];
 
         foreach ($attributes as $i => $attr) {
             $attribute = null;
@@ -741,36 +773,46 @@ class MariaDB extends SQL
                 }
             }
 
-            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
-            $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';
+            $attr = $this->filter($this->getInternalKeyForAttribute($attr));
+            $order = empty($orders[$i]) || $type === IndexType::Fulltext ? '' : $orders[$i];
+            $length = empty($lengths[$i]) ? 0 : (int)$lengths[$i];
 
-            $attr = $this->getInternalKeyForAttribute($attr);
-            $attr = $this->filter($attr);
-
-            $attributes[$i] = "`{$attr}`{$length} {$order}";
-
-            if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
-                $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
+            if ($this->supports(Capability::CastIndexArray) && !empty($attribute['array'])) {
+                $rawExpressions[] = '(CAST(`' . $attr . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
+            } else {
+                $schemaColumns[] = $attr;
+                if ($length > 0) {
+                    $schemaLengths[$attr] = $length;
+                }
+                if (!empty($order)) {
+                    $schemaOrders[$attr] = $order;
+                }
             }
         }
 
-        $sqlType = match ($type) {
-            Database::INDEX_KEY => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            Database::INDEX_SPATIAL => 'SPATIAL INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
-        };
-
-        $attributes = \implode(', ', $attributes);
-
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
-            // Add tenant as first index column for best performance
-            $attributes = "_tenant, {$attributes}";
+        if ($this->sharedTables && $type !== IndexType::Fulltext && $type !== IndexType::Spatial) {
+            \array_unshift($schemaColumns, '_tenant');
         }
 
-        $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
-        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
+        $unique = $type === IndexType::Unique;
+        $schemaType = match ($type) {
+            IndexType::Key, IndexType::Unique => '',
+            IndexType::Fulltext => 'fulltext',
+            IndexType::Spatial => 'spatial',
+            default => throw new DatabaseException('Unknown index type: ' . $type->value . '. Must be one of ' . IndexType::Key->value . ', ' . IndexType::Unique->value . ', ' . IndexType::Fulltext->value . ', ' . IndexType::Spatial->value),
+        };
+
+        $result = $schema->createIndex(
+            $tableName,
+            $id,
+            $schemaColumns,
+            unique: $unique,
+            type: $schemaType,
+            lengths: $schemaLengths,
+            orders: $schemaOrders,
+            rawColumns: $rawExpressions,
+        );
+        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $result->query);
 
         try {
             return $this->getPDO()
@@ -795,9 +837,10 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;";
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);
 
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $result->query);
 
         try {
             return $this->getPDO()
@@ -826,6 +869,8 @@ class MariaDB extends SQL
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
+            $this->syncWriteHooks();
+
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
@@ -833,90 +878,40 @@ class MariaDB extends SQL
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-            if ($this->sharedTables) {
-                $attributes['_tenant'] = $document->getTenant();
-            }
-
             $name = $this->filter($collection);
-            $columns = '';
-            $columnNames = '';
 
-            /**
-             * Insert Attributes
-             */
-            $bindIndex = 0;
-            foreach ($attributes as $attribute => $value) {
-                $column = $this->filter($attribute);
-                $bindKey = 'key_' . $bindIndex;
-                $columns .= "`{$column}`, ";
-                if (in_array($attribute, $spatialAttributes)) {
-                    $columnNames .= $this->getSpatialGeomFromText(':' . $bindKey) . ", ";
+            // Build document INSERT using query builder
+            // Spatial columns use insertColumnExpression() for ST_GeomFromText() wrapping
+            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+            $row = ['_uid' => $document->getId()];
+
+            if (!empty($document->getSequence())) {
+                $row['_id'] = $document->getSequence();
+            }
+
+            foreach ($attributes as $attr => $value) {
+                $column = $this->filter($attr);
+
+                if (\in_array($attr, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $row[$column] = $value;
+                    $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
                 } else {
-                    $columnNames .= ':' . $bindKey . ', ';
-                }
-                $bindIndex++;
-            }
-
-            // Insert internal ID if set
-            if (!empty($document->getSequence())) {
-                $bindKey = '_id';
-                $columns .= "_id, ";
-                $columnNames .= ':' . $bindKey . ', ';
-            }
-
-            $sql = "
-			    INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
-			    VALUES ({$columnNames} :_uid)
-			";
-
-            $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
-            $stmt = $this->getPDO()->prepare($sql);
-
-            $stmt->bindValue(':_uid', $document->getId());
-
-            if (!empty($document->getSequence())) {
-                $stmt->bindValue(':_id', $document->getSequence());
-            }
-
-            $attributeIndex = 0;
-            foreach ($attributes as $value) {
-                if (\is_array($value)) {
-                    $value = \json_encode($value);
-                }
-
-                $bindKey = 'key_' . $attributeIndex;
-                $attribute = $this->filter($attribute);
-                $value = (\is_bool($value)) ? (int)$value : $value;
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
-
-            $permissions = [];
-            foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $permission) {
-                    $tenantBind = $this->sharedTables ? ", :_tenant" : '';
-                    $permission = \str_replace('"', '', $permission);
-                    $permission = "('{$type}', '{$permission}', :_uid {$tenantBind})";
-                    $permissions[] = $permission;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $row[$column] = $value;
                 }
             }
 
-            if (!empty($permissions)) {
-                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
-                $permissions = \implode(', ', $permissions);
-
-                $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
-                ";
-
-                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
-                $stmtPermissions->bindValue(':_uid', $document->getId());
-                if ($this->sharedTables) {
-                    $stmtPermissions->bindValue(':_tenant', $document->getTenant());
-                }
-            }
+            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $builder->set($row);
+            $result = $builder->insert();
+            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_CREATE);
 
             $stmt->execute();
 
@@ -926,29 +921,30 @@ class MariaDB extends SQL
                 throw new DatabaseException('Error creating document empty "$sequence"');
             }
 
-            if (isset($stmtPermissions)) {
-                try {
-                    $stmtPermissions->execute();
-                } catch (PDOException $e) {
-                    $isOrphanedPermission = $e->getCode() === '23000'
-                        && isset($e->errorInfo[1])
-                        && $e->errorInfo[1] === 1062
-                        && \str_contains($e->getMessage(), '_index1');
+            $ctx = $this->buildWriteContext($name);
+            try {
+                foreach ($this->writeHooks as $hook) {
+                    $hook->afterDocumentCreate($name, [$document], $ctx);
+                }
+            } catch (PDOException $e) {
+                $isOrphanedPermission = $e->getCode() === '23000'
+                    && isset($e->errorInfo[1])
+                    && $e->errorInfo[1] === 1062
+                    && \str_contains($e->getMessage(), '_index1');
 
-                    if (!$isOrphanedPermission) {
-                        throw $e;
-                    }
+                if (!$isOrphanedPermission) {
+                    throw $e;
+                }
 
-                    // Clean up orphaned permissions from a previous failed delete, then retry
-                    $sql = "DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid {$this->getTenantQuery($collection)}";
-                    $cleanup = $this->getPDO()->prepare($sql);
-                    $cleanup->bindValue(':_uid', $document->getId());
-                    if ($this->sharedTables) {
-                        $cleanup->bindValue(':_tenant', $document->getTenant());
-                    }
-                    $cleanup->execute();
+                // Clean up orphaned permissions from a previous failed delete, then retry
+                $cleanupBuilder = $this->newBuilder($name . '_perms');
+                $cleanupBuilder->filter([\Utopia\Query\Query::equal('_document', [$document->getId()])]);
+                $cleanupResult = $cleanupBuilder->delete();
+                $cleanupStmt = $this->executeResult($cleanupResult);
+                $cleanupStmt->execute();
 
-                    $stmtPermissions->execute();
+                foreach ($this->writeHooks as $hook) {
+                    $hook->afterDocumentCreate($name, [$document], $ctx);
                 }
             }
         } catch (PDOException $e) {
@@ -974,6 +970,8 @@ class MariaDB extends SQL
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
+            $this->syncWriteHooks();
+
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
@@ -982,240 +980,49 @@ class MariaDB extends SQL
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
             $name = $this->filter($collection);
-            $columns = '';
 
-            if (!$skipPermissions) {
-                $sql = "
-			    SELECT _type, _permission
-			    FROM {$this->getSQLTable($name . '_perms')}
-			    WHERE _document = :_uid
-			    {$this->getTenantQuery($collection)}
-			";
-
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
-
-                /**
-                 * Get current permissions from the database
-                 */
-                $sqlPermissions = $this->getPDO()->prepare($sql);
-                $sqlPermissions->bindValue(':_uid', $document->getId());
-
-                if ($this->sharedTables) {
-                    $sqlPermissions->bindValue(':_tenant', $this->tenant);
-                }
-
-                $sqlPermissions->execute();
-                $permissions = $sqlPermissions->fetchAll();
-                $sqlPermissions->closeCursor();
-
-                $initial = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $initial[$type] = [];
-                }
-
-                $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                    $carry[$item['_type']][] = $item['_permission'];
-
-                    return $carry;
-                }, $initial);
-
-                /**
-                 * Get removed Permissions
-                 */
-                $removals = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                    if (!empty($diff)) {
-                        $removals[$type] = $diff;
-                    }
-                }
-
-                /**
-                 * Get added Permissions
-                 */
-                $additions = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                    if (!empty($diff)) {
-                        $additions[$type] = $diff;
-                    }
-                }
-
-                /**
-                 * Query to remove permissions
-                 */
-                $removeQuery = '';
-                if (!empty($removals)) {
-                    $removeQuery = ' AND (';
-                    foreach ($removals as $type => $permissions) {
-                        $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                        if ($type !== \array_key_last($removals)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-                }
-                if (!empty($removeQuery)) {
-                    $removeQuery .= ')';
-                    $sql = "
-				    DELETE
-                    FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document = :_uid
-                    {$this->getTenantQuery($collection)}
-                ";
-
-                    $removeQuery = $sql . $removeQuery;
-
-                    $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-
-                    $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                    $stmtRemovePermissions->bindValue(':_uid', $document->getId());
-
-                    if ($this->sharedTables) {
-                        $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                    }
-
-                    foreach ($removals as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
-                            $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                        }
-                    }
-                }
-
-                /**
-                 * Query to add permissions
-                 */
-                if (!empty($additions)) {
-                    $values = [];
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $_) {
-                            $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
-
-                            if ($this->sharedTables) {
-                                $value .= ", :_tenant)";
-                            } else {
-                                $value .= ")";
-                            }
-
-                            $values[] = $value;
-                        }
-                    }
-
-                    $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
-				";
-
-                    if ($this->sharedTables) {
-                        $sql .= ', _tenant)';
-                    } else {
-                        $sql .= ')';
-                    }
-
-                    $sql .= " VALUES " . \implode(', ', $values);
-
-                    $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
-
-                    $stmtAddPermissions = $this->getPDO()->prepare($sql);
-
-                    $stmtAddPermissions->bindValue(":_uid", $document->getId());
-
-                    if ($this->sharedTables) {
-                        $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
-                    }
-
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
-                            $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                        }
-                    }
-                }
-            }
-
-            /**
-             * Update Attributes
-             */
-            $keyIndex = 0;
-            $opIndex = 0;
             $operators = [];
-
-            // Separate regular attributes from operators
             foreach ($attributes as $attribute => $value) {
                 if (Operator::isOperator($value)) {
                     $operators[$attribute] = $value;
                 }
             }
 
+            $builder = $this->newBuilder($name);
+            $regularRow = ['_uid' => $document->getId()];
+
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
-                // Check if this is an operator or regular attribute
                 if (isset($operators[$attribute])) {
-                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
-                    $columns .= $operatorSQL . ',';
-                } else {
-                    $bindKey = 'key_' . $keyIndex;
-
-                    if (in_array($attribute, $spatialAttributes)) {
-                        $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
-                    } else {
-                        $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                    $opResult = $this->getOperatorBuilderExpression($column, $operators[$attribute]);
+                    $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
                     }
-                    $keyIndex++;
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                } else {
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $regularRow[$column] = $value;
                 }
             }
 
-            $sql = "
-                UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_newUid
-                WHERE _id=:_sequence
-                {$this->getTenantQuery($collection)}
-			";
-
-            $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-            $stmt = $this->getPDO()->prepare($sql);
-
-            $stmt->bindValue(':_sequence', $document->getSequence());
-            $stmt->bindValue(':_newUid', $document->getId());
-
-            if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant);
-            }
-
-            $keyIndex = 0;
-            $opIndexForBinding = 0;
-            foreach ($attributes as $attribute => $value) {
-                // Handle operators separately
-                if (isset($operators[$attribute])) {
-                    $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
-                } else {
-                    // Convert spatial arrays to WKT, json_encode non-spatial arrays
-                    if (\in_array($attribute, $spatialAttributes, true)) {
-                        if (\is_array($value)) {
-                            $value = $this->convertArrayToWKT($value);
-                        }
-                    } elseif (is_array($value)) {
-                        $value = json_encode($value);
-                    }
-
-                    $bindKey = 'key_' . $keyIndex;
-                    $value = (is_bool($value)) ? (int)$value : $value;
-                    $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                    $keyIndex++;
-                }
-            }
+            $builder->set($regularRow);
+            $builder->filter([\Utopia\Query\Query::equal('_id', [$document->getSequence()])]);
+            $result = $builder->update();
+            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
 
             $stmt->execute();
 
-            if (isset($stmtRemovePermissions)) {
-                $stmtRemovePermissions->execute();
+            $ctx = $this->buildWriteContext($name);
+            foreach ($this->writeHooks as $hook) {
+                $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx);
             }
-            if (isset($stmtAddPermissions)) {
-                $stmtAddPermissions->execute();
-            }
-
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1224,90 +1031,38 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $tableName
-     * @param string $columns
-     * @param array<string> $batchKeys
-     * @param array<string> $attributes
-     * @param array<mixed> $bindValues
-     * @param string $attribute
-     * @param array<Operator> $operators
-     * @return mixed
-     * @throws DatabaseException
+     * @inheritDoc
      */
-    public function getUpsertStatement(
-        string $tableName,
-        string $columns,
-        array $batchKeys,
-        array $attributes,
-        array $bindValues,
-        string $attribute = '',
-        array $operators = []
-    ): mixed {
-        $getUpdateClause = function (string $attribute, bool $increment = false): string {
-            $attribute = $this->quote($this->filter($attribute));
+    protected function insertRequiresAlias(): bool
+    {
+        return false;
+    }
 
-            if ($increment) {
-                $new = "{$attribute} + VALUES({$attribute})";
-            } else {
-                $new = "VALUES({$attribute})";
-            }
+    /**
+     * @inheritDoc
+     */
+    protected function getConflictTenantExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+        return "IF(_tenant = VALUES(_tenant), VALUES({$quoted}), {$quoted})";
+    }
 
-            if ($this->sharedTables) {
-                return "{$attribute} = IF(_tenant = VALUES(_tenant), {$new}, {$attribute})";
-            }
+    /**
+     * @inheritDoc
+     */
+    protected function getConflictIncrementExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+        return "{$quoted} + VALUES({$quoted})";
+    }
 
-            return "{$attribute} = {$new}";
-        };
-
-        $updateColumns = [];
-        $opIndex = 0;
-
-        if (!empty($attribute)) {
-            // Increment specific column by its new value in place
-            $updateColumns = [
-                $getUpdateClause($attribute, increment: true),
-                $getUpdateClause('_updatedAt'),
-            ];
-        } else {
-            foreach (\array_keys($attributes) as $attr) {
-                /**
-                 * @var string $attr
-                 */
-                $filteredAttr = $this->filter($attr);
-
-                if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
-                    if ($operatorSQL !== null) {
-                        $updateColumns[] = $operatorSQL;
-                    }
-                } else {
-                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
-                        $updateColumns[] = $getUpdateClause($filteredAttr);
-                    }
-                }
-            }
-        }
-
-        $stmt = $this->getPDO()->prepare(
-            "
-            INSERT INTO {$this->getSQLTable($tableName)} {$columns}
-            VALUES " . \implode(', ', $batchKeys) . "
-            ON DUPLICATE KEY UPDATE
-                " . \implode(', ', $updateColumns)
-        );
-
-        foreach ($bindValues as $key => $binding) {
-            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
-        }
-
-        $opIndexForBinding = 0;
-        foreach (\array_keys($attributes) as $attr) {
-            if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
-            }
-        }
-
-        return $stmt;
+    /**
+     * @inheritDoc
+     */
+    protected function getConflictTenantIncrementExpression(string $column): string
+    {
+        $quoted = $this->quote($this->filter($column));
+        return "IF(_tenant = VALUES(_tenant), {$quoted} + VALUES({$quoted}), {$quoted})";
     }
 
     /**
@@ -1335,36 +1090,21 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max !== null ? " AND `{$attribute}` <= :max" : '';
-        $sqlMin = $min !== null ? " AND `{$attribute}` >= :min" : '';
+        $builder = $this->newBuilder($name);
+        $builder->setRaw($attribute, $this->quote($attribute) . ' + ?', [$value]);
+        $builder->set(['_updatedAt' => $updatedAt]);
 
-        $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET
-			    `{$attribute}` = `{$attribute}` + :val,
-			    `_updatedAt` = :updatedAt
-			WHERE _uid = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql .= $sqlMax . $sqlMin;
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-        $stmt->bindValue(':_uid', $id);
-        $stmt->bindValue(':val', $value);
-        $stmt->bindValue(':updatedAt', $updatedAt);
-
+        $filters = [\Utopia\Query\Query::equal('_uid', [$id])];
         if ($max !== null) {
-            $stmt->bindValue(':max', $max);
+            $filters[] = \Utopia\Query\Query::lessThanEqual($attribute, $max);
         }
         if ($min !== null) {
-            $stmt->bindValue(':min', $min);
+            $filters[] = \Utopia\Query\Query::greaterThanEqual($attribute, $min);
         }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
+        $builder->filter($filters);
+
+        $result = $builder->update();
+        $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
 
         try {
             $stmt->execute();
@@ -1387,38 +1127,14 @@ class MariaDB extends SQL
     public function deleteDocument(string $collection, string $id): bool
     {
         try {
+            $this->syncWriteHooks();
+
             $name = $this->filter($collection);
 
-            $sql = "
-                DELETE FROM {$this->getSQLTable($name)} 
-                WHERE _uid = :_uid
-                {$this->getTenantQuery($collection)}
-		    ";
-
-            $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
-
-            $stmt = $this->getPDO()->prepare($sql);
-
-            $stmt->bindValue(':_uid', $id);
-
-            if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant);
-            }
-
-            $sql = "
-			    DELETE FROM {$this->getSQLTable($name . '_perms')} 
-		        WHERE _document = :_uid
-		        {$this->getTenantQuery($collection)}
-		    ";
-
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-            $stmtPermissions = $this->getPDO()->prepare($sql);
-            $stmtPermissions->bindValue(':_uid', $id);
-
-            if ($this->sharedTables) {
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
-            }
+            $builder = $this->newBuilder($name);
+            $builder->filter([\Utopia\Query\Query::equal('_uid', [$id])]);
+            $result = $builder->delete();
+            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_DELETE);
 
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
@@ -1426,8 +1142,9 @@ class MariaDB extends SQL
 
             $deleted = $stmt->rowCount();
 
-            if (!$stmtPermissions->execute()) {
-                throw new DatabaseException('Failed to delete permissions');
+            $ctx = $this->buildWriteContext($name);
+            foreach ($this->writeHooks as $hook) {
+                $hook->afterDocumentDelete($name, [$id], $ctx);
             }
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
@@ -1456,27 +1173,18 @@ class MariaDB extends SQL
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
-        switch ($query->getMethod()) {
-            case Query::TYPE_DISTANCE_EQUAL:
-                $operator = '=';
-                break;
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $operator = '!=';
-                break;
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-                $operator = '>';
-                break;
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                $operator = '<';
-                break;
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        $operator = match ($query->getMethod()) {
+            Query::TYPE_DISTANCE_EQUAL => '=',
+            Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
+            Query::TYPE_DISTANCE_GREATER_THAN => '>',
+            Query::TYPE_DISTANCE_LESS_THAN => '<',
+            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+        };
 
         if ($useMeters) {
             $wktType = $this->getSpatialTypeFromWKT($wkt);
             $attrType = strtolower($type);
-            if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
+            if ($wktType != ColumnType::Point->value || $attrType != ColumnType::Point->value) {
                 throw new QueryException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
             }
             return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::EARTH_RADIUS . ") {$operator} :{$placeholder}_1";
@@ -1497,64 +1205,28 @@ class MariaDB extends SQL
      */
     protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
-        switch ($query->getMethod()) {
-            case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
 
-            case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_DISTANCE_EQUAL:
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder);
-
-            case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_NOT_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Contains({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            case Query::TYPE_NOT_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Contains({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
-
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        return match ($query->getMethod()) {
+            Query::TYPE_CROSSES => "ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_CROSSES => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_DISTANCE_EQUAL,
+            Query::TYPE_DISTANCE_NOT_EQUAL,
+            Query::TYPE_DISTANCE_GREATER_THAN,
+            Query::TYPE_DISTANCE_LESS_THAN => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
+            Query::TYPE_INTERSECTS => "ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_INTERSECTS => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_OVERLAPS => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_OVERLAPS => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_TOUCHES => "ST_Touches({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_TOUCHES => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_EQUAL => "ST_Equals({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_EQUAL => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_CONTAINS => "ST_Contains({$alias}.{$attribute}, {$geom})",
+            Query::TYPE_NOT_CONTAINS => "NOT ST_Contains({$alias}.{$attribute}, {$geom})",
+            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+        };
     }
 
     /**
@@ -1588,7 +1260,7 @@ class MariaDB extends SQL
                     $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
-                $method = strtoupper($query->getMethod());
+                $method = strtoupper($query->getMethod()->value);
 
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
@@ -1627,7 +1299,7 @@ class MariaDB extends SQL
             case Query::TYPE_CONTAINS:
             case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
-                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                if ($this->supports(Capability::JSONOverlaps) && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
                     return $isNot
@@ -1669,18 +1341,47 @@ class MariaDB extends SQL
 
     /**
      * Get SQL Type
-     *
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param bool $required
-     * @return string
-     * @throws DatabaseException
      */
+    protected function createBuilder(): \Utopia\Query\Builder\SQL
+    {
+        return new \Utopia\Query\Builder\MariaDB();
+    }
+
+    /**
+     * Override to handle spatial types with MariaDB-specific syntax.
+     * MariaDB uses POINT(srid) instead of MySQL's POINT SRID srid.
+     */
+    public function createAttribute(string $collection, Attribute $attribute): bool
+    {
+        if (\in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])) {
+            $id = $this->filter($attribute->key);
+            $table = $this->getSQLTableRaw($collection);
+            $sqlType = $this->getSpatialSQLType($attribute->type->value, $attribute->required);
+            $sql = "ALTER TABLE {$table} ADD COLUMN {$this->quote($id)} {$sqlType}";
+            $lockType = $this->getLockType();
+            if (!empty($lockType)) {
+                $sql .= ' ' . $lockType;
+            }
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+            try {
+                return $this->getPDO()->prepare($sql)->execute();
+            } catch (\PDOException $e) {
+                throw $this->processException($e);
+            }
+        }
+
+        return parent::createAttribute($collection, $attribute);
+    }
+
+    protected function createSchemaBuilder(): \Utopia\Query\Schema
+    {
+        return new \Utopia\Query\Schema\MySQL();
+    }
+
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
-        if (in_array($type, Database::SPATIAL_TYPES)) {
+        if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
             return $this->getSpatialSQLType($type, $required);
         }
         if ($array === true) {
@@ -1688,10 +1389,10 @@ class MariaDB extends SQL
         }
 
         switch ($type) {
-            case Database::VAR_ID:
+            case ColumnType::Id->value:
                 return 'BIGINT UNSIGNED';
 
-            case Database::VAR_STRING:
+            case ColumnType::String->value:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
                 if ($size > 16777215) {
                     return 'LONGTEXT';
@@ -1707,7 +1408,7 @@ class MariaDB extends SQL
 
                 return "VARCHAR({$size})";
 
-            case Database::VAR_VARCHAR:
+            case ColumnType::Varchar->value:
                 if ($size <= 0) {
                     throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
                 }
@@ -1716,16 +1417,16 @@ class MariaDB extends SQL
                 }
                 return "VARCHAR({$size})";
 
-            case Database::VAR_TEXT:
+            case ColumnType::Text->value:
                 return 'TEXT';
 
-            case Database::VAR_MEDIUMTEXT:
+            case ColumnType::MediumText->value:
                 return 'MEDIUMTEXT';
 
-            case Database::VAR_LONGTEXT:
+            case ColumnType::LongText->value:
                 return 'LONGTEXT';
 
-            case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
+            case ColumnType::Integer->value:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
 
                 if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
@@ -1734,21 +1435,21 @@ class MariaDB extends SQL
 
                 return 'INT' . $signed;
 
-            case Database::VAR_FLOAT:
+            case ColumnType::Double->value:
                 $signed = ($signed) ? '' : ' UNSIGNED';
                 return 'DOUBLE' . $signed;
 
-            case Database::VAR_BOOLEAN:
+            case ColumnType::Boolean->value:
                 return 'TINYINT(1)';
 
-            case Database::VAR_RELATIONSHIP:
+            case ColumnType::Relationship->value:
                 return 'VARCHAR(255)';
 
-            case Database::VAR_DATETIME:
+            case ColumnType::Datetime->value:
                 return 'DATETIME(3)';
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER . ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . ColumnType::String->value . ', ' . ColumnType::Varchar->value . ', ' . ColumnType::Text->value . ', ' . ColumnType::MediumText->value . ', ' . ColumnType::LongText->value . ', ' . ColumnType::Integer->value . ', ' . ColumnType::Double->value . ', ' . ColumnType::Boolean->value . ', ' . ColumnType::Datetime->value . ', ' . ColumnType::Relationship->value . ', ' . ColumnType::Point->value . ', ' . ColumnType::Linestring->value . ', ' . ColumnType::Polygon->value);
         }
     }
 
@@ -1801,51 +1502,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * Is fulltext Wildcard index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter handle Query Array Overlaps?
-     *
-     * @return bool
-     */
-    public function getSupportForJSONOverlaps(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return true;
-    }
-
-    /**
      * Set max execution time
      * @param int $milliseconds
      * @param string $event
@@ -1854,9 +1510,6 @@ class MariaDB extends SQL
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }
@@ -1875,7 +1528,8 @@ class MariaDB extends SQL
      */
     public function getConnectionId(): string
     {
-        $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
+        $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
+        $stmt = $this->getPDO()->query($result->query);
         return $stmt->fetchColumn();
     }
 
@@ -1985,7 +1639,7 @@ class MariaDB extends SQL
 
         switch ($method) {
             // Numeric operators
-            case Operator::TYPE_INCREMENT:
+            case OperatorType::Increment->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -1999,7 +1653,7 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
-            case Operator::TYPE_DECREMENT:
+            case OperatorType::Decrement->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2013,7 +1667,7 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
-            case Operator::TYPE_MULTIPLY:
+            case OperatorType::Multiply->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2028,7 +1682,7 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
-            case Operator::TYPE_DIVIDE:
+            case OperatorType::Divide->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2041,12 +1695,12 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
-            case Operator::TYPE_MODULO:
+            case OperatorType::Modulo->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-            case Operator::TYPE_POWER:
+            case OperatorType::Power->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2062,12 +1716,12 @@ class MariaDB extends SQL
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
                 // String operators
-            case Operator::TYPE_STRING_CONCAT:
+            case OperatorType::StringConcat->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
 
-            case Operator::TYPE_STRING_REPLACE:
+            case OperatorType::StringReplace->value:
                 $searchKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
@@ -2075,21 +1729,21 @@ class MariaDB extends SQL
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
                 // Boolean operators
-            case Operator::TYPE_TOGGLE:
+            case OperatorType::Toggle->value:
                 return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
 
                 // Array operators
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
-            case Operator::TYPE_ARRAY_INSERT:
+            case OperatorType::ArrayInsert->value:
                 $indexKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
@@ -2100,7 +1754,7 @@ class MariaDB extends SQL
                     JSON_EXTRACT(:$valueKey, '$')
                 )";
 
-            case Operator::TYPE_ARRAY_REMOVE:
+            case OperatorType::ArrayRemove->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = IFNULL((
@@ -2109,13 +1763,13 @@ class MariaDB extends SQL
                     WHERE value != :$bindKey
                 ), JSON_ARRAY())";
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique->value:
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(DISTINCT jt.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
                 ), JSON_ARRAY())";
 
-            case Operator::TYPE_ARRAY_INTERSECT:
+            case OperatorType::ArrayIntersect->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = IFNULL((
@@ -2127,7 +1781,7 @@ class MariaDB extends SQL
                     )
                 ), JSON_ARRAY())";
 
-            case Operator::TYPE_ARRAY_DIFF:
+            case OperatorType::ArrayDiff->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = IFNULL((
@@ -2139,7 +1793,7 @@ class MariaDB extends SQL
                     )
                 ), JSON_ARRAY())";
 
-            case Operator::TYPE_ARRAY_FILTER:
+            case OperatorType::ArrayFilter->value:
                 $conditionKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
@@ -2161,17 +1815,17 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
                 // Date operators
-            case Operator::TYPE_DATE_ADD_DAYS:
+            case OperatorType::DateAddDays->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
-            case Operator::TYPE_DATE_SUB_DAYS:
+            case OperatorType::DateSubDays->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
-            case Operator::TYPE_DATE_SET_NOW:
+            case OperatorType::DateSetNow->value:
                 return "{$quotedColumn} = NOW()";
 
             default:
@@ -2179,81 +1833,12 @@ class MariaDB extends SQL
         }
     }
 
-    public function getSupportForNumericCasting(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Are object (JSON) indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Get Support for Null Values in Spatial Indexes
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false;
-    }
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return true;
-    }
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-    */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return false;
-    }
-
     public function getSpatialSQLType(string $type, bool $required): string
     {
         $srid = Database::DEFAULT_SRID;
         $nullability = '';
 
-        if (!$this->getSupportForSpatialIndexNull()) {
+        if (!$this->supports(Capability::SpatialIndexNull)) {
             if ($required) {
                 $nullability = ' NOT NULL';
             } else {
@@ -2261,43 +1846,12 @@ class MariaDB extends SQL
             }
         }
 
-        switch ($type) {
-            case Database::VAR_POINT:
-                return "POINT($srid)$nullability";
-
-            case Database::VAR_LINESTRING:
-                return "LINESTRING($srid)$nullability";
-
-            case Database::VAR_POLYGON:
-                return "POLYGON($srid)$nullability";
-        }
-
-        return '';
-    }
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAlterLocks(): bool
-    {
-        return true;
+        return match ($type) {
+            ColumnType::Point->value => "POINT($srid)$nullability",
+            ColumnType::Linestring->value => "LINESTRING($srid)$nullability",
+            ColumnType::Polygon->value => "POLYGON($srid)$nullability",
+            default => '',
+        };
     }
 
     public function getSupportNonUtfCharacters(): bool
@@ -2305,23 +1859,4 @@ class MariaDB extends SQL
         return true;
     }
 
-    public function getSupportForTrigramIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
-    }
 }

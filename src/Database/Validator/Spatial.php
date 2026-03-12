@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Database;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
 class Spatial extends Validator
@@ -173,13 +173,13 @@ class Spatial extends Validator
 
         if (is_array($value)) {
             switch ($this->spatialType) {
-                case Database::VAR_POINT:
+                case ColumnType::Point->value:
                     return $this->validatePoint($value);
 
-                case Database::VAR_LINESTRING:
+                case ColumnType::Linestring->value:
                     return $this->validateLineString($value);
 
-                case Database::VAR_POLYGON:
+                case ColumnType::Polygon->value:
                     return $this->validatePolygon($value);
 
                 default:

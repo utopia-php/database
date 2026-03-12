@@ -3,9 +3,9 @@
 namespace Utopia\Database\Validator\Queries;
 
 use Exception;
-use Utopia\Database\Database;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Schema\ColumnType;
 
 class Document extends Queries
 {
@@ -19,19 +19,19 @@ class Document extends Queries
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$id',
             'key' => '$id',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'array' => false,
         ]);
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$createdAt',
             'key' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$updatedAt',
             'key' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);
 

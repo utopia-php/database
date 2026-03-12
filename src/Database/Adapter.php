@@ -2,7 +2,11 @@
 
 namespace Utopia\Database;
 
+use DateTime;
 use Exception;
+use Throwable;
+use Utopia\Database\Change;
+use Utopia\Database\CursorDirection;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -12,9 +16,13 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Hook\WriteContext;
+use Utopia\Database\Hook\Write;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Validator\Authorization;
 
-abstract class Adapter
+abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Transactions
 {
     protected string $database = '';
     protected string $hostname = '';
@@ -51,9 +59,85 @@ abstract class Adapter
     protected array $metadata = [];
 
     /**
+     * @var list<Write>
+     */
+    protected array $writeHooks = [];
+
+    /**
      * @var Authorization
      */
     protected Authorization $authorization;
+
+    /**
+     * Check if this adapter supports a given capability.
+     *
+     * @param Capability $feature Capability enum case
+     */
+    public function supports(Capability $feature): bool
+    {
+        return \in_array($feature, $this->capabilities(), true);
+    }
+
+    /**
+     * Get the list of capabilities this adapter supports.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return [
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+        ];
+    }
+
+    public function addWriteHook(Write $hook): static
+    {
+        $this->writeHooks[] = $hook;
+        return $this;
+    }
+
+    public function removeWriteHook(string $class): static
+    {
+        $this->writeHooks = \array_values(\array_filter(
+            $this->writeHooks,
+            fn (Write $h) => !($h instanceof $class)
+        ));
+        return $this;
+    }
+
+    /**
+     * @return list<Write>
+     */
+    public function getWriteHooks(): array
+    {
+        return $this->writeHooks;
+    }
+
+    /**
+     * Apply all write hooks' decorateRow to a row.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    protected function decorateRow(array $row, array $metadata): array
+    {
+        foreach ($this->writeHooks as $hook) {
+            $row = $hook->decorateRow($row, $metadata);
+        }
+        return $row;
+    }
+
+    /**
+     * @param Document $document
+     * @return array<string, mixed>
+     */
+    protected function documentMetadata(Document $document): array
+    {
+        return ['id' => $document->getId(), 'tenant' => $document->getTenant()];
+    }
 
     /**
      * @param Authorization $authorization
@@ -315,22 +399,10 @@ abstract class Adapter
         return $this;
     }
 
-    /**
-     * Set a global timeout for database queries in milliseconds.
-     *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire for
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
-     */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        $this->timeout = $milliseconds;
+    }
 
     public function getTimeout(): int
     {
@@ -396,7 +468,7 @@ abstract class Adapter
      * @template T
      * @param callable(): T $callback
      * @return T
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function withTransaction(callable $callback): mixed
     {
@@ -409,10 +481,10 @@ abstract class Adapter
                 $result = $callback();
                 $this->commitTransaction();
                 return $result;
-            } catch (\Throwable $action) {
+            } catch (Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-                } catch (\Throwable $rollback) {
+                } catch (Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
                         continue;
@@ -540,8 +612,8 @@ abstract class Adapter
      * Create Collection
      *
      * @param string $name
-     * @param array<Document> $attributes (optional)
-     * @param array<Document> $indexes (optional)
+     * @param array<Attribute> $attributes (optional)
+     * @param array<Index> $indexes (optional)
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -564,25 +636,16 @@ abstract class Adapter
     abstract public function analyzeCollection(string $collection): bool;
 
     /**
-     * Create Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @return bool
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
+    abstract public function createAttribute(string $collection, Attribute $attribute): bool;
 
     /**
      * Create Attributes
      *
      * @param string $collection
-     * @param array<array<string, mixed>> $attributes
+     * @param array<Attribute> $attributes
      * @return bool
      * @throws TimeoutException
      * @throws DuplicateException
@@ -593,17 +656,11 @@ abstract class Adapter
      * Update Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
+     * @param Attribute $attribute
      * @param string|null $newKey
-     * @param bool $required
-     *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
+    abstract public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
 
     /**
      * Delete Attribute
@@ -625,46 +682,20 @@ abstract class Adapter
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
-    /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $id
-     * @param string $twoWayKey
-     * @return bool
-     */
-    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool;
+    public function createRelationship(Relationship $relationship): bool
+    {
+        return true;
+    }
 
-    /**
-     * Update Relationship
-     *
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @return bool
-     */
-    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    {
+        return true;
+    }
 
-    /**
-     * Delete Relationship
-     *
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @return bool
-     */
-    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool;
+    public function deleteRelationship(Relationship $relationship): bool
+    {
+        return true;
+    }
 
     /**
      * Rename Index
@@ -677,21 +708,10 @@ abstract class Adapter
     abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
-     * Create Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     * @param array<string,string> $indexAttributeTypes
+     * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
-     * @param int $ttl
-     *
-     * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool;
+    abstract public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool;
 
     /**
      * Delete Index
@@ -764,20 +784,18 @@ abstract class Adapter
     abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
-     * Create documents if they do not exist, otherwise update them.
-     *
-     * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
-     *
      * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      */
-    abstract public function upsertDocuments(
+    public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes
-    ): array;
+    ): array {
+        return [];
+    }
 
     /**
      * @param string $collection
@@ -823,7 +841,7 @@ abstract class Adapter
      * @param string $forPermission
      * @return array<Document>
      */
-    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array;
 
     /**
      * Sum an attribute
@@ -916,9 +934,9 @@ abstract class Adapter
     /**
      * Get the minimum supported DateTime value
      *
-     * @return \DateTime
+     * @return DateTime
      */
-    abstract public function getMinDateTime(): \DateTime;
+    abstract public function getMinDateTime(): DateTime;
 
     /**
      * Get the primitive type of the primary key type for this adapter
@@ -930,261 +948,13 @@ abstract class Adapter
     /**
      * Get the maximum supported DateTime value
      *
-     * @return \DateTime
+     * @return DateTime
      */
-    public function getMaxDateTime(): \DateTime
+    public function getMaxDateTime(): DateTime
     {
-        return new \DateTime('9999-12-31 23:59:59');
+        return new DateTime('9999-12-31 23:59:59');
     }
 
-    /**
-     * Is schemas supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSchemas(): bool;
-
-    /**
-     * Are attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAttributes(): bool;
-
-    /**
-     * Are schema attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSchemaAttributes(): bool;
-
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndex(): bool;
-
-    /**
-     * Is indexing array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndexArray(): bool;
-
-    /**
-     * Is cast index as array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCastIndexArray(): bool;
-
-    /**
-     * Is unique index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUniqueIndex(): bool;
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForFulltextIndex(): bool;
-
-    /**
-     * Is fulltext wildcard supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForFulltextWildcardIndex(): bool;
-
-
-    /**
-     * Does the adapter handle casting?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCasting(): bool;
-
-    /**
-     * Does the adapter handle array Contains?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForQueryContains(): bool;
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTimeouts(): bool;
-
-    /**
-     * Are relationships supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForRelationships(): bool;
-
-    abstract public function getSupportForUpdateLock(): bool;
-
-    /**
-     * Are batch operations supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBatchOperations(): bool;
-
-    /**
-     * Is attribute resizing supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAttributeResizing(): bool;
-
-    /**
-     * Is get connection id supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForGetConnectionId(): bool;
-
-    /**
-     * Is upserting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUpserts(): bool;
-
-    /**
-     * Is vector type supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForVectors(): bool;
-
-    /**
-     * Is Cache Fallback supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCacheSkipOnFailure(): bool;
-
-    /**
-     * Is reconnection supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForReconnection(): bool;
-
-    /**
-     * Is hostname supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForHostname(): bool;
-
-    /**
-     * Is creating multiple attributes in a single query supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBatchCreateAttributes(): bool;
-
-    /**
-     * Is spatial attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialAttributes(): bool;
-
-    /**
-     * Are object (JSON) attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForObject(): bool;
-
-    /**
-     * Are object (JSON) indexes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForObjectIndexes(): bool;
-
-    /**
-     * Does the adapter support null values in spatial indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialIndexNull(): bool;
-
-    /**
-     * Does the adapter support operators?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOperators(): bool;
-
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
-
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialIndexOrder(): bool;
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialAxisOrder(): bool;
-
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBoundaryInclusiveContains(): bool;
-
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
-
-    /**
-     * Does the adapter support multiple fulltext indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForMultipleFulltextIndexes(): bool;
-
-
-    /**
-     * Does the adapter support identical indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIdenticalIndexes(): bool;
-
-    /**
-     * Does the adapter support random order by?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOrderRandom(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1254,20 +1024,18 @@ abstract class Adapter
     /**
      * Get all selected attributes from queries
      *
-     * @param Query[] $queries
-     * @return string[]
+     * @param array<Query> $queries
+     * @return array<string>
      */
     protected function getAttributeSelections(array $queries): array
     {
         $selections = [];
 
         foreach ($queries as $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        $selections[] = $value;
-                    }
-                    break;
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    $selections[] = $value;
+                }
             }
         }
 
@@ -1342,12 +1110,10 @@ abstract class Adapter
         int|float|null $max = null
     ): bool;
 
-    /**
-     * Returns the connection ID identifier
-     *
-     * @return string
-     */
-    abstract public function getConnectionId(): string;
+    public function getConnectionId(): string
+    {
+        return '';
+    }
 
     /**
      * Get List of internal index keys names
@@ -1357,13 +1123,13 @@ abstract class Adapter
     abstract public function getInternalIndexesKeys(): array;
 
     /**
-     * Get Schema Attributes
-     *
      * @param string $collection
      * @return array<Document>
-     * @throws DatabaseException
      */
-    abstract public function getSchemaAttributes(string $collection): array;
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
 
     /**
      * Get the expected column type for a given attribute type.
@@ -1378,7 +1144,7 @@ abstract class Adapter
      * @param bool $array
      * @param bool $required
      * @return string
-     * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
+     * @throws DatabaseException For unknown types on adapters that support column-type resolution.
      */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
@@ -1400,67 +1166,20 @@ abstract class Adapter
      */
     abstract protected function execute(mixed $stmt): bool;
 
-    /**
-     * Decode a WKB or textual POINT into [x, y]
-     *
-     * @param string $wkb
-     * @return float[] Array with two elements: [x, y]
-     */
-    abstract public function decodePoint(string $wkb): array;
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
 
-    /**
-     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
-     *
-     * @param string $wkb
-     * @return float[][] Array of points, each as [x, y]
-     */
-    abstract public function decodeLinestring(string $wkb): array;
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
 
-    /**
-     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
-     *
-     * @param string $wkb
-     * @return float[][][] Array of rings, each ring is an array of points [x, y]
-     */
-    abstract public function decodePolygon(string $wkb): array;
-
-    /**
-        * Returns the document after casting
-        * @param Document $collection
-        * @param Document $document
-        * @return Document
-        */
-    abstract public function castingBefore(Document $collection, Document $document): Document;
-
-    /**
-     * Returns the document after casting
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
-     */
-    abstract public function castingAfter(Document $collection, Document $document): Document;
-
-    /**
-     * Is internal casting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForInternalCasting(): bool;
-
-    /**
-     * Is UTC casting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUTCCasting(): bool;
-
-    /**
-    * Set UTC Datetime
-    *
-    * @param string $value
-    * @return mixed
-    */
-    abstract public function setUTCDatetime(string $value): mixed;
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $value;
+    }
 
     /**
     * Set support for attributes
@@ -1469,23 +1188,6 @@ abstract class Adapter
     * @return bool
     */
     abstract public function setSupportForAttributes(bool $support): bool;
-
-    /**
-     * Does the adapter require booleans to be converted to integers (0/1)?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIntegerBooleans(): bool;
-
-    /**
-     * Does the adapter have support for ALTER TABLE locking modes?
-     *
-     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
-     * during ALTER TABLE operations to control concurrent access.
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAlterLocks(): bool;
 
     /**
      * @param bool $enable
@@ -1504,63 +1206,8 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportNonUtfCharacters(): bool;
-
-    /**
-     * Does the adapter support trigram index?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTrigramIndex(): bool;
-
-    /**
-     * Is PCRE regex supported?
-     * PCRE (Perl Compatible Regular Expressions) supports \b for word boundaries
-     *
-     * @return bool
-     */
-    abstract public function getSupportForPCRERegex(): bool;
-
-    /**
-     * Is POSIX regex supported?
-     * POSIX regex uses \y for word boundaries instead of \b
-     *
-     * @return bool
-     */
-    abstract public function getSupportForPOSIXRegex(): bool;
-
-    /**
-     * Is regex supported at all?
-     * Returns true if either PCRE or POSIX regex is supported
-     *
-     * @return bool
-     */
-    public function getSupportForRegex(): bool
-    {
-        return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
-    }
-
-    /**
-     * Are ttl indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTTLIndexes(): bool
+    public function getSupportNonUtfCharacters(): bool
     {
         return false;
     }
-
-    /**
-     * Does the adapter support transaction retries?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTransactionRetries(): bool;
-
-    /**
-     * Does the adapter support nested transactions?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForNestedTransactions(): bool;
 }

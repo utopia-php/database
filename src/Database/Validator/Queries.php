@@ -122,6 +122,10 @@ class Queries extends Validator
                 Query::TYPE_NOT_OVERLAPS,
                 Query::TYPE_TOUCHES,
                 Query::TYPE_NOT_TOUCHES,
+                Query::TYPE_COVERS,
+                Query::TYPE_NOT_COVERS,
+                Query::TYPE_SPATIAL_EQUALS,
+                Query::TYPE_NOT_SPATIAL_EQUALS,
                 Query::TYPE_VECTOR_DOT,
                 Query::TYPE_VECTOR_COSINE,
                 Query::TYPE_VECTOR_EUCLIDEAN,
@@ -145,7 +149,7 @@ class Queries extends Validator
             }
 
             if (!$methodIsValid) {
-                $this->message = 'Invalid query method: ' . $method;
+                $this->message = 'Invalid query method: ' . $method->value;
                 return false;
             }
         }

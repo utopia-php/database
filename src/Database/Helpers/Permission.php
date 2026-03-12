@@ -3,8 +3,8 @@
 namespace Utopia\Database\Helpers;
 
 use Exception;
-use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\PermissionType;
 
 class Permission
 {
@@ -15,9 +15,9 @@ class Permission
      */
     private static array $aggregates = [
         'write' => [
-            Database::PERMISSION_CREATE,
-            Database::PERMISSION_UPDATE,
-            Database::PERMISSION_DELETE,
+            PermissionType::Create->value,
+            PermissionType::Update->value,
+            PermissionType::Delete->value,
         ]
     ];
 
@@ -90,7 +90,7 @@ class Permission
 
         $permission = $permissionParts[0];
 
-        if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
+        if (!\in_array($permission, array_column(PermissionType::cases(), 'value'))) {
             throw new DatabaseException('Invalid permission type: "' . $permission . '".');
         }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
@@ -148,7 +148,7 @@ class Permission
      * @return array<string>|null
      * @throws Exception
      */
-    public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
+    public static function aggregate(?array $permissions, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value]): ?array
     {
         if (\is_null($permissions)) {
             return null;

@@ -10,6 +10,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -25,7 +26,7 @@ class Structure extends Validator
     protected array $attributes = [
         [
             '$id' => '$id',
-            'type' => Database::VAR_STRING,
+            'type' => 'string',
             'size' => 255,
             'required' => false,
             'signed' => true,
@@ -34,7 +35,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$sequence',
-            'type' => Database::VAR_ID,
+            'type' => 'id',
             'size' => 0,
             'required' => false,
             'signed' => true,
@@ -43,7 +44,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$collection',
-            'type' => Database::VAR_STRING,
+            'type' => 'string',
             'size' => 255,
             'required' => true,
             'signed' => true,
@@ -52,7 +53,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$tenant',
-            'type' => Database::VAR_INTEGER, // ? VAR_ID
+            'type' => 'integer',
             'size' => 8,
             'required' => false,
             'default' => null,
@@ -62,8 +63,8 @@ class Structure extends Validator
         ],
         [
             '$id' => '$permissions',
-            'type' => Database::VAR_STRING,
-            'size' => 67000, // medium text
+            'type' => 'string',
+            'size' => 67000,
             'required' => false,
             'signed' => true,
             'array' => true,
@@ -71,7 +72,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => 'datetime',
             'size' => 0,
             'required' => true,
             'signed' => false,
@@ -80,7 +81,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => 'datetime',
             'size' => 0,
             'required' => true,
             'signed' => false,
@@ -332,26 +333,26 @@ class Structure extends Validator
                 continue;
             }
 
-            if ($type === Database::VAR_RELATIONSHIP) {
+            if ($type === ColumnType::Relationship->value) {
                 continue;
             }
 
             $validators = [];
 
             switch ($type) {
-                case Database::VAR_ID:
+                case ColumnType::Id->value:
                     $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
                     break;
 
-                case Database::VAR_VARCHAR:
-                case Database::VAR_TEXT:
-                case Database::VAR_MEDIUMTEXT:
-                case Database::VAR_LONGTEXT:
-                case Database::VAR_STRING:
+                case ColumnType::Varchar->value:
+                case ColumnType::Text->value:
+                case ColumnType::MediumText->value:
+                case ColumnType::LongText->value:
+                case ColumnType::String->value:
                     $validators[] = new Text($size, min: 0);
                     break;
 
-                case Database::VAR_INTEGER:
+                case ColumnType::Integer->value:
                     // Determine bit size based on attribute size in bytes
                     $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
@@ -360,38 +361,38 @@ class Structure extends Validator
                     $validators[] = new Integer(false, $bits, $unsigned);
                     $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
-                    $validators[] = new Range($min, $max, Database::VAR_INTEGER);
+                    $validators[] = new Range($min, $max, ColumnType::Integer->value);
                     break;
 
-                case Database::VAR_FLOAT:
+                case ColumnType::Double->value:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
                     $min = $signed ? -Database::MAX_DOUBLE : 0;
-                    $validators[] =  new Range($min, Database::MAX_DOUBLE, Database::VAR_FLOAT);
+                    $validators[] =  new Range($min, Database::MAX_DOUBLE, ColumnType::Double->value);
                     break;
 
-                case Database::VAR_BOOLEAN:
+                case ColumnType::Boolean->value:
                     $validators[] = new Boolean();
                     break;
 
-                case Database::VAR_DATETIME:
+                case ColumnType::Datetime->value:
                     $validators[] = new DatetimeValidator(
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate
                     );
                     break;
 
-                case Database::VAR_OBJECT:
+                case ColumnType::Object->value:
                     $validators[] = new ObjectValidator();
                     break;
 
-                case Database::VAR_POINT:
-                case Database::VAR_LINESTRING:
-                case Database::VAR_POLYGON:
+                case ColumnType::Point->value:
+                case ColumnType::Linestring->value:
+                case ColumnType::Polygon->value:
                     $validators[] = new Spatial($type);
                     break;
 
-                case Database::VAR_VECTOR:
+                case ColumnType::Vector->value:
                     $validators[] = new Vector($attribute['size'] ?? 0);
                     break;
 

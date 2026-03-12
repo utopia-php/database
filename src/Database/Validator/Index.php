@@ -5,6 +5,8 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 use Utopia\Validator;
 
 class Index extends Validator
@@ -178,7 +180,7 @@ class Index extends Validator
             if (\count($dottedAttributes)) {
                 foreach ($dottedAttributes as $attribute) {
                     $baseAttribute = $this->getBaseAttributeFromDottedAttribute($attribute);
-                    if (isset($this->attributes[\strtolower($baseAttribute)]) && $this->attributes[\strtolower($baseAttribute)]->getAttribute('type') != Database::VAR_OBJECT) {
+                    if (isset($this->attributes[\strtolower($baseAttribute)]) && $this->attributes[\strtolower($baseAttribute)]->getAttribute('type') != ColumnType::Object->value) {
                         $this->message = 'Index attribute "' . $attribute . '" is only supported on object attributes';
                         return false;
                     };
@@ -187,28 +189,28 @@ class Index extends Validator
         }
 
         switch ($type) {
-            case Database::INDEX_KEY:
+            case IndexType::Key->value:
                 if (!$this->supportForKeyIndexes) {
                     $this->message = 'Key index is not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_UNIQUE:
+            case IndexType::Unique->value:
                 if (!$this->supportForUniqueIndexes) {
                     $this->message = 'Unique index is not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_FULLTEXT:
+            case IndexType::Fulltext->value:
                 if (!$this->supportForFulltextIndexes) {
                     $this->message = 'Fulltext index is not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_SPATIAL:
+            case IndexType::Spatial->value:
                 if (!$this->supportForSpatialIndexes) {
                     $this->message = 'Spatial indexes are not supported';
                     return false;
@@ -219,30 +221,30 @@ class Index extends Validator
                 }
                 break;
 
-            case Database::INDEX_HNSW_EUCLIDEAN:
-            case Database::INDEX_HNSW_COSINE:
-            case Database::INDEX_HNSW_DOT:
+            case IndexType::HnswEuclidean->value:
+            case IndexType::HnswCosine->value:
+            case IndexType::HnswDot->value:
                 if (!$this->supportForVectorIndexes) {
                     $this->message = 'Vector indexes are not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_OBJECT:
+            case IndexType::Object->value:
                 if (!$this->supportForObjectIndexes) {
                     $this->message = 'Object indexes are not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_TRIGRAM:
+            case IndexType::Trigram->value:
                 if (!$this->supportForTrigramIndexes) {
                     $this->message = 'Trigram indexes are not supported';
                     return false;
                 }
                 break;
 
-            case Database::INDEX_TTL:
+            case IndexType::Ttl->value:
                 if (!$this->supportForTTLIndexes) {
                     $this->message = 'TTL indexes are not supported';
                     return false;
@@ -250,7 +252,7 @@ class Index extends Validator
                 break;
 
             default:
-                $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT . ', '.Database::INDEX_TRIGRAM . ', '.Database::INDEX_TTL;
+                $this->message = 'Unknown index type: ' . $type . '. Must be one of ' . IndexType::Key->value . ', ' . IndexType::Unique->value . ', ' . IndexType::Fulltext->value . ', ' . IndexType::Spatial->value . ', ' . IndexType::Object->value . ', ' . IndexType::HnswEuclidean->value . ', ' . IndexType::HnswCosine->value . ', ' . IndexType::HnswDot->value . ', ' . IndexType::Trigram->value . ', ' . IndexType::Ttl->value;
                 return false;
         }
         return true;
@@ -325,16 +327,16 @@ class Index extends Validator
         if (!$this->supportForAttributes) {
             return true;
         }
-        if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+        if ($index->getAttribute('type') === IndexType::Fulltext->value) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 $attributeType = $attribute->getAttribute('type', '');
                 $validFulltextTypes = [
-                    Database::VAR_STRING,
-                    Database::VAR_VARCHAR,
-                    Database::VAR_TEXT,
-                    Database::VAR_MEDIUMTEXT,
-                    Database::VAR_LONGTEXT
+                    ColumnType::String->value,
+                    ColumnType::Varchar->value,
+                    ColumnType::Text->value,
+                    ColumnType::MediumText->value,
+                    ColumnType::LongText->value
                 ];
                 if (!in_array($attributeType, $validFulltextTypes)) {
                     $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a fulltext index, must be of type string';
@@ -364,7 +366,7 @@ class Index extends Validator
 
             if ($attribute->getAttribute('array', false)) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if ($index->getAttribute('type') != Database::INDEX_KEY) {
+                if ($index->getAttribute('type') != IndexType::Key->value) {
                     $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
@@ -391,11 +393,11 @@ class Index extends Validator
                     return false;
                 }
             } elseif (!in_array($attribute->getAttribute('type'), [
-                Database::VAR_STRING,
-                Database::VAR_VARCHAR,
-                Database::VAR_TEXT,
-                Database::VAR_MEDIUMTEXT,
-                Database::VAR_LONGTEXT
+                ColumnType::String->value,
+                ColumnType::Varchar->value,
+                ColumnType::Text->value,
+                ColumnType::MediumText->value,
+                ColumnType::LongText->value
             ]) && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "' . $attribute->getAttribute('type') . '" attributes';
                 return false;
@@ -410,7 +412,7 @@ class Index extends Validator
      */
     public function checkIndexLengths(Document $index): bool
     {
-        if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+        if ($index->getAttribute('type') === IndexType::Fulltext->value) {
             return true;
         }
 
@@ -431,24 +433,18 @@ class Index extends Validator
             }
             $attribute = $this->attributes[\strtolower($attributeName)];
 
-            switch ($attribute->getAttribute('type')) {
-                case Database::VAR_STRING:
-                case Database::VAR_VARCHAR:
-                case Database::VAR_TEXT:
-                case Database::VAR_MEDIUMTEXT:
-                case Database::VAR_LONGTEXT:
-                    $attributeSize = $attribute->getAttribute('size', 0);
-                    $indexLength = !empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $attributeSize;
-                    break;
-                case Database::VAR_FLOAT:
-                    $attributeSize = 2; // 8 bytes / 4 mb4
-                    $indexLength = 2;
-                    break;
-                default:
-                    $attributeSize = 1; // 4 bytes / 4 mb4
-                    $indexLength = 1;
-                    break;
-            }
+            [$attributeSize, $indexLength] = match ($attribute->getAttribute('type')) {
+                ColumnType::String->value,
+                ColumnType::Varchar->value,
+                ColumnType::Text->value,
+                ColumnType::MediumText->value,
+                ColumnType::LongText->value => [
+                    $attribute->getAttribute('size', 0),
+                    !empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $attribute->getAttribute('size', 0),
+                ],
+                ColumnType::Double->value => [2, 2],
+                default => [1, 1],
+            };
             if ($indexLength < 0) {
                 $this->message = 'Negative index length provided for ' . $attributeName;
                 return false;
@@ -501,7 +497,7 @@ class Index extends Validator
     {
         $type = $index->getAttribute('type');
 
-        if ($type !== Database::INDEX_SPATIAL) {
+        if ($type !== IndexType::Spatial->value) {
             return true;
         }
 
@@ -522,7 +518,7 @@ class Index extends Validator
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
 
-            if (!\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+            if (!\in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
                 $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
                 return false;
             }
@@ -551,7 +547,7 @@ class Index extends Validator
         $type = $index->getAttribute('type');
 
         // Skip check for spatial indexes
-        if ($type === Database::INDEX_SPATIAL) {
+        if ($type === IndexType::Spatial->value) {
             return true;
         }
 
@@ -561,7 +557,7 @@ class Index extends Validator
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
 
-            if (\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+            if (\in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
                 $this->message = 'Cannot create ' . $type . ' index on spatial attribute "' . $attributeName . '". Spatial attributes require spatial indexes.';
                 return false;
             }
@@ -580,9 +576,9 @@ class Index extends Validator
         $type = $index->getAttribute('type');
 
         if (
-            $type !== Database::INDEX_HNSW_DOT &&
-            $type !== Database::INDEX_HNSW_COSINE &&
-            $type !== Database::INDEX_HNSW_EUCLIDEAN
+            $type !== IndexType::HnswDot->value &&
+            $type !== IndexType::HnswCosine->value &&
+            $type !== IndexType::HnswEuclidean->value
         ) {
             return true;
         }
@@ -600,7 +596,7 @@ class Index extends Validator
         }
 
         $attribute = $this->attributes[\strtolower($attributes[0])] ?? new Document();
-        if ($attribute->getAttribute('type') !== Database::VAR_VECTOR) {
+        if ($attribute->getAttribute('type') !== ColumnType::Vector->value) {
             $this->message = 'Vector index can only be created on vector attributes';
             return false;
         }
@@ -624,7 +620,7 @@ class Index extends Validator
     {
         $type = $index->getAttribute('type');
 
-        if ($type !== Database::INDEX_TRIGRAM) {
+        if ($type !== IndexType::Trigram->value) {
             return true;
         }
 
@@ -636,11 +632,11 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
 
         $validStringTypes = [
-            Database::VAR_STRING,
-            Database::VAR_VARCHAR,
-            Database::VAR_TEXT,
-            Database::VAR_MEDIUMTEXT,
-            Database::VAR_LONGTEXT
+            ColumnType::String->value,
+            ColumnType::Varchar->value,
+            ColumnType::Text->value,
+            ColumnType::MediumText->value,
+            ColumnType::LongText->value
         ];
 
         foreach ($attributes as $attributeName) {
@@ -669,12 +665,12 @@ class Index extends Validator
     {
         $type = $index->getAttribute('type');
 
-        if ($type === Database::INDEX_KEY && $this->supportForKeyIndexes === false) {
+        if ($type === IndexType::Key->value && $this->supportForKeyIndexes === false) {
             $this->message = 'Key index is not supported';
             return false;
         }
 
-        if ($type === Database::INDEX_UNIQUE && $this->supportForUniqueIndexes === false) {
+        if ($type === IndexType::Unique->value && $this->supportForUniqueIndexes === false) {
             $this->message = 'Unique index is not supported';
             return false;
         }
@@ -692,12 +688,12 @@ class Index extends Validator
             return true;
         }
 
-        if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+        if ($index->getAttribute('type') === IndexType::Fulltext->value) {
             foreach ($this->indexes as $existingIndex) {
                 if ($existingIndex->getId() === $index->getId()) {
                     continue;
                 }
-                if ($existingIndex->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                if ($existingIndex->getAttribute('type') === IndexType::Fulltext->value) {
                     $this->message = 'There is already a fulltext index in the collection';
                     return false;
                 }
@@ -740,7 +736,7 @@ class Index extends Validator
 
             if ($attributesMatch && $ordersMatch) {
                 // Allow fulltext + key/unique combinations (different purposes)
-                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE];
+                $regularTypes = [IndexType::Key->value, IndexType::Unique->value];
                 $isRegularIndex = \in_array($indexType, $regularTypes);
                 $isRegularExisting = \in_array($existingType, $regularTypes);
 
@@ -766,7 +762,7 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
 
-        if ($type !== Database::INDEX_OBJECT) {
+        if ($type !== IndexType::Object->value) {
             return true;
         }
 
@@ -797,7 +793,7 @@ class Index extends Validator
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
-        if ($attributeType !== Database::VAR_OBJECT) {
+        if ($attributeType !== ColumnType::Object->value) {
             $this->message = 'Object index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
             return false;
         }
@@ -812,7 +808,7 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
         $ttl        = $index->getAttribute('ttl', 0);
-        if ($type !== Database::INDEX_TTL) {
+        if ($type !== IndexType::Ttl->value) {
             return true;
         }
 
@@ -825,7 +821,7 @@ class Index extends Validator
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
-        if ($this->supportForAttributes && $attributeType !== Database::VAR_DATETIME) {
+        if ($this->supportForAttributes && $attributeType !== ColumnType::Datetime->value) {
             $this->message = 'TTL index can only be created on datetime attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
             return false;
         }
@@ -842,7 +838,7 @@ class Index extends Validator
             }
 
             // Check if existing index is also a TTL index
-            if ($existingIndex->getAttribute('type') === Database::INDEX_TTL) {
+            if ($existingIndex->getAttribute('type') === IndexType::Ttl->value) {
                 $this->message = 'There can be only one TTL index in a collection';
                 return false;
             }

@@ -5,6 +5,10 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator as DatabaseOperator;
+use Utopia\Database\OperatorType;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
 class Operator extends Validator
@@ -63,17 +67,17 @@ class Operator extends Validator
         $side = $options['side'] ?? '';
 
         // Many-to-many is always an array on both sides
-        if ($relationType === Database::RELATION_MANY_TO_MANY) {
+        if ($relationType === RelationType::ManyToMany->value) {
             return true;
         }
 
         // One-to-many: array on parent side, single on child side
-        if ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) {
+        if ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value) {
             return true;
         }
 
         // Many-to-one: array on child side, single on parent side
-        if ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) {
+        if ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value) {
             return true;
         }
 
@@ -151,14 +155,14 @@ class Operator extends Validator
         $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
 
         switch ($method) {
-            case DatabaseOperator::TYPE_INCREMENT:
-            case DatabaseOperator::TYPE_DECREMENT:
-            case DatabaseOperator::TYPE_MULTIPLY:
-            case DatabaseOperator::TYPE_DIVIDE:
-            case DatabaseOperator::TYPE_MODULO:
-            case DatabaseOperator::TYPE_POWER:
+            case OperatorType::Increment->value:
+            case OperatorType::Decrement->value:
+            case OperatorType::Multiply->value:
+            case OperatorType::Divide->value:
+            case OperatorType::Modulo->value:
+            case OperatorType::Power->value:
                 // Numeric operations only work on numeric types
-                if (!\in_array($type, [Database::VAR_INTEGER, Database::VAR_FLOAT])) {
+                if (!\in_array($type, [ColumnType::Integer->value, ColumnType::Double->value])) {
                     $this->message = "Cannot apply {$method} operator to non-numeric field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -170,8 +174,8 @@ class Operator extends Validator
                 }
 
                 // Special validation for divide/modulo by zero
-                if (($method === DatabaseOperator::TYPE_DIVIDE || $method === DatabaseOperator::TYPE_MODULO) && (float)$values[0] === 0.0) {
-                    $this->message = "Cannot apply {$method} operator: " . ($method === DatabaseOperator::TYPE_DIVIDE ? "division" : "modulo") . " by zero";
+                if (($method === OperatorType::Divide->value || $method === OperatorType::Modulo->value) && (float)$values[0] === 0.0) {
+                    $this->message = "Cannot apply {$method} operator: " . ($method === OperatorType::Divide->value ? "division" : "modulo") . " by zero";
                     return false;
                 }
 
@@ -181,18 +185,18 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === Database::VAR_INTEGER && !isset($values[1])) {
+                if ($this->currentDocument !== null && $type === ColumnType::Integer->value && !isset($values[1])) {
                     $currentValue = $this->currentDocument->getAttribute($operator->getAttribute()) ?? 0;
                     $operatorValue = $values[0];
 
                     // Compute predicted result
                     $predictedResult = match ($method) {
-                        DatabaseOperator::TYPE_INCREMENT => $currentValue + $operatorValue,
-                        DatabaseOperator::TYPE_DECREMENT => $currentValue - $operatorValue,
-                        DatabaseOperator::TYPE_MULTIPLY => $currentValue * $operatorValue,
-                        DatabaseOperator::TYPE_DIVIDE => $currentValue / $operatorValue,
-                        DatabaseOperator::TYPE_MODULO => $currentValue % $operatorValue,
-                        DatabaseOperator::TYPE_POWER => $currentValue ** $operatorValue,
+                        OperatorType::Increment->value => $currentValue + $operatorValue,
+                        OperatorType::Decrement->value => $currentValue - $operatorValue,
+                        OperatorType::Multiply->value => $currentValue * $operatorValue,
+                        OperatorType::Divide->value => $currentValue / $operatorValue,
+                        OperatorType::Modulo->value => $currentValue % $operatorValue,
+                        OperatorType::Power->value => $currentValue ** $operatorValue,
                     };
 
                     if ($predictedResult > Database::MAX_INT) {
@@ -207,10 +211,10 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_APPEND:
-            case DatabaseOperator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayAppend->value:
+            case OperatorType::ArrayPrepend->value:
                 // For relationships, check if it's a "many" side
-                if ($type === Database::VAR_RELATIONSHIP) {
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -226,7 +230,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (!empty($values) && $type === Database::VAR_INTEGER) {
+                if (!empty($values) && $type === ColumnType::Integer->value) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
                         if (\is_numeric($item) && ($item > Database::MAX_INT || $item < Database::MIN_INT)) {
@@ -237,8 +241,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_UNIQUE:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayUnique->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -249,8 +253,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_INSERT:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayInsert->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -273,14 +277,14 @@ class Operator extends Validator
 
                 $insertValue = $values[1];
 
-                if ($type === Database::VAR_RELATIONSHIP) {
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isValidRelationshipValue($insertValue)) {
                         $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
                         return false;
                     }
                 }
 
-                if ($type === Database::VAR_INTEGER && \is_numeric($insertValue)) {
+                if ($type === ColumnType::Integer->value && \is_numeric($insertValue)) {
                     if ($insertValue > Database::MAX_INT || $insertValue < Database::MIN_INT) {
                         $this->message = "Cannot apply {$method} operator: array items must be between " . Database::MIN_INT . " and " . Database::MAX_INT;
                         return false;
@@ -301,8 +305,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_REMOVE:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayRemove->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -325,8 +329,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_INTERSECT:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayIntersect->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -341,7 +345,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($type === Database::VAR_RELATIONSHIP) {
+                if ($type === ColumnType::Relationship->value) {
                     foreach ($values as $item) {
                         if (!$this->isValidRelationshipValue($item)) {
                             $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
@@ -351,8 +355,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_DIFF:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayDiff->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -369,8 +373,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_ARRAY_FILTER:
-                if ($type === Database::VAR_RELATIONSHIP) {
+            case OperatorType::ArrayFilter->value:
+                if ($type === ColumnType::Relationship->value) {
                     if (!$this->isRelationshipArray($attribute)) {
                         $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
                         return false;
@@ -401,8 +405,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_STRING_CONCAT:
-                if ($type !== Database::VAR_STRING || $isArray) {
+            case OperatorType::StringConcat->value:
+                if ($type !== ColumnType::String->value || $isArray) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -412,7 +416,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === Database::VAR_STRING) {
+                if ($this->currentDocument !== null && $type === ColumnType::String->value) {
                     $currentString = $this->currentDocument->getAttribute($operator->getAttribute()) ?? '';
                     $concatValue = $values[0];
                     $predictedLength = strlen($currentString) + strlen($concatValue);
@@ -428,9 +432,9 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_STRING_REPLACE:
+            case OperatorType::StringReplace->value:
                 // Replace only works on string types
-                if ($type !== Database::VAR_STRING) {
+                if ($type !== ColumnType::String->value) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -441,17 +445,17 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_TOGGLE:
+            case OperatorType::Toggle->value:
                 // Toggle only works on boolean types
-                if ($type !== Database::VAR_BOOLEAN) {
+                if ($type !== ColumnType::Boolean->value) {
                     $this->message = "Cannot apply {$method} operator to non-boolean field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 break;
-            case DatabaseOperator::TYPE_DATE_ADD_DAYS:
-            case DatabaseOperator::TYPE_DATE_SUB_DAYS:
-                if ($type !== Database::VAR_DATETIME) {
+            case OperatorType::DateAddDays->value:
+            case OperatorType::DateSubDays->value:
+                if ($type !== ColumnType::Datetime->value) {
                     $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
                     return false;
                 }
@@ -462,8 +466,8 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_DATE_SET_NOW:
-                if ($type !== Database::VAR_DATETIME) {
+            case OperatorType::DateSetNow->value:
+                if ($type !== ColumnType::Datetime->value) {
                     $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
                     return false;
                 }

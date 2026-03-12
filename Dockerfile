@@ -10,7 +10,8 @@ COPY query /usr/local/query
 
 # Rewrite path repository to use copied location
 RUN sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.json \
- && sed -i 's|"symlink": true|"symlink": false|' /usr/local/src/composer.json
+ && sed -i 's|"symlink": true|"symlink": false|' /usr/local/src/composer.json \
+ && sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.lock
 
 RUN COMPOSER_MIRROR_PATH_REPOS=1 composer install \
     --ignore-platform-reqs \

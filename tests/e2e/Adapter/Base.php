@@ -17,6 +17,7 @@ use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Database;
+use Utopia\Database\Hook\RelationshipHandler;
 use Utopia\Database\Validator\Authorization;
 
 \ini_set('memory_limit', '2048M');
@@ -67,11 +68,18 @@ abstract class Base extends TestCase
 
     public function setUp(): void
     {
+        $this->testDatabase = 'utopiaTests_' . static::getTestToken();
+
         if (is_null(self::$authorization)) {
             self::$authorization = new Authorization();
         }
 
         self::$authorization->addRole('any');
+
+        $db = $this->getDatabase();
+        if ($db->getRelationshipHook() === null) {
+            $db->setRelationshipHook(new RelationshipHandler($db));
+        }
     }
 
     public function tearDown(): void
@@ -82,4 +90,8 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
+    protected static function getTestToken(): string
+    {
+        return getenv('TEST_TOKEN') ?: getenv('UNIQUE_TEST_TOKEN') ?: (string) getmypid();
+    }
 }

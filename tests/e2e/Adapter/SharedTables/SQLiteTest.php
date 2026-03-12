@@ -36,7 +36,7 @@ class SQLiteTest extends Base
             return self::$database;
         }
 
-        $db = __DIR__."/database.sql";
+        $db = __DIR__."/database_" . static::getTestToken() . ".sql";
 
         if (file_exists($db)) {
             unlink($db);
@@ -48,17 +48,17 @@ class SQLiteTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis');
-        $redis->flushAll();
+        $redis->select(10);
 
-        $cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new SQLite($pdo), $cache);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '');
+            ->setNamespace(static::$namespace = 'st_' . static::getTestToken() . '_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();

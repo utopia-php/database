@@ -18,6 +18,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
+use Utopia\Database\Attribute;
+use Utopia\Query\Schema\ColumnType;
 
 class MirrorTest extends Base
 {
@@ -48,8 +50,8 @@ class MirrorTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis');
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(5);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);
@@ -63,20 +65,21 @@ class MirrorTest extends Base
 
         $mirrorRedis = new Redis();
         $mirrorRedis->connect('redis-mirror');
-        $mirrorRedis->flushAll();
-        $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
+        $mirrorRedis->select(5);
+        $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
 
         self::$destinationPdo = $mirrorPdo;
         self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);
 
         $database = new Mirror(self::$source, self::$destination);
 
+        $token = static::getTestToken();
         $schemas = [
-            'utopiaTests',
-            'schema1',
-            'schema2',
-            'sharedTables',
-            'sharedTablesTenantPerDocument'
+            $this->testDatabase,
+            'schema1_' . $token,
+            'schema2_' . $token,
+            'sharedTables_' . $token,
+            'sharedTablesTenantPerDocument_' . $token,
         ];
 
         /**
@@ -94,7 +97,7 @@ class MirrorTest extends Base
         }
 
         $database
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setAuthorization(self::$authorization)
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
@@ -207,12 +210,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -249,12 +247,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -289,12 +282,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

@@ -4,7 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Database;
+use Utopia\Database\OrderDirection;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -14,7 +14,13 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Index;
+use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait IndexTests
 {
@@ -27,24 +33,24 @@ trait IndexTests
         /**
          * Check ticks sounding cast index for reserved words
          */
-        $database->createAttribute('indexes', 'int', Database::VAR_INTEGER, 8, false, array:true);
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
+        $database->createAttribute('indexes', new Attribute(key: 'int', type: ColumnType::Integer, size: 8, required: false, array: true));
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
+            $database->createIndex('indexes', new Index(key: 'indx8711', type: IndexType::Key, attributes: ['int'], lengths: [255]));
         }
 
-        $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
+        $database->createAttribute('indexes', new Attribute(key: 'name', type: ColumnType::String, size: 10, required: false));
 
-        $database->createIndex('indexes', 'index_1', Database::INDEX_KEY, ['name']);
+        $database->createIndex('indexes', new Index(key: 'index_1', type: IndexType::Key, attributes: ['name']));
 
         try {
-            $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['$id', '$id']);
+            $database->createIndex('indexes', new Index(key: 'index3', type: IndexType::Key, attributes: ['$id', '$id']));
         } catch (Throwable $e) {
             self::assertTrue($e instanceof DatabaseException);
             self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
         }
 
         try {
-            $database->createIndex('indexes', 'index4', Database::INDEX_KEY, ['name', 'Name']);
+            $database->createIndex('indexes', new Index(key: 'index4', type: IndexType::Key, attributes: ['name', 'Name']));
         } catch (Throwable $e) {
             self::assertTrue($e instanceof DatabaseException);
             self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
@@ -60,19 +66,19 @@ trait IndexTests
 
         $database->createCollection('indexes');
 
-        $this->assertEquals(true, $database->createAttribute('indexes', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('indexes', 'order', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $database->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, $database->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'string', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'order', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'integer', type: ColumnType::Integer, size: 0, required: true)));
+        $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'float', type: ColumnType::Double, size: 0, required: true)));
+        $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true)));
 
         // Indexes
-        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, $database->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
-        $this->assertEquals(true, $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
-        $this->assertEquals(true, $database->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, $database->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, $database->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index2', type: IndexType::Key, attributes: ['float', 'integer'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index3', type: IndexType::Key, attributes: ['integer', 'boolean'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value, OrderDirection::DESC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index4', type: IndexType::Unique, attributes: ['string'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index5', type: IndexType::Unique, attributes: ['$id', 'string'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'order', type: IndexType::Unique, attributes: ['order'], lengths: [128], orders: [OrderDirection::ASC->value])));
 
         $collection = $database->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
@@ -89,21 +95,21 @@ trait IndexTests
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // Test non-shared tables duplicates throw duplicate
-        $database->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+        $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::ASC->value]));
         try {
-            $database->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+            $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::ASC->value]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
         // Test delete index when index does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
         $this->assertEquals(true, $this->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
         $this->assertEquals(true, $database->deleteAttribute('indexes', 'string'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
@@ -120,7 +126,7 @@ trait IndexTests
         $attributes = [
             new Document([
                 '$id' => ID::custom('title1'),
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 700,
                 'signed' => true,
@@ -131,7 +137,7 @@ trait IndexTests
             ]),
             new Document([
                 '$id' => ID::custom('title2'),
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 500,
                 'signed' => true,
@@ -145,7 +151,7 @@ trait IndexTests
         $indexes = [
             new Document([
                 '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_KEY,
+                'type' => IndexType::Key->value,
                 'attributes' => ['title1', 'title2'],
                 'lengths' => [701,50],
                 'orders' => [],
@@ -162,26 +168,26 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $validator = new Index(
+        $validator = new IndexValidator(
             $attributes,
             $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialIndexNull(),
-            $database->getAdapter()->getSupportForSpatialIndexOrder(),
-            $database->getAdapter()->getSupportForVectors(),
-            $database->getAdapter()->getSupportForAttributes(),
-            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes(),
-            $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
-            $database->getAdapter()->getSupportForIndex(),
-            $database->getAdapter()->getSupportForUniqueIndex(),
-            $database->getAdapter()->getSupportForFulltextIndex()
+            $database->getAdapter()->supports(Capability::IndexArray),
+            $database->getAdapter()->supports(Capability::SpatialIndexNull),
+            $database->getAdapter()->supports(Capability::SpatialIndexOrder),
+            $database->getAdapter()->supports(Capability::Vectors),
+            $database->getAdapter()->supports(Capability::DefinedAttributes),
+            $database->getAdapter()->supports(Capability::MultipleFulltextIndexes),
+            $database->getAdapter()->supports(Capability::IdenticalIndexes),
+            $database->getAdapter()->supports(Capability::Objects),
+            $database->getAdapter()->supports(Capability::TrigramIndex),
+            $database->getAdapter()->supports(Capability::Spatial),
+            $database->getAdapter()->supports(Capability::Index),
+            $database->getAdapter()->supports(Capability::UniqueIndex),
+            $database->getAdapter()->supports(Capability::Fulltext)
         );
-        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
+        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -199,7 +205,7 @@ trait IndexTests
         $indexes = [
             new Document([
                 '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_KEY,
+                'type' => IndexType::Key->value,
                 'attributes' => ['title1', 'title2'],
                 'lengths' => [700], // 700, 500 (length(title2))
                 'orders' => [],
@@ -208,7 +214,7 @@ trait IndexTests
 
         $collection->setAttribute('indexes', $indexes);
 
-        if ($database->getAdapter()->getSupportForAttributes() && $database->getAdapter()->getMaxIndexLength() > 0) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -223,7 +229,7 @@ trait IndexTests
 
         $attributes[] = new Document([
             '$id' => ID::custom('integer'),
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'format' => '',
             'size' => 10000,
             'signed' => true,
@@ -236,7 +242,7 @@ trait IndexTests
         $indexes = [
             new Document([
                 '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_FULLTEXT,
+                'type' => IndexType::Fulltext->value,
                 'attributes' => ['title1', 'integer'],
                 'lengths' => [],
                 'orders' => [],
@@ -253,49 +259,49 @@ trait IndexTests
         // not using $indexes[0] as the index validator skips indexes with same id
         $newIndex = new Document([
             '$id' => ID::custom('newIndex1'),
-            'type' => Database::INDEX_FULLTEXT,
+            'type' => IndexType::Fulltext->value,
             'attributes' => ['title1', 'integer'],
             'lengths' => [],
             'orders' => [],
         ]);
 
-        $validator = new Index(
+        $validator = new IndexValidator(
             $attributes,
             $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialIndexNull(),
-            $database->getAdapter()->getSupportForSpatialIndexOrder(),
-            $database->getAdapter()->getSupportForVectors(),
-            $database->getAdapter()->getSupportForAttributes(),
-            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
-            $database->getAdapter()->getSupportForIdenticalIndexes(),
-            $database->getAdapter()->getSupportForObject(),
-            $database->getAdapter()->getSupportForTrigramIndex(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
-            $database->getAdapter()->getSupportForIndex(),
-            $database->getAdapter()->getSupportForUniqueIndex(),
-            $database->getAdapter()->getSupportForFulltextIndex()
+            $database->getAdapter()->supports(Capability::IndexArray),
+            $database->getAdapter()->supports(Capability::SpatialIndexNull),
+            $database->getAdapter()->supports(Capability::SpatialIndexOrder),
+            $database->getAdapter()->supports(Capability::Vectors),
+            $database->getAdapter()->supports(Capability::DefinedAttributes),
+            $database->getAdapter()->supports(Capability::MultipleFulltextIndexes),
+            $database->getAdapter()->supports(Capability::IdenticalIndexes),
+            $database->getAdapter()->supports(Capability::Objects),
+            $database->getAdapter()->supports(Capability::TrigramIndex),
+            $database->getAdapter()->supports(Capability::Spatial),
+            $database->getAdapter()->supports(Capability::Index),
+            $database->getAdapter()->supports(Capability::UniqueIndex),
+            $database->getAdapter()->supports(Capability::Fulltext)
         );
 
         $this->assertFalse($validator->isValid($newIndex));
 
-        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+        if (!$database->getAdapter()->supports(Capability::Fulltext)) {
             $this->assertEquals('Fulltext index is not supported', $validator->getDescription());
-        } elseif (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+        } elseif (!$database->getAdapter()->supports(Capability::MultipleFulltextIndexes)) {
             $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
-        } elseif ($database->getAdapter()->getSupportForAttributes()) {
+        } elseif ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
         }
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);
-            if ($database->getAdapter()->getSupportForAttributes()) {
+            if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+            if (!$database->getAdapter()->supports(Capability::Fulltext)) {
                 $this->assertEquals('Fulltext index is not supported', $e->getMessage());
             } else {
                 $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
@@ -306,13 +312,13 @@ trait IndexTests
         $indexes = [
             new Document([
                 '$id' => ID::custom('index_negative_length'),
-                'type' => Database::INDEX_KEY,
+                'type' => IndexType::Key->value,
                 'attributes' => ['title1'],
                 'lengths' => [-1],
                 'orders' => [],
             ]),
         ];
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $errorMessage = 'Negative index length provided for title1';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -327,7 +333,7 @@ trait IndexTests
             $indexes = [
                 new Document([
                     '$id' => ID::custom('index_extra_lengths'),
-                    'type' => Database::INDEX_KEY,
+                    'type' => IndexType::Key->value,
                     'attributes' => ['title1', 'title2'],
                     'lengths' => [100, 100, 100],
                     'orders' => [],
@@ -351,28 +357,28 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $database->createCollection(__FUNCTION__);
 
-        $database->createAttribute(__FUNCTION__, 'title1', Database::VAR_STRING, $database->getAdapter()->getMaxIndexLength() + 300, true);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'title1', type: ColumnType::String, size: $database->getAdapter()->getMaxIndexLength() + 300, required: true));
 
         try {
-            $database->createIndex(__FUNCTION__, 'index_title1', Database::INDEX_KEY, ['title1'], [0]);
+            $database->createIndex(__FUNCTION__, new Index(key: 'index_title1', type: IndexType::Key, attributes: ['title1'], lengths: [0]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
         }
 
 
-        $database->createAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, 100, true);
-        $database->createIndex(__FUNCTION__, 'index_title2', Database::INDEX_KEY, ['title2'], [0]);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'title2', type: ColumnType::String, size: 100, required: true));
+        $database->createIndex(__FUNCTION__, new Index(key: 'index_title2', type: IndexType::Key, attributes: ['title2'], lengths: [0]));
 
         try {
-            $database->updateAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, $database->getAdapter()->getMaxIndexLength() + 300, true);
+            $database->updateAttribute(__FUNCTION__, 'title2', ColumnType::String->value, $database->getAdapter()->getMaxIndexLength() + 300, true);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
@@ -384,11 +390,11 @@ trait IndexTests
         $database = $this->getDatabase();
 
         $numbers = $database->createCollection('numbers');
-        $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
-        $database->createAttribute('numbers', 'symbol', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
 
-        $database->createIndex('numbers', 'index1', Database::INDEX_KEY, ['verbose'], [128], [Database::ORDER_ASC]);
-        $database->createIndex('numbers', 'index2', Database::INDEX_KEY, ['symbol'], [0], [Database::ORDER_ASC]);
+        $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::ASC->value]));
+        $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::ASC->value]));
 
         $index = $database->renameIndex('numbers', 'index1', 'index3');
 
@@ -403,22 +409,47 @@ trait IndexTests
 
 
     /**
-    * @depends testRenameIndex
+     * Sets up the 'numbers' collection with renamed indexes as testRenameIndex would.
+     */
+    private static bool $renameIndexFixtureInit = false;
+
+    protected function initRenameIndexFixture(): void
+    {
+        if (self::$renameIndexFixtureInit) {
+            return;
+        }
+
+        $database = $this->getDatabase();
+
+        if (!$database->exists($this->testDatabase, 'numbers')) {
+            $database->createCollection('numbers');
+            $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
+            $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::ASC->value]));
+            $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::ASC->value]));
+            $database->renameIndex('numbers', 'index1', 'index3');
+        }
+
+        self::$renameIndexFixtureInit = true;
+    }
+
+    /**
     * @expectedException Exception
     */
     public function testRenameIndexMissing(): void
     {
+        $this->initRenameIndexFixture();
         $database = $this->getDatabase();
         $this->expectExceptionMessage('Index not found');
         $index = $database->renameIndex('numbers', 'index1', 'index4');
     }
 
     /**
-    * @depends testRenameIndex
     * @expectedException Exception
     */
     public function testRenameIndexExisting(): void
     {
+        $this->initRenameIndexFixture();
         $database = $this->getDatabase();
         $this->expectExceptionMessage('Index name already used');
         $index = $database->renameIndex('numbers', 'index3', 'index2');
@@ -434,32 +465,34 @@ trait IndexTests
 
         // add unique attributes for indexing
         for ($i = 0; $i < 64; $i++) {
-            $this->assertEquals(true, $database->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
+            $this->assertEquals(true, $database->createAttribute('indexLimit', new Attribute(key: "test{$i}", type: ColumnType::String, size: 16, required: true)));
         }
 
         // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i = 0; $i < ($this->getDatabase()->getLimitForIndexes()); $i++) {
-            $this->assertEquals(true, $database->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
+            $this->assertEquals(true, $database->createIndex('indexLimit', new Index(key: "index{$i}", type: IndexType::Key, attributes: ["test{$i}"], lengths: [16])));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, $database->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
+        $this->assertEquals(false, $database->createIndex('indexLimit', new Index(key: "index64", type: IndexType::Key, attributes: ["test64"], lengths: [16])));
 
         $database->deleteCollection('indexLimit');
     }
 
     public function testListDocumentSearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
+        $this->initDocumentsFixture();
+
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+        $database->createIndex('documents', new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
         $database->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -491,6 +524,7 @@ trait IndexTests
 
     public function testMaxQueriesValues(): void
     {
+        $this->initDocumentsFixture();
         /** @var Database $database */
         $database = $this->getDatabase();
 
@@ -514,14 +548,23 @@ trait IndexTests
 
     public function testEmptySearch(): void
     {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
+        $this->initDocumentsFixture();
+
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        // Create fulltext index if it doesn't exist (was created by testListDocumentSearch in sequential mode)
+        try {
+            $database->createIndex('documents', new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
+        } catch (\Exception $e) {
+            // Already exists
+        }
 
         $documents = $database->find('documents', [
             Query::search('string', ''),
@@ -542,7 +585,7 @@ trait IndexTests
     public function testMultipleFulltextIndexValidation(): void
     {
 
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
         if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -555,15 +598,15 @@ trait IndexTests
         try {
             $database->createCollection($collectionId);
 
-            $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 256, false);
-            $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 256, false);
-            $database->createIndex($collectionId, 'fulltext_title', Database::INDEX_FULLTEXT, ['title']);
+            $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 256, required: false));
+            $database->createAttribute($collectionId, new Attribute(key: 'content', type: ColumnType::String, size: 256, required: false));
+            $database->createIndex($collectionId, new Index(key: 'fulltext_title', type: IndexType::Fulltext, attributes: ['title']));
 
-            $supportsMultipleFulltext = $database->getAdapter()->getSupportForMultipleFulltextIndexes();
+            $supportsMultipleFulltext = $database->getAdapter()->supports(Capability::MultipleFulltextIndexes);
 
             // Try to add second fulltext index
             try {
-                $database->createIndex($collectionId, 'fulltext_content', Database::INDEX_FULLTEXT, ['content']);
+                $database->createIndex($collectionId, new Index(key: 'fulltext_content', type: IndexType::Fulltext, attributes: ['content']));
 
                 if ($supportsMultipleFulltext) {
                     $this->assertTrue(true, 'Multiple fulltext indexes are supported and second index was created successfully');
@@ -594,16 +637,16 @@ trait IndexTests
         try {
             $database->createCollection($collectionId);
 
-            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
-            $database->createAttribute($collectionId, 'age', Database::VAR_INTEGER, 8, false);
+            $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 256, required: false));
+            $database->createAttribute($collectionId, new Attribute(key: 'age', type: ColumnType::Integer, size: 8, required: false));
 
-            $database->createIndex($collectionId, 'index1', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC, Database::ORDER_DESC]);
+            $database->createIndex($collectionId, new Index(key: 'index1', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
 
-            $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
+            $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
 
             // Try to add identical index (failure)
             try {
-                $database->createIndex($collectionId, 'index2', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC, Database::ORDER_DESC]);
+                $database->createIndex($collectionId, new Index(key: 'index2', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
                 if ($supportsIdenticalIndexes) {
                     $this->assertTrue(true, 'Identical indexes are supported and second index was created successfully');
                 } else {
@@ -621,7 +664,7 @@ trait IndexTests
 
             // Test with different attributes order - faliure
             try {
-                $database->createIndex($collectionId, 'index3', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_ASC, Database::ORDER_DESC]);
+                $database->createIndex($collectionId, new Index(key: 'index3', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [ OrderDirection::ASC->value, OrderDirection::DESC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 if (!$supportsIdenticalIndexes) {
@@ -633,7 +676,7 @@ trait IndexTests
 
             // Test with different orders  order - faliure
             try {
-                $database->createIndex($collectionId, 'index4', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_DESC, Database::ORDER_ASC]);
+                $database->createIndex($collectionId, new Index(key: 'index4', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [ OrderDirection::DESC->value, OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 if (!$supportsIdenticalIndexes) {
@@ -645,7 +688,7 @@ trait IndexTests
 
             // Test with different attributes - success
             try {
-                $database->createIndex($collectionId, 'index5', Database::INDEX_KEY, ['name'], [], [Database::ORDER_ASC]);
+                $database->createIndex($collectionId, new Index(key: 'index5', type: IndexType::Key, attributes: ['name'], lengths: [], orders: [OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different attributes: ' . $e->getMessage());
@@ -653,7 +696,7 @@ trait IndexTests
 
             // Test with different orders - success
             try {
-                $database->createIndex($collectionId, 'index6', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC]);
+                $database->createIndex($collectionId, new Index(key: 'index6', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different orders was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different orders: ' . $e->getMessage());
@@ -666,7 +709,7 @@ trait IndexTests
 
     public function testTrigramIndex(): void
     {
-        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
         if (!$trigramSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -679,21 +722,21 @@ trait IndexTests
         try {
             $database->createCollection($collectionId);
 
-            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
-            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 512, false);
+            $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 256, required: false));
+            $database->createAttribute($collectionId, new Attribute(key: 'description', type: ColumnType::String, size: 512, required: false));
 
             // Create trigram index on name attribute
-            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_name', Database::INDEX_TRIGRAM, ['name']));
+            $this->assertEquals(true, $database->createIndex($collectionId, new Index(key: 'trigram_name', type: IndexType::Trigram, attributes: ['name'])));
 
             $collection = $database->getCollection($collectionId);
             $indexes = $collection->getAttribute('indexes');
             $this->assertCount(1, $indexes);
             $this->assertEquals('trigram_name', $indexes[0]['$id']);
-            $this->assertEquals(Database::INDEX_TRIGRAM, $indexes[0]['type']);
+            $this->assertEquals(IndexType::Trigram->value, $indexes[0]['type']);
             $this->assertEquals(['name'], $indexes[0]['attributes']);
 
             // Create another trigram index on description
-            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_description', Database::INDEX_TRIGRAM, ['description']));
+            $this->assertEquals(true, $database->createIndex($collectionId, new Index(key: 'trigram_description', type: IndexType::Trigram, attributes: ['description'])));
 
             $collection = $database->getCollection($collectionId);
             $indexes = $collection->getAttribute('indexes');
@@ -715,7 +758,7 @@ trait IndexTests
 
     public function testTrigramIndexValidation(): void
     {
-        $trigramSupport = $this->getDatabase()->getAdapter()->getSupportForTrigramIndex();
+        $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
         if (!$trigramSupport) {
             $this->expectNotToPerformAssertions();
             return;
@@ -728,20 +771,20 @@ trait IndexTests
         try {
             $database->createCollection($collectionId);
 
-            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
-            $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 412, false);
-            $database->createAttribute($collectionId, 'age', Database::VAR_INTEGER, 8, false);
+            $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 256, required: false));
+            $database->createAttribute($collectionId, new Attribute(key: 'description', type: ColumnType::String, size: 412, required: false));
+            $database->createAttribute($collectionId, new Attribute(key: 'age', type: ColumnType::Integer, size: 8, required: false));
 
             // Test: Trigram index on non-string attribute should fail
             try {
-                $database->createIndex($collectionId, 'trigram_invalid', Database::INDEX_TRIGRAM, ['age']);
+                $database->createIndex($collectionId, new Index(key: 'trigram_invalid', type: IndexType::Trigram, attributes: ['age']));
                 $this->fail('Expected exception when creating trigram index on non-string attribute');
             } catch (Exception $e) {
                 $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
             }
 
             // Test: Trigram index with multiple string attributes should succeed
-            $this->assertEquals(true, $database->createIndex($collectionId, 'trigram_multi', Database::INDEX_TRIGRAM, ['name', 'description']));
+            $this->assertEquals(true, $database->createIndex($collectionId, new Index(key: 'trigram_multi', type: IndexType::Trigram, attributes: ['name', 'description'])));
 
             $collection = $database->getCollection($collectionId);
             $indexes = $collection->getAttribute('indexes');
@@ -753,12 +796,12 @@ trait IndexTests
                 }
             }
             $this->assertNotNull($trigramMultiIndex);
-            $this->assertEquals(Database::INDEX_TRIGRAM, $trigramMultiIndex['type']);
+            $this->assertEquals(IndexType::Trigram->value, $trigramMultiIndex['type']);
             $this->assertEquals(['name', 'description'], $trigramMultiIndex['attributes']);
 
             // Test: Trigram index with mixed string and non-string attributes should fail
             try {
-                $database->createIndex($collectionId, 'trigram_mixed', Database::INDEX_TRIGRAM, ['name', 'age']);
+                $database->createIndex($collectionId, new Index(key: 'trigram_mixed', type: IndexType::Trigram, attributes: ['name', 'age']));
                 $this->fail('Expected exception when creating trigram index with mixed attribute types');
             } catch (Exception $e) {
                 $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
@@ -766,7 +809,7 @@ trait IndexTests
 
             // Test: Trigram index with orders should fail
             try {
-                $database->createIndex($collectionId, 'trigram_order', Database::INDEX_TRIGRAM, ['name'], [], [Database::ORDER_ASC]);
+                $database->createIndex($collectionId, new Index(key: 'trigram_order', type: IndexType::Trigram, attributes: ['name'], lengths: [], orders: [OrderDirection::ASC->value]));
                 $this->fail('Expected exception when creating trigram index with orders');
             } catch (Exception $e) {
                 $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
@@ -774,7 +817,7 @@ trait IndexTests
 
             // Test: Trigram index with lengths should fail
             try {
-                $database->createIndex($collectionId, 'trigram_length', Database::INDEX_TRIGRAM, ['name'], [128]);
+                $database->createIndex($collectionId, new Index(key: 'trigram_length', type: IndexType::Trigram, attributes: ['name'], lengths: [128]));
                 $this->fail('Expected exception when creating trigram index with lengths');
             } catch (Exception $e) {
                 $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
@@ -791,7 +834,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -799,7 +842,7 @@ trait IndexTests
         $col = uniqid('sl_ttl');
         $database->createCollection($col);
 
-        $database->createAttribute($col, 'expiresAt', Database::VAR_DATETIME, 0, false);
+        $database->createAttribute($col, new Attribute(key: 'expiresAt', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -809,15 +852,7 @@ trait IndexTests
         ];
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_valid',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour TTL
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
@@ -825,7 +860,7 @@ trait IndexTests
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
         $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(Database::INDEX_TTL, $ttlIndex->getAttribute('type'));
+        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
         $now = new \DateTime();
@@ -854,22 +889,14 @@ trait IndexTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_min',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                1 // Minimum TTL
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1))
         );
 
         $col2 = uniqid('sl_ttl_collection');
 
         $expiresAtAttr = new Document([
             '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'signed' => false,
             'required' => false,
@@ -880,10 +907,10 @@ trait IndexTests
 
         $ttlIndexDoc = new Document([
             '$id' => ID::custom('idx_ttl_collection'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 7200 // 2 hours
         ]);
 
@@ -905,7 +932,7 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -913,31 +940,15 @@ trait IndexTests
         $col = uniqid('sl_ttl_dup');
         $database->createCollection($col);
 
-        $database->createAttribute($col, 'expiresAt', Database::VAR_DATETIME, 0, false);
-        $database->createAttribute($col, 'deletedAt', Database::VAR_DATETIME, 0, false);
+        $database->createAttribute($col, new Attribute(key: 'expiresAt', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']));
+        $database->createAttribute($col, new Attribute(key: 'deletedAt', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
         );
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires_duplicate',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                7200 // 2 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 7200));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -945,15 +956,7 @@ trait IndexTests
         }
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                86400 // 24 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 86400));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -969,15 +972,7 @@ trait IndexTests
         $this->assertNotContains('idx_ttl_deleted', $indexIds);
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted_duplicate',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                172800 // 48 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 172800));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -987,15 +982,7 @@ trait IndexTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                1800 // 30 minutes
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1800))
         );
 
         $collection = $database->getCollection($col);
@@ -1010,7 +997,7 @@ trait IndexTests
 
         $expiresAtAttr = new Document([
             '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'signed' => false,
             'required' => false,
@@ -1021,19 +1008,19 @@ trait IndexTests
 
         $ttlIndex1 = new Document([
             '$id' => ID::custom('idx_ttl_1'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 3600
         ]);
 
         $ttlIndex2 = new Document([
             '$id' => ID::custom('idx_ttl_2'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 7200
         ]);
 

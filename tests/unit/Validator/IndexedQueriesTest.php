@@ -3,7 +3,6 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
@@ -13,6 +12,8 @@ use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 class IndexedQueriesTest extends TestCase
 {
@@ -59,18 +60,18 @@ class IndexedQueriesTest extends TestCase
             new Document([
                 '$id' => 'name',
                 'key' => 'name',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
         ];
 
         $indexes = [
             new Document([
-                'type' => Database::INDEX_KEY,
+                'type' => IndexType::Key->value,
                 'attributes' => ['name'],
             ]),
             new Document([
-                'type' => Database::INDEX_FULLTEXT,
+                'type' => IndexType::Fulltext->value,
                 'attributes' => ['name'],
             ]),
         ];
@@ -80,7 +81,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes, Database::VAR_INTEGER),
+                new Filter($attributes, ColumnType::Integer->value),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)
@@ -126,14 +127,14 @@ class IndexedQueriesTest extends TestCase
         $attributes = [
             new Document([
                 'key' => 'name',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
         ];
 
         $indexes = [
             new Document([
-                'type' => Database::INDEX_KEY,
+                'type' => IndexType::Key->value,
                 'attributes' => ['name'],
             ]),
         ];
@@ -143,7 +144,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes, Database::VAR_INTEGER),
+                new Filter($attributes, ColumnType::Integer->value),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)
@@ -173,20 +174,20 @@ class IndexedQueriesTest extends TestCase
             new Document([
                 '$id' => 'ft1',
                 'key' => 'ft1',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
             new Document([
                 '$id' => 'ft2',
                 'key' => 'ft2',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
         ];
 
         $indexes = [
             new Document([
-                'type' => Database::INDEX_FULLTEXT,
+                'type' => IndexType::Fulltext->value,
                 'attributes' => ['ft1','ft2'],
             ]),
         ];
@@ -196,7 +197,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes, Database::VAR_INTEGER),
+                new Filter($attributes, ColumnType::Integer->value),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)

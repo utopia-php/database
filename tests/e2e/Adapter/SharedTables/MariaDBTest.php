@@ -44,16 +44,16 @@ class MariaDBTest extends Base
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(7);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '')
+            ->setNamespace(static::$namespace = 'st_' . static::getTestToken())
             ->enableLocks(true)
         ;
 

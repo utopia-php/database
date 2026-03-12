@@ -10,6 +10,7 @@ use Utopia\Database\Exception;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Query\Schema\ColumnType;
 
 class StructureTest extends TestCase
 {
@@ -23,7 +24,7 @@ class StructureTest extends TestCase
         'attributes' => [
             [
                 '$id' => 'title',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 256,
                 'required' => true,
@@ -33,7 +34,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'description',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 1000000,
                 'required' => false,
@@ -43,7 +44,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'rating',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -53,7 +54,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'reviews',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'format' => '',
                 'size' => 5,
                 'required' => false,
@@ -63,7 +64,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'price',
-                'type' => Database::VAR_FLOAT,
+                'type' => ColumnType::Double->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -73,7 +74,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'published',
-                'type' => Database::VAR_BOOLEAN,
+                'type' => ColumnType::Boolean->value,
                 'format' => '',
                 'size' => 5,
                 'required' => true,
@@ -83,7 +84,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'tags',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'format' => '',
                 'size' => 55,
                 'required' => false,
@@ -93,7 +94,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'id',
-                'type' => Database::VAR_ID,
+                'type' => ColumnType::Id->value,
                 'format' => '',
                 'size' => 0,
                 'required' => false,
@@ -103,7 +104,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'varchar_field',
-                'type' => Database::VAR_VARCHAR,
+                'type' => ColumnType::Varchar->value,
                 'format' => '',
                 'size' => 255,
                 'required' => false,
@@ -113,7 +114,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'text_field',
-                'type' => Database::VAR_TEXT,
+                'type' => ColumnType::Text->value,
                 'format' => '',
                 'size' => 65535,
                 'required' => false,
@@ -123,7 +124,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'mediumtext_field',
-                'type' => Database::VAR_MEDIUMTEXT,
+                'type' => ColumnType::MediumText->value,
                 'format' => '',
                 'size' => 16777215,
                 'required' => false,
@@ -133,7 +134,7 @@ class StructureTest extends TestCase
             ],
             [
                 '$id' => 'longtext_field',
-                'type' => Database::VAR_LONGTEXT,
+                'type' => ColumnType::LongText->value,
                 'format' => '',
                 'size' => 4294967295,
                 'required' => false,
@@ -150,13 +151,13 @@ class StructureTest extends TestCase
         Structure::addFormat('email', function ($attribute) {
             $size = $attribute['size'] ?? 0;
             return new Format($size);
-        }, Database::VAR_STRING);
+        }, ColumnType::String->value);
 
         // Cannot encode format when defining constants
         // So add feedback attribute on startup
         $this->collection['attributes'][] = [
             '$id' => ID::custom('feedback'),
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'format' => 'email',
             'size' => 55,
             'required' => true,
@@ -174,7 +175,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -189,7 +190,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -201,7 +202,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document(),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -224,7 +225,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -246,7 +247,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -281,7 +282,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -305,7 +306,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -328,7 +329,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -349,7 +350,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -372,7 +373,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -441,7 +442,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -462,7 +463,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -483,7 +484,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -521,7 +522,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -587,7 +588,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -625,7 +626,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -663,7 +664,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -686,7 +687,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -709,7 +710,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -732,7 +733,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -753,7 +754,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $sqlId = '1000';
@@ -789,7 +790,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_UUID7
+            ColumnType::Uuid7->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -825,7 +826,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         // Operators should be skipped during structure validation
@@ -847,7 +848,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         // Multiple operators should all be skipped
@@ -869,7 +870,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         // Missing required field (not replaced by operator) should still fail
@@ -893,7 +894,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -947,7 +948,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1001,7 +1002,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1039,7 +1040,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -1082,7 +1083,7 @@ class StructureTest extends TestCase
             'attributes' => [
                 [
                     '$id' => 'varchar_array',
-                    'type' => Database::VAR_VARCHAR,
+                    'type' => ColumnType::Varchar->value,
                     'format' => '',
                     'size' => 128,
                     'required' => false,
@@ -1092,7 +1093,7 @@ class StructureTest extends TestCase
                 ],
                 [
                     '$id' => 'text_array',
-                    'type' => Database::VAR_TEXT,
+                    'type' => ColumnType::Text->value,
                     'format' => '',
                     'size' => 65535,
                     'required' => false,
@@ -1106,7 +1107,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($collection),
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([

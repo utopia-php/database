@@ -3,14 +3,14 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Validator\Spatial;
+use Utopia\Query\Schema\ColumnType;
 
 class SpatialTest extends TestCase
 {
     public function testValidPoint(): void
     {
-        $validator = new Spatial(Database::VAR_POINT);
+        $validator = new Spatial(ColumnType::Point->value);
 
         $this->assertTrue($validator->isValid([10, 20]));
         $this->assertTrue($validator->isValid([0, 0]));
@@ -24,7 +24,7 @@ class SpatialTest extends TestCase
 
     public function testValidLineString(): void
     {
-        $validator = new Spatial(Database::VAR_LINESTRING);
+        $validator = new Spatial(ColumnType::Linestring->value);
 
         $this->assertTrue($validator->isValid([[0, 0], [1, 1]]));
 
@@ -38,7 +38,7 @@ class SpatialTest extends TestCase
 
     public function testValidPolygon(): void
     {
-        $validator = new Spatial(Database::VAR_POLYGON);
+        $validator = new Spatial(ColumnType::Polygon->value);
 
         // Single ring polygon (closed)
         $this->assertTrue($validator->isValid([
@@ -85,17 +85,17 @@ class SpatialTest extends TestCase
     public function testInvalidCoordinate(): void
     {
         // Point with invalid longitude
-        $validator = new Spatial(Database::VAR_POINT);
+        $validator = new Spatial(ColumnType::Point->value);
         $this->assertFalse($validator->isValid([200, 10])); // longitude > 180
         $this->assertStringContainsString('Longitude', $validator->getDescription());
 
         // Point with invalid latitude
-        $validator = new Spatial(Database::VAR_POINT);
+        $validator = new Spatial(ColumnType::Point->value);
         $this->assertFalse($validator->isValid([10, -100])); // latitude < -90
         $this->assertStringContainsString('Latitude', $validator->getDescription());
 
         // LineString with invalid coordinates
-        $validator = new Spatial(Database::VAR_LINESTRING);
+        $validator = new Spatial(ColumnType::Linestring->value);
         $this->assertFalse($validator->isValid([
             [0, 0],
             [181, 45] // invalid longitude
@@ -103,7 +103,7 @@ class SpatialTest extends TestCase
         $this->assertStringContainsString('Invalid coordinates', $validator->getDescription());
 
         // Polygon with invalid coordinates
-        $validator = new Spatial(Database::VAR_POLYGON);
+        $validator = new Spatial(ColumnType::Polygon->value);
         $this->assertFalse($validator->isValid([
             [[0, 0], [1, 1], [190, 5], [0, 0]] // invalid longitude in ring
         ]));

@@ -3,7 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
-use Utopia\Database\Database;
+use Utopia\Database\RelationType;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure;
@@ -11,6 +11,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Relationship;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
 
 trait ManyToManyTests
 {
@@ -19,7 +25,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -27,16 +33,11 @@ trait ManyToManyTests
         $database->createCollection('playlist');
         $database->createCollection('song');
 
-        $database->createAttribute('playlist', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('song', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('song', 'length', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('playlist', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('song', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('song', new Attribute(key: 'length', type: ColumnType::Integer, size: 0, required: true));
 
-        $database->createRelationship(
-            collection: 'playlist',
-            relatedCollection: 'song',
-            type: Database::RELATION_MANY_TO_MANY,
-            id: 'songs'
-        );
+        $database->createRelationship(new Relationship(collection: 'playlist', relatedCollection: 'song', type: RelationType::ManyToMany, key: 'songs'));
 
         // Check metadata for collection
         $collection = $database->getCollection('playlist');
@@ -48,7 +49,7 @@ trait ManyToManyTests
                 $this->assertEquals('songs', $attribute['$id']);
                 $this->assertEquals('songs', $attribute['key']);
                 $this->assertEquals('song', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::ManyToMany->value, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
                 $this->assertEquals('playlist', $attribute['options']['twoWayKey']);
             }
@@ -277,7 +278,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'playlist',
             id: 'newSongs',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         $playlist1 = $database->getDocument('playlist', 'playlist1');
@@ -300,7 +301,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'playlist',
             id: 'newSongs',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete parent, will delete child
@@ -330,7 +331,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -338,16 +339,11 @@ trait ManyToManyTests
         $database->createCollection('students');
         $database->createCollection('classes');
 
-        $database->createAttribute('students', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('classes', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('classes', 'number', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('students', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('classes', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('classes', new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: true));
 
-        $database->createRelationship(
-            collection: 'students',
-            relatedCollection: 'classes',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'students', relatedCollection: 'classes', type: RelationType::ManyToMany, twoWay: true));
 
         // Check metadata for collection
         $collection = $database->getCollection('students');
@@ -358,7 +354,7 @@ trait ManyToManyTests
                 $this->assertEquals('students', $attribute['$id']);
                 $this->assertEquals('students', $attribute['key']);
                 $this->assertEquals('students', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::ManyToMany->value, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('classes', $attribute['options']['twoWayKey']);
             }
@@ -373,7 +369,7 @@ trait ManyToManyTests
                 $this->assertEquals('classes', $attribute['$id']);
                 $this->assertEquals('classes', $attribute['key']);
                 $this->assertEquals('classes', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::ManyToMany->value, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('students', $attribute['options']['twoWayKey']);
             }
@@ -718,7 +714,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'students',
             id: 'newClasses',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         $student1 = $database->getDocument('students', 'student1');
@@ -741,7 +737,7 @@ trait ManyToManyTests
         $database->updateRelationship(
             collection: 'students',
             id: 'newClasses',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete parent, will delete child
@@ -784,7 +780,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -793,24 +789,12 @@ trait ManyToManyTests
         $database->createCollection('hearths');
         $database->createCollection('plots');
 
-        $database->createAttribute('stones', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('hearths', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('plots', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('stones', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('hearths', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('plots', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'stones',
-            relatedCollection: 'hearths',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: 'hearths',
-            relatedCollection: 'plots',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'plot',
-            twoWayKey: 'hearth'
-        );
+        $database->createRelationship(new Relationship(collection: 'stones', relatedCollection: 'hearths', type: RelationType::ManyToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: 'hearths', relatedCollection: 'plots', type: RelationType::OneToOne, twoWay: true, key: 'plot', twoWayKey: 'hearth'));
 
         $database->createDocument('stones', new Document([
             '$id' => 'stone1',
@@ -895,7 +879,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -904,24 +888,12 @@ trait ManyToManyTests
         $database->createCollection('tounaments');
         $database->createCollection('prizes');
 
-        $database->createAttribute('groups', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('tounaments', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('prizes', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('groups', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('tounaments', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('prizes', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'groups',
-            relatedCollection: 'tounaments',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: 'tounaments',
-            relatedCollection: 'prizes',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            id: 'prizes',
-            twoWayKey: 'tounament'
-        );
+        $database->createRelationship(new Relationship(collection: 'groups', relatedCollection: 'tounaments', type: RelationType::ManyToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: 'tounaments', relatedCollection: 'prizes', type: RelationType::OneToMany, twoWay: true, key: 'prizes', twoWayKey: 'tounament'));
 
         $database->createDocument('groups', new Document([
             '$id' => 'group1',
@@ -995,7 +967,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1004,24 +976,12 @@ trait ManyToManyTests
         $database->createCollection('games');
         $database->createCollection('publishers');
 
-        $database->createAttribute('platforms', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('games', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('publishers', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('platforms', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('games', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('publishers', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'platforms',
-            relatedCollection: 'games',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: 'games',
-            relatedCollection: 'publishers',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'publisher',
-            twoWayKey: 'games'
-        );
+        $database->createRelationship(new Relationship(collection: 'platforms', relatedCollection: 'games', type: RelationType::ManyToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: 'games', relatedCollection: 'publishers', type: RelationType::ManyToOne, twoWay: true, key: 'publisher', twoWayKey: 'games'));
 
         $database->createDocument('platforms', new Document([
             '$id' => 'platform1',
@@ -1109,7 +1069,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1118,24 +1078,12 @@ trait ManyToManyTests
         $database->createCollection('pizzas');
         $database->createCollection('toppings');
 
-        $database->createAttribute('sauces', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('pizzas', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('toppings', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('sauces', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('pizzas', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('toppings', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'sauces',
-            relatedCollection: 'pizzas',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: 'pizzas',
-            relatedCollection: 'toppings',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'toppings',
-            twoWayKey: 'pizzas'
-        );
+        $database->createRelationship(new Relationship(collection: 'sauces', relatedCollection: 'pizzas', type: RelationType::ManyToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: 'pizzas', relatedCollection: 'toppings', type: RelationType::ManyToMany, twoWay: true, key: 'toppings', twoWayKey: 'pizzas'));
 
         $database->createDocument('sauces', new Document([
             '$id' => 'sauce1',
@@ -1213,7 +1161,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1221,12 +1169,7 @@ trait ManyToManyTests
         $database->createCollection('$symbols_coll.ection7');
         $database->createCollection('$symbols_coll.ection8');
 
-        $database->createRelationship(
-            collection: '$symbols_coll.ection7',
-            relatedCollection: '$symbols_coll.ection8',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: '$symbols_coll.ection7', relatedCollection: '$symbols_coll.ection8', type: RelationType::ManyToMany, twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection8', new Document([
             '$id' => ID::unique(),
@@ -1237,7 +1180,7 @@ trait ManyToManyTests
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection7', new Document([
             '$id' => ID::unique(),
-            '$symbols_coll.ection8' => [$doc1->getId()],
+            'symbols_collection8' => [$doc1->getId()],
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any())
@@ -1247,8 +1190,8 @@ trait ManyToManyTests
         $doc1 = $database->getDocument('$symbols_coll.ection8', $doc1->getId());
         $doc2 = $database->getDocument('$symbols_coll.ection7', $doc2->getId());
 
-        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection7')[0]->getId());
-        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
+        $this->assertEquals($doc2->getId(), $doc1->getAttribute('symbols_collection7')[0]->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getAttribute('symbols_collection8')[0]->getId());
     }
 
     public function testRecreateManyToManyOneWayRelationshipFromChild(): void
@@ -1256,22 +1199,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1279,17 +1212,7 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1297,19 +1220,11 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany));
 
         $database->deleteRelationship('two', 'one');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany));
 
         $this->assertTrue($result);
 
@@ -1322,22 +1237,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1345,17 +1250,7 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1363,21 +1258,11 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany, twoWay: true));
 
         $database->deleteRelationship('one', 'two');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1390,22 +1275,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1413,17 +1288,7 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1431,21 +1296,11 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany, twoWay: true));
 
         $database->deleteRelationship('two', 'one');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1458,22 +1313,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1481,17 +1326,7 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1499,19 +1334,11 @@ trait ManyToManyTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany));
 
         $database->deleteRelationship('one', 'two');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_MANY,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::ManyToMany));
 
         $this->assertTrue($result);
 
@@ -1524,7 +1351,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1532,18 +1359,13 @@ trait ManyToManyTests
         $database->createCollection('select_m2m_collection1');
         $database->createCollection('select_m2m_collection2');
 
-        $database->createAttribute('select_m2m_collection1', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('select_m2m_collection1', 'type', Database::VAR_STRING, 255, true);
-        $database->createAttribute('select_m2m_collection2', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('select_m2m_collection2', 'type', Database::VAR_STRING, 255, true);
+        $database->createAttribute('select_m2m_collection1', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('select_m2m_collection1', new Attribute(key: 'type', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('select_m2m_collection2', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('select_m2m_collection2', new Attribute(key: 'type', type: ColumnType::String, size: 255, required: true));
 
         // Many-to-Many Relationship
-        $database->createRelationship(
-            collection: 'select_m2m_collection1',
-            relatedCollection: 'select_m2m_collection2',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true
-        );
+        $database->createRelationship(new Relationship(collection: 'select_m2m_collection1', relatedCollection: 'select_m2m_collection2', type: RelationType::ManyToMany, twoWay: true));
 
         // Create documents in the first collection
         $doc1 = $database->createDocument('select_m2m_collection1', new Document([
@@ -1602,7 +1424,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1628,25 +1450,15 @@ trait ManyToManyTests
         ], documentSecurity: false);
 
         // Add attributes
-        $database->createAttribute('artists', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('albums', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('tracks', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('tracks', 'duration', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('artists', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('albums', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('tracks', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('tracks', new Attribute(key: 'duration', type: ColumnType::Integer, size: 0, required: true));
 
         // Create relationships
-        $database->createRelationship(
-            collection: 'artists',
-            relatedCollection: 'albums',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true
-        );
+        $database->createRelationship(new Relationship(collection: 'artists', relatedCollection: 'albums', type: RelationType::ManyToMany, twoWay: true));
 
-        $database->createRelationship(
-            collection: 'albums',
-            relatedCollection: 'tracks',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true
-        );
+        $database->createRelationship(new Relationship(collection: 'albums', relatedCollection: 'tracks', type: RelationType::ManyToMany, twoWay: true));
 
         // Create documents
         $database->createDocument('artists', new Document([
@@ -1723,7 +1535,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1731,17 +1543,12 @@ trait ManyToManyTests
         $this->getDatabase()->createCollection('bulk_delete_person_m2m');
         $this->getDatabase()->createCollection('bulk_delete_library_m2m');
 
-        $this->getDatabase()->createAttribute('bulk_delete_person_m2m', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_m2m', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_m2m', 'area', Database::VAR_STRING, 255, true);
+        $this->getDatabase()->createAttribute('bulk_delete_person_m2m', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_m2m', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_m2m', new Attribute(key: 'area', type: ColumnType::String, size: 255, required: true));
 
         // Many-to-Many Relationship
-        $this->getDatabase()->createRelationship(
-            collection: 'bulk_delete_person_m2m',
-            relatedCollection: 'bulk_delete_library_m2m',
-            type: Database::RELATION_MANY_TO_MANY,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $this->getDatabase()->createRelationship(new Relationship(collection: 'bulk_delete_person_m2m', relatedCollection: 'bulk_delete_library_m2m', type: RelationType::ManyToMany, onDelete: ForeignKeyAction::Restrict));
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_m2m', new Document([
             '$id' => 'person1',
@@ -1801,8 +1608,8 @@ trait ManyToManyTests
         $database = $this->getDatabase();
 
         if (
-            !$database->getAdapter()->getSupportForRelationships() ||
-            !$database->getAdapter()->getSupportForBatchOperations()
+            !$database->getAdapter()->supports(Capability::Relationships) ||
+            !$database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1814,17 +1621,12 @@ trait ManyToManyTests
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);
 
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'parentNumber', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute($parentCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'parentNumber', type: ColumnType::Integer, size: 0, required: false));
 
 
-        $database->createRelationship(
-            collection: $parentCollection,
-            relatedCollection: $childCollection,
-            type: Database::RELATION_MANY_TO_MANY,
-            id: 'parentNumber'
-        );
+        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::ManyToMany, key: 'parentNumber'));
 
         $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1885,7 +1687,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1895,15 +1697,10 @@ trait ManyToManyTests
 
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($parentCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: $parentCollection,
-            relatedCollection: $childCollection,
-            type: Database::RELATION_MANY_TO_MANY,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::ManyToMany, onDelete: ForeignKeyAction::Restrict));
 
         $parent = $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1945,7 +1742,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1953,19 +1750,12 @@ trait ManyToManyTests
         $database->createCollection('partial_students');
         $database->createCollection('partial_courses');
 
-        $database->createAttribute('partial_students', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('partial_students', 'grade', Database::VAR_STRING, 10, false);
-        $database->createAttribute('partial_courses', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('partial_courses', 'credits', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('partial_students', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('partial_students', new Attribute(key: 'grade', type: ColumnType::String, size: 10, required: false));
+        $database->createAttribute('partial_courses', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('partial_courses', new Attribute(key: 'credits', type: ColumnType::Integer, size: 0, required: false));
 
-        $database->createRelationship(
-            collection: 'partial_students',
-            relatedCollection: 'partial_courses',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'partial_courses',
-            twoWayKey: 'partial_students'
-        );
+        $database->createRelationship(new Relationship(collection: 'partial_students', relatedCollection: 'partial_courses', type: RelationType::ManyToMany, twoWay: true, key: 'partial_courses', twoWayKey: 'partial_students'));
 
         // Create student with courses
         $database->createDocument('partial_students', new Document([
@@ -2014,7 +1804,7 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2022,19 +1812,12 @@ trait ManyToManyTests
         $database->createCollection('tags');
         $database->createCollection('articles');
 
-        $database->createAttribute('tags', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('tags', 'color', Database::VAR_STRING, 50, false);
-        $database->createAttribute('articles', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('articles', 'published', Database::VAR_BOOLEAN, 0, false);
+        $database->createAttribute('tags', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('tags', new Attribute(key: 'color', type: ColumnType::String, size: 50, required: false));
+        $database->createAttribute('articles', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('articles', new Attribute(key: 'published', type: ColumnType::Boolean, size: 0, required: false));
 
-        $database->createRelationship(
-            collection: 'articles',
-            relatedCollection: 'tags',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'tags',
-            twoWayKey: 'articles'
-        );
+        $database->createRelationship(new Relationship(collection: 'articles', relatedCollection: 'tags', type: RelationType::ManyToMany, twoWay: true, key: 'tags', twoWayKey: 'articles'));
 
         // Create article with tags
         $database->createDocument('articles', new Document([
@@ -2099,12 +1882,12 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2122,17 +1905,10 @@ trait ManyToManyTests
         $database->createCollection('library');
         $database->createCollection('book');
 
-        $database->createAttribute('library', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('book', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('library', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('book', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'library',
-            relatedCollection: 'book',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'books',
-            twoWayKey: 'libraries'
-        );
+        $database->createRelationship(new Relationship(collection: 'library', relatedCollection: 'book', type: RelationType::ManyToMany, twoWay: true, key: 'books', twoWayKey: 'libraries'));
 
         // Create some books
         $book1 = $database->createDocument('book', new Document([
@@ -2261,9 +2037,17 @@ trait ManyToManyTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
+        }
+
+        // Clean up if collections already exist from other tests
+        foreach (['brands', 'products', 'tags'] as $col) {
+            try {
+                $database->deleteCollection($col);
+            } catch (\Throwable) {
+            }
         }
 
         // 3-level many-to-many chain: brands <-> products <-> tags
@@ -2271,27 +2055,13 @@ trait ManyToManyTests
         $database->createCollection('products');
         $database->createCollection('tags');
 
-        $database->createAttribute('brands', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('products', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('tags', 'label', Database::VAR_STRING, 255, true);
+        $database->createAttribute('brands', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('products', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('tags', new Attribute(key: 'label', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'brands',
-            relatedCollection: 'products',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'products',
-            twoWayKey: 'brands',
-        );
+        $database->createRelationship(new Relationship(collection: 'brands', relatedCollection: 'products', type: RelationType::ManyToMany, twoWay: true, key: 'products', twoWayKey: 'brands'));
 
-        $database->createRelationship(
-            collection: 'products',
-            relatedCollection: 'tags',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'tags',
-            twoWayKey: 'products',
-        );
+        $database->createRelationship(new Relationship(collection: 'products', relatedCollection: 'tags', type: RelationType::ManyToMany, twoWay: true, key: 'tags', twoWayKey: 'products'));
 
         // Seed data
         $database->createDocument('tags', new Document([

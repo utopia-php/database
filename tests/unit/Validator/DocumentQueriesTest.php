@@ -9,6 +9,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
+use Utopia\Query\Schema\ColumnType;
 
 class DocumentQueriesTest extends TestCase
 {
@@ -30,7 +31,7 @@ class DocumentQueriesTest extends TestCase
                 new Document([
                     '$id' => 'title',
                     'key' => 'title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 256,
                     'required' => true,
                     'signed' => true,
@@ -40,7 +41,7 @@ class DocumentQueriesTest extends TestCase
                 new Document([
                     '$id' => 'price',
                     'key' => 'price',
-                    'type' => Database::VAR_FLOAT,
+                    'type' => ColumnType::Double->value,
                     'size' => 5,
                     'required' => true,
                     'signed' => true,

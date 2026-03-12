@@ -3,12 +3,12 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Schema\ColumnType;
 
 class SelectTest extends TestCase
 {
@@ -24,13 +24,13 @@ class SelectTest extends TestCase
                 new Document([
                     '$id' => 'attr',
                     'key' => 'attr',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'artist',
                     'key' => 'artist',
-                    'type' => Database::VAR_RELATIONSHIP,
+                    'type' => ColumnType::Relationship->value,
                     'array' => false,
                 ]),
             ],

@@ -9,6 +9,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Query\Schema\ColumnType;
 
 class DocumentsQueriesTest extends TestCase
 {
@@ -30,7 +31,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'title',
                     'key' => 'title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 256,
                     'required' => true,
                     'signed' => true,
@@ -40,7 +41,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'description',
                     'key' => 'description',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 1000000,
                     'required' => true,
                     'signed' => true,
@@ -50,7 +51,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'rating',
                     'key' => 'rating',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => ColumnType::Integer->value,
                     'size' => 5,
                     'required' => true,
                     'signed' => true,
@@ -60,7 +61,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'price',
                     'key' => 'price',
-                    'type' => Database::VAR_FLOAT,
+                    'type' => ColumnType::Double->value,
                     'size' => 5,
                     'required' => true,
                     'signed' => true,
@@ -70,7 +71,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'is_bool',
                     'key' => 'is_bool',
-                    'type' => Database::VAR_BOOLEAN,
+                    'type' => ColumnType::Boolean->value,
                     'size' => 0,
                     'required' => false,
                     'signed' => false,
@@ -80,7 +81,7 @@ class DocumentsQueriesTest extends TestCase
                 new Document([
                     '$id' => 'id',
                     'key' => 'id',
-                    'type' => Database::VAR_ID,
+                    'type' => ColumnType::Id->value,
                     'size' => 0,
                     'required' => false,
                     'signed' => false,
@@ -126,7 +127,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->collection['attributes'],
             $this->collection['indexes'],
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $queries = [
@@ -164,7 +165,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->collection['attributes'],
             $this->collection['indexes'],
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
 
         $queries = ['{"method":"notEqual","attribute":"title","values":["Iron Man","Ant Man"]}'];

@@ -7,7 +7,11 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\OrderDirection;
+use Utopia\Database\SetType;
 use Utopia\Database\Validator\Index;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 class IndexTest extends TestCase
 {
@@ -30,7 +34,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -43,7 +47,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
+                    'type' => IndexType::Key->value,
                     'attributes' => ['not_exist'],
                     'lengths' => [],
                     'orders' => [],
@@ -68,7 +72,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -79,7 +83,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('date'),
-                    'type' => Database::VAR_DATETIME,
+                    'type' => ColumnType::Datetime->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -92,7 +96,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
+                    'type' => IndexType::Fulltext->value,
                     'attributes' => ['title', 'date'],
                     'lengths' => [],
                     'orders' => [],
@@ -117,7 +121,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 769,
                     'signed' => true,
@@ -130,7 +134,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
+                    'type' => IndexType::Key->value,
                     'attributes' => ['title'],
                     'lengths' => [],
                     'orders' => [],
@@ -155,7 +159,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 256,
                     'signed' => true,
@@ -166,7 +170,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('description'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 1024,
                     'signed' => true,
@@ -179,7 +183,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
+                    'type' => IndexType::Fulltext->value,
                     'attributes' => ['title'],
                 ]),
             ],
@@ -191,11 +195,11 @@ class IndexTest extends TestCase
 
         $index = new Document([
             '$id' => ID::custom('index2'),
-            'type' => Database::INDEX_KEY,
+            'type' => IndexType::Key->value,
             'attributes' => ['title', 'description'],
         ]);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+        $collection->setAttribute('indexes', $index, SetType::Append);
         $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
@@ -211,7 +215,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 769,
                     'signed' => true,
@@ -224,7 +228,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
+                    'type' => IndexType::Key->value,
                     'attributes' => [],
                     'lengths' => [],
                     'orders' => [],
@@ -249,7 +253,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('data'),
-                    'type' => Database::VAR_OBJECT,
+                    'type' => ColumnType::Object->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -260,7 +264,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -279,7 +283,7 @@ class IndexTest extends TestCase
         // Valid: Object index on single VAR_OBJECT attribute
         $validIndex = new Document([
             '$id' => ID::custom('idx_gin_valid'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => [],
@@ -289,7 +293,7 @@ class IndexTest extends TestCase
         // Invalid: Object index on non-object attribute
         $invalidIndexType = new Document([
             '$id' => ID::custom('idx_gin_invalid_type'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['name'],
             'lengths' => [],
             'orders' => [],
@@ -300,7 +304,7 @@ class IndexTest extends TestCase
         // Invalid: Object index on multiple attributes
         $invalidIndexMulti = new Document([
             '$id' => ID::custom('idx_gin_multi'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['data', 'name'],
             'lengths' => [],
             'orders' => [],
@@ -311,7 +315,7 @@ class IndexTest extends TestCase
         // Invalid: Object index with orders
         $invalidIndexOrder = new Document([
             '$id' => ID::custom('idx_gin_order'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => ['asc'],
@@ -336,7 +340,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('data'),
-                    'type' => Database::VAR_OBJECT,
+                    'type' => ColumnType::Object->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -347,7 +351,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('metadata'),
-                    'type' => Database::VAR_OBJECT,
+                    'type' => ColumnType::Object->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -358,7 +362,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -377,7 +381,7 @@ class IndexTest extends TestCase
         // InValid: INDEX_OBJECT on nested path (dot notation)
         $validNestedObjectIndex = new Document([
             '$id' => ID::custom('idx_nested_object'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['data.key.nestedKey'],
             'lengths' => [],
             'orders' => [],
@@ -388,7 +392,7 @@ class IndexTest extends TestCase
         // Valid: INDEX_UNIQUE on nested path (for Postgres/Mongo)
         $validNestedUniqueIndex = new Document([
             '$id' => ID::custom('idx_nested_unique'),
-            'type' => Database::INDEX_UNIQUE,
+            'type' => IndexType::Unique->value,
             'attributes' => ['data.key.nestedKey'],
             'lengths' => [],
             'orders' => [],
@@ -398,7 +402,7 @@ class IndexTest extends TestCase
         // Valid: INDEX_KEY on nested path
         $validNestedKeyIndex = new Document([
             '$id' => ID::custom('idx_nested_key'),
-            'type' => Database::INDEX_KEY,
+            'type' => IndexType::Key->value,
             'attributes' => ['metadata.user.id'],
             'lengths' => [],
             'orders' => [],
@@ -408,7 +412,7 @@ class IndexTest extends TestCase
         // Invalid: Nested path on non-object attribute
         $invalidNestedPath = new Document([
             '$id' => ID::custom('idx_invalid_nested'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['name.key'],
             'lengths' => [],
             'orders' => [],
@@ -419,7 +423,7 @@ class IndexTest extends TestCase
         // Invalid: Nested path with non-existent base attribute
         $invalidBaseAttribute = new Document([
             '$id' => ID::custom('idx_invalid_base'),
-            'type' => Database::INDEX_OBJECT,
+            'type' => IndexType::Object->value,
             'attributes' => ['nonexistent.key'],
             'lengths' => [],
             'orders' => [],
@@ -430,7 +434,7 @@ class IndexTest extends TestCase
         // Valid: Multiple nested paths in same index
         $validMultiNested = new Document([
             '$id' => ID::custom('idx_multi_nested'),
-            'type' => Database::INDEX_KEY,
+            'type' => IndexType::Key->value,
             'attributes' => ['data.key1', 'data.key2'],
             'lengths' => [],
             'orders' => [],
@@ -449,7 +453,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -462,7 +466,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
+                    'type' => IndexType::Fulltext->value,
                     'attributes' => ['title', 'title'],
                     'lengths' => [],
                     'orders' => [],
@@ -487,7 +491,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -500,7 +504,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_FULLTEXT,
+                    'type' => IndexType::Fulltext->value,
                     'attributes' => ['title', 'title'],
                     'lengths' => [],
                     'orders' => ['asc', 'desc'],
@@ -524,7 +528,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -537,7 +541,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('primary'),
-                    'type' => Database::INDEX_FULLTEXT,
+                    'type' => IndexType::Fulltext->value,
                     'attributes' => ['title'],
                     'lengths' => [],
                     'orders' => [],
@@ -561,7 +565,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 769,
                     'signed' => true,
@@ -574,7 +578,7 @@ class IndexTest extends TestCase
             'indexes' => [
                 new Document([
                     '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
+                    'type' => IndexType::Key->value,
                     'attributes' => ['new'],
                     'lengths' => [],
                     'orders' => [],
@@ -602,7 +606,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -613,7 +617,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('description'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 512,
                     'signed' => true,
@@ -624,7 +628,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('age'),
-                    'type' => Database::VAR_INTEGER,
+                    'type' => ColumnType::Integer->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
@@ -643,7 +647,7 @@ class IndexTest extends TestCase
         // Valid: Trigram index on single VAR_STRING attribute
         $validIndex = new Document([
             '$id' => ID::custom('idx_trigram_valid'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['name'],
             'lengths' => [],
             'orders' => [],
@@ -653,7 +657,7 @@ class IndexTest extends TestCase
         // Valid: Trigram index on multiple string attributes
         $validIndexMulti = new Document([
             '$id' => ID::custom('idx_trigram_multi_valid'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['name', 'description'],
             'lengths' => [],
             'orders' => [],
@@ -663,7 +667,7 @@ class IndexTest extends TestCase
         // Invalid: Trigram index on non-string attribute
         $invalidIndexType = new Document([
             '$id' => ID::custom('idx_trigram_invalid_type'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['age'],
             'lengths' => [],
             'orders' => [],
@@ -674,7 +678,7 @@ class IndexTest extends TestCase
         // Invalid: Trigram index with mixed string and non-string attributes
         $invalidIndexMixed = new Document([
             '$id' => ID::custom('idx_trigram_mixed'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['name', 'age'],
             'lengths' => [],
             'orders' => [],
@@ -685,7 +689,7 @@ class IndexTest extends TestCase
         // Invalid: Trigram index with orders
         $invalidIndexOrder = new Document([
             '$id' => ID::custom('idx_trigram_order'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['name'],
             'lengths' => [],
             'orders' => ['asc'],
@@ -696,7 +700,7 @@ class IndexTest extends TestCase
         // Invalid: Trigram index with lengths
         $invalidIndexLength = new Document([
             '$id' => ID::custom('idx_trigram_length'),
-            'type' => Database::INDEX_TRIGRAM,
+            'type' => IndexType::Trigram->value,
             'attributes' => ['name'],
             'lengths' => [128],
             'orders' => [],
@@ -721,7 +725,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('expiresAt'),
-                    'type' => Database::VAR_DATETIME,
+                    'type' => ColumnType::Datetime->value,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -732,7 +736,7 @@ class IndexTest extends TestCase
                 ]),
                 new Document([
                     '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'format' => '',
                     'size' => 255,
                     'signed' => true,
@@ -770,10 +774,10 @@ class IndexTest extends TestCase
         // Valid: TTL index on single datetime attribute with valid TTL
         $validIndex = new Document([
             '$id' => ID::custom('idx_ttl_valid'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 3600,
         ]);
         $this->assertTrue($validator->isValid($validIndex));
@@ -781,10 +785,10 @@ class IndexTest extends TestCase
         // Invalid: TTL index with ttl = 1
         $invalidIndexZero = new Document([
             '$id' => ID::custom('idx_ttl_zero'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 0,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexZero));
@@ -793,10 +797,10 @@ class IndexTest extends TestCase
         // Invalid: TTL index with TTL < 0
         $invalidIndexNegative = new Document([
             '$id' => ID::custom('idx_ttl_negative'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => -100,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexNegative));
@@ -805,10 +809,10 @@ class IndexTest extends TestCase
         // Invalid: TTL index on non-datetime attribute
         $invalidIndexType = new Document([
             '$id' => ID::custom('idx_ttl_invalid_type'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['name'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 3600,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexType));
@@ -817,10 +821,10 @@ class IndexTest extends TestCase
         // Invalid: TTL index on multiple attributes
         $invalidIndexMulti = new Document([
             '$id' => ID::custom('idx_ttl_multi'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt', 'name'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC, Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value, OrderDirection::ASC->value],
             'ttl' => 3600,
         ]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
@@ -829,16 +833,16 @@ class IndexTest extends TestCase
         // Valid: TTL index with minimum valid TTL (1 second)
         $validIndexMin = new Document([
             '$id' => ID::custom('idx_ttl_min'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 1,
         ]);
         $this->assertTrue($validator->isValid($validIndexMin));
 
         // Invalid: any additional TTL index when another TTL index already exists
-        $collection->setAttribute('indexes', $validIndex, Document::SET_TYPE_APPEND);
+        $collection->setAttribute('indexes', $validIndex, SetType::Append);
         $validatorWithExisting = new Index(
             $collection->getAttribute('attributes'),
             $collection->getAttribute('indexes', []),
@@ -862,10 +866,10 @@ class IndexTest extends TestCase
 
         $duplicateTTLIndex = new Document([
             '$id' => ID::custom('idx_ttl_duplicate'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 7200,
         ]);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));

@@ -9,6 +9,8 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Attribute;
+use Utopia\Query\Schema\ColumnType;
 
 // Test custom document classes
 class TestUser extends Document
@@ -154,9 +156,9 @@ trait CustomDocumentTypeTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createAttribute('customUsers', 'email', Database::VAR_STRING, 255, true);
-        $database->createAttribute('customUsers', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('customUsers', 'status', Database::VAR_STRING, 50, true);
+        $database->createAttribute('customUsers', new Attribute(key: 'email', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customUsers', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customUsers', new Attribute(key: 'status', type: ColumnType::String, size: 50, required: true));
 
         $database->setDocumentType('customUsers', TestUser::class);
 
@@ -198,8 +200,8 @@ trait CustomDocumentTypeTests
             Permission::create(Role::any()),
         ]);
 
-        $database->createAttribute('customPosts', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('customPosts', 'content', Database::VAR_STRING, 5000, true);
+        $database->createAttribute('customPosts', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customPosts', new Attribute(key: 'content', type: ColumnType::String, size: 5000, required: true));
 
         // Register custom type
         $database->setDocumentType('customPosts', TestPost::class);
@@ -246,9 +248,9 @@ trait CustomDocumentTypeTests
             Permission::update(Role::any()),
         ]);
 
-        $database->createAttribute('customUsersUpdate', 'email', Database::VAR_STRING, 255, true);
-        $database->createAttribute('customUsersUpdate', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('customUsersUpdate', 'status', Database::VAR_STRING, 50, true);
+        $database->createAttribute('customUsersUpdate', new Attribute(key: 'email', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customUsersUpdate', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customUsersUpdate', new Attribute(key: 'status', type: ColumnType::String, size: 50, required: true));
 
         // Register custom type
         $database->setDocumentType('customUsersUpdate', TestUser::class);
@@ -294,7 +296,7 @@ trait CustomDocumentTypeTests
             Permission::create(Role::any()),
         ]);
 
-        $database->createAttribute('unmappedCollection', 'data', Database::VAR_STRING, 255, true);
+        $database->createAttribute('unmappedCollection', new Attribute(key: 'data', type: ColumnType::String, size: 255, required: true));
 
         // Create document
         $created = $database->createDocument('unmappedCollection', new Document([

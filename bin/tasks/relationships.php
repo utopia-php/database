@@ -20,6 +20,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -111,11 +112,11 @@ $cli
             $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
             $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
 
-            $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: Database::RELATION_MUTATE_SET_NULL);
-            $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: Database::RELATION_MUTATE_CASCADE);
-            $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: Database::RELATION_MUTATE_CASCADE);
-            $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: Database::RELATION_MUTATE_CASCADE);
-            $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: Database::RELATION_MUTATE_SET_NULL);
+            $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: ForeignKeyAction::SetNull->value);
+            $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: ForeignKeyAction::Cascade->value);
+            $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: ForeignKeyAction::Cascade->value);
+            $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: ForeignKeyAction::Cascade->value);
+            $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: ForeignKeyAction::SetNull->value);
         };
 
         $dbAdapters = [

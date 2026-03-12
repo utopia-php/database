@@ -38,10 +38,10 @@ class MongoDBTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(12);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $schema = 'utopiaTests'; // same as $this->testDatabase
+        $schema = $this->testDatabase;
         $client = new Client(
             $schema,
             'mongo',

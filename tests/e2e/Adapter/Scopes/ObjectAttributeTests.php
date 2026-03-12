@@ -3,7 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
-use Utopia\Database\Database;
+use Utopia\Database\OrderDirection;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
@@ -13,6 +13,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait ObjectAttributeTests
 {
@@ -29,13 +35,13 @@ trait ObjectAttributeTests
      * @param mixed $default
      * @return bool
      */
-    private function createAttribute(Database $database, string $collectionId, string $attributeId, string $type, int $size, bool $required, $default = null): bool
+    private function createAttribute(Database $database, string $collectionId, string $attributeId, ColumnType $type, int $size, bool $required, $default = null): bool
     {
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             return true;
         }
 
-        $result = $database->createAttribute($collectionId, $attributeId, $type, $size, $required, $default);
+        $result = $database->createAttribute($collectionId, new Attribute(key: $attributeId, type: $type, size: $size, required: $required, default: $default));
         $this->assertEquals(true, $result);
         return $result;
     }
@@ -46,7 +52,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -54,7 +60,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // Test 1: Create and read document with object attribute
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -581,7 +587,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 
@@ -589,10 +595,10 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->createAttribute($database, $collectionId, 'data', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'data', ColumnType::Object, 0, false);
 
         // Test 1: Create Object index on object attribute
-        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::INDEX_OBJECT, ['data']);
+        $ginIndex = $database->createIndex($collectionId, new Index(key: 'idx_data_gin', type: IndexType::Object, attributes: ['data']));
         $this->assertTrue($ginIndex);
 
         // Test 2: Create documents with JSONB data
@@ -644,11 +650,11 @@ trait ObjectAttributeTests
         $this->assertEquals('gin2', $results[0]->getId());
 
         // Test 6: Try to create Object index on non-object attribute (should fail)
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_name_gin', Database::INDEX_OBJECT, ['name']);
+            $database->createIndex($collectionId, new Index(key: 'idx_name_gin', type: IndexType::Object, attributes: ['name']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -657,11 +663,11 @@ trait ObjectAttributeTests
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on non-object attribute');
 
         // Test 7: Try to create Object index on multiple attributes (should fail)
-        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'metadata', ColumnType::Object, 0, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_multi_gin', Database::INDEX_OBJECT, ['data', 'metadata']);
+            $database->createIndex($collectionId, new Index(key: 'idx_multi_gin', type: IndexType::Object, attributes: ['data', 'metadata']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -672,7 +678,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_ordered_gin', Database::INDEX_OBJECT, ['metadata'], [], [Database::ORDER_ASC]);
+            $database->createIndex($collectionId, new Index(key: 'idx_ordered_gin', type: IndexType::Object, attributes: ['metadata'], lengths: [], orders: [OrderDirection::ASC->value]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -690,7 +696,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Objects) || !$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -698,7 +704,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // Test 1: Try to create document with string instead of object (should fail)
         $exceptionThrown = false;
@@ -865,7 +871,7 @@ trait ObjectAttributeTests
 
         // Test 16: with multiple json
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
+        $this->createAttribute($database, $collectionId, 'settings', ColumnType::Object, 0, false, $defaultSettings);
         $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
         $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']], '$permissions' => [Permission::read(Role::any())]]));
         $results = $database->find($collectionId, [
@@ -889,7 +895,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::Objects) || !$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -897,20 +903,20 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // 1) Default empty object
-        $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', Database::VAR_OBJECT, 0, false, []);
+        $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', ColumnType::Object, 0, false, []);
 
         // 2) Default nested object
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
+        $this->createAttribute($database, $collectionId, 'settings', ColumnType::Object, 0, false, $defaultSettings);
 
         // 3) Required without default (should fail when missing)
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, true, null);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, true, null);
 
         // 4) Required with default (should auto-populate)
-        $this->createAttribute($database, $collectionId, 'profile2', Database::VAR_OBJECT, 0, false, ['name' => 'anon']);
+        $this->createAttribute($database, $collectionId, 'profile2', ColumnType::Object, 0, false, ['name' => 'anon']);
 
         // 5) Explicit null default
-        $this->createAttribute($database, $collectionId, 'misc', Database::VAR_OBJECT, 0, false, null);
+        $this->createAttribute($database, $collectionId, 'misc', ColumnType::Object, 0, false, null);
 
         // Create document missing all above attributes
         $exceptionThrown = false;
@@ -969,7 +975,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip if adapter doesn't support either vectors or object attributes
-        if (!$database->getAdapter()->getSupportForVectors() || !$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Vectors) || !$database->getAdapter()->supports(Capability::Objects)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -978,8 +984,8 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Attributes: 3D vector and nested metadata object
-        $this->createAttribute($database, $collectionId, 'embedding', Database::VAR_VECTOR, 3, true);
-        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'embedding', ColumnType::Vector, 3, true);
+        $this->createAttribute($database, $collectionId, 'metadata', ColumnType::Object, 0, false);
 
         // Seed documents
         $docA = $database->createDocument($collectionId, new Document([
@@ -1124,11 +1130,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1136,14 +1142,14 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // 1) KEY index on a nested object path (dot notation)
 
 
         // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
-        $created = $database->createIndex($collectionId, 'idx_profile_email_unique', Database::INDEX_UNIQUE, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email_unique', type: IndexType::Unique, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         $database->createDocument($collectionId, new Document([
@@ -1179,14 +1185,14 @@ trait ObjectAttributeTests
 
         // 3) INDEX_OBJECT must NOT be allowed on nested paths
         try {
-            $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
+            $database->createIndex($collectionId, new Index(key: 'idx_profile_nested_object', type: IndexType::Object, attributes: ['profile.user.email']));
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
         }
 
         // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
         try {
-            $database->createIndex($collectionId, 'idx_name_nested', Database::INDEX_KEY, ['name.first']);
+            $database->createIndex($collectionId, new Index(key: 'idx_name_nested', type: IndexType::Key, attributes: ['name.first']));
             $this->fail('Expected Type exception for nested index on non-object base attribute');
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
@@ -1200,11 +1206,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1212,11 +1218,11 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // Create index on nested email path
-        $created = $database->createIndex($collectionId, 'idx_profile_email', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Seed documents with different nested values
@@ -1330,7 +1336,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1338,12 +1344,12 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
-        $this->createAttribute($database, $collectionId, 'age', Database::VAR_INTEGER, 0, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
+        $this->createAttribute($database, $collectionId, 'age', ColumnType::Integer, 0, false);
 
         // Edge Case 1: Deep nesting (5 levels deep)
-        $created = $database->createIndex($collectionId, 'idx_deep_nest', Database::INDEX_KEY, ['profile.level1.level2.level3.level4.value']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_deep_nest', type: IndexType::Key, attributes: ['profile.level1.level2.level3.level4.value']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1379,7 +1385,7 @@ trait ObjectAttributeTests
             ])
         ]);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             try {
                 $database->find($collectionId, [
                     Query::equal('profile.level1.level2.level3.level4.value', [10])
@@ -1398,11 +1404,11 @@ trait ObjectAttributeTests
         $this->assertEquals('deep1', $results[0]->getId());
 
         // Edge Case 2: Multiple nested indexes on same base attribute
-        $created = $database->createIndex($collectionId, 'idx_email', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_email', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, 'idx_country', Database::INDEX_KEY, ['profile.user.info.country']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_country', type: IndexType::Key, attributes: ['profile.user.info.country']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, 'idx_city', Database::INDEX_KEY, ['profile.user.info.city']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_city', type: IndexType::Key, attributes: ['profile.user.info.city']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1532,8 +1538,8 @@ trait ObjectAttributeTests
         ]);
 
         // Create indexes on regular attributes
-        $database->createIndex($collectionId, 'idx_name', Database::INDEX_KEY, ['name']);
-        $database->createIndex($collectionId, 'idx_age', Database::INDEX_KEY, ['age']);
+        $database->createIndex($collectionId, new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']));
+        $database->createIndex($collectionId, new Index(key: 'idx_age', type: IndexType::Key, attributes: ['age']));
 
         // Combined query: nested path + regular attribute
         $results = $database->find($collectionId, [
@@ -1805,7 +1811,7 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Re-create index
-        $created = $database->createIndex($collectionId, 'idx_email_recreated', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_email_recreated', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Query should still work with recreated index
@@ -1815,8 +1821,8 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
-        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
-            $created = $database->createIndex($collectionId, 'idx_unique_email', Database::INDEX_UNIQUE, ['profile.user.email']);
+        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
+            $created = $database->createIndex($collectionId, new Index(key: 'idx_unique_email', type: IndexType::Unique, attributes: ['profile.user.email']));
             $this->assertTrue($created);
 
             // Try to create duplicate

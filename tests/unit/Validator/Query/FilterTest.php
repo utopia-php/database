@@ -3,10 +3,10 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Query\Schema\ColumnType;
 
 class FilterTest extends TestCase
 {
@@ -21,32 +21,32 @@ class FilterTest extends TestCase
             new Document([
                 '$id' => 'string',
                 'key' => 'string',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
             new Document([
                 '$id' => 'string_array',
                 'key' => 'string_array',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => true,
             ]),
             new Document([
                 '$id' => 'integer_array',
                 'key' => 'integer_array',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'array' => true,
             ]),
             new Document([
                 '$id' => 'integer',
                 'key' => 'integer',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'array' => false,
             ]),
         ];
 
         $this->validator = new Filter(
             $attributes,
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
     }
 

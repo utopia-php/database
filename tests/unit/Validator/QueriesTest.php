@@ -4,7 +4,6 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
@@ -13,6 +12,7 @@ use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
 {
@@ -55,13 +55,13 @@ class QueriesTest extends TestCase
             new Document([
                 '$id' => 'name',
                 'key' => 'name',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
             new Document([
                 '$id' => 'meta',
                 'key' => 'meta',
-                'type' => Database::VAR_OBJECT,
+                'type' => ColumnType::Object->value,
                 'array' => false,
             ]),
         ];
@@ -69,7 +69,7 @@ class QueriesTest extends TestCase
         $validator = new Queries(
             [
                 new Cursor(),
-                new Filter($attributes, Database::VAR_INTEGER),
+                new Filter($attributes, ColumnType::Integer->value),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)

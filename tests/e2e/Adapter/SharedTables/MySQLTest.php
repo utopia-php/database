@@ -45,17 +45,17 @@ class MySQLTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
+        $redis->select(8);
 
-        $cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new MySQL($pdo), $cache);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '')
+            ->setNamespace(static::$namespace = 'st_' . static::getTestToken())
             ->enableLocks(true)
         ;
 

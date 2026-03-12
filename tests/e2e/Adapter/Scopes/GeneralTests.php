@@ -22,6 +22,11 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Attribute;
+use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait GeneralTests
 {
@@ -40,7 +45,7 @@ trait GeneralTests
      */
     public function testQueryTimeout(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+        if (!$this->getDatabase()->getAdapter()->supports(Capability::Timeouts)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -52,13 +57,7 @@ trait GeneralTests
 
         $this->assertEquals(
             true,
-            $database->createAttribute(
-                collection: 'global-timeouts',
-                id: 'longtext',
-                type: Database::VAR_STRING,
-                size: 100000000,
-                required: true
-            )
+            $database->createAttribute('global-timeouts', new Attribute(key: 'longtext', type: ColumnType::String, size: 100000000, required: true))
         );
 
         for ($i = 0; $i < 20; $i++) {
@@ -95,7 +94,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -104,7 +103,7 @@ trait GeneralTests
 
         $database->createCollection('preserve_update_dates');
 
-        $database->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+        $database->createAttribute('preserve_update_dates', new Attribute(key: 'attr1', type: ColumnType::String, size: 10, required: false));
 
         $doc1 = $database->createDocument('preserve_update_dates', new Document([
             '$id' => 'doc1',
@@ -195,7 +194,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -204,7 +203,7 @@ trait GeneralTests
 
         $database->createCollection('preserve_create_dates');
 
-        $database->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+        $database->createAttribute('preserve_create_dates', new Attribute(key: 'attr1', type: ColumnType::String, size: 10, required: false));
 
         // empty string for $createdAt should throw Structure exception
         try {
@@ -325,17 +324,19 @@ trait GeneralTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if ($database->exists('sharedTables')) {
-            $database->setDatabase('sharedTables')->delete();
+        $sharedTablesDb = 'sharedTables_' . static::getTestToken();
+
+        if ($database->exists($sharedTablesDb)) {
+            $database->setDatabase($sharedTablesDb)->delete();
         }
 
         $database
-            ->setDatabase('sharedTables')
+            ->setDatabase($sharedTablesDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)
@@ -392,12 +393,7 @@ trait GeneralTests
     public function testNestedQueryValidation(): void
     {
         $this->getDatabase()->createCollection(__FUNCTION__, [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => true,
-            ])
+            new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true)
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -441,17 +437,19 @@ trait GeneralTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (!$database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if ($database->exists('sharedTablesTenantPerDocument')) {
-            $database->delete('sharedTablesTenantPerDocument');
+        $tenantPerDocDb = 'sharedTablesTenantPerDocument_' . static::getTestToken();
+
+        if ($database->exists($tenantPerDocDb)) {
+            $database->delete($tenantPerDocDb);
         }
 
         $database
-            ->setDatabase('sharedTablesTenantPerDocument')
+            ->setDatabase($tenantPerDocDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)
@@ -464,8 +462,8 @@ trait GeneralTests
             Permission::update(Role::any()),
         ], documentSecurity: false);
 
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 100, false);
-        $database->createIndex(__FUNCTION__, 'nameIndex', Database::INDEX_KEY, ['name']);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false));
+        $database->createIndex(__FUNCTION__, new Index(key: 'nameIndex', type: IndexType::Key, attributes: ['name']));
 
         $doc1Id = ID::unique();
 
@@ -517,7 +515,7 @@ trait GeneralTests
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
-        if ($database->getAdapter()->getSupportForUpserts()) {
+        if ($database->getAdapter()->supports(Capability::Upserts)) {
             // Test upsert with tenant per doc
             $doc3Id = ID::unique();
             $database
@@ -631,12 +629,15 @@ trait GeneralTests
     }
 
 
+    /**
+     * @group redis-destructive
+     */
     public function testCacheFallback(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        if (!$database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -646,12 +647,7 @@ trait GeneralTests
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => Database::VAR_STRING,
-                'size' => 767,
-                'required' => true,
-            ])
+            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true)
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -664,48 +660,51 @@ trait GeneralTests
             'string' => 'text📝',
         ]));
 
-        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
+        $database->createIndex('testRedisFallback', new Index(key: 'index1', type: IndexType::Key, attributes: ['string']));
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
 
         // Bring down Redis
         $stdout = '';
         $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker kill', "", $stdout, $stderr);
 
         // Check we can read data still
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
         $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
 
-        // Check we cannot modify data
+        // Check we cannot modify data (error message varies: "went away", DNS failure, connection refused)
         try {
             $database->updateDocument('testRedisFallback', 'doc1', new Document([
                 'string' => 'text📝 updated',
             ]));
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            $this->assertInstanceOf(\RedisException::class, $e);
         }
 
         try {
             $database->deleteDocument('testRedisFallback', 'doc1');
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            $this->assertInstanceOf(\RedisException::class, $e);
         }
 
-        // Bring backup Redis
+        // Restart Redis containers
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(5);
+        $this->waitForRedis();
 
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
+    /**
+     * @group redis-destructive
+     */
     public function testCacheReconnect(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        if (!$database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -713,34 +712,12 @@ trait GeneralTests
         // Wait for Redis to be fully healthy after previous test
         $this->waitForRedis();
 
-        // Create new cache with reconnection enabled
-        $redis = new \Redis();
-        $redis->connect('redis', 6379);
-        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
-
-        // For Mirror, we need to set cache on both source and destination
-        if ($database instanceof Mirror) {
-            $database->getSource()->setCache($cache);
-
-            $mirrorRedis = new \Redis();
-            $mirrorRedis->connect('redis-mirror', 6379);
-            $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
-            $database->getDestination()->setCache($mirrorCache);
-        }
-
-        $database->setCache($cache);
-
         $database->getAuthorization()->cleanRoles();
         $database->getAuthorization()->addRole(Role::any()->toString());
 
         try {
             $database->createCollection('testCacheReconnect', attributes: [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'size' => 255,
-                    'required' => true,
-                ])
+                new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true)
             ], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -760,10 +737,10 @@ trait GeneralTests
             // Bring down Redis
             $stdout = '';
             $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker kill', "", $stdout, $stderr);
             sleep(1);
 
-            // Bring back Redis
+            // Restart Redis containers
             Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
             $this->waitForRedis();
 
@@ -780,10 +757,10 @@ trait GeneralTests
             $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
             $this->assertEquals('Updated Title', $doc->getAttribute('title'));
         } finally {
-            // Ensure Redis is running
+            // Restart Redis containers if they were killed
             $stdout = '';
             $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            Console::execute('docker ps -a --filter "name=utopia-redis" --filter "status=exited" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
             $this->waitForRedis();
 
             // Cleanup collection if it exists
@@ -804,7 +781,7 @@ trait GeneralTests
         $database = $this->getDatabase();
 
         $database->createCollection('transactionAtomicity');
-        $database->createAttribute('transactionAtomicity', 'title', Database::VAR_STRING, 128, true);
+        $database->createAttribute('transactionAtomicity', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
 
         // Verify a successful transaction commits
         $doc = $database->withTransaction(function () use ($database) {
@@ -855,7 +832,7 @@ trait GeneralTests
         $database = $this->getDatabase();
 
         $database->createCollection('txKnownException');
-        $database->createAttribute('txKnownException', 'title', Database::VAR_STRING, 128, true);
+        $database->createAttribute('txKnownException', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
 
         $database->createDocument('txKnownException', new Document([
             '$id' => 'existing_doc',
@@ -906,7 +883,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTransactionRetries()) {
+        if (!$database->getAdapter()->supports(Capability::TransactionRetries)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -944,13 +921,13 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForNestedTransactions()) {
+        if (!$database->getAdapter()->supports(Capability::NestedTransactions)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $database->createCollection('txNested');
-        $database->createAttribute('txNested', 'title', Database::VAR_STRING, 128, true);
+        $database->createAttribute('txNested', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
 
         $database->createDocument('txNested', new Document([
             '$id' => 'nested_existing',
@@ -1011,16 +988,23 @@ trait GeneralTests
     /**
      * Wait for Redis to be ready with a readiness probe
      */
-    private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void
+    private function waitForRedis(int $maxRetries = 60, int $delayMs = 500): void
     {
+        $consecutive = 0;
+        $required = 5;
         for ($i = 0; $i < $maxRetries; $i++) {
+            usleep($delayMs * 1000);
             try {
                 $redis = new \Redis();
-                $redis->connect('redis', 6379);
+                $redis->connect('redis', 6379, 1.0);
                 $redis->ping();
-                return;
+                $redis->close();
+                $consecutive++;
+                if ($consecutive >= $required) {
+                    return;
+                }
             } catch (\RedisException $e) {
-                usleep($delayMs * 1000);
+                $consecutive = 0;
             }
         }
     }

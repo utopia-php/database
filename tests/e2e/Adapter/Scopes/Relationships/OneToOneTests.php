@@ -3,7 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
-use Utopia\Database\Database;
+use Utopia\Database\RelationType;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -14,6 +14,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Relationship;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
 
 trait OneToOneTests
 {
@@ -22,7 +28,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -30,15 +36,11 @@ trait OneToOneTests
         $database->createCollection('person');
         $database->createCollection('library');
 
-        $database->createAttribute('person', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('library', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('library', 'area', Database::VAR_STRING, 255, true);
+        $database->createAttribute('person', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('library', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('library', new Attribute(key: 'area', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'person',
-            relatedCollection: 'library',
-            type: Database::RELATION_ONE_TO_ONE
-        );
+        $database->createRelationship(new Relationship(collection: 'person', relatedCollection: 'library', type: RelationType::OneToOne));
 
         // Check metadata for collection
         $collection = $database->getCollection('person');
@@ -50,7 +52,7 @@ trait OneToOneTests
                 $this->assertEquals('library', $attribute['$id']);
                 $this->assertEquals('library', $attribute['key']);
                 $this->assertEquals('library', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::OneToOne->value, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
                 $this->assertEquals('person', $attribute['options']['twoWayKey']);
             }
@@ -386,7 +388,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'person',
             id: 'newLibrary',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         // Delete parent, no effect on children for one-way
@@ -410,7 +412,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'person',
             id: 'newLibrary',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete parent, will delete child
@@ -447,7 +449,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -455,16 +457,11 @@ trait OneToOneTests
         $database->createCollection('country');
         $database->createCollection('city');
 
-        $database->createAttribute('country', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('city', 'code', Database::VAR_STRING, 3, true);
-        $database->createAttribute('city', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('country', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('city', new Attribute(key: 'code', type: ColumnType::String, size: 3, required: true));
+        $database->createAttribute('city', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'country',
-            relatedCollection: 'city',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true
-        );
+        $database->createRelationship(new Relationship(collection: 'country', relatedCollection: 'city', type: RelationType::OneToOne, twoWay: true));
 
         $collection = $database->getCollection('country');
         $attributes = $collection->getAttribute('attributes', []);
@@ -474,7 +471,7 @@ trait OneToOneTests
                 $this->assertEquals('city', $attribute['$id']);
                 $this->assertEquals('city', $attribute['key']);
                 $this->assertEquals('city', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::OneToOne->value, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('country', $attribute['options']['twoWayKey']);
             }
@@ -488,7 +485,7 @@ trait OneToOneTests
                 $this->assertEquals('country', $attribute['$id']);
                 $this->assertEquals('country', $attribute['key']);
                 $this->assertEquals('country', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(RelationType::OneToOne->value, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('city', $attribute['options']['twoWayKey']);
             }
@@ -911,14 +908,14 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'country',
             id: 'newCity',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         $database->updateDocument('city', 'city1', new Document(['newCountry' => null, '$id' => 'city1']));
         $city1 = $database->getDocument('city', 'city1');
         $this->assertNull($city1->getAttribute('newCountry'));
 
-        // Check Delete TwoWay TRUE && RELATION_MUTATE_SET_NULL && related value NULL
+        // Check Delete TwoWay TRUE && ForeignKeyAction::SetNull && related value NULL
         $this->assertTrue($database->deleteDocument('city', 'city1'));
         $city1 = $database->getDocument('city', 'city1');
         $this->assertTrue($city1->isEmpty());
@@ -948,7 +945,7 @@ trait OneToOneTests
         $database->updateRelationship(
             collection: 'country',
             id: 'newCity',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete parent, will delete child
@@ -1009,7 +1006,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1017,32 +1014,16 @@ trait OneToOneTests
         $database->createCollection('parent');
         $database->createCollection('child');
 
-        $database->createRelationship(
-            collection: 'parent',
-            relatedCollection: 'child',
-            type: Database::RELATION_ONE_TO_ONE,
-            id: 'child1'
-        );
+        $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToOne, key: 'child1'));
 
         try {
-            $database->createRelationship(
-                collection: 'parent',
-                relatedCollection: 'child',
-                type: Database::RELATION_ONE_TO_MANY,
-                id: 'children',
-            );
+            $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToMany, key: 'children'));
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
             $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
 
-        $database->createRelationship(
-            collection: 'parent',
-            relatedCollection: 'child',
-            type: Database::RELATION_ONE_TO_MANY,
-            id: 'children',
-            twoWayKey: 'parent_id'
-        );
+        $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToMany, key: 'children', twoWayKey: 'parent_id'));
 
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
@@ -1109,7 +1090,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1118,26 +1099,12 @@ trait OneToOneTests
         $database->createCollection('shirt');
         $database->createCollection('team');
 
-        $database->createAttribute('pattern', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('shirt', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('team', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('pattern', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('shirt', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('team', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'pattern',
-            relatedCollection: 'shirt',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'shirt',
-            twoWayKey: 'pattern'
-        );
-        $database->createRelationship(
-            collection: 'shirt',
-            relatedCollection: 'team',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'team',
-            twoWayKey: 'shirt'
-        );
+        $database->createRelationship(new Relationship(collection: 'pattern', relatedCollection: 'shirt', type: RelationType::OneToOne, twoWay: true, key: 'shirt', twoWayKey: 'pattern'));
+        $database->createRelationship(new Relationship(collection: 'shirt', relatedCollection: 'team', type: RelationType::OneToOne, twoWay: true, key: 'team', twoWayKey: 'shirt'));
 
         $database->createDocument('pattern', new Document([
             '$id' => 'stripes',
@@ -1201,7 +1168,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1210,25 +1177,12 @@ trait OneToOneTests
         $database->createCollection('classrooms');
         $database->createCollection('children');
 
-        $database->createAttribute('children', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('teachers', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('classrooms', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('children', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('teachers', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('classrooms', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'teachers',
-            relatedCollection: 'classrooms',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'classroom',
-            twoWayKey: 'teacher'
-        );
-        $database->createRelationship(
-            collection: 'classrooms',
-            relatedCollection: 'children',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            twoWayKey: 'classroom'
-        );
+        $database->createRelationship(new Relationship(collection: 'teachers', relatedCollection: 'classrooms', type: RelationType::OneToOne, twoWay: true, key: 'classroom', twoWayKey: 'teacher'));
+        $database->createRelationship(new Relationship(collection: 'classrooms', relatedCollection: 'children', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'classroom'));
 
         $database->createDocument('teachers', new Document([
             '$id' => 'teacher1',
@@ -1302,7 +1256,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1311,25 +1265,12 @@ trait OneToOneTests
         $database->createCollection('profiles');
         $database->createCollection('avatars');
 
-        $database->createAttribute('users', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('profiles', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('avatars', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('users', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('profiles', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('avatars', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'users',
-            relatedCollection: 'profiles',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'profile',
-            twoWayKey: 'user'
-        );
-        $database->createRelationship(
-            collection: 'profiles',
-            relatedCollection: 'avatars',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'avatar',
-        );
+        $database->createRelationship(new Relationship(collection: 'users', relatedCollection: 'profiles', type: RelationType::OneToOne, twoWay: true, key: 'profile', twoWayKey: 'user'));
+        $database->createRelationship(new Relationship(collection: 'profiles', relatedCollection: 'avatars', type: RelationType::ManyToOne, twoWay: true, key: 'avatar'));
 
         $database->createDocument('users', new Document([
             '$id' => 'user1',
@@ -1395,7 +1336,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1404,24 +1345,12 @@ trait OneToOneTests
         $database->createCollection('houses');
         $database->createCollection('buildings');
 
-        $database->createAttribute('addresses', 'street', Database::VAR_STRING, 255, true);
-        $database->createAttribute('houses', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('buildings', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('addresses', new Attribute(key: 'street', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('houses', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('buildings', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'addresses',
-            relatedCollection: 'houses',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'house',
-            twoWayKey: 'address'
-        );
-        $database->createRelationship(
-            collection: 'houses',
-            relatedCollection: 'buildings',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'addresses', relatedCollection: 'houses', type: RelationType::OneToOne, twoWay: true, key: 'house', twoWayKey: 'address'));
+        $database->createRelationship(new Relationship(collection: 'houses', relatedCollection: 'buildings', type: RelationType::ManyToMany, twoWay: true));
 
         $database->createDocument('addresses', new Document([
             '$id' => 'address1',
@@ -1492,7 +1421,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1507,24 +1436,9 @@ trait OneToOneTests
         $database->createCollection($level3Collection);
         $database->createCollection($level4Collection);
 
-        $database->createRelationship(
-            collection: $level1Collection,
-            relatedCollection: $level2Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level2Collection,
-            relatedCollection: $level3Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level3Collection,
-            relatedCollection: $level4Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: $level1Collection, relatedCollection: $level2Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $level2Collection, relatedCollection: $level3Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $level3Collection, relatedCollection: $level4Collection, type: RelationType::OneToOne, twoWay: true));
 
         // Exceed create depth
         $level1 = $database->createDocument($level1Collection, new Document([
@@ -1574,7 +1488,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1589,24 +1503,9 @@ trait OneToOneTests
         $database->createCollection($level3Collection);
         $database->createCollection($level4Collection);
 
-        $database->createRelationship(
-            collection: $level1Collection,
-            relatedCollection: $level2Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level2Collection,
-            relatedCollection: $level3Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level3Collection,
-            relatedCollection: $level4Collection,
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: $level1Collection, relatedCollection: $level2Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $level2Collection, relatedCollection: $level3Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $level3Collection, relatedCollection: $level4Collection, type: RelationType::OneToOne, twoWay: true));
 
         $level1 = $database->createDocument($level1Collection, new Document([
             '$id' => 'level1',
@@ -1657,7 +1556,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1665,12 +1564,7 @@ trait OneToOneTests
         $database->createCollection('$symbols_coll.ection1');
         $database->createCollection('$symbols_coll.ection2');
 
-        $database->createRelationship(
-            collection: '$symbols_coll.ection1',
-            relatedCollection: '$symbols_coll.ection2',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: '$symbols_coll.ection1', relatedCollection: '$symbols_coll.ection2', type: RelationType::OneToOne, twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection2', new Document([
             '$id' => ID::unique(),
@@ -1681,7 +1575,7 @@ trait OneToOneTests
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection1', new Document([
             '$id' => ID::unique(),
-            '$symbols_coll.ection2' => $doc1->getId(),
+            'symbols_collection2' => $doc1->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any())
@@ -1691,8 +1585,8 @@ trait OneToOneTests
         $doc1 = $database->getDocument('$symbols_coll.ection2', $doc1->getId());
         $doc2 = $database->getDocument('$symbols_coll.ection1', $doc2->getId());
 
-        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection1')->getId());
-        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection2')->getId());
+        $this->assertEquals($doc2->getId(), $doc1->getAttribute('symbols_collection1')->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getAttribute('symbols_collection2')->getId());
     }
 
     public function testRecreateOneToOneOneWayRelationshipFromChild(): void
@@ -1700,22 +1594,12 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1723,17 +1607,7 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1741,19 +1615,11 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
 
         $database->deleteRelationship('two', 'one');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
 
         $this->assertTrue($result);
 
@@ -1766,22 +1632,12 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1789,17 +1645,7 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1807,21 +1653,11 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
 
         $database->deleteRelationship('one', 'two');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1834,22 +1670,12 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1857,17 +1683,7 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1875,21 +1691,11 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
 
         $database->deleteRelationship('two', 'one');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1902,22 +1708,12 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
         $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1925,17 +1721,7 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
         $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1943,19 +1729,11 @@ trait OneToOneTests
             Permission::delete(Role::any())
         ]);
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
+        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
 
         $database->deleteRelationship('one', 'two');
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
+        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
 
         $this->assertTrue($result);
 
@@ -1968,7 +1746,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1976,17 +1754,12 @@ trait OneToOneTests
         $this->getDatabase()->createCollection('bulk_delete_person_o2o');
         $this->getDatabase()->createCollection('bulk_delete_library_o2o');
 
-        $this->getDatabase()->createAttribute('bulk_delete_person_o2o', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_o2o', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_o2o', 'area', Database::VAR_STRING, 255, true);
+        $this->getDatabase()->createAttribute('bulk_delete_person_o2o', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_o2o', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_o2o', new Attribute(key: 'area', type: ColumnType::String, size: 255, required: true));
 
         // Restrict
-        $this->getDatabase()->createRelationship(
-            collection: 'bulk_delete_person_o2o',
-            relatedCollection: 'bulk_delete_library_o2o',
-            type: Database::RELATION_ONE_TO_ONE,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $this->getDatabase()->createRelationship(new Relationship(collection: 'bulk_delete_person_o2o', relatedCollection: 'bulk_delete_library_o2o', type: RelationType::OneToOne, onDelete: ForeignKeyAction::Restrict));
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([
             '$id' => 'person1',
@@ -2041,7 +1814,7 @@ trait OneToOneTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2o',
             id: 'bulk_delete_library_o2o',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([
@@ -2089,7 +1862,7 @@ trait OneToOneTests
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person_o2o',
             id: 'bulk_delete_library_o2o',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([
@@ -2167,7 +1940,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2175,14 +1948,7 @@ trait OneToOneTests
         $database->createCollection('drivers');
         $database->createCollection('licenses');
 
-        $database->createRelationship(
-            collection: 'drivers',
-            relatedCollection: 'licenses',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'license',
-            twoWayKey: 'driver'
-        );
+        $database->createRelationship(new Relationship(collection: 'drivers', relatedCollection: 'licenses', type: RelationType::OneToOne, twoWay: true, key: 'license', twoWayKey: 'driver'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2202,14 +1968,7 @@ trait OneToOneTests
         $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
         $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
 
-        $database->createRelationship(
-            collection: 'drivers',
-            relatedCollection: 'licenses',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            id: 'licenses',
-            twoWayKey: 'driver'
-        );
+        $database->createRelationship(new Relationship(collection: 'drivers', relatedCollection: 'licenses', type: RelationType::OneToMany, twoWay: true, key: 'licenses', twoWayKey: 'driver'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2229,14 +1988,7 @@ trait OneToOneTests
         $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
         $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
 
-        $database->createRelationship(
-            collection: 'licenses',
-            relatedCollection: 'drivers',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'driver',
-            twoWayKey: 'licenses'
-        );
+        $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToOne, twoWay: true, key: 'driver', twoWayKey: 'licenses'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2256,14 +2008,7 @@ trait OneToOneTests
         $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
         $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
 
-        $database->createRelationship(
-            collection: 'licenses',
-            relatedCollection: 'drivers',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-            id: 'drivers',
-            twoWayKey: 'licenses'
-        );
+        $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToMany, twoWay: true, key: 'drivers', twoWayKey: 'licenses'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2295,8 +2040,8 @@ trait OneToOneTests
         $database = $this->getDatabase();
 
         if (
-            !$database->getAdapter()->getSupportForRelationships() ||
-            !$database->getAdapter()->getSupportForBatchOperations()
+            !$database->getAdapter()->supports(Capability::Relationships) ||
+            !$database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2308,16 +2053,11 @@ trait OneToOneTests
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);
 
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'parentNumber', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute($parentCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'parentNumber', type: ColumnType::Integer, size: 0, required: false));
 
-        $database->createRelationship(
-            collection: $parentCollection,
-            relatedCollection: $childCollection,
-            type: Database::RELATION_ONE_TO_ONE,
-            id: 'parentNumber'
-        );
+        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::OneToOne, key: 'parentNumber'));
 
         $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -2377,7 +2117,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2387,15 +2127,10 @@ trait OneToOneTests
 
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($parentCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($childCollection, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: $parentCollection,
-            relatedCollection: $childCollection,
-            type: Database::RELATION_ONE_TO_ONE,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::OneToOne, onDelete: ForeignKeyAction::Restrict));
 
         $parent = $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -2435,7 +2170,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2444,18 +2179,11 @@ trait OneToOneTests
         $database->createCollection('cities_partial');
         $database->createCollection('mayors_partial');
 
-        $database->createAttribute('cities_partial', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('cities_partial', 'population', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute('mayors_partial', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('cities_partial', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('cities_partial', new Attribute(key: 'population', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute('mayors_partial', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'cities_partial',
-            relatedCollection: 'mayors_partial',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'mayor',
-            twoWayKey: 'city'
-        );
+        $database->createRelationship(new Relationship(collection: 'cities_partial', relatedCollection: 'mayors_partial', type: RelationType::OneToOne, twoWay: true, key: 'mayor', twoWayKey: 'city'));
 
         // Create a city with a mayor
         $database->createDocument('cities_partial', new Document([
@@ -2522,7 +2250,7 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2531,17 +2259,10 @@ trait OneToOneTests
         $database->createCollection('cities_strict');
         $database->createCollection('mayors_strict');
 
-        $database->createAttribute('cities_strict', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('mayors_strict', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('cities_strict', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('mayors_strict', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'cities_strict',
-            relatedCollection: 'mayors_strict',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'mayor',
-            twoWayKey: 'city'
-        );
+        $database->createRelationship(new Relationship(collection: 'cities_strict', relatedCollection: 'mayors_strict', type: RelationType::OneToOne, twoWay: true, key: 'mayor', twoWayKey: 'city'));
 
         // Create city with mayor
         $database->createDocument('cities_strict', new Document([
@@ -2603,12 +2324,12 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!$database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2626,17 +2347,10 @@ trait OneToOneTests
         $database->createCollection('user_o2o');
         $database->createCollection('profile_o2o');
 
-        $database->createAttribute('user_o2o', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('profile_o2o', 'bio', Database::VAR_STRING, 255, true);
+        $database->createAttribute('user_o2o', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('profile_o2o', new Attribute(key: 'bio', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(
-            collection: 'user_o2o',
-            relatedCollection: 'profile_o2o',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true,
-            id: 'profile',
-            twoWayKey: 'user'
-        );
+        $database->createRelationship(new Relationship(collection: 'user_o2o', relatedCollection: 'profile_o2o', type: RelationType::OneToOne, twoWay: true, key: 'profile', twoWayKey: 'user'));
 
         // Create a profile
         $database->createDocument('profile_o2o', new Document([

@@ -19,6 +19,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Database\Attribute;
+use Utopia\Query\Schema\ColumnType;
 
 class PoolTest extends Base
 {
@@ -44,8 +46,8 @@ class PoolTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(6);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $pool = new UtopiaPool(new Stack(), 'mysql', 10, function () {
             $dbHost = 'mysql';
@@ -65,7 +67,7 @@ class PoolTest extends Base
 
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
@@ -145,7 +147,7 @@ class PoolTest extends Base
         $collection = 'orphanedPermsRecovery';
 
         $database->createCollection($collection);
-        $database->createAttribute($collection, 'title', Database::VAR_STRING, 128, true);
+        $database->createAttribute($collection, new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
 
         // Step 1: Create a document with permissions
         $doc = $database->createDocument($collection, new Document([

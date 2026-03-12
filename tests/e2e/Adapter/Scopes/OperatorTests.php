@@ -12,6 +12,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Attribute;
+use Utopia\Query\Schema\ColumnType;
 
 trait OperatorTests
 {
@@ -20,7 +23,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -30,11 +33,11 @@ trait OperatorTests
         $collectionId = 'test_operators';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 100, false, 'test');
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: 'test'));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -126,7 +129,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -136,9 +139,9 @@ trait OperatorTests
         $collectionId = 'test_batch_operators';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
 
         // Create multiple test documents
         $docs = [];
@@ -203,7 +206,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -214,26 +217,26 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create attributes for all operator types
-        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 10);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 5.0);
-        $database->createAttribute($collectionId, 'multiplier', Database::VAR_FLOAT, 0, false, 2.0);
-        $database->createAttribute($collectionId, 'divisor', Database::VAR_FLOAT, 0, false, 100.0);
-        $database->createAttribute($collectionId, 'remainder', Database::VAR_INTEGER, 0, false, 20);
-        $database->createAttribute($collectionId, 'power_val', Database::VAR_FLOAT, 0, false, 2.0);
-        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, false, 'Title');
-        $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 500, false, 'old content');
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'categories', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'duplicates', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'intersect_items', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'diff_items', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'filter_numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
-        $database->createAttribute($collectionId, 'last_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
-        $database->createAttribute($collectionId, 'next_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
-        $database->createAttribute($collectionId, 'now_field', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 10));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 5.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'multiplier', type: ColumnType::Double, size: 0, required: false, default: 2.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'divisor', type: ColumnType::Double, size: 0, required: false, default: 100.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'remainder', type: ColumnType::Integer, size: 0, required: false, default: 20));
+        $database->createAttribute($collectionId, new Attribute(key: 'power_val', type: ColumnType::Double, size: 0, required: false, default: 2.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: false, default: 'Title'));
+        $database->createAttribute($collectionId, new Attribute(key: 'content', type: ColumnType::String, size: 500, required: false, default: 'old content'));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'categories', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'duplicates', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'intersect_items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'diff_items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'filter_numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'last_update', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
+        $database->createAttribute($collectionId, new Attribute(key: 'next_update', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
+        $database->createAttribute($collectionId, new Attribute(key: 'now_field', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Create test documents
         $docs = [];
@@ -353,7 +356,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -363,10 +366,10 @@ trait OperatorTests
         $collectionId = 'test_operators_with_queries';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, true);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
 
         // Create test documents
         for ($i = 1; $i <= 5; $i++) {
@@ -435,7 +438,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -445,9 +448,9 @@ trait OperatorTests
         $collectionId = 'test_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'text_field', Database::VAR_STRING, 100, true);
-        $database->createAttribute($collectionId, 'number_field', Database::VAR_INTEGER, 0, true);
-        $database->createAttribute($collectionId, 'array_field', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'text_field', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'number_field', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -474,7 +477,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -484,8 +487,8 @@ trait OperatorTests
         $collectionId = 'test_array_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'text_field', Database::VAR_STRING, 100, true);
-        $database->createAttribute($collectionId, 'array_field', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'text_field', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -511,7 +514,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -521,7 +524,7 @@ trait OperatorTests
         $collectionId = 'test_insert_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'array_field', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -549,7 +552,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -560,12 +563,12 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create various attribute types for testing
-        $database->createAttribute($collectionId, 'string_field', Database::VAR_STRING, 100, false, 'default');
-        $database->createAttribute($collectionId, 'int_field', Database::VAR_INTEGER, 0, false, 10);
-        $database->createAttribute($collectionId, 'float_field', Database::VAR_FLOAT, 0, false, 1.5);
-        $database->createAttribute($collectionId, 'bool_field', Database::VAR_BOOLEAN, 0, false, false);
-        $database->createAttribute($collectionId, 'array_field', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'date_field', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'string_field', type: ColumnType::String, size: 100, required: false, default: 'default'));
+        $database->createAttribute($collectionId, new Attribute(key: 'int_field', type: ColumnType::Integer, size: 0, required: false, default: 10));
+        $database->createAttribute($collectionId, new Attribute(key: 'float_field', type: ColumnType::Double, size: 0, required: false, default: 1.5));
+        $database->createAttribute($collectionId, new Attribute(key: 'bool_field', type: ColumnType::Boolean, size: 0, required: false, default: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'date_field', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -638,7 +641,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -646,7 +649,7 @@ trait OperatorTests
 
         $collectionId = 'test_division_zero';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'number', Database::VAR_FLOAT, 0, false, 100.0);
+        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Double, size: 0, required: false, default: 100.0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_test_doc',
@@ -694,7 +697,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -702,7 +705,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_bounds';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'bounds_test_doc',
@@ -740,7 +743,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -748,8 +751,8 @@ trait OperatorTests
 
         $collectionId = 'test_operator_limits';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 10);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 5.0);
+        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 10));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 5.0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'limits_test_doc',
@@ -797,7 +800,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -805,8 +808,8 @@ trait OperatorTests
 
         $collectionId = 'test_array_filter';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'filter_test_doc',
@@ -835,7 +838,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -843,8 +846,8 @@ trait OperatorTests
 
         $collectionId = 'test_replace';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, 'default text');
-        $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: 'default text'));
+        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false, default: 0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'replace_test_doc',
@@ -883,7 +886,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -891,9 +894,9 @@ trait OperatorTests
 
         $collectionId = 'test_null_handling';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'nullable_int', Database::VAR_INTEGER, 0, false, null, false, false);
-        $database->createAttribute($collectionId, 'nullable_string', Database::VAR_STRING, 100, false, null, false, false);
-        $database->createAttribute($collectionId, 'nullable_bool', Database::VAR_BOOLEAN, 0, false, null, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'nullable_int', type: ColumnType::Integer, size: 0, required: false, default: null, signed: false, array: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'nullable_string', type: ColumnType::String, size: 100, required: false, default: null, signed: false, array: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'nullable_bool', type: ColumnType::Boolean, size: 0, required: false, default: null, signed: false, array: false));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'null_test_doc',
@@ -940,7 +943,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -948,10 +951,10 @@ trait OperatorTests
 
         $collectionId = 'test_complex_operators';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'stats', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'metadata', Database::VAR_STRING, 100, false, null, true, true);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'stats', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'metadata', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false, default: ''));
 
         // Create document with complex data
         $doc = $database->createDocument($collectionId, new Document([
@@ -1000,7 +1003,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1008,7 +1011,7 @@ trait OperatorTests
 
         $collectionId = 'test_increment_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1042,7 +1045,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1050,7 +1053,7 @@ trait OperatorTests
 
         $collectionId = 'test_string_concat_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: false, default: ''));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1084,7 +1087,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1092,7 +1095,7 @@ trait OperatorTests
 
         $collectionId = 'test_modulo_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false, default: 0));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1114,7 +1117,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1122,7 +1125,7 @@ trait OperatorTests
 
         $collectionId = 'test_toggle_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1152,7 +1155,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1160,7 +1163,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_unique_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1187,7 +1190,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1196,9 +1199,9 @@ trait OperatorTests
         // Setup collection
         $collectionId = 'operator_increment_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
 
         // Success case - integer
         $doc = $database->createDocument($collectionId, new Document([
@@ -1246,7 +1249,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1254,7 +1257,7 @@ trait OperatorTests
 
         $collectionId = 'operator_decrement_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1291,7 +1294,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1299,7 +1302,7 @@ trait OperatorTests
 
         $collectionId = 'operator_multiply_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1326,7 +1329,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1334,7 +1337,7 @@ trait OperatorTests
 
         $collectionId = 'operator_divide_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1361,7 +1364,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1369,7 +1372,7 @@ trait OperatorTests
 
         $collectionId = 'operator_modulo_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1390,7 +1393,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1398,7 +1401,7 @@ trait OperatorTests
 
         $collectionId = 'operator_power_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'number', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Double, size: 0, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1425,7 +1428,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1433,7 +1436,7 @@ trait OperatorTests
 
         $collectionId = 'operator_concat_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1464,7 +1467,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1472,7 +1475,7 @@ trait OperatorTests
 
         $collectionId = 'operator_replace_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
 
         // Success case - single replacement
         $doc = $database->createDocument($collectionId, new Document([
@@ -1505,7 +1508,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1513,7 +1516,7 @@ trait OperatorTests
 
         $collectionId = 'operator_append_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1554,7 +1557,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1562,7 +1565,7 @@ trait OperatorTests
 
         $collectionId = 'operator_prepend_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1583,7 +1586,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1591,7 +1594,7 @@ trait OperatorTests
 
         $collectionId = 'operator_insert_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
 
         // Success case - middle insertion
         $doc = $database->createDocument($collectionId, new Document([
@@ -1627,7 +1630,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1635,7 +1638,7 @@ trait OperatorTests
 
         $collectionId = 'operator_remove_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case - single occurrence
         $doc = $database->createDocument($collectionId, new Document([
@@ -1675,7 +1678,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1683,7 +1686,7 @@ trait OperatorTests
 
         $collectionId = 'operator_unique_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case - with duplicates
         $doc = $database->createDocument($collectionId, new Document([
@@ -1718,7 +1721,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1726,7 +1729,7 @@ trait OperatorTests
 
         $collectionId = 'operator_intersect_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1756,7 +1759,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1764,7 +1767,7 @@ trait OperatorTests
 
         $collectionId = 'operator_diff_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1796,7 +1799,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1804,8 +1807,8 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'mixed', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'mixed', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Success case - equals condition
         $doc = $database->createDocument($collectionId, new Document([
@@ -1856,7 +1859,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1864,8 +1867,8 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_numeric_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'integers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'floats', Database::VAR_FLOAT, 0, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'integers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'floats', type: ColumnType::Double, size: 0, required: false, default: null, signed: true, array: true));
 
         // Create document with various numeric values
         $doc = $database->createDocument($collectionId, new Document([
@@ -1913,7 +1916,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1921,7 +1924,7 @@ trait OperatorTests
 
         $collectionId = 'operator_toggle_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false));
 
         // Success case - true to false
         $doc = $database->createDocument($collectionId, new Document([
@@ -1961,7 +1964,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1969,7 +1972,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_add_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Success case - positive days
         $doc = $database->createDocument($collectionId, new Document([
@@ -1997,7 +2000,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2005,7 +2008,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_sub_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2026,7 +2029,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2034,7 +2037,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_now_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'timestamp', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'timestamp', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2063,7 +2066,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2071,11 +2074,11 @@ trait OperatorTests
 
         $collectionId = 'mixed_operators_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false);
-        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false));
 
         // Test multiple operators in one update
         $doc = $database->createDocument($collectionId, new Document([
@@ -2108,7 +2111,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2116,8 +2119,8 @@ trait OperatorTests
 
         $collectionId = 'batch_operators_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: false));
 
         // Create multiple documents
         $docs = [];
@@ -2160,14 +2163,14 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collectionId = 'test_array_insert_beginning';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2203,14 +2206,14 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collectionId = 'test_array_insert_middle';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2246,14 +2249,14 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collectionId = 'test_array_insert_end';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2290,14 +2293,14 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collectionId = 'test_array_insert_multiple';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2367,7 +2370,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2378,7 +2381,7 @@ trait OperatorTests
 
         // Create an integer attribute with a maximum value of 100
         // Using size=4 (signed int) with max constraint through Range validator
-        $database->createAttribute($collectionId, 'score', Database::VAR_INTEGER, 4, false, 0, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Integer, size: 4, required: false, default: 0, signed: false, array: false));
 
         // Get the collection to verify attribute was created
         $collection = $database->getCollection($collectionId);
@@ -2455,7 +2458,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2465,7 +2468,7 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create a string attribute with max length of 20 characters
-        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 20, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 20, required: false, default: ''));
 
         // Create a document with a 15-character title (within limit)
         $doc = $database->createDocument($collectionId, new Document([
@@ -2514,7 +2517,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2524,7 +2527,7 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create a signed integer attribute (max value = Database::MAX_INT = 2147483647)
-        $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 4, false, 1, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 4, required: false, default: 1, signed: false, array: false));
 
         // Create a document with quantity that when multiplied will exceed MAX_INT
         $doc = $database->createDocument($collectionId, new Document([
@@ -2576,7 +2579,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2584,7 +2587,7 @@ trait OperatorTests
 
         $collectionId = 'test_multiply_negative';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
 
         // Test negative multiplier without max limit
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -2658,7 +2661,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2666,7 +2669,7 @@ trait OperatorTests
 
         $collectionId = 'test_divide_negative';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
 
         // Test negative divisor without min limit
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -2730,7 +2733,7 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2741,7 +2744,7 @@ trait OperatorTests
 
         // Create an array attribute for integers with max value constraint
         // Each item should be an integer within the valid range
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 4, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 4, required: false, default: null, signed: true, array: true));
 
         // Create a document with valid integer array
         $doc = $database->createDocument($collectionId, new Document([
@@ -2837,7 +2840,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2845,8 +2848,8 @@ trait OperatorTests
 
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'bigint_max', Database::VAR_INTEGER, 8, true);
-        $database->createAttribute($collectionId, 'bigint_min', Database::VAR_INTEGER, 8, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'bigint_max', type: ColumnType::Integer, size: 8, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'bigint_min', type: ColumnType::Integer, size: 8, required: true));
 
         $maxValue = PHP_INT_MAX - 1000; // Near max but with room
         $minValue = PHP_INT_MIN + 1000; // Near min but with room
@@ -2886,7 +2889,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2894,7 +2897,7 @@ trait OperatorTests
 
         $collectionId = 'test_negative_power';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
 
         // Create document with value 8
         $doc = $database->createDocument($collectionId, new Document([
@@ -2922,7 +2925,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2930,7 +2933,7 @@ trait OperatorTests
 
         $collectionId = 'test_fractional_power';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
 
         // Create document with value 16
         $doc = $database->createDocument($collectionId, new Document([
@@ -2969,7 +2972,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2977,7 +2980,7 @@ trait OperatorTests
 
         $collectionId = 'test_empty_strings';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_str_doc',
@@ -3026,7 +3029,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3034,7 +3037,7 @@ trait OperatorTests
 
         $collectionId = 'test_unicode';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 500, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 500, required: false, default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'unicode_doc',
@@ -3076,7 +3079,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3084,7 +3087,7 @@ trait OperatorTests
 
         $collectionId = 'test_empty_arrays';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_array_doc',
@@ -3146,7 +3149,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3154,7 +3157,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_special_values';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'mixed', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'mixed', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'special_values_doc',
@@ -3194,7 +3197,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3202,7 +3205,7 @@ trait OperatorTests
 
         $collectionId = 'test_negative_modulo';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
 
         // Test -17 % 5 (different languages handle this differently)
         $doc = $database->createDocument($collectionId, new Document([
@@ -3242,7 +3245,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3250,7 +3253,7 @@ trait OperatorTests
 
         $collectionId = 'test_float_precision';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precision_doc',
@@ -3294,7 +3297,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3302,7 +3305,7 @@ trait OperatorTests
 
         $collectionId = 'test_long_strings';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 70000, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 70000, required: false, default: ''));
 
         // Create a long string (10k characters)
         $longString = str_repeat('A', 10000);
@@ -3344,7 +3347,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3352,7 +3355,7 @@ trait OperatorTests
 
         $collectionId = 'test_date_boundaries';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
         // Test date at end of year
         $doc = $database->createDocument($collectionId, new Document([
@@ -3417,7 +3420,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3425,7 +3428,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_boundaries';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'boundary_insert_doc',
@@ -3461,7 +3464,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3469,8 +3472,8 @@ trait OperatorTests
 
         $collectionId = 'test_sequential_ops';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'sequential_doc',
@@ -3528,7 +3531,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3536,7 +3539,7 @@ trait OperatorTests
 
         $collectionId = 'test_zero_values';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_doc',
@@ -3584,7 +3587,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3592,7 +3595,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_empty_results';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_result_doc',
@@ -3634,7 +3637,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3642,7 +3645,7 @@ trait OperatorTests
 
         $collectionId = 'test_replace_multiple';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'replace_multi_doc',
@@ -3678,7 +3681,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3686,7 +3689,7 @@ trait OperatorTests
 
         $collectionId = 'test_precise_floats';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precise_doc',
@@ -3722,7 +3725,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3730,7 +3733,7 @@ trait OperatorTests
 
         $collectionId = 'test_single_element';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'single_elem_doc',
@@ -3782,7 +3785,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3790,7 +3793,7 @@ trait OperatorTests
 
         $collectionId = 'test_toggle_default';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'flag', Database::VAR_BOOLEAN, 0, false, false);
+        $database->createAttribute($collectionId, new Attribute(key: 'flag', type: ColumnType::Boolean, size: 0, required: false, default: false));
 
         // Create doc without setting flag (should use default false)
         $doc = $database->createDocument($collectionId, new Document([
@@ -3825,7 +3828,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3834,7 +3837,7 @@ trait OperatorTests
         $collectionId = 'test_attribute_constraints';
         $database->createCollection($collectionId);
         // Integer with size 0 (32-bit INT)
-        $database->createAttribute($collectionId, 'small_int', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'small_int', type: ColumnType::Integer, size: 0, required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'constraint_doc',
@@ -3866,7 +3869,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3876,9 +3879,9 @@ trait OperatorTests
         $collectionId = 'test_bulk_callback';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Create multiple test documents
         for ($i = 1; $i <= 5; $i++) {
@@ -3932,7 +3935,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3942,9 +3945,9 @@ trait OperatorTests
         $collectionId = 'test_upsert_callback';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Create existing documents
         $database->createDocument($collectionId, new Document([
@@ -4029,7 +4032,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4039,9 +4042,9 @@ trait OperatorTests
         $collectionId = 'test_single_upsert';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Test upsert with operators on new document (insert)
         $doc = $database->upsertDocument($collectionId, new Document([
@@ -4096,7 +4099,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4106,13 +4109,13 @@ trait OperatorTests
         $collectionId = 'test_upsert_new_ops';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
-        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 100, false, '');
+        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collectionId, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: ''));
 
         // Test 1: INCREMENT on new document (should use 0 as default)
         $doc1 = $database->upsertDocument($collectionId, new Document([
@@ -4229,33 +4232,33 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collectionId = 'test_upsert_all_operators';
         $attributes = [
-            new Document(['$id' => 'counter', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => 10, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'score', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 5.0, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'multiplier', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'divisor', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 100.0, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'remainder', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => 20, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'power_val', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'title', 'type' => Database::VAR_STRING, 'size' => 255, 'required' => false, 'default' => 'Title', 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'content', 'type' => Database::VAR_STRING, 'size' => 500, 'required' => false, 'default' => 'old content', 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'tags', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'categories', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'duplicates', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'numbers', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'intersect_items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'diff_items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'filter_numbers', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
-            new Document(['$id' => 'active', 'type' => Database::VAR_BOOLEAN, 'size' => 0, 'required' => false, 'default' => false, 'signed' => true, 'array' => false]),
-            new Document(['$id' => 'date_field1', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
-            new Document(['$id' => 'date_field2', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
-            new Document(['$id' => 'date_field3', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+            new Document(['$id' => 'counter', 'type' => ColumnType::Integer->value, 'size' => 0, 'required' => false, 'default' => 10, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'score', 'type' => ColumnType::Double->value, 'size' => 0, 'required' => false, 'default' => 5.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'multiplier', 'type' => ColumnType::Double->value, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'divisor', 'type' => ColumnType::Double->value, 'size' => 0, 'required' => false, 'default' => 100.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'remainder', 'type' => ColumnType::Integer->value, 'size' => 0, 'required' => false, 'default' => 20, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'power_val', 'type' => ColumnType::Double->value, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'title', 'type' => ColumnType::String->value, 'size' => 255, 'required' => false, 'default' => 'Title', 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'content', 'type' => ColumnType::String->value, 'size' => 500, 'required' => false, 'default' => 'old content', 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'tags', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'categories', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'items', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'duplicates', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'numbers', 'type' => ColumnType::Integer->value, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'intersect_items', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'diff_items', 'type' => ColumnType::String->value, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'filter_numbers', 'type' => ColumnType::Integer->value, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'active', 'type' => ColumnType::Boolean->value, 'size' => 0, 'required' => false, 'default' => false, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'date_field1', 'type' => ColumnType::Datetime->value, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+            new Document(['$id' => 'date_field2', 'type' => ColumnType::Datetime->value, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+            new Document(['$id' => 'date_field3', 'type' => ColumnType::Datetime->value, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
         ];
         $database->createCollection($collectionId, $attributes);
 
@@ -4460,7 +4463,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4468,7 +4471,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_not_null';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, default: null, signed: true, array: true));
 
         // Test ARRAY_UNIQUE on empty array returns [] not NULL
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -4522,7 +4525,7 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
+        if (!$database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4530,7 +4533,7 @@ trait OperatorTests
 
         $collectionId = 'test_operator_cache';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
 
         // Create a document
         $doc = $database->createDocument($collectionId, new Document([

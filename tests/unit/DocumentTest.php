@@ -3,11 +3,12 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\PermissionType;
+use Utopia\Database\SetType;
 
 class DocumentTest extends TestCase
 {
@@ -124,17 +125,17 @@ class DocumentTest extends TestCase
 
     public function testGetPermissionByType(): void
     {
-        $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
+        $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(PermissionType::Create->value));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create->value));
 
-        $this->assertEquals(['user:123','team:123'], $this->document->getPermissionsByType(Database::PERMISSION_READ));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_READ));
+        $this->assertEquals(['user:123','team:123'], $this->document->getPermissionsByType(PermissionType::Read->value));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read->value));
 
-        $this->assertEquals(['any','user:updater'], $this->document->getPermissionsByType(Database::PERMISSION_UPDATE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_UPDATE));
+        $this->assertEquals(['any','user:updater'], $this->document->getPermissionsByType(PermissionType::Update->value));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update->value));
 
-        $this->assertEquals(['any','user:deleter'], $this->document->getPermissionsByType(Database::PERMISSION_DELETE));
-        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
+        $this->assertEquals(['any','user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete->value));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete->value));
     }
 
     public function testGetPermissions(): void
@@ -183,13 +184,13 @@ class DocumentTest extends TestCase
         $this->assertEquals('New title', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
 
-        $this->document->setAttribute('list', 'two', Document::SET_TYPE_APPEND);
+        $this->document->setAttribute('list', 'two', SetType::Append);
         $this->assertEquals(['one', 'two'], $this->document->getAttribute('list', []));
 
-        $this->document->setAttribute('list', 'zero', Document::SET_TYPE_PREPEND);
+        $this->document->setAttribute('list', 'zero', SetType::Prepend);
         $this->assertEquals(['zero', 'one', 'two'], $this->document->getAttribute('list', []));
 
-        $this->document->setAttribute('list', ['one'], Document::SET_TYPE_ASSIGN);
+        $this->document->setAttribute('list', ['one'], SetType::Assign);
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
     }
 

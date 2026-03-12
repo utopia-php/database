@@ -3,10 +3,10 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\PermissionType;
 
 class PermissionTest extends TestCase
 {
@@ -298,7 +298,7 @@ class PermissionTest extends TestCase
         $parsed = Permission::aggregate($permissions);
         $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
-        $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Update->value, PermissionType::Delete->value]);
         $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
@@ -310,7 +310,7 @@ class PermissionTest extends TestCase
             'delete("user:123")'
         ];
 
-        $parsed = Permission::aggregate($permissions, Database::PERMISSIONS);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value]);
         $this->assertEquals([
             'read("any")',
             'read("user:123")',

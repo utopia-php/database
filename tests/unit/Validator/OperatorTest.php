@@ -3,10 +3,10 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
+use Utopia\Query\Schema\ColumnType;
 
 class OperatorTest extends TestCase
 {
@@ -20,38 +20,38 @@ class OperatorTest extends TestCase
                 new Document([
                     '$id' => 'count',
                     'key' => 'count',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => ColumnType::Integer->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'score',
                     'key' => 'score',
-                    'type' => Database::VAR_FLOAT,
+                    'type' => ColumnType::Double->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'title',
                     'key' => 'title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                     'size' => 100,
                 ]),
                 new Document([
                     '$id' => 'tags',
                     'key' => 'tags',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => true,
                 ]),
                 new Document([
                     '$id' => 'active',
                     'key' => 'active',
-                    'type' => Database::VAR_BOOLEAN,
+                    'type' => ColumnType::Boolean->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'createdAt',
                     'key' => 'createdAt',
-                    'type' => Database::VAR_DATETIME,
+                    'type' => ColumnType::Datetime->value,
                     'array' => false,
                 ]),
             ],

@@ -3,12 +3,12 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Query\Schema\ColumnType;
 
 class OrderTest extends TestCase
 {
@@ -24,13 +24,13 @@ class OrderTest extends TestCase
                 new Document([
                     '$id' => 'attr',
                     'key' => 'attr',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => '$sequence',
                     'key' => '$sequence',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
             ],

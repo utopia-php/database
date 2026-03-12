@@ -4,7 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Database;
+use Utopia\Database\OrderDirection;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -15,6 +15,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait SchemalessTests
 {
@@ -23,15 +29,15 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $colName = uniqid('schemaless');
         $database->createCollection($colName);
-        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
-        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+        $database->createAttribute($colName, new Attribute(key: 'key', type: ColumnType::String, size: 50, required: true));
+        $database->createAttribute($colName, new Attribute(key: 'value', type: ColumnType::String, size: 50, required: false, default: 'value'));
 
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
 
@@ -121,7 +127,7 @@ trait SchemalessTests
         $database = $this->getDatabase();
 
         // test to ensure internal attributes are checked during creating schemaless document
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -159,7 +165,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -206,7 +212,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -260,7 +266,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -314,7 +320,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -372,7 +378,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -415,12 +421,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -510,12 +516,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -592,12 +598,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -680,7 +686,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -702,8 +708,8 @@ trait SchemalessTests
             'rank' => 2,
         ]));
 
-        $this->assertTrue($database->createIndex($col, 'idx_title_unique', Database::INDEX_UNIQUE, ['title'], [128], [Database::ORDER_ASC]));
-        $this->assertTrue($database->createIndex($col, 'idx_rank_key', Database::INDEX_KEY, ['rank'], [0], [Database::ORDER_ASC]));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_title_unique', type: IndexType::Unique, attributes: ['title'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_rank_key', type: IndexType::Key, attributes: ['rank'], lengths: [0], orders: [OrderDirection::ASC->value])));
 
         $collection = $database->getCollection($col);
         $indexes = $collection->getAttribute('indexes');
@@ -726,7 +732,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -740,10 +746,10 @@ trait SchemalessTests
             'name' => 'x'
         ]));
 
-        $this->assertTrue($database->createIndex($col, 'duplicate', Database::INDEX_KEY, ['name'], [0], [Database::ORDER_ASC]));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::ASC->value])));
 
         try {
-            $database->createIndex($col, 'duplicate', Database::INDEX_KEY, ['name'], [0], [Database::ORDER_ASC]);
+            $database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::ASC->value]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
@@ -758,7 +764,7 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only run for schemaless adapters that support object attributes
-        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes) || !$database->getAdapter()->supports(Capability::Objects)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -767,31 +773,17 @@ trait SchemalessTests
         $database->createCollection($col);
 
         // Define object attributes in metadata
-        $database->createAttribute($col, 'meta', Database::VAR_OBJECT, 0, false);
-        $database->createAttribute($col, 'meta2', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, new Attribute(key: 'meta', type: ColumnType::Object, size: 0, required: false));
+        $database->createAttribute($col, new Attribute(key: 'meta2', type: ColumnType::Object, size: 0, required: false));
 
         // Create regular key index on first object attribute
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_meta_key',
-                Database::INDEX_KEY,
-                ['meta'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, new Index(key: 'idx_meta_key', type: IndexType::Key, attributes: ['meta'], lengths: [0], orders: [OrderDirection::ASC->value]))
         );
 
         // Create unique index on second object attribute
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_meta_unique',
-                Database::INDEX_UNIQUE,
-                ['meta2'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, new Index(key: 'idx_meta_unique', type: IndexType::Unique, attributes: ['meta2'], lengths: [0], orders: [OrderDirection::ASC->value]))
         );
 
         // Verify index metadata is stored on the collection
@@ -813,7 +805,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -885,7 +877,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -995,7 +987,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1307,7 +1299,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1424,7 +1416,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1534,7 +1526,7 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1687,7 +1679,7 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1782,7 +1774,7 @@ trait SchemalessTests
 
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1960,7 +1952,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
         }
 
@@ -2245,7 +2237,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2261,15 +2253,7 @@ trait SchemalessTests
         ];
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_valid',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour TTL
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
@@ -2277,7 +2261,7 @@ trait SchemalessTests
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
         $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(Database::INDEX_TTL, $ttlIndex->getAttribute('type'));
+        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
         $now = new \DateTime();
@@ -2314,22 +2298,14 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_min',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                1 // Minimum TTL
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1))
         );
 
         $col2 = uniqid('sl_ttl_collection');
 
         $expiresAtAttr = new Document([
             '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'signed' => false,
             'required' => false,
@@ -2340,10 +2316,10 @@ trait SchemalessTests
 
         $ttlIndexDoc = new Document([
             '$id' => ID::custom('idx_ttl_collection'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 7200 // 2 hours
         ]);
 
@@ -2365,7 +2341,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2374,27 +2350,11 @@ trait SchemalessTests
         $database->createCollection($col);
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
         );
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires_duplicate',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                7200 // 2 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 7200));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2402,15 +2362,7 @@ trait SchemalessTests
         }
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                86400 // 24 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 86400));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2426,15 +2378,7 @@ trait SchemalessTests
         $this->assertNotContains('idx_ttl_deleted', $indexIds);
 
         try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted_duplicate',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                172800 // 48 hours
-            );
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 172800));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2444,15 +2388,7 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                1800 // 30 minutes
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1800))
         );
 
         $collection = $database->getCollection($col);
@@ -2467,7 +2403,7 @@ trait SchemalessTests
 
         $expiresAtAttr = new Document([
             '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'signed' => false,
             'required' => false,
@@ -2478,19 +2414,19 @@ trait SchemalessTests
 
         $ttlIndex1 = new Document([
             '$id' => ID::custom('idx_ttl_1'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 3600
         ]);
 
         $ttlIndex2 = new Document([
             '$id' => ID::custom('idx_ttl_2'),
-            'type' => Database::INDEX_TTL,
+            'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
+            'orders' => [OrderDirection::ASC->value],
             'ttl' => 7200
         ]);
 
@@ -2510,7 +2446,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2623,12 +2559,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2645,15 +2581,7 @@ trait SchemalessTests
 
         // Create TTL index with 60 seconds expiry
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2765,12 +2693,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2787,15 +2715,7 @@ trait SchemalessTests
 
         // Create TTL index with 10 seconds expiry (also used as cache TTL)
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2858,7 +2778,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2988,12 +2908,12 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3010,15 +2930,7 @@ trait SchemalessTests
 
         // Create TTL index on expiresAt field
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -3158,7 +3070,7 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only meaningful for schemaless adapters
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3167,7 +3079,7 @@ trait SchemalessTests
         $database->createCollection($col);
 
         // Define top-level object attribute (metadata only; schemaless adapter won't enforce)
-        $database->createAttribute($col, 'profile', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, new Attribute(key: 'profile', type: ColumnType::Object, size: 0, required: false));
 
         // Seed documents
         $database->createDocuments($col, [
@@ -3195,26 +3107,12 @@ trait SchemalessTests
 
         // Create KEY index on nested path
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_profile_user_email_key',
-                Database::INDEX_KEY,
-                ['profile.user.email'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, new Index(key: 'idx_profile_user_email_key', type: IndexType::Key, attributes: ['profile.user.email'], lengths: [0], orders: [OrderDirection::ASC->value]))
         );
 
         // Create UNIQUE index on nested path and verify enforcement
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_profile_user_id_unique',
-                Database::INDEX_UNIQUE,
-                ['profile.user.id'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, new Index(key: 'idx_profile_user_id_unique', type: IndexType::Unique, attributes: ['profile.user.id'], lengths: [0], orders: [OrderDirection::ASC->value]))
         );
 
         try {
@@ -3248,7 +3146,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -3376,7 +3274,7 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }

@@ -633,22 +633,22 @@ $database->createRelationship(
 ); 
 
 // Relationship onDelete types
-Database::RELATION_MUTATE_CASCADE, 
-Database::RELATION_MUTATE_SET_NULL,
-Database::RELATION_MUTATE_RESTRICT,
+ForeignKeyAction::Cascade->value,
+ForeignKeyAction::SetNull->value,
+ForeignKeyAction::Restrict->value,
 
 // Update the relationship with the default reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: Database::RELATION_MUTATE_CASCADE
+    onDelete: ForeignKeyAction::Cascade->value
 ); 
 
 // Update the relationship with custom reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: Database::RELATION_MUTATE_CASCADE, 
+    onDelete: ForeignKeyAction::Cascade->value, 
     newKey: 'movies_id', 
     newTwoWayKey: 'users_id', 
     twoWay: true
@@ -755,25 +755,25 @@ $database->decreaseDocumentAttribute(
 // Update the value of an attribute in a document
 
 // Set types
-Document::SET_TYPE_ASSIGN, // Assign the new value directly
-Document::SET_TYPE_APPEND, // Append the new value to end of the array
-Document::SET_TYPE_PREPEND // Prepend the new value to start of the array
+SetType::Assign, // Assign the new value directly
+SetType::Append, // Append the new value to end of the array
+SetType::Prepend // Prepend the new value to start of the array
 Note: Using append/prepend with an attribute which is not an array, it will be set to an array containing the new value.
 
 $document->setAttribute(key: 'name', 'Chris Smoove')
-         ->setAttribute(key: 'age', 33, Document::SET_TYPE_ASSIGN);
+         ->setAttribute(key: 'age', 33, SetType::Assign);
 
 $database->updateDocument(
-    collection: 'users', 
-    id: $document->getId(), 
+    collection: 'users',
+    id: $document->getId(),
     document: $document
-);         
+);
 
 // Update the permissions of a document
-$document->setAttribute('$permissions', Permission::read(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::create(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::update(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::delete(Role::any()), Document::SET_TYPE_APPEND)
+$document->setAttribute('$permissions', Permission::read(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::create(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::update(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::delete(Role::any()), SetType::Append)
 
 $database->updateDocument(
     collection: 'users', 

@@ -2112,14 +2112,14 @@ trait ManyToManyTests
             'products' => ['prod_c'],
         ]));
 
-        // --- 1-level deep: query brands by product title (many-to-many) ---
+        // 1-level deep: query brands by product title (many-to-many)
         $brands = $database->find('brands', [
             Query::equal('products.title', ['Product A']),
         ]);
         $this->assertCount(1, $brands);
         $this->assertEquals('brand_x', $brands[0]->getId());
 
-        // --- 2-level deep: query brands by product→tag label (many-to-many→many-to-many) ---
+        // 2-level deep: query brands by product→tag label (many-to-many→many-to-many)
         // "Eco-Friendly" tag is on prod_a (BrandX) and prod_c (BrandY)
         $brands = $database->find('brands', [
             Query::equal('products.tags.label', ['Eco-Friendly']),
@@ -2143,7 +2143,7 @@ trait ManyToManyTests
         $this->assertCount(1, $brands);
         $this->assertEquals('brand_x', $brands[0]->getId());
 
-        // --- 2-level deep from the child side: query tags by product→brand name ---
+        // 2-level deep from the child side: query tags by product→brand name
         $tags = $database->find('tags', [
             Query::equal('products.brands.name', ['BrandY']),
         ]);
@@ -2159,7 +2159,7 @@ trait ManyToManyTests
         $this->assertContains('tag_premium', $tagIds);
         $this->assertContains('tag_sale', $tagIds);
 
-        // --- No match returns empty ---
+        // No match returns empty
         $brands = $database->find('brands', [
             Query::equal('products.tags.label', ['NonExistent']),
         ]);

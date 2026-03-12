@@ -3298,7 +3298,7 @@ trait SchemalessTests
         $recentPastDate = '2020-01-01T00:00:00.000Z';
         $nearFutureDate = '2025-01-01T00:00:00.000Z';
 
-        // --- createdBefore ---
+        // createdBefore
         $documents = $database->find('schemaless_time', [
             Query::createdBefore($futureDate),
             Query::limit(1),
@@ -3311,7 +3311,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- createdAfter ---
+        // createdAfter
         $documents = $database->find('schemaless_time', [
             Query::createdAfter($pastDate),
             Query::limit(1),
@@ -3324,7 +3324,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- updatedBefore ---
+        // updatedBefore
         $documents = $database->find('schemaless_time', [
             Query::updatedBefore($futureDate),
             Query::limit(1),
@@ -3337,7 +3337,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- updatedAfter ---
+        // updatedAfter
         $documents = $database->find('schemaless_time', [
             Query::updatedAfter($pastDate),
             Query::limit(1),
@@ -3350,7 +3350,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- createdBetween ---
+        // createdBetween
         $documents = $database->find('schemaless_time', [
             Query::createdBetween($pastDate, $futureDate),
             Query::limit(25),
@@ -3375,7 +3375,7 @@ trait SchemalessTests
         ]);
         $this->assertGreaterThanOrEqual($count, count($documents));
 
-        // --- updatedBetween ---
+        // updatedBetween
         $documents = $database->find('schemaless_time', [
             Query::updatedBetween($pastDate, $futureDate),
             Query::limit(25),

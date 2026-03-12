@@ -1135,7 +1135,6 @@ class SQLite extends MariaDB
      * Get SQL expression for operator
      *
      * IMPORTANT: SQLite JSON Limitations
-     * -----------------------------------
      * Array operators using json_each() and json_group_array() have type conversion behavior:
      * - Numbers are preserved but may lose precision (e.g., 1.0 becomes 1)
      * - Booleans become integers (true→1, false→0)

@@ -21,10 +21,14 @@ RUN COMPOSER_MIRROR_PATH_REPOS=1 composer install \
     --prefer-dist
 
 # Replace symlink with actual copy (composer path repos may still symlink)
-RUN if [ -L /usr/local/src/vendor/utopia-php/query ]; then \
-      rm /usr/local/src/vendor/utopia-php/query && \
-      cp -r /usr/local/query /usr/local/src/vendor/utopia-php/query; \
-    fi
+RUN echo "=== Before copy ===" && \
+    ls -la /usr/local/src/vendor/utopia-php/query && \
+    rm -rf /usr/local/src/vendor/utopia-php/query && \
+    cp -r /usr/local/query /usr/local/src/vendor/utopia-php/query && \
+    echo "=== After copy ===" && \
+    ls /usr/local/src/vendor/utopia-php/query/src/Query/Schema/ && \
+    echo "=== Autoloader ===" && \
+    grep -i query /usr/local/src/vendor/composer/autoload_psr4.php
 
 FROM php:8.4.18-cli-alpine3.22 AS compile
 

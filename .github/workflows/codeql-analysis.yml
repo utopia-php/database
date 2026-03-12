@@ -13,6 +13,7 @@ jobs:
           fetch-depth: 2
 
       - run: git checkout HEAD^2
+        if: github.event_name == 'pull_request'
 
       - name: Run CodeQL
         run: |

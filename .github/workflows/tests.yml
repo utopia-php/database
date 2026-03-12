@@ -6,9 +6,9 @@ concurrency:
 
 env:
   IMAGE: databases-dev
-  CACHE_KEY: databases-dev-${{ github.event.pull_request.head.sha }}
+  CACHE_KEY: databases-dev-${{ github.event.pull_request.head.sha || github.sha }}
 
-on: [pull_request]
+on: [pull_request, workflow_dispatch]
 
 jobs:
   setup:

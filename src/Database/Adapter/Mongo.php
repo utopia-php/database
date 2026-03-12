@@ -2026,7 +2026,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         $options = [];
@@ -2287,7 +2287,7 @@ class Mongo extends Adapter
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         /**
@@ -2377,7 +2377,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in

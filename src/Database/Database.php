@@ -40,7 +40,6 @@ use Utopia\Database\OrderDirection;
 use Utopia\Database\PermissionType;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
-use Utopia\Database\Adapter\Feature\Spatial;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Hook\Relationship;
@@ -458,7 +457,7 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                if ($this->adapter instanceof Spatial) {
+                if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodePoint($value);
                 }
                 return null;
@@ -489,7 +488,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter instanceof Spatial) {
+                if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodeLinestring($value);
                 }
                 return null;
@@ -520,7 +519,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter instanceof Spatial) {
+                if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodePolygon($value);
                 }
                 return null;

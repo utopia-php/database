@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: utopia-php/query
+          ref: feat-builder
           path: query
 
       - name: Set up Docker Buildx

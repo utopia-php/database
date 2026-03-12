@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: utopia-php/query
+          ref: feat-builder
           path: query
 
       - run: git checkout HEAD^2
@@ -28,7 +29,6 @@ jobs:
           docker run --rm -v $PWD/database:/app -v $PWD/query:/query -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
           "sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
            sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
-           composer update --profile --ignore-platform-reqs && \
-           ls -la vendor/utopia-php/query && \
-           ls vendor/utopia-php/query/src/Query/Schema/ && \
+           sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
+           composer install --profile --ignore-platform-reqs && \
            composer check"

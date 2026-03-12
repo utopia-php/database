@@ -11,11 +11,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          path: database
+
+      - name: Checkout query library
+        uses: actions/checkout@v4
+        with:
+          repository: utopia-php/query
+          path: query
 
       - run: git checkout HEAD^2
         if: github.event_name == 'pull_request'
+        working-directory: database
 
       - name: Run Linter
         run: |
-          docker run --rm -v $PWD:/app -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
-          "composer install --profile --ignore-platform-reqs && composer lint"
+          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
+          "sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
+           sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
+           composer install --profile --ignore-platform-reqs && composer lint"

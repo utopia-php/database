@@ -11,7 +11,7 @@ class Vector extends Validator
     /**
      * Vector constructor.
      *
-     * @param int $size The size (number of elements) the vector should have
+     * @param  int  $size  The size (number of elements) the vector should have
      */
     public function __construct(int $size)
     {
@@ -22,8 +22,6 @@ class Vector extends Validator
      * Get Description
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -34,25 +32,22 @@ class Vector extends Validator
      * Is valid
      *
      * Validation will pass when $value is a valid vector array or JSON string
-     *
-     * @param mixed $value
-     * @return bool
      */
     public function isValid(mixed $value): bool
     {
         if (is_string($value)) {
             $decoded = json_decode($value, true);
-            if (!is_array($decoded)) {
+            if (! is_array($decoded)) {
                 return false;
             }
             $value = $decoded;
         }
 
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             return false;
         }
 
-        if (!\array_is_list($value)) {
+        if (! \array_is_list($value)) {
             return false;
         }
 
@@ -62,7 +57,7 @@ class Vector extends Validator
 
         // Check that all values are int or float (not strings, booleans, null, arrays, objects)
         foreach ($value as $component) {
-            if (!\is_int($component) && !\is_float($component)) {
+            if (! \is_int($component) && ! \is_float($component)) {
                 return false;
             }
         }
@@ -74,8 +69,6 @@ class Vector extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -86,8 +79,6 @@ class Vector extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

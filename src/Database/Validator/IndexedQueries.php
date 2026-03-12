@@ -25,9 +25,10 @@ class IndexedQueries extends Queries
      *
      * This Queries Validator filters indexes for only available indexes
      *
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
-     * @param array<Base> $validators
+     * @param  array<Document>  $attributes
+     * @param  array<Document>  $indexes
+     * @param  array<Base>  $validators
+     *
      * @throws Exception
      */
     public function __construct(array $attributes = [], array $indexes = [], array $validators = [])
@@ -36,17 +37,17 @@ class IndexedQueries extends Queries
 
         $this->indexes[] = new Document([
             'type' => IndexType::Unique->value,
-            'attributes' => ['$id']
+            'attributes' => ['$id'],
         ]);
 
         $this->indexes[] = new Document([
             'type' => IndexType::Key->value,
-            'attributes' => ['$createdAt']
+            'attributes' => ['$createdAt'],
         ]);
 
         $this->indexes[] = new Document([
             'type' => IndexType::Key->value,
-            'attributes' => ['$updatedAt']
+            'attributes' => ['$updatedAt'],
         ]);
 
         foreach ($indexes as $index) {
@@ -59,8 +60,7 @@ class IndexedQueries extends Queries
     /**
      * Count vector queries across entire query tree
      *
-     * @param array<Query> $queries
-     * @return int
+     * @param  array<Query>  $queries
      */
     private function countVectorQueries(array $queries): int
     {
@@ -80,13 +80,13 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * @param mixed $value
-     * @return bool
+     * @param  mixed  $value
+     *
      * @throws Exception
      */
     public function isValid($value): bool
     {
-        if (!parent::isValid($value)) {
+        if (! parent::isValid($value)) {
             return false;
         }
         $queries = [];
@@ -113,6 +113,7 @@ class IndexedQueries extends Queries
         $vectorQueryCount = $this->countVectorQueries($queries);
         if ($vectorQueryCount > 1) {
             $this->message = 'Cannot use multiple vector queries in a single request';
+
             return false;
         }
 
@@ -135,8 +136,9 @@ class IndexedQueries extends Queries
                     }
                 }
 
-                if (!$matched) {
+                if (! $matched) {
                     $this->message = "Searching by attribute \"{$filter->getAttribute()}\" requires a fulltext index.";
+
                     return false;
                 }
             }

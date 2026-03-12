@@ -4,7 +4,9 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
-use Utopia\Database\OrderDirection;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -13,12 +15,10 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
+use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Index as IndexValidator;
-use Utopia\Database\Capability;
-use Utopia\Database\Database;
-use Utopia\Database\Attribute;
-use Utopia\Database\Index;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -116,8 +116,6 @@ trait IndexTests
         $database->deleteCollection('indexes');
     }
 
-
-
     /**
      * @throws Exception|Throwable
      */
@@ -153,7 +151,7 @@ trait IndexTests
                 '$id' => ID::custom('index1'),
                 'type' => IndexType::Key->value,
                 'attributes' => ['title1', 'title2'],
-                'lengths' => [701,50],
+                'lengths' => [701, 50],
                 'orders' => [],
             ]),
         ];
@@ -162,7 +160,7 @@ trait IndexTests
             '$id' => ID::custom('index_length'),
             'name' => 'test',
             'attributes' => $attributes,
-            'indexes' => $indexes
+            'indexes' => $indexes,
         ]);
 
         /** @var Database $database */
@@ -215,7 +213,7 @@ trait IndexTests
         $collection->setAttribute('indexes', $indexes);
 
         if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
-            $errorMessage = 'Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength();
+            $errorMessage = 'Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
 
@@ -253,7 +251,7 @@ trait IndexTests
             '$id' => ID::custom('index_length'),
             'name' => 'test',
             'attributes' => $attributes,
-            'indexes' => $indexes
+            'indexes' => $indexes,
         ]);
 
         // not using $indexes[0] as the index validator skips indexes with same id
@@ -287,9 +285,9 @@ trait IndexTests
 
         $this->assertFalse($validator->isValid($newIndex));
 
-        if (!$database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
             $this->assertEquals('Fulltext index is not supported', $validator->getDescription());
-        } elseif (!$database->getAdapter()->supports(Capability::MultipleFulltextIndexes)) {
+        } elseif (! $database->getAdapter()->supports(Capability::MultipleFulltextIndexes)) {
             $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
         } elseif ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
@@ -301,13 +299,12 @@ trait IndexTests
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            if (!$database->getAdapter()->supports(Capability::Fulltext)) {
+            if (! $database->getAdapter()->supports(Capability::Fulltext)) {
                 $this->assertEquals('Fulltext index is not supported', $e->getMessage());
             } else {
                 $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
             }
         }
-
 
         $indexes = [
             new Document([
@@ -357,8 +354,9 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -372,7 +370,6 @@ trait IndexTests
         } catch (Throwable $e) {
             $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
         }
-
 
         $database->createAttribute(__FUNCTION__, new Attribute(key: 'title2', type: ColumnType::String, size: 100, required: true));
         $database->createIndex(__FUNCTION__, new Index(key: 'index_title2', type: IndexType::Key, attributes: ['title2'], lengths: [0]));
@@ -407,7 +404,6 @@ trait IndexTests
         $this->assertCount(2, $numbers->getAttribute('indexes'));
     }
 
-
     /**
      * Sets up the 'numbers' collection with renamed indexes as testRenameIndex would.
      */
@@ -421,7 +417,7 @@ trait IndexTests
 
         $database = $this->getDatabase();
 
-        if (!$database->exists($this->testDatabase, 'numbers')) {
+        if (! $database->exists($this->testDatabase, 'numbers')) {
             $database->createCollection('numbers');
             $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
@@ -434,8 +430,8 @@ trait IndexTests
     }
 
     /**
-    * @expectedException Exception
-    */
+     * @expectedException Exception
+     */
     public function testRenameIndexMissing(): void
     {
         $this->initRenameIndexFixture();
@@ -445,8 +441,8 @@ trait IndexTests
     }
 
     /**
-    * @expectedException Exception
-    */
+     * @expectedException Exception
+     */
     public function testRenameIndexExisting(): void
     {
         $this->initRenameIndexFixture();
@@ -454,7 +450,6 @@ trait IndexTests
         $this->expectExceptionMessage('Index name already used');
         $index = $database->renameIndex('numbers', 'index3', 'index2');
     }
-
 
     public function testExceptionIndexLimit(): void
     {
@@ -474,7 +469,7 @@ trait IndexTests
             $this->assertEquals(true, $database->createIndex('indexLimit', new Index(key: "index{$i}", type: IndexType::Key, attributes: ["test{$i}"], lengths: [16])));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, $database->createIndex('indexLimit', new Index(key: "index64", type: IndexType::Key, attributes: ["test64"], lengths: [16])));
+        $this->assertEquals(false, $database->createIndex('indexLimit', new Index(key: 'index64', type: IndexType::Key, attributes: ['test64'], lengths: [16])));
 
         $database->deleteCollection('indexLimit');
     }
@@ -482,8 +477,9 @@ trait IndexTests
     public function testListDocumentSearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
-        if (!$fulltextSupport) {
+        if (! $fulltextSupport) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -549,8 +545,9 @@ trait IndexTests
     public function testEmptySearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
-        if (!$fulltextSupport) {
+        if (! $fulltextSupport) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -586,8 +583,9 @@ trait IndexTests
     {
 
         $fulltextSupport = $this->getDatabase()->getAdapter()->supports(Capability::Fulltext);
-        if (!$fulltextSupport) {
+        if (! $fulltextSupport) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -614,10 +612,10 @@ trait IndexTests
                     $this->fail('Expected exception when creating second fulltext index, but none was thrown');
                 }
             } catch (Throwable $e) {
-                if (!$supportsMultipleFulltext) {
+                if (! $supportsMultipleFulltext) {
                     $this->assertTrue(true, 'Multiple fulltext indexes are not supported and exception was thrown as expected');
                 } else {
-                    $this->fail('Unexpected exception when creating second fulltext index: ' . $e->getMessage());
+                    $this->fail('Unexpected exception when creating second fulltext index: '.$e->getMessage());
                 }
             }
 
@@ -654,35 +652,35 @@ trait IndexTests
                 }
 
             } catch (Throwable $e) {
-                if (!$supportsIdenticalIndexes) {
+                if (! $supportsIdenticalIndexes) {
                     $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
                 } else {
-                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                    $this->fail('Unexpected exception when creating identical index: '.$e->getMessage());
                 }
 
             }
 
             // Test with different attributes order - faliure
             try {
-                $database->createIndex($collectionId, new Index(key: 'index3', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [ OrderDirection::ASC->value, OrderDirection::DESC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index3', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
-                if (!$supportsIdenticalIndexes) {
+                if (! $supportsIdenticalIndexes) {
                     $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
                 } else {
-                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                    $this->fail('Unexpected exception when creating identical index: '.$e->getMessage());
                 }
             }
 
             // Test with different orders  order - faliure
             try {
-                $database->createIndex($collectionId, new Index(key: 'index4', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [ OrderDirection::DESC->value, OrderDirection::ASC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index4', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::DESC->value, OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
-                if (!$supportsIdenticalIndexes) {
+                if (! $supportsIdenticalIndexes) {
                     $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
                 } else {
-                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                    $this->fail('Unexpected exception when creating identical index: '.$e->getMessage());
                 }
             }
 
@@ -691,7 +689,7 @@ trait IndexTests
                 $database->createIndex($collectionId, new Index(key: 'index5', type: IndexType::Key, attributes: ['name'], lengths: [], orders: [OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
-                $this->fail('Unexpected exception when creating index with different attributes: ' . $e->getMessage());
+                $this->fail('Unexpected exception when creating index with different attributes: '.$e->getMessage());
             }
 
             // Test with different orders - success
@@ -699,7 +697,7 @@ trait IndexTests
                 $database->createIndex($collectionId, new Index(key: 'index6', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value]));
                 $this->assertTrue(true, 'Index with different orders was created successfully');
             } catch (Throwable $e) {
-                $this->fail('Unexpected exception when creating index with different orders: ' . $e->getMessage());
+                $this->fail('Unexpected exception when creating index with different orders: '.$e->getMessage());
             }
         } finally {
             // Clean up
@@ -710,8 +708,9 @@ trait IndexTests
     public function testTrigramIndex(): void
     {
         $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
-        if (!$trigramSupport) {
+        if (! $trigramSupport) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -759,8 +758,9 @@ trait IndexTests
     public function testTrigramIndexValidation(): void
     {
         $trigramSupport = $this->getDatabase()->getAdapter()->supports(Capability::TrigramIndex);
-        if (!$trigramSupport) {
+        if (! $trigramSupport) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -834,8 +834,9 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -848,7 +849,7 @@ trait IndexTests
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $this->assertTrue(
@@ -863,7 +864,7 @@ trait IndexTests
         $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
-        $now = new \DateTime();
+        $now = new \DateTime;
         $future1 = (clone $now)->modify('+2 hours');
         $future2 = (clone $now)->modify('+1 hour');
         $past = (clone $now)->modify('-1 hour');
@@ -883,7 +884,7 @@ trait IndexTests
                 '$id' => 'doc3',
                 '$permissions' => $permissions,
                 'expiresAt' => $past->format(\DateTime::ATOM),
-            ])
+            ]),
         ]);
 
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
@@ -911,7 +912,7 @@ trait IndexTests
             'attributes' => ['expiresAt'],
             'lengths' => [],
             'orders' => [OrderDirection::ASC->value],
-            'ttl' => 7200 // 2 hours
+            'ttl' => 7200, // 2 hours
         ]);
 
         $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
@@ -932,8 +933,9 @@ trait IndexTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::TTLIndexes)) {
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1012,7 +1014,7 @@ trait IndexTests
             'attributes' => ['expiresAt'],
             'lengths' => [],
             'orders' => [OrderDirection::ASC->value],
-            'ttl' => 3600
+            'ttl' => 3600,
         ]);
 
         $ttlIndex2 = new Document([
@@ -1021,7 +1023,7 @@ trait IndexTests
             'attributes' => ['expiresAt'],
             'lengths' => [],
             'orders' => [OrderDirection::ASC->value],
-            'ttl' => 7200
+            'ttl' => 7200,
         ]);
 
         try {

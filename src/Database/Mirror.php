@@ -5,12 +5,9 @@ namespace Utopia\Database;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Index;
-use Utopia\Database\Mirroring\Filter;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Hook\Relationship as RelationshipHook;
 use Utopia\Database\Hook\RelationshipHandler;
-use Utopia\Database\Relationship;
+use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -19,6 +16,7 @@ use Utopia\Query\Schema\IndexType;
 class Mirror extends Database
 {
     protected Database $source;
+
     protected ?Database $destination;
 
     /**
@@ -43,9 +41,7 @@ class Mirror extends Database
     ];
 
     /**
-     * @param Database $source
-     * @param ?Database $destination
-     * @param array<Filter> $filters
+     * @param  array<Filter>  $filters
      */
     public function __construct(
         Database $source,
@@ -80,8 +76,7 @@ class Mirror extends Database
     }
 
     /**
-     * @param callable(string, \Throwable): void $callback
-     * @return void
+     * @param  callable(string, \Throwable): void  $callback
      */
     public function onError(callable $callback): void
     {
@@ -89,9 +84,7 @@ class Mirror extends Database
     }
 
     /**
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
      */
     protected function delegate(string $method, array $args = []): mixed
     {
@@ -249,12 +242,13 @@ class Mirror extends Database
                 $this->source->createDocument('upgrades', new Document([
                     '$id' => $id,
                     'collectionId' => $id,
-                    'status' => 'upgraded'
+                    'status' => 'upgraded',
                 ]));
             });
         } catch (\Throwable $err) {
             $this->logError('createCollection', $err);
         }
+
         return $result;
     }
 
@@ -604,8 +598,7 @@ class Mirror extends Database
             }
 
             $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->createDocuments(
+                fn () => $this->destination->createDocuments(
                     $collection,
                     $clones,
                     $batchSize,
@@ -720,8 +713,7 @@ class Mirror extends Database
             }
 
             $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->updateDocuments(
+                fn () => $this->destination->updateDocuments(
                     $collection,
                     $clone,
                     $queries,
@@ -791,8 +783,7 @@ class Mirror extends Database
             }
 
             $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->upsertDocuments(
+                fn () => $this->destination->upsertDocuments(
                     $collection,
                     $clones,
                     $batchSize,
@@ -968,7 +959,6 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -993,7 +983,7 @@ class Mirror extends Database
     {
         $collection = $this->source->getCollection('upgrades');
 
-        if (!$collection->isEmpty()) {
+        if (! $collection->isEmpty()) {
             return;
         }
 
@@ -1037,7 +1027,7 @@ class Mirror extends Database
     protected function getUpgradeStatus(string $collection): ?Document
     {
         if ($collection === 'upgrades' || $collection === Database::METADATA) {
-            return new Document();
+            return new Document;
         }
 
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
@@ -1092,22 +1082,21 @@ class Mirror extends Database
     /**
      * Set custom document class for a collection
      *
-     * @param string $collection Collection ID
-     * @param class-string<Document> $className Fully qualified class name that extends Document
-     * @return static
+     * @param  string  $collection  Collection ID
+     * @param  class-string<Document>  $className  Fully qualified class name that extends Document
      */
     public function setDocumentType(string $collection, string $className): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
         $this->documentTypes[$collection] = $className;
+
         return $this;
     }
 
     /**
      * Clear document type mapping for a collection
      *
-     * @param string $collection Collection ID
-     * @return static
+     * @param  string  $collection  Collection ID
      */
     public function clearDocumentType(string $collection): static
     {
@@ -1119,8 +1108,6 @@ class Mirror extends Database
 
     /**
      * Clear all document type mappings
-     *
-     * @return static
      */
     public function clearAllDocumentTypes(): static
     {
@@ -1129,5 +1116,4 @@ class Mirror extends Database
 
         return $this;
     }
-
 }

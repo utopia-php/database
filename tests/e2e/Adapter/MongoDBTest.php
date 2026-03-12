@@ -13,29 +13,27 @@ use Utopia\Mongo\Client;
 class MongoDBTest extends Base
 {
     public static ?Database $database = null;
+
     protected static string $namespace;
 
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mongodb";
+        return 'mongodb';
     }
 
     /**
-     * @return Database
      * @throws Exception
      */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis', 6379);
         $redis->select(4);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
@@ -55,7 +53,7 @@ class MongoDBTest extends Base
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -69,7 +67,7 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
-    public function testCreateExistsDelete(): void
+    public function test_create_exists_delete(): void
     {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
         $this->assertNotNull($this->getDatabase()->create());
@@ -78,22 +76,22 @@ class MongoDBTest extends Base
         $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
     }
 
-    public function testRenameAttribute(): void
+    public function test_rename_attribute(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testRenameAttributeExisting(): void
+    public function test_rename_attribute_existing(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testUpdateAttributeStructure(): void
+    public function test_update_attribute_structure(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testKeywords(): void
+    public function test_keywords(): void
     {
         $this->assertTrue(true);
     }

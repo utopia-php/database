@@ -21,7 +21,7 @@ class DocumentsQueriesTest extends TestCase
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->collection = [
             '$id' => Database::METADATA,
@@ -87,7 +87,7 @@ class DocumentsQueriesTest extends TestCase
                     'signed' => false,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             'indexes' => [
                 new Document([
@@ -96,33 +96,31 @@ class DocumentsQueriesTest extends TestCase
                     'attributes' => [
                         'title',
                         'description',
-                        'price'
+                        'price',
                     ],
                     'orders' => [
                         'ASC',
-                        'DESC'
+                        'DESC',
                     ],
                 ]),
                 new Document([
                     '$id' => ID::custom('testindex3'),
                     'type' => 'fulltext',
                     'attributes' => [
-                        'title'
+                        'title',
                     ],
-                    'orders' => []
+                    'orders' => [],
                 ]),
             ],
         ];
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     /**
      * @throws Exception
      */
-    public function testValidQueries(): void
+    public function test_valid_queries(): void
     {
         $validator = new Documents(
             $this->collection['attributes'],
@@ -160,7 +158,7 @@ class DocumentsQueriesTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testInvalidQueries(): void
+    public function test_invalid_queries(): void
     {
         $validator = new Documents(
             $this->collection['attributes'],
@@ -182,12 +180,11 @@ class DocumentsQueriesTest extends TestCase
 
         $queries = [Query::limit(-1)];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
+        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and '.number_format(PHP_INT_MAX), $validator->getDescription());
 
         $queries = [Query::equal('title', [])]; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
-
 
     }
 }

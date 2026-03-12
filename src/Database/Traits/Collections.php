@@ -4,6 +4,8 @@ namespace Utopia\Database\Traits;
 
 use Exception;
 use Utopia\CLI\Console;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -15,12 +17,10 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Query;
-use Utopia\Database\Attribute;
 use Utopia\Database\Index;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
-use Utopia\Database\Capability;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -29,13 +29,10 @@ trait Collections
     /**
      * Create Collection
      *
-     * @param string $id
-     * @param array<Attribute> $attributes
-     * @param array<Index> $indexes
-     * @param array<string>|null $permissions
-     * @param bool $documentSecurity
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     * @param  array<string>|null  $permissions
      *
-     * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
@@ -48,7 +45,7 @@ trait Collections
         foreach ($attributes as $attribute) {
             if (in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object], true)) {
                 $existingFilters = $attribute->filters;
-                if (!is_array($existingFilters)) {
+                if (! is_array($existingFilters)) {
                     $existingFilters = [$existingFilters];
                 }
                 $attribute->filters = array_values(
@@ -62,16 +59,16 @@ trait Collections
         ];
 
         if ($this->validate) {
-            $validator = new Permissions();
-            if (!$validator->isValid($permissions)) {
+            $validator = new Permissions;
+            if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
 
-        if (!$collection->isEmpty() && $id !== self::METADATA) {
-            throw new DuplicateException('Collection ' . $id . ' already exists');
+        if (! $collection->isEmpty() && $id !== self::METADATA) {
+            throw new DuplicateException('Collection '.$id.' already exists');
         }
 
         // Enforce single TTL index per collection
@@ -96,7 +93,7 @@ trait Collections
                          * mysql does not save length in collection when length = attributes size
                          */
                         if ($collectionAttribute->type === ColumnType::String) {
-                            if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->size && $this->adapter->getMaxIndexLength() > 0) {
+                            if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->size && $this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = null;
                             }
                         }
@@ -128,7 +125,7 @@ trait Collections
             'name' => $id,
             'attributes' => $attributeDocs,
             'indexes' => $indexDocs,
-            'documentSecurity' => $documentSecurity
+            'documentSecurity' => $documentSecurity,
         ]);
 
         if ($this->validate) {
@@ -154,7 +151,7 @@ trait Collections
                 $this->adapter->supports(Capability::Objects)
             );
             foreach ($indexDocs as $indexDoc) {
-                if (!$validator->isValid($indexDoc)) {
+                if (! $validator->isValid($indexDoc)) {
                     throw new IndexException($validator->getDescription());
                 }
             }
@@ -162,7 +159,7 @@ trait Collections
 
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
-            throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
+            throw new LimitException('Index limit of '.$this->adapter->getLimitForIndexes().' exceeded. Cannot create collection.');
         }
 
         // Check attribute limits, if given
@@ -171,14 +168,14 @@ trait Collections
                 $this->adapter->getLimitForAttributes() > 0 &&
                 $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
             ) {
-                throw new LimitException('Attribute limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Attribute limit of '.$this->adapter->getLimitForAttributes().' exceeded. Cannot create collection.');
             }
 
             if (
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Document size limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Document size limit of '.$this->adapter->getDocumentSizeLimit().' exceeded. Cannot create collection.');
             }
         }
 
@@ -205,10 +202,10 @@ trait Collections
                 try {
                     $this->cleanupCollection($id);
                 } catch (\Throwable $e) {
-                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+                    Console::error("Failed to rollback collection '{$id}': ".$e->getMessage());
                 }
             }
-            throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
+            throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);
         }
 
         try {
@@ -223,19 +220,16 @@ trait Collections
     /**
      * Update Collections Permissions.
      *
-     * @param string $id
-     * @param array<string> $permissions
-     * @param bool $documentSecurity
+     * @param  array<string>  $permissions
      *
-     * @return Document
      * @throws ConflictException
      * @throws DatabaseException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
         if ($this->validate) {
-            $validator = new Permissions();
-            if (!$validator->isValid($permissions)) {
+            $validator = new Permissions;
+            if (! $validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
@@ -271,9 +265,7 @@ trait Collections
     /**
      * Get Collection
      *
-     * @param string $id
      *
-     * @return Document
      * @throws DatabaseException
      */
     public function getCollection(string $id): Document
@@ -286,7 +278,7 @@ trait Collections
             && $collection->getTenant() !== null
             && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
-            return new Document();
+            return new Document;
         }
 
         try {
@@ -301,17 +293,16 @@ trait Collections
     /**
      * List Collections
      *
-     * @param int $offset
-     * @param int $limit
      *
      * @return array<Document>
+     *
      * @throws Exception
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
         $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
-            Query::offset($offset)
+            Query::offset($offset),
         ]));
 
         try {
@@ -326,9 +317,7 @@ trait Collections
     /**
      * Get Collection Size
      *
-     * @param string $collection
      *
-     * @return int
      * @throws Exception
      */
     public function getSizeOfCollection(string $collection): int
@@ -348,10 +337,6 @@ trait Collections
 
     /**
      * Get Collection Size on disk
-     *
-     * @param string $collection
-     *
-     * @return int
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
@@ -374,9 +359,6 @@ trait Collections
 
     /**
      * Analyze a collection updating its metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
      */
     public function analyzeCollection(string $collection): bool
     {
@@ -386,9 +368,7 @@ trait Collections
     /**
      * Delete Collection
      *
-     * @param string $id
      *
-     * @return bool
      * @throws DatabaseException
      */
     public function deleteCollection(string $id): bool
@@ -439,7 +419,7 @@ trait Collections
                     }
                 }
                 throw new DatabaseException(
-                    "Failed to persist metadata for collection deletion '{$id}': " . $e->getMessage(),
+                    "Failed to persist metadata for collection deletion '{$id}': ".$e->getMessage(),
                     previous: $e
                 );
             }
@@ -461,9 +441,9 @@ trait Collections
     /**
      * Cleanup (delete) a collection with retry logic
      *
-     * @param string $collectionId The collection ID
-     * @param int $maxAttempts Maximum retry attempts
-     * @return void
+     * @param  string  $collectionId  The collection ID
+     * @param  int  $maxAttempts  Maximum retry attempts
+     *
      * @throws DatabaseException If cleanup fails after all retries
      */
     private function cleanupCollection(

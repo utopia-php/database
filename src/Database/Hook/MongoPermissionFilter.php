@@ -10,12 +10,11 @@ class MongoPermissionFilter implements Read
 {
     public function __construct(
         private Authorization $authorization,
-    ) {
-    }
+    ) {}
 
     public function applyFilters(array $filters, string $collection, string $forPermission = 'read'): array
     {
-        if (!$this->authorization->getStatus()) {
+        if (! $this->authorization->getStatus()) {
             return $filters;
         }
 

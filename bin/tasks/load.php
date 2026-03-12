@@ -25,7 +25,6 @@ $namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi',
 $genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
 $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
-
 /**
  * @Example
  * docker compose exec tests bin/load --adapter=mariadb --limit=1000
@@ -35,10 +34,9 @@ $cli
     ->desc('Load database with mock data for testing')
     ->param('adapter', '', new Text(0), 'Database adapter')
     ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
-    ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
+    ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) {
-
 
         $createSchema = function (Database $database): void {
             if ($database->exists($database->getDatabase())) {
@@ -61,14 +59,13 @@ $cli
             $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
         };
 
-
         $start = null;
         $namespace = '_ns';
-        $cache = new Cache(new NoCache());
+        $cache = new Cache(new NoCache);
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-        //Runtime::enableCoroutine();
+        // Runtime::enableCoroutine();
 
         $dbAdapters = [
             'mariadb' => [
@@ -103,15 +100,16 @@ $cli
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported");
+
             return;
         }
 
         $cfg = $dbAdapters[$adapter];
         $dsn = ($cfg['dsn'])($cfg['host'], $cfg['port']);
 
-        //Co\run(function () use (&$start, $limit, $name, $sharedTables, $namespace, $cache, $cfg) {
+        // Co\run(function () use (&$start, $limit, $name, $sharedTables, $namespace, $cache, $cfg) {
         $pdo = new PDO(
             $dsn,
             $cfg['user'],
@@ -127,12 +125,12 @@ $cli
         );
 
         $pool = new PDOPool(
-            (new PDOConfig())
+            (new PDOConfig)
                 ->withDriver($cfg['driver'])
                 ->withHost($cfg['host'])
                 ->withPort($cfg['port'])
                 ->withDbName($name)
-                //->withCharset('utf8mb4')
+                // ->withCharset('utf8mb4')
                 ->withUsername($cfg['user'])
                 ->withPassword($cfg['pass']),
             128
@@ -141,9 +139,9 @@ $cli
         $start = \microtime(true);
 
         for ($i = 0; $i < $limit / 1000; $i++) {
-            //\go(function () use ($cfg, $pool, $name, $namespace, $sharedTables, $cache) {
+            // \go(function () use ($cfg, $pool, $name, $namespace, $sharedTables, $cache) {
             try {
-                //$pdo = $pool->get();
+                // $pdo = $pool->get();
 
                 $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
                     ->setDatabase($name)
@@ -151,18 +149,16 @@ $cli
                     ->setSharedTables($sharedTables);
 
                 createDocuments($database);
-                //$pool->put($pdo);
+                // $pool->put($pdo);
             } catch (\Throwable $error) {
-                Console::error('Coroutine error: ' . $error->getMessage());
+                Console::error('Coroutine error: '.$error->getMessage());
             }
-            //});
+            // });
         }
 
         $time = microtime(true) - $start;
         Console::success("Completed in {$time} seconds");
     });
-
-
 
 function createDocuments(Database $database): void
 {
@@ -176,7 +172,7 @@ function createDocuments(Database $database): void
         $bytes = \random_bytes(intdiv($length + 1, 2));
         $text = \substr(\bin2hex($bytes), 0, $length);
         $tagCount = \mt_rand(1, count($tagsPool));
-        $tagKeys = (array)\array_rand($tagsPool, $tagCount);
+        $tagKeys = (array) \array_rand($tagsPool, $tagCount);
         $tags = \array_map(fn ($k) => $tagsPool[$k], $tagKeys);
 
         $documents[] = new Document([

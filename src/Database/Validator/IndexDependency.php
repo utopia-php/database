@@ -17,8 +17,7 @@ class IndexDependency extends Validator
     protected array $indexes;
 
     /**
-     * @param array<Document> $indexes
-     * @param bool $castIndexSupport
+     * @param  array<Document>  $indexes
      */
     public function __construct(array $indexes, bool $castIndexSupport)
     {

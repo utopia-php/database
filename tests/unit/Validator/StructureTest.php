@@ -146,10 +146,11 @@ class StructureTest extends TestCase
         'indexes' => [],
     ];
 
-    public function setUp(): void
+    protected function setUp(): void
     {
         Structure::addFormat('email', function ($attribute) {
             $size = $attribute['size'] ?? 0;
+
             return new Format($size);
         }, ColumnType::String->value);
 
@@ -167,11 +168,9 @@ class StructureTest extends TestCase
         ];
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testDocumentInstance(): void
+    public function test_document_instance(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -186,22 +185,22 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Value must be an instance of Document', $validator->getDescription());
     }
 
-    public function testCollectionAttribute(): void
+    public function test_collection_attribute(): void
     {
         $validator = new Structure(
             new Document($this->collection),
             ColumnType::Integer->value
         );
 
-        $this->assertEquals(false, $validator->isValid(new Document()));
+        $this->assertEquals(false, $validator->isValid(new Document));
 
         $this->assertEquals('Invalid document structure: Missing collection attribute $collection', $validator->getDescription());
     }
 
-    public function testCollection(): void
+    public function test_collection(): void
     {
         $validator = new Structure(
-            new Document(),
+            new Document,
             ColumnType::Integer->value
         );
 
@@ -215,13 +214,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Collection not found', $validator->getDescription());
     }
 
-    public function testRequiredKeys(): void
+    public function test_required_keys(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -237,13 +236,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 
-    public function testNullValues(): void
+    public function test_null_values(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -274,11 +273,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', null, 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testUnknownKeys(): void
+    public function test_unknown_keys(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -296,13 +295,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
     }
 
-    public function testIntegerAsString(): void
+    public function test_integer_as_string(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -319,13 +318,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testValidDocument(): void
+    public function test_valid_document(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -342,11 +341,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testStringValidation(): void
+    public function test_string_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -363,13 +362,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
-    public function testArrayOfStringsValidation(): void
+    public function test_array_of_strings_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -386,7 +385,7 @@ class StructureTest extends TestCase
             'tags' => [1, 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
@@ -401,7 +400,7 @@ class StructureTest extends TestCase
             'tags' => [true],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
@@ -416,7 +415,7 @@ class StructureTest extends TestCase
             'tags' => [],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -429,7 +428,7 @@ class StructureTest extends TestCase
             'tags' => ['too-long-tag-name-to-make-sure-the-length-validator-inside-string-attribute-type-fails-properly'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
@@ -438,7 +437,7 @@ class StructureTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testArrayAsObjectValidation(): void
+    public function test_array_as_object_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -455,11 +454,11 @@ class StructureTest extends TestCase
             'tags' => ['name' => 'dog'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testArrayOfObjectsValidation(): void
+    public function test_array_of_objects_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -476,11 +475,11 @@ class StructureTest extends TestCase
             'tags' => [['name' => 'dog']],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testIntegerValidation(): void
+    public function test_integer_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -497,7 +496,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
@@ -512,13 +511,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testArrayOfIntegersValidation(): void
+    public function test_array_of_integers_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -536,7 +535,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -550,7 +549,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -564,7 +563,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -578,13 +577,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testFloatValidation(): void
+    public function test_float_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -601,7 +600,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
@@ -616,13 +615,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
     }
 
-    public function testBooleanValidation(): void
+    public function test_boolean_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -639,7 +638,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
@@ -654,13 +653,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
     }
 
-    public function testFormatValidation(): void
+    public function test_format_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -677,13 +676,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team_appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
     }
 
-    public function testIntegerMaxRange(): void
+    public function test_integer_max_range(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -700,13 +699,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid signed 32-bit integer between -2,147,483,648 and 2,147,483,647', $validator->getDescription());
     }
 
-    public function testDoubleUnsigned(): void
+    public function test_double_unsigned(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -723,13 +722,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertStringContainsString('Invalid document structure: Attribute "price" has invalid type. Value must be a valid range between 0 and ', $validator->getDescription());
     }
 
-    public function testDoubleMaxRange(): void
+    public function test_double_max_range(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -746,11 +745,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
     }
 
-    public function testId(): void
+    public function test_id(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -822,7 +821,7 @@ class StructureTest extends TestCase
         ])));
     }
 
-    public function testOperatorsSkippedDuringValidation(): void
+    public function test_operators_skipped_during_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -840,11 +839,11 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])), $validator->getDescription());
     }
 
-    public function testMultipleOperatorsSkippedDuringValidation(): void
+    public function test_multiple_operators_skipped_during_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -862,11 +861,11 @@ class StructureTest extends TestCase
             'tags' => Operator::arrayAppend(['new']),
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])), $validator->getDescription());
     }
 
-    public function testMissingRequiredFieldWithoutOperator(): void
+    public function test_missing_required_field_without_operator(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -884,13 +883,13 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "rating"', $validator->getDescription());
     }
 
-    public function testVarcharValidation(): void
+    public function test_varchar_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -908,7 +907,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => 'Short varchar text',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -922,7 +921,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
@@ -938,13 +937,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'varchar_field' => \str_repeat('a', 256),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_field" has invalid type. Value must be a valid string and no longer than 255 chars', $validator->getDescription());
     }
 
-    public function testTextValidation(): void
+    public function test_text_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -962,7 +961,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => \str_repeat('a', 65535),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -976,7 +975,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
@@ -992,13 +991,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'text_field' => \str_repeat('a', 65536),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
     }
 
-    public function testMediumtextValidation(): void
+    public function test_mediumtext_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -1016,7 +1015,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'mediumtext_field' => \str_repeat('a', 100000),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -1030,13 +1029,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'mediumtext_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string and no longer than 16777215 chars', $validator->getDescription());
     }
 
-    public function testLongtextValidation(): void
+    public function test_longtext_validation(): void
     {
         $validator = new Structure(
             new Document($this->collection),
@@ -1054,7 +1053,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'longtext_field' => \str_repeat('a', 1000000),
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -1068,13 +1067,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             'longtext_field' => 123,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string and no longer than 4294967295 chars', $validator->getDescription());
     }
 
-    public function testStringTypeArrayValidation(): void
+    public function test_string_type_array_validation(): void
     {
         $collection = [
             '$id' => Database::METADATA,
@@ -1114,14 +1113,14 @@ class StructureTest extends TestCase
             '$collection' => ID::custom('posts'),
             'varchar_array' => ['test1', 'test2', 'test3'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'varchar_array' => [123, 'test2', 'test3'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
@@ -1130,10 +1129,9 @@ class StructureTest extends TestCase
             '$collection' => ID::custom('posts'),
             'varchar_array' => [\str_repeat('a', 129), 'test2'],
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
-            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
     }
-
 }

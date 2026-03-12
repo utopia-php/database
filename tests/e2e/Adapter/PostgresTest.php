@@ -12,7 +12,9 @@ use Utopia\Database\PDO;
 class PostgresTest extends Base
 {
     public static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
     /**
@@ -20,7 +22,7 @@ class PostgresTest extends Base
      */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
@@ -30,7 +32,7 @@ class PostgresTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, Postgres::getPDOAttributes());
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis', 6379);
         $redis->select(2);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
@@ -39,7 +41,7 @@ class PostgresTest extends Base
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -48,12 +50,13 @@ class PostgresTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = '"' . $this->getDatabase()->getDatabase(). '"."' . $this->getDatabase()->getNamespace() . '_' . $collection . '"';
+        $sqlTable = '"'.$this->getDatabase()->getDatabase().'"."'.$this->getDatabase()->getNamespace().'_'.$collection.'"';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN \"{$column}\"";
 
         self::$pdo->exec($sql);
@@ -63,13 +66,12 @@ class PostgresTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $key = "\"".$this->getDatabase()->getNamespace()."_".$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";
+        $key = '"'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";
 
-        $sql = "DROP INDEX \"".$this->getDatabase()->getDatabase()."\".{$key}";
+        $sql = 'DROP INDEX "'.$this->getDatabase()->getDatabase()."\".{$key}";
 
         self::$pdo->exec($sql);
 
         return true;
     }
-
 }

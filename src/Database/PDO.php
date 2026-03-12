@@ -15,10 +15,7 @@ class PDO
     protected \PDO $pdo;
 
     /**
-     * @param string $dsn
-     * @param ?string $username
-     * @param ?string $password
-     * @param array<mixed> $config
+     * @param  array<mixed>  $config
      */
     public function __construct(
         protected string $dsn,
@@ -35,9 +32,8 @@ class PDO
     }
 
     /**
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
+     *
      * @throws \Throwable
      */
     public function __call(string $method, array $args): mixed
@@ -46,7 +42,7 @@ class PDO
             return $this->pdo->{$method}(...$args);
         } catch (\Throwable $e) {
             if (Connection::hasError($e)) {
-                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning('[Database] '.$e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
                 $inTransaction = $this->pdo->inTransaction();
@@ -56,7 +52,7 @@ class PDO
 
                 // If we weren't in a transaction, also retry the query
                 // In a transaction we can't retry as the state is attached to the previous connection
-                if (!$inTransaction) {
+                if (! $inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
             }
@@ -67,8 +63,6 @@ class PDO
 
     /**
      * Create a new connection to the database
-     *
-     * @return void
      */
     public function reconnect(): void
     {
@@ -83,7 +77,6 @@ class PDO
     /**
      * Get the hostname from the DSN.
      *
-     * @return string
      * @throws \Exception
      */
     public function getHostname(): string
@@ -102,11 +95,12 @@ class PDO
      * Parse a PDO-style DSN string.
      *
      * @return array<string, string|int|float|bool|null>
+     *
      * @throws InvalidArgumentException If the DSN is malformed.
      */
     private function parseDsn(string $dsn): array
     {
-        if ($dsn === '' || !\str_contains($dsn, ':')) {
+        if ($dsn === '' || ! \str_contains($dsn, ':')) {
             throw new InvalidArgumentException('Malformed DSN: missing driver separator.');
         }
 
@@ -117,6 +111,7 @@ class PDO
         // Handle “path only” DSNs like sqlite:/path/to.db
         if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
             $parsed['path'] = \ltrim($parameterString, '/');
+
             return $parsed;
         }
 
@@ -125,7 +120,7 @@ class PDO
         foreach ($parameterSegments as $segment) {
             [$name, $rawValue] = \array_pad(\explode('=', $segment, 2), 2, null);
 
-            $name  = \trim($name);
+            $name = \trim($name);
             $value = $rawValue !== null ? \trim($rawValue) : null;
 
             // Casting for scalars

@@ -15,16 +15,14 @@ class AuthorizationTest extends TestCase
 {
     protected Authorization $authorization;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
-        $this->authorization = new Authorization();
+        $this->authorization = new Authorization;
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testValues(): void
+    public function test_values(): void
     {
         $this->authorization->addRole(Role::any()->toString());
 
@@ -101,7 +99,7 @@ class AuthorizationTest extends TestCase
         }), true);
     }
 
-    public function testNestedSkips(): void
+    public function test_nested_skips(): void
     {
         $this->assertEquals(true, $this->authorization->getStatus());
 

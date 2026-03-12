@@ -7,21 +7,16 @@ use Utopia\Database\Validator\Key;
 
 class KeyTest extends TestCase
 {
-    /**
-     * @var Key
-     */
     protected ?Key $object = null;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
-        $this->object = new Key();
+        $this->object = new Key;
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testValues(): void
+    public function test_values(): void
     {
         // Must be strings
         $this->assertEquals(false, $this->object->isValid(false));

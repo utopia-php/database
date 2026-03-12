@@ -13,7 +13,7 @@ use Utopia\Query\Schema\ColumnType;
 
 class AttributeTest extends TestCase
 {
-    public function testDuplicateAttributeId(): void
+    public function test_duplicate_attribute_id(): void
     {
         $validator = new Attribute(
             attributes: [
@@ -27,7 +27,7 @@ class AttributeTest extends TestCase
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -51,7 +51,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidStringAttribute(): void
+    public function test_valid_string_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -75,7 +75,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testStringSizeTooLarge(): void
+    public function test_string_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -101,7 +101,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVarcharSizeTooLarge(): void
+    public function test_varchar_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -127,7 +127,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testTextSizeTooLarge(): void
+    public function test_text_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -153,7 +153,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testMediumtextSizeTooLarge(): void
+    public function test_mediumtext_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -179,7 +179,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testIntegerSizeTooLarge(): void
+    public function test_integer_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -205,7 +205,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testUnknownType(): void
+    public function test_unknown_type(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -231,7 +231,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testRequiredFiltersForDatetime(): void
+    public function test_required_filters_for_datetime(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -257,7 +257,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidDatetimeWithFilter(): void
+    public function test_valid_datetime_with_filter(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -281,7 +281,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testDefaultValueOnRequiredAttribute(): void
+    public function test_default_value_on_required_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -307,7 +307,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDefaultValueTypeMismatch(): void
+    public function test_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -333,7 +333,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorNotSupported(): void
+    public function test_vector_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -360,7 +360,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorCannotBeArray(): void
+    public function test_vector_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -387,7 +387,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorInvalidDimensions(): void
+    public function test_vector_invalid_dimensions(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -414,7 +414,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDimensionsExceedsMax(): void
+    public function test_vector_dimensions_exceeds_max(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -441,7 +441,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialNotSupported(): void
+    public function test_spatial_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -468,7 +468,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialCannotBeArray(): void
+    public function test_spatial_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -495,7 +495,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialMustHaveEmptySize(): void
+    public function test_spatial_must_have_empty_size(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -522,7 +522,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectNotSupported(): void
+    public function test_object_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -549,7 +549,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectCannotBeArray(): void
+    public function test_object_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -576,7 +576,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectMustHaveEmptySize(): void
+    public function test_object_must_have_empty_size(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -603,7 +603,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testAttributeLimitExceeded(): void
+    public function test_attribute_limit_exceeded(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -633,7 +633,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testRowWidthLimitExceeded(): void
+    public function test_row_width_limit_exceeded(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -663,7 +663,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueNotArray(): void
+    public function test_vector_default_value_not_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -690,7 +690,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueWrongElementCount(): void
+    public function test_vector_default_value_wrong_element_count(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -717,7 +717,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueNonNumericElements(): void
+    public function test_vector_default_value_non_numeric_elements(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -744,7 +744,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testLongtextSizeTooLarge(): void
+    public function test_longtext_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -770,7 +770,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidVarcharAttribute(): void
+    public function test_valid_varchar_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -794,7 +794,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidTextAttribute(): void
+    public function test_valid_text_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -818,7 +818,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidMediumtextAttribute(): void
+    public function test_valid_mediumtext_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -842,7 +842,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidLongtextAttribute(): void
+    public function test_valid_longtext_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -866,7 +866,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidFloatAttribute(): void
+    public function test_valid_float_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -890,7 +890,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidBooleanAttribute(): void
+    public function test_valid_boolean_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -914,7 +914,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testFloatDefaultValueTypeMismatch(): void
+    public function test_float_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -940,7 +940,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testBooleanDefaultValueTypeMismatch(): void
+    public function test_boolean_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -966,7 +966,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testStringDefaultValueTypeMismatch(): void
+    public function test_string_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -992,7 +992,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidStringWithDefaultValue(): void
+    public function test_valid_string_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1016,7 +1016,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidIntegerWithDefaultValue(): void
+    public function test_valid_integer_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1040,7 +1040,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidFloatWithDefaultValue(): void
+    public function test_valid_float_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1064,7 +1064,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidBooleanWithDefaultValue(): void
+    public function test_valid_boolean_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1088,7 +1088,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testUnsignedIntegerSizeLimit(): void
+    public function test_unsigned_integer_size_limit(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1113,7 +1113,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testUnsignedIntegerSizeTooLarge(): void
+    public function test_unsigned_integer_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1139,7 +1139,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDuplicateAttributeIdCaseInsensitive(): void
+    public function test_duplicate_attribute_id_case_insensitive(): void
     {
         $validator = new Attribute(
             attributes: [
@@ -1153,7 +1153,7 @@ class AttributeTest extends TestCase
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1177,7 +1177,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDuplicateInSchema(): void
+    public function test_duplicate_in_schema(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1187,7 +1187,7 @@ class AttributeTest extends TestCase
                     'key' => 'existing_column',
                     'type' => ColumnType::String->value,
                     'size' => 255,
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1212,7 +1212,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSchemaCheckSkippedWhenMigrating(): void
+    public function test_schema_check_skipped_when_migrating(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1222,7 +1222,7 @@ class AttributeTest extends TestCase
                     'key' => 'existing_column',
                     'type' => ColumnType::String->value,
                     'size' => 255,
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1247,7 +1247,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidLinestringAttribute(): void
+    public function test_valid_linestring_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1272,7 +1272,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidPolygonAttribute(): void
+    public function test_valid_polygon_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1297,7 +1297,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidPointAttribute(): void
+    public function test_valid_point_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1322,7 +1322,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidVectorAttribute(): void
+    public function test_valid_vector_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1347,7 +1347,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidVectorWithDefaultValue(): void
+    public function test_valid_vector_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1372,7 +1372,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidObjectAttribute(): void
+    public function test_valid_object_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1397,7 +1397,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayStringAttribute(): void
+    public function test_array_string_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1421,7 +1421,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayWithDefaultValues(): void
+    public function test_array_with_default_values(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1445,7 +1445,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayDefaultValueTypeMismatch(): void
+    public function test_array_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1471,7 +1471,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDatetimeDefaultValueMustBeString(): void
+    public function test_datetime_default_value_must_be_string(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1497,7 +1497,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidDatetimeWithDefaultValue(): void
+    public function test_valid_datetime_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1521,7 +1521,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testVarcharDefaultValueTypeMismatch(): void
+    public function test_varchar_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1547,7 +1547,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testTextDefaultValueTypeMismatch(): void
+    public function test_text_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1573,7 +1573,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testMediumtextDefaultValueTypeMismatch(): void
+    public function test_mediumtext_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1599,7 +1599,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testLongtextDefaultValueTypeMismatch(): void
+    public function test_longtext_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1625,7 +1625,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidVarcharWithDefaultValue(): void
+    public function test_valid_varchar_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1649,7 +1649,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidTextWithDefaultValue(): void
+    public function test_valid_text_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1673,7 +1673,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidIntegerAttribute(): void
+    public function test_valid_integer_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1697,7 +1697,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testNullDefaultValueAllowed(): void
+    public function test_null_default_value_allowed(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1721,7 +1721,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayDefaultOnNonArrayAttribute(): void
+    public function test_array_default_on_non_array_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],

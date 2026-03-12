@@ -2,6 +2,4 @@
 
 namespace Tests\Unit\Validator;
 
-class UIDTest extends KeyTest
-{
-}
+class UIDTest extends KeyTest {}

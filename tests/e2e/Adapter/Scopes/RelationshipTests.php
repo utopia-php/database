@@ -7,7 +7,9 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
-use Utopia\Database\RelationType;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -18,27 +20,26 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Capability;
-use Utopia\Database\Database;
-use Utopia\Database\Attribute;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait RelationshipTests
 {
-    use OneToOneTests;
-    use OneToManyTests;
-    use ManyToOneTests;
     use ManyToManyTests;
+    use ManyToOneTests;
+    use OneToManyTests;
+    use OneToOneTests;
 
     public function testZoo(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -78,7 +79,7 @@ trait RelationshipTests
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
-            'name' => 'Bronx Zoo'
+            'name' => 'Bronx Zoo',
         ]));
 
         $this->assertEquals('zoo1', $zoo->getId());
@@ -235,7 +236,7 @@ trait RelationshipTests
         $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
 
         $veterinarian = $database->findOne('veterinarians', [
-            Query::equal('$id', ['dr.pol'])
+            Query::equal('$id', ['dr.pol']),
         ]);
 
         $this->assertEquals('dr.pol', $veterinarian->getId());
@@ -262,7 +263,7 @@ trait RelationshipTests
         $this->assertEquals('bush', $animal['president']->getId());
 
         $animal = $database->findOne('__animals', [
-            Query::equal('$id', ['tiger'])
+            Query::equal('$id', ['tiger']),
         ]);
 
         $this->assertEquals('tiger', $animal->getId());
@@ -288,7 +289,7 @@ trait RelationshipTests
          * Check President data
          */
         $president = $database->findOne('presidents', [
-            Query::equal('$id', ['bush'])
+            Query::equal('$id', ['bush']),
         ]);
 
         $this->assertEquals('bush', $president->getId());
@@ -301,7 +302,7 @@ trait RelationshipTests
                 '*',
                 'votes.*',
             ]),
-            Query::equal('$id', ['trump'])
+            Query::equal('$id', ['trump']),
         ]);
 
         $this->assertEquals('trump', $president->getId());
@@ -315,7 +316,7 @@ trait RelationshipTests
                 'votes.*',
                 'votes.animals.*',
             ]),
-            Query::equal('$id', ['trump'])
+            Query::equal('$id', ['trump']),
         ]);
 
         $this->assertEquals('trump', $president->getId());
@@ -340,7 +341,7 @@ trait RelationshipTests
             [
                 Query::select([
                     'animals.*',
-                ])
+                ]),
             ]
         );
 
@@ -362,7 +363,7 @@ trait RelationshipTests
                     'animals.*',
                     'animals.zoo.*',
                     'animals.president.*',
-                ])
+                ]),
             ]
         );
 
@@ -383,8 +384,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -426,7 +428,7 @@ trait RelationshipTests
         $this->assertIsArray($posts, 'Posts should be an array');
         $this->assertCount(2, $posts, 'Should have 2 posts');
 
-        if (!empty($posts)) {
+        if (! empty($posts)) {
             $this->assertInstanceOf(Document::class, $posts[0], 'First post should be a Document object');
             $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
         }
@@ -436,7 +438,7 @@ trait RelationshipTests
 
         $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
 
-        if (!empty($fetchedPosts)) {
+        if (! empty($fetchedPosts)) {
             $author = $fetchedPosts[0]->getAttribute('author');
             $this->assertInstanceOf(Document::class, $author, 'Author should be a Document object');
             $this->assertEquals('John Doe', $author->getAttribute('name'), 'Author name should be populated');
@@ -448,8 +450,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -560,8 +563,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -592,7 +596,7 @@ trait RelationshipTests
                 'v1' => [
                     '$id' => 'test',
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -621,9 +625,9 @@ trait RelationshipTests
                 '$id' => 'woman',
                 '$permissions' => [
                     Permission::update(Role::any()),
-                    Permission::read(Role::any())
-                ]
-            ]
+                    Permission::read(Role::any()),
+                ],
+            ],
         ]));
 
         $this->assertEquals('man', $doc->getId());
@@ -633,8 +637,8 @@ trait RelationshipTests
                 '$permissions' => [],
                 'v2' => [[
                     '$id' => 'woman',
-                    '$permissions' => []
-                ]]
+                    '$permissions' => [],
+                ]],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -656,7 +660,7 @@ trait RelationshipTests
                 'v2' => [ // Expecting Array of arrays or array of strings, object provided
                     '$id' => 'test',
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -680,7 +684,7 @@ trait RelationshipTests
                 'v1' => [[  // Expecting a string or an object ,array provided
                     '$id' => 'test',
                     '$permissions' => [],
-                ]]
+                ]],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -698,9 +702,9 @@ trait RelationshipTests
             'v1' => [
                 '$id' => 'v1_uid',
                 '$permissions' => [
-                    Permission::update(Role::any())
+                    Permission::update(Role::any()),
                 ],
-            ]
+            ],
         ]));
 
         $this->assertEquals('v2_uid', $doc->getId());
@@ -708,14 +712,13 @@ trait RelationshipTests
         /**
          * Test update
          */
-
         try {
             $database->updateDocument('v1', 'v1_uid', new Document([
                 '$permissions' => [],
                 'v2' => [ // Expecting array of arrays or array of strings, object given
                     '$id' => 'v2_uid',
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -725,7 +728,7 @@ trait RelationshipTests
         try {
             $database->updateDocument('v1', 'v1_uid', new Document([
                 '$permissions' => [],
-                'v2' => 'v2_uid'
+                'v2' => 'v2_uid',
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -738,7 +741,7 @@ trait RelationshipTests
                 'v1' => [
                     '$id' => null, // Invalid value
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -751,7 +754,7 @@ trait RelationshipTests
          */
         try {
             $database->find('v2', [
-                //@phpstan-ignore-next-line
+                // @phpstan-ignore-next-line
                 Query::equal('v1', [['doc1']]),
             ]);
             $this->fail('Failed to throw exception');
@@ -783,7 +786,7 @@ trait RelationshipTests
                 'v2' => [[ // Expecting an object or a string array provided
                     '$id' => 'test',
                     '$permissions' => [],
-                ]]
+                ]],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -807,7 +810,7 @@ trait RelationshipTests
                 'v1' => [ // Expecting an array, object provided
                     '$id' => 'test',
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -838,7 +841,7 @@ trait RelationshipTests
                     Permission::update(Role::any()),
                     Permission::read(Role::any()),
                 ],
-            ]
+            ],
         ]));
 
         $this->assertEquals('doc1', $doc->getId());
@@ -859,7 +862,7 @@ trait RelationshipTests
         try {
             $database->updateDocument('v2', 'doc2', new Document([
                 '$permissions' => [],
-                'v1' => null
+                'v1' => null,
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -901,7 +904,7 @@ trait RelationshipTests
                 'classes' => [ // Expected array, object provided
                     '$id' => 'test',
                     '$permissions' => [],
-                ]
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -929,7 +932,6 @@ trait RelationshipTests
         /**
          * Success for later test update
          */
-
         $doc = $database->createDocument('v1', new Document([
             '$id' => 'class1',
             '$permissions' => [
@@ -941,17 +943,17 @@ trait RelationshipTests
                     '$id' => 'Richard',
                     '$permissions' => [
                         Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
+                        Permission::read(Role::any()),
+                    ],
                 ],
                 [
                     '$id' => 'Bill',
                     '$permissions' => [
                         Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
-                ]
-            ]
+                        Permission::read(Role::any()),
+                    ],
+                ],
+            ],
         ]));
 
         $this->assertEquals('class1', $doc->getId());
@@ -966,9 +968,9 @@ trait RelationshipTests
                     '$id' => 'Richard',
                     '$permissions' => [
                         Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
-                ]
+                        Permission::read(Role::any()),
+                    ],
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -981,7 +983,7 @@ trait RelationshipTests
                     Permission::update(Role::any()),
                     Permission::read(Role::any()),
                 ],
-                'students' => 'Richard'
+                'students' => 'Richard',
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -994,21 +996,23 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             // Schemaless mode allows unknown attributes, so structure validation won't reject them
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
-        $database->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
+        $database->createCollection('structure_1', [], [], [Permission::create(Role::any())]);
+        $database->createCollection('structure_2', [], [], [Permission::create(Role::any())]);
 
-        $database->createRelationship(new Relationship(collection: "structure_1", relatedCollection: "structure_2", type: RelationType::OneToOne));
+        $database->createRelationship(new Relationship(collection: 'structure_1', relatedCollection: 'structure_2', type: RelationType::OneToOne));
 
         try {
             $database->createDocument('structure_1', new Document([
@@ -1024,18 +1028,18 @@ trait RelationshipTests
         }
     }
 
-
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $attribute = new Document([
-            '$id' => ID::custom("name"),
+            '$id' => ID::custom('name'),
             'type' => ColumnType::String->value,
             'size' => 100,
             'required' => false,
@@ -1081,7 +1085,7 @@ trait RelationshipTests
                             '$id' => 'level5',
                             '$permissions' => [],
                             'name' => 'Level 5',
-                        ]
+                        ],
                     ],
                 ],
             ],
@@ -1118,15 +1122,14 @@ trait RelationshipTests
         }
     }
 
-
-
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1151,8 +1154,8 @@ trait RelationshipTests
             ],
             'rnRsTestB' => [
                 '$id' => 'b1',
-                'name' => 'B1'
-            ]
+                'name' => 'B1',
+            ],
         ]));
 
         $docB = $database->getDocument('rnRsTestB', 'b1');
@@ -1184,8 +1187,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('species');
@@ -1218,8 +1222,8 @@ trait RelationshipTests
                         Permission::update(Role::any()),
                     ],
                     'name' => 'active',
-                ]
-            ]
+                ],
+            ],
         ]));
         $database->updateDocument('species', $species->getId(), new Document([
             '$id' => ID::custom('1'),
@@ -1231,8 +1235,8 @@ trait RelationshipTests
                     '$id' => ID::custom('1'),
                     'name' => 'active',
                     '$collection' => 'characteristics',
-                ]
-            ]
+                ],
+            ],
         ]));
 
         $updatedSpecies = $database->getDocument('species', $species->getId());
@@ -1245,8 +1249,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1532,8 +1537,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1603,7 +1609,7 @@ trait RelationshipTests
 
         $database = $this->getDatabase();
 
-        if (!$database->exists($this->testDatabase, 'lawns')) {
+        if (! $database->exists($this->testDatabase, 'lawns')) {
             $database->createCollection('lawns', permissions: [Permission::create(Role::any())], documentSecurity: true);
             $database->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
             $database->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
@@ -1653,8 +1659,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1815,8 +1822,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1831,8 +1839,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1849,8 +1858,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1870,8 +1880,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1883,14 +1894,14 @@ trait RelationshipTests
         $database->createRelationship(new Relationship(collection: 'test3', relatedCollection: 'test4', type: 'invalid', twoWay: true));
     }
 
-
     public function testDeleteMissingRelationship(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1907,8 +1918,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1939,7 +1951,7 @@ trait RelationshipTests
 
         $database = $this->getDatabase();
 
-        if (!$database->exists($this->testDatabase, 'invalid1')) {
+        if (! $database->exists($this->testDatabase, 'invalid1')) {
             $database->createCollection('invalid1');
             $database->createCollection('invalid2');
             $database->createRelationship(new Relationship(collection: 'invalid1', relatedCollection: 'invalid2', type: RelationType::OneToOne, twoWay: true));
@@ -1953,8 +1965,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1965,7 +1978,7 @@ trait RelationshipTests
 
         $database->createDocument('invalid1', new Document([
             '$id' => ID::unique(),
-            'invalid2' => new \stdClass(),
+            'invalid2' => new \stdClass,
         ]));
     }
 
@@ -1974,8 +1987,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2002,8 +2016,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2078,8 +2093,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2110,8 +2126,9 @@ trait RelationshipTests
 
     public function testUpdateDocumentsRelationships(): void
     {
-        if (!$this->getDatabase()->getAdapter()->supports(Capability::BatchOperations) || !$this->getDatabase()->getAdapter()->supports(Capability::Relationships)) {
+        if (! $this->getDatabase()->getAdapter()->supports(Capability::BatchOperations) || ! $this->getDatabase()->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2119,21 +2136,21 @@ trait RelationshipTests
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true)
+            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships2', attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true)
+            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $this->getDatabase()->createRelationship(new Relationship(collection: 'testUpdateDocumentsRelationships1', relatedCollection: 'testUpdateDocumentsRelationships2', type: RelationType::OneToOne, twoWay: true));
@@ -2146,7 +2163,7 @@ trait RelationshipTests
         $this->getDatabase()->createDocument('testUpdateDocumentsRelationships2', new Document([
             '$id' => 'doc1',
             'string' => 'text📝',
-            'testUpdateDocumentsRelationships1' => 'doc1'
+            'testUpdateDocumentsRelationships1' => 'doc1',
         ]));
 
         $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc1');
@@ -2174,23 +2191,23 @@ trait RelationshipTests
 
         for ($i = 2; $i < 11; $i++) {
             $this->getDatabase()->createDocument('testUpdateDocumentsRelationships1', new Document([
-                '$id' => 'doc' . $i,
+                '$id' => 'doc'.$i,
                 'string' => 'text📝',
             ]));
 
             $this->getDatabase()->createDocument('testUpdateDocumentsRelationships2', new Document([
-                '$id' => 'doc' . $i,
+                '$id' => 'doc'.$i,
                 'string' => 'text📝',
-                'testUpdateDocumentsRelationships1' => 'doc' . $i
+                'testUpdateDocumentsRelationships1' => 'doc'.$i,
             ]));
         }
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
-            'testUpdateDocumentsRelationships1' => null
+            'testUpdateDocumentsRelationships1' => null,
         ]));
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
-            'testUpdateDocumentsRelationships1' => 'doc1'
+            'testUpdateDocumentsRelationships1' => 'doc1',
         ]));
 
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');
@@ -2205,8 +2222,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('userProfiles', [
@@ -2215,7 +2233,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('links', [
             new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2223,7 +2241,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('videos', [
             new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2231,7 +2249,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('products', [
             new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2239,7 +2257,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('settings', [
             new Attribute(key: 'metaTitle', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2247,7 +2265,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('appearance', [
             new Attribute(key: 'metaTitle', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2255,7 +2273,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('group', [
             new Attribute(key: 'name', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2263,7 +2281,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('community', [
             new Attribute(key: 'name', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -2271,7 +2289,7 @@ trait RelationshipTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createRelationship(new Relationship(collection: 'userProfiles', relatedCollection: 'links', type: RelationType::OneToMany, key: 'links'));
@@ -2394,8 +2412,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2602,8 +2621,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2723,8 +2743,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2938,8 +2959,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3225,8 +3247,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3298,70 +3321,70 @@ trait RelationshipTests
 
         // Query::equal()
         $products = $database->find('productsQt', [
-            Query::equal('vendor.company', ['Acme Corp'])
+            Query::equal('vendor.company', ['Acme Corp']),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());
 
         // Query::notEqual()
         $products = $database->find('productsQt', [
-            Query::notEqual('vendor.company', ['Budget Vendors'])
+            Query::notEqual('vendor.company', ['Budget Vendors']),
         ]);
         $this->assertCount(2, $products);
 
         // Query::lessThan()
         $products = $database->find('productsQt', [
-            Query::lessThan('vendor.rating', 4.0)
+            Query::lessThan('vendor.rating', 4.0),
         ]);
         $this->assertCount(2, $products); // vendor2 (3.8) and vendor3 (2.5)
 
         // Query::lessThanEqual()
         $products = $database->find('productsQt', [
-            Query::lessThanEqual('vendor.rating', 3.8)
+            Query::lessThanEqual('vendor.rating', 3.8),
         ]);
         $this->assertCount(2, $products);
 
         // Query::greaterThan()
         $products = $database->find('productsQt', [
-            Query::greaterThan('vendor.rating', 4.0)
+            Query::greaterThan('vendor.rating', 4.0),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());
 
         // Query::greaterThanEqual()
         $products = $database->find('productsQt', [
-            Query::greaterThanEqual('vendor.rating', 3.8)
+            Query::greaterThanEqual('vendor.rating', 3.8),
         ]);
         $this->assertCount(2, $products); // vendor1 (4.5) and vendor2 (3.8)
 
         // Query::startsWith()
         $products = $database->find('productsQt', [
-            Query::startsWith('vendor.email', 'sales@')
+            Query::startsWith('vendor.email', 'sales@'),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());
 
         // Query::endsWith()
         $products = $database->find('productsQt', [
-            Query::endsWith('vendor.email', '.com')
+            Query::endsWith('vendor.email', '.com'),
         ]);
         $this->assertCount(3, $products);
 
         // Query::contains()
         $products = $database->find('productsQt', [
-            Query::contains('vendor.company', ['Corp'])
+            Query::contains('vendor.company', ['Corp']),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());
 
         // Boolean query
         $products = $database->find('productsQt', [
-            Query::equal('vendor.verified', [true])
+            Query::equal('vendor.verified', [true]),
         ]);
         $this->assertCount(2, $products); // vendor1 and vendor2 are verified
 
         $products = $database->find('productsQt', [
-            Query::equal('vendor.verified', [false])
+            Query::equal('vendor.verified', [false]),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product3', $products[0]->getId());
@@ -3370,7 +3393,7 @@ trait RelationshipTests
         $products = $database->find('productsQt', [
             Query::greaterThan('vendor.rating', 3.0),
             Query::equal('vendor.verified', [true]),
-            Query::startsWith('vendor.company', 'Acme')
+            Query::startsWith('vendor.company', 'Acme'),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());
@@ -3385,13 +3408,15 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->supports(Capability::Spatial)) {
+        if (! $database->getAdapter()->supports(Capability::Spatial)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3420,13 +3445,13 @@ trait RelationshipTests
                 [-73.9, 40.7],
                 [-73.9, 40.8],
                 [-74.1, 40.8],
-                [-74.1, 40.7]
+                [-74.1, 40.7],
             ],
             'deliveryRoute' => [
                 [-74.0060, 40.7128],
                 [-73.9851, 40.7589],
-                [-73.9857, 40.7484]
-            ]
+                [-73.9857, 40.7484],
+            ],
         ]));
 
         $supplier2 = $database->createDocument('suppliersSpatial', new Document([
@@ -3439,13 +3464,13 @@ trait RelationshipTests
                 [-118.1, 34.0],
                 [-118.1, 34.1],
                 [-118.3, 34.1],
-                [-118.3, 34.0]
+                [-118.3, 34.0],
             ],
             'deliveryRoute' => [
                 [-118.2437, 34.0522],
                 [-118.2468, 34.0407],
-                [-118.2456, 34.0336]
-            ]
+                [-118.2456, 34.0336],
+            ],
         ]));
 
         $supplier3 = $database->createDocument('suppliersSpatial', new Document([
@@ -3458,13 +3483,13 @@ trait RelationshipTests
                 [-104.8, 39.7],
                 [-104.8, 39.8],
                 [-105.1, 39.8],
-                [-105.1, 39.7]
+                [-105.1, 39.7],
             ],
             'deliveryRoute' => [
                 [-104.9903, 39.7392],
                 [-104.9847, 39.7294],
-                [-104.9708, 39.7197]
-            ]
+                [-104.9708, 39.7197],
+            ],
         ]));
 
         // Create restaurants
@@ -3473,7 +3498,7 @@ trait RelationshipTests
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'NYC Diner',
             'location' => [-74.0060, 40.7128],
-            'supplier' => 'supplier1'
+            'supplier' => 'supplier1',
         ]));
 
         $database->createDocument('restaurantsSpatial', new Document([
@@ -3481,7 +3506,7 @@ trait RelationshipTests
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'LA Bistro',
             'location' => [-118.2437, 34.0522],
-            'supplier' => 'supplier2'
+            'supplier' => 'supplier2',
         ]));
 
         $database->createDocument('restaurantsSpatial', new Document([
@@ -3489,38 +3514,38 @@ trait RelationshipTests
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'Denver Steakhouse',
             'location' => [-104.9903, 39.7392],
-            'supplier' => 'supplier3'
+            'supplier' => 'supplier3',
         ]));
 
         // distanceLessThan on relationship point attribute
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0)
+            Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
 
         // distanceEqual on relationship point attribute
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::distanceEqual('supplier.warehouseLocation', [-74.0060, 40.7128], 0.0)
+            Query::distanceEqual('supplier.warehouseLocation', [-74.0060, 40.7128], 0.0),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
 
         // distanceGreaterThan on relationship point attribute
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::distanceGreaterThan('supplier.warehouseLocation', [-74.0060, 40.7128], 10.0)
+            Query::distanceGreaterThan('supplier.warehouseLocation', [-74.0060, 40.7128], 10.0),
         ]);
         $this->assertCount(2, $restaurants); // LA and Denver suppliers
 
         // distanceNotEqual on relationship point attribute
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::distanceNotEqual('supplier.warehouseLocation', [-74.0060, 40.7128], 0.0)
+            Query::distanceNotEqual('supplier.warehouseLocation', [-74.0060, 40.7128], 0.0),
         ]);
         $this->assertCount(2, $restaurants); // LA and Denver
 
         // covers on relationship polygon attribute (point inside polygon)
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::covers('supplier.deliveryArea', [[-74.0, 40.75]])
+            Query::covers('supplier.deliveryArea', [[-74.0, 40.75]]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3528,7 +3553,7 @@ trait RelationshipTests
         // covers on relationship linestring attribute
         // Note: ST_Contains on linestrings is implementation-dependent (some DBs require exact point-on-line)
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::covers('supplier.deliveryRoute', [[-74.0060, 40.7128]])
+            Query::covers('supplier.deliveryRoute', [[-74.0060, 40.7128]]),
         ]);
         // Verify query executes (result count depends on DB spatial implementation)
         $this->assertGreaterThanOrEqual(0, count($restaurants));
@@ -3539,10 +3564,10 @@ trait RelationshipTests
             [-74.00, 40.72],
             [-74.00, 40.77],
             [-74.05, 40.77],
-            [-74.05, 40.72]
+            [-74.05, 40.72],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::intersects('supplier.deliveryArea', [$testPolygon])
+            Query::intersects('supplier.deliveryArea', [$testPolygon]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3551,10 +3576,10 @@ trait RelationshipTests
         // Note: Linestring intersection semantics vary by DB (MariaDB/MySQL/PostgreSQL differ)
         $testLine = [
             [-74.01, 40.71],
-            [-73.99, 40.76]
+            [-73.99, 40.76],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::intersects('supplier.deliveryRoute', [$testLine])
+            Query::intersects('supplier.deliveryRoute', [$testLine]),
         ]);
         // Verify query executes (result count depends on DB spatial implementation)
         $this->assertGreaterThanOrEqual(0, count($restaurants));
@@ -3562,10 +3587,10 @@ trait RelationshipTests
         // crosses on relationship linestring
         $crossingLine = [
             [-74.05, 40.70],
-            [-73.95, 40.80]
+            [-73.95, 40.80],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::crosses('supplier.deliveryRoute', [$crossingLine])
+            Query::crosses('supplier.deliveryRoute', [$crossingLine]),
         ]);
         // Result depends on actual geometry intersection
 
@@ -3575,10 +3600,10 @@ trait RelationshipTests
             [-74.00, 40.75],
             [-74.00, 40.85],
             [-74.05, 40.85],
-            [-74.05, 40.75]
+            [-74.05, 40.75],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::overlaps('supplier.deliveryArea', [$overlappingPolygon])
+            Query::overlaps('supplier.deliveryArea', [$overlappingPolygon]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3589,10 +3614,10 @@ trait RelationshipTests
             [-73.9, 40.8],
             [-73.9, 40.9],
             [-74.1, 40.9],
-            [-74.1, 40.8]
+            [-74.1, 40.8],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::touches('supplier.deliveryArea', [$touchingPolygon])
+            Query::touches('supplier.deliveryArea', [$touchingPolygon]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3600,7 +3625,7 @@ trait RelationshipTests
         // Multiple spatial queries combined
         $restaurants = $database->find('restaurantsSpatial', [
             Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0),
-            Query::covers('supplier.deliveryArea', [[-74.0, 40.75]])
+            Query::covers('supplier.deliveryArea', [[-74.0, 40.75]]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3608,14 +3633,14 @@ trait RelationshipTests
         // Spatial query combined with regular query
         $restaurants = $database->find('restaurantsSpatial', [
             Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0),
-            Query::equal('supplier.company', ['Fresh Foods Inc'])
+            Query::equal('supplier.company', ['Fresh Foods Inc']),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
 
         // count with spatial relationship query
         $count = $database->count('restaurantsSpatial', [
-            Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0)
+            Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0),
         ]);
         $this->assertEquals(1, $count);
 
@@ -3632,8 +3657,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3695,21 +3721,21 @@ trait RelationshipTests
         // Find teams that have senior engineers
         $teams = $database->find('teamsParent', [
             Query::equal('members.role', ['Engineer']),
-            Query::equal('members.senior', [true])
+            Query::equal('members.senior', [true]),
         ]);
         $this->assertCount(1, $teams);
         $this->assertEquals('team1', $teams[0]->getId());
 
         // Find teams with managers
         $teams = $database->find('teamsParent', [
-            Query::equal('members.role', ['Manager'])
+            Query::equal('members.role', ['Manager']),
         ]);
         $this->assertCount(1, $teams);
         $this->assertEquals('team2', $teams[0]->getId());
 
         // Find teams with members named 'Alice'
         $teams = $database->find('teamsParent', [
-            Query::startsWith('members.memberName', 'A')
+            Query::startsWith('members.memberName', 'A'),
         ]);
         $this->assertCount(1, $teams);
         $this->assertEquals('team1', $teams[0]->getId());
@@ -3717,7 +3743,7 @@ trait RelationshipTests
         // No teams with junior managers
         $teams = $database->find('teamsParent', [
             Query::equal('members.role', ['Manager']),
-            Query::equal('members.senior', [true])
+            Query::equal('members.senior', [true]),
         ]);
         $this->assertCount(0, $teams);
 
@@ -3734,8 +3760,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3769,21 +3796,21 @@ trait RelationshipTests
 
         // No matching results
         $orders = $database->find('ordersEdge', [
-            Query::equal('customer.name', ['Jane Doe'])
+            Query::equal('customer.name', ['Jane Doe']),
         ]);
         $this->assertCount(0, $orders);
 
         // Impossible condition (combines to empty set)
         $orders = $database->find('ordersEdge', [
             Query::equal('customer.name', ['John Doe']),
-            Query::equal('customer.age', [25]) // John is 30, not 25
+            Query::equal('customer.age', [25]), // John is 30, not 25
         ]);
         $this->assertCount(0, $orders);
 
         // Non-existent relationship attribute
         try {
             $database->find('ordersEdge', [
-                Query::equal('nonexistent.attribute', ['value'])
+                Query::equal('nonexistent.attribute', ['value']),
             ]);
         } catch (\Exception $e) {
             // Expected - non-existent relationship
@@ -3800,14 +3827,14 @@ trait RelationshipTests
         ]));
 
         $orders = $database->find('ordersEdge', [
-            Query::equal('customer.name', ['John Doe'])
+            Query::equal('customer.name', ['John Doe']),
         ]);
         $this->assertCount(1, $orders);
 
         // Combining relationship query with regular query
         $orders = $database->find('ordersEdge', [
             Query::equal('customer.name', ['John Doe']),
-            Query::greaterThan('total', 75.00)
+            Query::greaterThan('total', 75.00),
         ]);
         $this->assertCount(1, $orders);
         $this->assertEquals('order1', $orders[0]->getId());
@@ -3816,7 +3843,7 @@ trait RelationshipTests
         $orders = $database->find('ordersEdge', [
             Query::equal('customer.name', ['John Doe']),
             Query::limit(1),
-            Query::offset(0)
+            Query::offset(0),
         ]);
         $this->assertCount(1, $orders);
 
@@ -3832,8 +3859,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3885,33 +3913,33 @@ trait RelationshipTests
 
         // Find developers on high priority projects
         $developers = $database->find('developersMtm', [
-            Query::equal('assignedProjects.priority', ['high'])
+            Query::equal('assignedProjects.priority', ['high']),
         ]);
         $this->assertCount(2, $developers); // Both assigned to proj1
 
         // Find developers on high budget projects
         $developers = $database->find('developersMtm', [
-            Query::greaterThan('assignedProjects.budget', 50000.00)
+            Query::greaterThan('assignedProjects.budget', 50000.00),
         ]);
         $this->assertCount(2, $developers);
 
         // Find projects with experienced developers
         $projects = $database->find('projectsMtm', [
-            Query::greaterThanEqual('assignedDevelopers.experience', 10)
+            Query::greaterThanEqual('assignedDevelopers.experience', 10),
         ]);
         $this->assertCount(1, $projects);
         $this->assertEquals('proj1', $projects[0]->getId());
 
         // Find projects with junior developers
         $projects = $database->find('projectsMtm', [
-            Query::lessThan('assignedDevelopers.experience', 5)
+            Query::lessThan('assignedDevelopers.experience', 5),
         ]);
         $this->assertCount(2, $projects); // Both projects have dev2
 
         // Combined queries
         $projects = $database->find('projectsMtm', [
             Query::equal('assignedDevelopers.devName', ['Junior Dev']),
-            Query::equal('priority', ['low'])
+            Query::equal('priority', ['low']),
         ]);
         $this->assertCount(1, $projects);
         $this->assertEquals('proj2', $projects[0]->getId());
@@ -3926,8 +3954,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -4154,8 +4183,9 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -4362,7 +4392,7 @@ trait RelationshipTests
         $caught = false;
         try {
             $database->find('postsOrder', [
-                Query::orderAsc('author.name')
+                Query::orderAsc('author.name'),
             ]);
         } catch (\Throwable $e) {
             $caught = true;
@@ -4374,19 +4404,18 @@ trait RelationshipTests
         $caught = false;
         try {
             $firstPost = $database->findOne('postsOrder', [
-                Query::orderAsc('title')
+                Query::orderAsc('title'),
             ]);
 
             $database->find('postsOrder', [
                 Query::orderAsc('author.name'),
-                Query::cursorAfter($firstPost)
+                Query::cursorAfter($firstPost),
             ]);
         } catch (\Throwable $e) {
             $caught = true;
             $this->assertStringContainsString('Cannot order by nested attribute', $e->getMessage());
         }
         $this->assertTrue($caught, 'Should throw exception for nested order attribute with cursor');
-
 
         // Clean up
         $database->deleteCollection('authorsOrder');

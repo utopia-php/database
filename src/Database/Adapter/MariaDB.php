@@ -4,7 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -50,8 +49,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Create Database
      *
-     * @param string $name
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -74,8 +71,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Delete Database
      *
-     * @param string $name
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -94,10 +89,9 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param array<Attribute> $attributes
-     * @param array<Index> $indexes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -136,7 +130,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
                     if (
                         $relationType === RelationType::ManyToMany->value
-                        || ($relationType === RelationType::OneToOne->value && !$twoWay && $side === RelationSide::Child->value)
+                        || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
                         || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
                         || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
                     ) {
@@ -169,7 +163,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                     $indexLength = $index->lengths[$nested] ?? '';
                     $indexOrder = $index->orders[$nested] ?? '';
 
-                    if ($indexType === IndexType::Spatial && !$this->supports(Capability::SpatialIndexOrder) && !empty($indexOrder)) {
+                    if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
                         throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                     }
 
@@ -179,14 +173,14 @@ class MariaDB extends SQL implements Feature\Timeouts
                         $indexOrder = '';
                     }
 
-                    if (!empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
-                        $rawCastColumns[] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
+                    if (! empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
+                        $rawCastColumns[] = '(CAST(`'.$indexAttribute.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
                     } else {
                         $regularColumns[] = $indexAttribute;
-                        if (!empty($indexLength)) {
-                            $indexLengths[$indexAttribute] = (int)$indexLength;
+                        if (! empty($indexLength)) {
+                            $indexLengths[$indexAttribute] = (int) $indexLength;
                         }
-                        if (!empty($indexOrder)) {
+                        if (! empty($indexOrder)) {
                             $indexOrders[$indexAttribute] = $indexOrder;
                         }
                     }
@@ -222,7 +216,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionResult->query);
 
         // Build permissions table using schema builder
-        $permsResult = $schema->create($this->getSQLTableRaw($id . '_perms'), function (Blueprint $table) use ($sharedTables) {
+        $permsResult = $schema->create($this->getSQLTableRaw($id.'_perms'), function (Blueprint $table) use ($sharedTables) {
             $table->id('_id');
             $table->string('_type', 12);
             $table->string('_permission', 255);
@@ -252,17 +246,15 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Get collection size on disk
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
-        $collection = $this->getNamespace() . '_' . $collection;
+        $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
-        $name = $database . '/' . $collection;
-        $permissions = $database . '/' . $collection . '_perms';
+        $name = $database.'/'.$collection;
+        $permissions = $database.'/'.$collection.'_perms';
 
         $builder = $this->createBuilder();
 
@@ -293,7 +285,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $permissionsSize->execute();
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
@@ -302,16 +294,14 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Get Collection Size of the raw data
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
-        $collection = $this->getNamespace() . '_' . $collection;
+        $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
-        $permissions = $collection . '_perms';
+        $permissions = $collection.'_perms';
 
         $builder = $this->createBuilder();
 
@@ -348,7 +338,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $permissionsSize->execute();
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
@@ -357,8 +347,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Delete collection
      *
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -368,9 +356,9 @@ class MariaDB extends SQL implements Feature\Timeouts
 
         $schema = $this->createSchemaBuilder();
         $mainResult = $schema->drop($this->getSQLTableRaw($id));
-        $permsResult = $schema->drop($this->getSQLTableRaw($id . '_perms'));
+        $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
 
-        $sql = $mainResult->query . '; ' . $permsResult->query;
+        $sql = $mainResult->query.'; '.$permsResult->query;
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         try {
@@ -385,8 +373,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Analyze a collection updating it's metadata on the database engine
      *
-     * @param string $collection
-     * @return bool
      * @throws DatabaseException
      */
     public function analyzeCollection(string $collection): bool
@@ -397,14 +383,15 @@ class MariaDB extends SQL implements Feature\Timeouts
         $sql = $result->query;
 
         $stmt = $this->getPDO()->prepare($sql);
+
         return $stmt->execute();
     }
 
     /**
      * Get Schema Attributes
      *
-     * @param string $collection
      * @return array<Document>
+     *
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
@@ -452,10 +439,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Update Attribute
      *
-     * @param string $collection
-     * @param Attribute $attribute
-     * @param string|null $newKey
-     * @return bool
      * @throws DatabaseException
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
@@ -468,7 +451,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
-        if (!empty($newKey)) {
+        if (! empty($newKey)) {
             $result = $schema->changeColumn($tableRaw, $id, $newKey, $sqlType);
         } else {
             $result = $schema->modifyColumn($tableRaw, $id, $sqlType);
@@ -478,16 +461,14 @@ class MariaDB extends SQL implements Feature\Timeouts
 
         try {
             return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+                ->prepare($sql)
+                ->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
     }
 
     /**
-     * @param Relationship $relationship
-     * @return bool
      * @throws DatabaseException
      */
     public function createRelationship(Relationship $relationship): bool
@@ -504,13 +485,14 @@ class MariaDB extends SQL implements Feature\Timeouts
             $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
                 $table->string($columnId, 255)->nullable()->default(null);
             });
+
             return $result->query;
         };
 
         $sql = match ($type) {
-            RelationType::OneToOne => $addRelColumn($name, $id) . ';' . ($twoWay ? $addRelColumn($relatedName, $twoWayKey) . ';' : ''),
-            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey) . ';',
-            RelationType::ManyToOne => $addRelColumn($name, $id) . ';',
+            RelationType::OneToOne => $addRelColumn($name, $id).';'.($twoWay ? $addRelColumn($relatedName, $twoWayKey).';' : ''),
+            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey).';',
+            RelationType::ManyToOne => $addRelColumn($name, $id).';',
             RelationType::ManyToMany => null,
         };
 
@@ -526,10 +508,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * @param Relationship $relationship
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @return bool
      * @throws DatabaseException
      */
     public function updateRelationship(
@@ -547,10 +525,10 @@ class MariaDB extends SQL implements Feature\Timeouts
         $twoWay = $relationship->twoWay;
         $side = $relationship->side;
 
-        if (!\is_null($newKey)) {
+        if (! \is_null($newKey)) {
             $newKey = $this->filter($newKey);
         }
-        if (!\is_null($newTwoWayKey)) {
+        if (! \is_null($newTwoWayKey)) {
             $newTwoWayKey = $this->filter($newTwoWayKey);
         }
 
@@ -559,6 +537,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
                 $table->renameColumn($from, $to);
             });
+
             return $result->query;
         };
 
@@ -567,31 +546,31 @@ class MariaDB extends SQL implements Feature\Timeouts
         switch ($type) {
             case RelationType::OneToOne:
                 if ($key !== $newKey) {
-                    $sql = $renameCol($name, $key, $newKey) . ';';
+                    $sql = $renameCol($name, $key, $newKey).';';
                 }
                 if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
                     if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
                     if ($key !== $newKey) {
-                        $sql = $renameCol($name, $key, $newKey) . ';';
+                        $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Child) {
                     if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
                     if ($key !== $newKey) {
-                        $sql = $renameCol($name, $key, $newKey) . ';';
+                        $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
                 break;
@@ -600,13 +579,13 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
-                $junctionName = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+                $junctionName = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
 
-                if (!\is_null($newKey)) {
-                    $sql = $renameCol($junctionName, $key, $newKey) . ';';
+                if (! \is_null($newKey)) {
+                    $sql = $renameCol($junctionName, $key, $newKey).';';
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey) . ';';
+                if ($twoWay && ! \is_null($newTwoWayKey)) {
+                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
             default:
@@ -625,8 +604,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * @param Relationship $relationship
-     * @return bool
      * @throws DatabaseException
      */
     public function deleteRelationship(Relationship $relationship): bool
@@ -646,35 +623,36 @@ class MariaDB extends SQL implements Feature\Timeouts
             $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
                 $table->dropColumn($columnId);
             });
+
             return $result->query;
         };
 
         switch ($type) {
             case RelationType::OneToOne:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropCol($name, $key).';';
                     if ($twoWay) {
-                        $sql .= $dropCol($relatedName, $twoWayKey) . ';';
+                        $sql .= $dropCol($relatedName, $twoWayKey).';';
                     }
                 } elseif ($side === RelationSide::Child) {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropCol($relatedName, $twoWayKey).';';
                     if ($twoWay) {
-                        $sql .= $dropCol($name, $key) . ';';
+                        $sql .= $dropCol($name, $key).';';
                     }
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropCol($relatedName, $twoWayKey).';';
                 } else {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropCol($name, $key).';';
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($name, $key) . ';';
+                    $sql = $dropCol($name, $key).';';
                 } else {
-                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    $sql = $dropCol($relatedName, $twoWayKey).';';
                 }
                 break;
             case RelationType::ManyToMany:
@@ -683,13 +661,13 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junctionName = $side === RelationSide::Parent
-                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
-                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+                    ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
+                    : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
 
                 $junctionResult = $schema->drop($this->getSQLTableRaw($junctionName));
-                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName . '_perms'));
+                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName.'_perms'));
 
-                $sql = $junctionResult->query . '; ' . $permsResult->query;
+                $sql = $junctionResult->query.'; '.$permsResult->query;
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
@@ -709,10 +687,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      * @throws Exception
      */
     public function renameIndex(string $collection, string $old, string $new): bool
@@ -732,11 +706,9 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param Index $index
-     * @param array<string,string> $indexAttributeTypes
-     * @param array<string, mixed> $collation
-     * @return bool
+     * @param  array<string,string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
+     *
      * @throws DatabaseException
      */
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
@@ -775,16 +747,16 @@ class MariaDB extends SQL implements Feature\Timeouts
 
             $attr = $this->filter($this->getInternalKeyForAttribute($attr));
             $order = empty($orders[$i]) || $type === IndexType::Fulltext ? '' : $orders[$i];
-            $length = empty($lengths[$i]) ? 0 : (int)$lengths[$i];
+            $length = empty($lengths[$i]) ? 0 : (int) $lengths[$i];
 
-            if ($this->supports(Capability::CastIndexArray) && !empty($attribute['array'])) {
-                $rawExpressions[] = '(CAST(`' . $attr . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
+            if ($this->supports(Capability::CastIndexArray) && ! empty($attribute['array'])) {
+                $rawExpressions[] = '(CAST(`'.$attr.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
             } else {
                 $schemaColumns[] = $attr;
                 if ($length > 0) {
                     $schemaLengths[$attr] = $length;
                 }
-                if (!empty($order)) {
+                if (! empty($order)) {
                     $schemaOrders[$attr] = $order;
                 }
             }
@@ -799,7 +771,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             IndexType::Key, IndexType::Unique => '',
             IndexType::Fulltext => 'fulltext',
             IndexType::Spatial => 'spatial',
-            default => throw new DatabaseException('Unknown index type: ' . $type->value . '. Must be one of ' . IndexType::Key->value . ', ' . IndexType::Unique->value . ', ' . IndexType::Fulltext->value . ', ' . IndexType::Spatial->value),
+            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value),
         };
 
         $result = $schema->createIndex(
@@ -826,9 +798,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -847,7 +816,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
+            if ($e->getCode() === '42000' && $e->errorInfo[1] === 1091) {
                 return true;
             }
 
@@ -858,9 +827,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Create Document
      *
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -885,7 +851,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
             $row = ['_uid' => $document->getId()];
 
-            if (!empty($document->getSequence())) {
+            if (! empty($document->getSequence())) {
                 $row['_id'] = $document->getSequence();
             }
 
@@ -896,14 +862,14 @@ class MariaDB extends SQL implements Feature\Timeouts
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
-                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
                     $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }
-                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
                 }
             }
@@ -932,12 +898,12 @@ class MariaDB extends SQL implements Feature\Timeouts
                     && $e->errorInfo[1] === 1062
                     && \str_contains($e->getMessage(), '_index1');
 
-                if (!$isOrphanedPermission) {
+                if (! $isOrphanedPermission) {
                     throw $e;
                 }
 
                 // Clean up orphaned permissions from a previous failed delete, then retry
-                $cleanupBuilder = $this->newBuilder($name . '_perms');
+                $cleanupBuilder = $this->newBuilder($name.'_perms');
                 $cleanupBuilder->filter([\Utopia\Query\Query::equal('_document', [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
                 $cleanupStmt = $this->executeResult($cleanupResult);
@@ -957,11 +923,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Update Document
      *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -1001,13 +962,13 @@ class MariaDB extends SQL implements Feature\Timeouts
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
-                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $value = (\is_bool($value)) ? (int) $value : $value;
                     $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }
-                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $value = (\is_bool($value)) ? (int) $value : $value;
                     $regularRow[$column] = $value;
                 }
             }
@@ -1031,7 +992,7 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function insertRequiresAlias(): bool
     {
@@ -1039,43 +1000,38 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "IF(_tenant = VALUES(_tenant), VALUES({$quoted}), {$quoted})";
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "{$quoted} + VALUES({$quoted})";
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "IF(_tenant = VALUES(_tenant), {$quoted} + VALUES({$quoted}), {$quoted})";
     }
 
     /**
      * Increase or decrease an attribute value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param string $updatedAt
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
      * @throws DatabaseException
      */
     public function increaseDocumentAttribute(
@@ -1091,7 +1047,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         $attribute = $this->filter($attribute);
 
         $builder = $this->newBuilder($name);
-        $builder->setRaw($attribute, $this->quote($attribute) . ' + ?', [$value]);
+        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
         $builder->set(['_updatedAt' => $updatedAt]);
 
         $filters = [\Utopia\Query\Query::equal('_uid', [$id])];
@@ -1118,9 +1074,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -1136,7 +1089,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_DELETE);
 
-            if (!$stmt->execute()) {
+            if (! $stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
 
@@ -1156,14 +1109,8 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Handle distance spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $type
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
-    */
+     * @param  array<string, mixed>  $binds
+     */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
@@ -1178,30 +1125,26 @@ class MariaDB extends SQL implements Feature\Timeouts
             Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
             Query::TYPE_DISTANCE_GREATER_THAN => '>',
             Query::TYPE_DISTANCE_LESS_THAN => '<',
-            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
 
         if ($useMeters) {
             $wktType = $this->getSpatialTypeFromWKT($wkt);
             $attrType = strtolower($type);
             if ($wktType != ColumnType::Point->value || $attrType != ColumnType::Point->value) {
-                throw new QueryException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
+                throw new QueryException('Distance in meters is not supported between '.$attrType.' and '.$wktType);
             }
-            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::EARTH_RADIUS . ") {$operator} :{$placeholder}_1";
+
+            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ".$this->getSpatialGeomFromText(":{$placeholder}_0", null).', '.Database::EARTH_RADIUS.") {$operator} :{$placeholder}_1";
         }
-        return "ST_Distance({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ") {$operator} :{$placeholder}_1";
+
+        return "ST_Distance({$alias}.{$attribute}, ".$this->getSpatialGeomFromText(":{$placeholder}_0", null).") {$operator} :{$placeholder}_1";
     }
 
     /**
      * Handle spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $type
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
+     * @param  array<string, mixed>  $binds
      */
     protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
@@ -1225,16 +1168,15 @@ class MariaDB extends SQL implements Feature\Timeouts
             Query::TYPE_NOT_EQUAL => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
             Query::TYPE_CONTAINS => "ST_Contains({$alias}.{$attribute}, {$geom})",
             Query::TYPE_NOT_CONTAINS => "NOT ST_Contains({$alias}.{$attribute}, {$geom})",
-            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
     }
 
     /**
      * Get SQL Condition
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @return string
+     * @param  array<string, mixed>  $binds
+     *
      * @throws Exception
      */
     protected function getSQLCondition(Query $query, array &$binds): string
@@ -1262,7 +1204,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
                 $method = strtoupper($query->getMethod()->value);
 
-                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
+                return empty($conditions) ? '' : ' '.$method.' ('.implode(' AND ', $conditions).')';
 
             case Query::TYPE_SEARCH:
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
@@ -1293,6 +1235,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             case Query::TYPE_CONTAINS_ALL:
                 if ($query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+
                     return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
                 // no break
@@ -1302,6 +1245,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if ($this->supports(Capability::JSONOverlaps) && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+
                     return $isNot
                         ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
                         : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
@@ -1312,17 +1256,17 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $isNotQuery = in_array($query->getMethod(), [
                     Query::TYPE_NOT_STARTS_WITH,
                     Query::TYPE_NOT_ENDS_WITH,
-                    Query::TYPE_NOT_CONTAINS
+                    Query::TYPE_NOT_CONTAINS,
                 ]);
 
                 foreach ($query->getValues() as $key => $value) {
                     $value = match ($query->getMethod()) {
-                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value).'%',
+                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value).'%',
+                        Query::TYPE_ENDS_WITH => '%'.$this->escapeWildcards($value),
+                        Query::TYPE_NOT_ENDS_WITH => '%'.$this->escapeWildcards($value),
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
                         default => $value
                     };
 
@@ -1335,7 +1279,8 @@ class MariaDB extends SQL implements Feature\Timeouts
                 }
 
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+
+                return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
         }
     }
 
@@ -1344,7 +1289,7 @@ class MariaDB extends SQL implements Feature\Timeouts
      */
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\MariaDB();
+        return new \Utopia\Query\Builder\MariaDB;
     }
 
     /**
@@ -1359,8 +1304,8 @@ class MariaDB extends SQL implements Feature\Timeouts
             $sqlType = $this->getSpatialSQLType($attribute->type->value, $attribute->required);
             $sql = "ALTER TABLE {$table} ADD COLUMN {$this->quote($id)} {$sqlType}";
             $lockType = $this->getLockType();
-            if (!empty($lockType)) {
-                $sql .= ' ' . $lockType;
+            if (! empty($lockType)) {
+                $sql .= ' '.$lockType;
             }
             $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
@@ -1376,7 +1321,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
     protected function createSchemaBuilder(): \Utopia\Query\Schema
     {
-        return new \Utopia\Query\Schema\MySQL();
+        return new \Utopia\Query\Schema\MySQL;
     }
 
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
@@ -1410,11 +1355,12 @@ class MariaDB extends SQL implements Feature\Timeouts
 
             case ColumnType::Varchar->value:
                 if ($size <= 0) {
-                    throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                    throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
                 }
                 if ($size > $this->getMaxVarcharLength()) {
-                    throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+                    throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
                 }
+
                 return "VARCHAR({$size})";
 
             case ColumnType::Text->value:
@@ -1430,14 +1376,15 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $signed = ($signed) ? '' : ' UNSIGNED';
 
                 if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
-                    return 'BIGINT' . $signed;
+                    return 'BIGINT'.$signed;
                 }
 
-                return 'INT' . $signed;
+                return 'INT'.$signed;
 
             case ColumnType::Double->value:
                 $signed = ($signed) ? '' : ' UNSIGNED';
-                return 'DOUBLE' . $signed;
+
+                return 'DOUBLE'.$signed;
 
             case ColumnType::Boolean->value:
                 return 'TINYINT(1)';
@@ -1449,15 +1396,13 @@ class MariaDB extends SQL implements Feature\Timeouts
                 return 'DATETIME(3)';
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . ColumnType::String->value . ', ' . ColumnType::Varchar->value . ', ' . ColumnType::Text->value . ', ' . ColumnType::MediumText->value . ', ' . ColumnType::LongText->value . ', ' . ColumnType::Integer->value . ', ' . ColumnType::Double->value . ', ' . ColumnType::Boolean->value . ', ' . ColumnType::Datetime->value . ', ' . ColumnType::Relationship->value . ', ' . ColumnType::Point->value . ', ' . ColumnType::Linestring->value . ', ' . ColumnType::Polygon->value);
+                throw new DatabaseException('Unknown type: '.$type.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value);
         }
     }
 
     /**
      * Get PDO Type
      *
-     * @param mixed $value
-     * @return int
      * @throws Exception
      */
     protected function getPDOType(mixed $value): int
@@ -1466,14 +1411,12 @@ class MariaDB extends SQL implements Feature\Timeouts
             'string','double' => \PDO::PARAM_STR,
             'integer', 'boolean' => \PDO::PARAM_INT,
             'NULL' => \PDO::PARAM_NULL,
-            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for '.\gettype($value)),
         };
     }
 
     /**
      * Get the SQL function for random ordering
-     *
-     * @return string
      */
     protected function getRandomOrder(): string
     {
@@ -1482,9 +1425,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
     /**
      * Size of POINT spatial type
-     *
-     * @return int
-    */
+     */
     protected function getMaxPointSize(): int
     {
         // https://dev.mysql.com/doc/refman/8.4/en/gis-data-formats.html#gis-internal-format
@@ -1503,9 +1444,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
     /**
      * Set max execution time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
+     *
      * @throws DatabaseException
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
@@ -1519,17 +1458,15 @@ class MariaDB extends SQL implements Feature\Timeouts
         $seconds = $milliseconds / 1000;
 
         $this->before($event, 'timeout', function ($sql) use ($seconds) {
-            return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+            return "SET STATEMENT max_statement_time = {$seconds} FOR ".$sql;
         });
     }
 
-    /**
-     * @return string
-     */
     public function getConnectionId(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
         $stmt = $this->getPDO()->query($result->query);
+
         return $stmt->fetchColumn();
     }
 
@@ -1570,9 +1507,10 @@ class MariaDB extends SQL implements Feature\Timeouts
             if (\str_contains($message, '_index1')) {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
-            if (!\str_contains($message, '_uid')) {
+            if (! \str_contains($message, '_uid')) {
                 return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
+
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
@@ -1625,11 +1563,6 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Get operator SQL
      * Override to handle MariaDB/MySQL-specific operators
-     *
-     * @param string $column
-     * @param Operator $operator
-     * @param int &$bindIndex
-     * @return ?string
      */
     protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
@@ -1645,12 +1578,14 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case OperatorType::Decrement->value:
@@ -1659,12 +1594,14 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
                         WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case OperatorType::Multiply->value:
@@ -1673,6 +1610,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
@@ -1680,6 +1618,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case OperatorType::Divide->value:
@@ -1688,16 +1627,19 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
             case OperatorType::Modulo->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case OperatorType::Power->value:
@@ -1706,6 +1648,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
@@ -1713,12 +1656,14 @@ class MariaDB extends SQL implements Feature\Timeouts
                         ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
                     END";
                 }
+
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
                 // String operators
             case OperatorType::StringConcat->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
 
             case OperatorType::StringReplace->value:
@@ -1726,6 +1671,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
                 // Boolean operators
@@ -1736,11 +1682,13 @@ class MariaDB extends SQL implements Feature\Timeouts
             case OperatorType::ArrayAppend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case OperatorType::ArrayPrepend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
             case OperatorType::ArrayInsert->value:
@@ -1748,6 +1696,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_ARRAY_INSERT(
                     {$quotedColumn}, 
                     CONCAT('$[', :$indexKey, ']'), 
@@ -1757,6 +1706,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             case OperatorType::ArrayRemove->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
@@ -1772,6 +1722,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             case OperatorType::ArrayIntersect->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
@@ -1784,6 +1735,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             case OperatorType::ArrayDiff->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
@@ -1798,6 +1750,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
@@ -1818,11 +1771,13 @@ class MariaDB extends SQL implements Feature\Timeouts
             case OperatorType::DateAddDays->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
             case OperatorType::DateSubDays->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
             case OperatorType::DateSetNow->value:
@@ -1838,7 +1793,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         $srid = Database::DEFAULT_SRID;
         $nullability = '';
 
-        if (!$this->supports(Capability::SpatialIndexNull)) {
+        if (! $this->supports(Capability::SpatialIndexNull)) {
             if ($required) {
                 $nullability = ' NOT NULL';
             } else {
@@ -1858,5 +1813,4 @@ class MariaDB extends SQL implements Feature\Timeouts
     {
         return true;
     }
-
 }

@@ -13,26 +13,23 @@ use Utopia\Database\PDO;
 class MySQLTest extends Base
 {
     public static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
     // Remove once all methods are implemented
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mysql";
+        return 'mysql';
     }
 
-    /**
-     * @return Database
-     */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
@@ -43,7 +40,7 @@ class MySQLTest extends Base
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis', 6379);
         $redis->select(8);
 
@@ -55,9 +52,8 @@ class MySQLTest extends Base
             ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = 'st_' . static::getTestToken())
-            ->enableLocks(true)
-        ;
+            ->setNamespace(static::$namespace = 'st_'.static::getTestToken())
+            ->enableLocks(true);
 
         if ($database->exists()) {
             $database->delete();
@@ -66,12 +62,13 @@ class MySQLTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
@@ -81,7 +78,7 @@ class MySQLTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pdo->exec($sql);

@@ -12,19 +12,19 @@ class PartialStructure extends Structure
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $document
-     *
-     * @return bool
+     * @param  mixed  $document
      */
     public function isValid($document): bool
     {
-        if (!$document instanceof Document) {
+        if (! $document instanceof Document) {
             $this->message = 'Value must be an instance of Document';
+
             return false;
         }
 
-        if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
+        if (empty($this->collection->getId()) || $this->collection->getCollection() !== Database::METADATA) {
             $this->message = 'Collection not found';
+
             return false;
         }
 
@@ -46,14 +46,14 @@ class PartialStructure extends Structure
             }
         }
 
-        if (!$this->checkForAllRequiredValues($structure, $requiredAttributes, $keys)) {
+        if (! $this->checkForAllRequiredValues($structure, $requiredAttributes, $keys)) {
             return false;
         }
-        if (!$this->checkForUnknownAttributes($structure, $keys)) {
+        if (! $this->checkForUnknownAttributes($structure, $keys)) {
             return false;
         }
 
-        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+        if (! $this->checkForInvalidAttributeValues($structure, $keys)) {
             return false;
         }
 

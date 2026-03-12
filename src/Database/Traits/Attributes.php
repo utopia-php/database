@@ -3,21 +3,21 @@
 namespace Utopia\Database\Traits;
 
 use Exception;
+use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\SetType;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Attribute;
+use Utopia\Database\SetType;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
@@ -30,9 +30,6 @@ trait Attributes
     /**
      * Create Attribute
      *
-     * @param string $collection
-     * @param Attribute $attribute
-     * @return bool
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
@@ -123,7 +120,7 @@ trait Attributes
                 }
             }
 
-            if (!$typesMatch) {
+            if (! $typesMatch) {
                 // Column exists with wrong type and is not tracked in metadata,
                 // so no indexes or relationships reference it. Drop and recreate.
                 $this->adapter->deleteAttribute($collection->getId(), $id);
@@ -136,11 +133,11 @@ trait Attributes
 
         $created = false;
 
-        if (!$existsInSchema) {
+        if (! $existsInSchema) {
             try {
                 $created = $this->adapter->createAttribute($collection->getId(), $attribute);
 
-                if (!$created) {
+                if (! $created) {
                     throw new DatabaseException('Failed to create attribute');
                 }
             } catch (DuplicateException) {
@@ -165,7 +162,7 @@ trait Attributes
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
                 '$id' => $collection->getId(),
-                '$collection' => self::METADATA
+                '$collection' => self::METADATA,
             ]));
         } catch (\Throwable $e) {
             // Ignore
@@ -183,9 +180,8 @@ trait Attributes
     /**
      * Create Attributes
      *
-     * @param string $collection
-     * @param array<Attribute> $attributes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -279,18 +275,18 @@ trait Attributes
             }
 
             $attributeDocuments[] = $attributeDocument;
-            if (!$existsInSchema) {
+            if (! $existsInSchema) {
                 $attributesToCreate[] = $attribute;
             }
         }
 
         $created = false;
 
-        if (!empty($attributesToCreate)) {
+        if (! empty($attributesToCreate)) {
             try {
                 $created = $this->adapter->createAttributes($collection->getId(), $attributesToCreate);
 
-                if (!$created) {
+                if (! $created) {
                     throw new DatabaseException('Failed to create attributes');
                 }
             } catch (DuplicateException) {
@@ -328,7 +324,7 @@ trait Attributes
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
                 '$id' => $collection->getId(),
-                '$collection' => self::METADATA
+                '$collection' => self::METADATA,
             ]));
         } catch (\Throwable $e) {
             // Ignore
@@ -344,19 +340,10 @@ trait Attributes
     }
 
     /**
-     * @param Document $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $required
-     * @param mixed $default
-     * @param bool $signed
-     * @param bool $array
-     * @param string $format
-     * @param array<string, mixed> $formatOptions
-     * @param array<string> $filters
-     * @param array<Document>|null $schemaAttributes Pre-fetched schema attributes, or null to fetch internally
-     * @return Document
+     * @param  array<string, mixed>  $formatOptions
+     * @param  array<string>  $filters
+     * @param  array<Document>|null  $schemaAttributes  Pre-fetched schema attributes, or null to fetch internally
+     *
      * @throws DuplicateException
      * @throws LimitException
      * @throws Exception
@@ -421,8 +408,7 @@ trait Attributes
     /**
      * Get the list of required filters for each data type
      *
-     * @param string|null $type Type of the attribute
-     *
+     * @param  string|null  $type  Type of the attribute
      * @return array<string>
      */
     protected function getRequiredFilters(?string $type): array
@@ -436,10 +422,9 @@ trait Attributes
     /**
      * Function to validate if the default value of an attribute matches its attribute type
      *
-     * @param string $type Type of the attribute
-     * @param mixed $default Default value of the attribute
+     * @param  string  $type  Type of the attribute
+     * @param  mixed  $default  Default value of the attribute
      *
-     * @return void
      * @throws DatabaseException
      */
     protected function validateDefaultTypes(string $type, mixed $default): void
@@ -453,11 +438,12 @@ trait Attributes
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (!in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]) && $type != ColumnType::Object->value) {
+            if (! in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]) && $type != ColumnType::Object->value) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
             }
+
             return;
         }
 
@@ -468,19 +454,19 @@ trait Attributes
             case ColumnType::MediumText->value:
             case ColumnType::LongText->value:
                 if ($defaultType !== 'string') {
-                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value '.$default.' does not match given type '.$type);
                 }
                 break;
             case ColumnType::Integer->value:
             case ColumnType::Double->value:
             case ColumnType::Boolean->value:
                 if ($type !== $defaultType) {
-                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value '.$default.' does not match given type '.$type);
                 }
                 break;
             case ColumnType::Datetime->value:
                 if ($defaultType !== ColumnType::String->value) {
-                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value '.$default.' does not match given type '.$type);
                 }
                 break;
             case ColumnType::Vector->value:
@@ -500,7 +486,7 @@ trait Attributes
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,
-                    ColumnType::Relationship->value
+                    ColumnType::Relationship->value,
                 ];
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
@@ -508,18 +494,15 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Spatial)) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
+                throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
         }
     }
 
     /**
      * Update attribute metadata. Utility method for update attribute methods.
      *
-     * @param string $collection
-     * @param string $id
-     * @param callable(Document, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
+     * @param  callable(Document, Document, int|string): void  $updateCallback  method that receives document, and returns it with changes applied
      *
-     * @return Document
      * @throws ConflictException
      * @throws DatabaseException
      */
@@ -562,11 +545,7 @@ trait Attributes
     /**
      * Update required status of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param bool $required
      *
-     * @return Document
      * @throws Exception
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document
@@ -579,18 +558,15 @@ trait Attributes
     /**
      * Update format of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $format validation format of attribute
+     * @param  string  $format  validation format of attribute
      *
-     * @return Document
      * @throws Exception
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
-            if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
-                throw new DatabaseException('Format "' . $format . '" not available for attribute type "' . $attribute->getAttribute('type') . '"');
+            if (! Structure::hasFormat($format, $attribute->getAttribute('type'))) {
+                throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attribute->getAttribute('type').'"');
             }
 
             $attribute->setAttribute('format', $format);
@@ -600,11 +576,8 @@ trait Attributes
     /**
      * Update format options of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param array<string, mixed> $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param  array<string, mixed>  $formatOptions  assoc array with custom options that can be passed for the format validation
      *
-     * @return Document
      * @throws Exception
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
@@ -617,11 +590,8 @@ trait Attributes
     /**
      * Update filters of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param array<string> $filters
+     * @param  array<string>  $filters
      *
-     * @return Document
      * @throws Exception
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): Document
@@ -634,11 +604,7 @@ trait Attributes
     /**
      * Update default value of attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param mixed $default
      *
-     * @return Document
      * @throws Exception
      */
     public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
@@ -657,19 +623,10 @@ trait Attributes
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
      *
-     * @param string $collection
-     * @param string $id
-     * @param ColumnType|string|null $type
-     * @param int|null $size utf8mb4 chars length
-     * @param bool|null $required
-     * @param mixed $default
-     * @param bool $signed
-     * @param bool $array
-     * @param string|null $format
-     * @param array<string, mixed>|null $formatOptions
-     * @param array<string>|null $filters
-     * @param string|null $newKey
-     * @return Document
+     * @param  int|null  $size  utf8mb4 chars length
+     * @param  array<string, mixed>|null  $formatOptions
+     * @param  array<string>|null  $filters
+     *
      * @throws Exception
      */
     public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
@@ -704,11 +661,11 @@ trait Attributes
             $originalIndexes[] = clone $index;
         }
 
-        $altering = !\is_null($type)
-            || !\is_null($size)
-            || !\is_null($signed)
-            || !\is_null($array)
-            || !\is_null($newKey);
+        $altering = ! \is_null($type)
+            || ! \is_null($size)
+            || ! \is_null($signed)
+            || ! \is_null($array)
+            || ! \is_null($newKey);
         $type ??= $attribute->getAttribute('type');
         $size ??= $attribute->getAttribute('size');
         $signed ??= $attribute->getAttribute('signed');
@@ -719,12 +676,12 @@ trait Attributes
         $formatOptions ??= $attribute->getAttribute('formatOptions');
         $filters ??= $attribute->getAttribute('filters');
 
-        if ($required === true && !\is_null($default)) {
+        if ($required === true && ! \is_null($default)) {
             $default = null;
         }
 
         // we need to alter table attribute type to NOT NULL/NULL for change in required
-        if (!$this->adapter->supports(Capability::SpatialIndexNull) && in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
+        if (! $this->adapter->supports(Capability::SpatialIndexNull) && in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
             $altering = true;
         }
 
@@ -735,7 +692,7 @@ trait Attributes
                 }
 
                 if ($size > $this->adapter->getLimitForString()) {
-                    throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    throw new DatabaseException('Max size allowed for string is: '.number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
@@ -745,7 +702,7 @@ trait Attributes
                 }
 
                 if ($size > $this->adapter->getMaxVarcharLength()) {
-                    throw new DatabaseException('Max size allowed for varchar is: ' . number_format($this->adapter->getMaxVarcharLength()));
+                    throw new DatabaseException('Max size allowed for varchar is: '.number_format($this->adapter->getMaxVarcharLength()));
                 }
                 break;
 
@@ -758,42 +715,42 @@ trait Attributes
             case ColumnType::Integer->value:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
-                    throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
+                    throw new DatabaseException('Max size allowed for int is: '.number_format($limit));
                 }
                 break;
             case ColumnType::Double->value:
             case ColumnType::Boolean->value:
             case ColumnType::Datetime->value:
-                if (!empty($size)) {
+                if (! empty($size)) {
                     throw new DatabaseException('Size must be empty');
                 }
                 break;
             case ColumnType::Object->value:
-                if (!$this->adapter->supports(Capability::Objects)) {
+                if (! $this->adapter->supports(Capability::Objects)) {
                     throw new DatabaseException('Object attributes are not supported');
                 }
-                if (!empty($size)) {
+                if (! empty($size)) {
                     throw new DatabaseException('Size must be empty for object attributes');
                 }
-                if (!empty($array)) {
+                if (! empty($array)) {
                     throw new DatabaseException('Object attributes cannot be arrays');
                 }
                 break;
             case ColumnType::Point->value:
             case ColumnType::Linestring->value:
             case ColumnType::Polygon->value:
-                if (!$this->adapter->supports(Capability::Spatial)) {
+                if (! $this->adapter->supports(Capability::Spatial)) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
-                if (!empty($size)) {
+                if (! empty($size)) {
                     throw new DatabaseException('Size must be empty for spatial attributes');
                 }
-                if (!empty($array)) {
+                if (! empty($array)) {
                     throw new DatabaseException('Spatial attributes cannot be arrays');
                 }
                 break;
             case ColumnType::Vector->value:
-                if (!$this->adapter->supports(Capability::Vectors)) {
+                if (! $this->adapter->supports(Capability::Vectors)) {
                     throw new DatabaseException('Vector types are not supported by the current database');
                 }
                 if ($array) {
@@ -803,17 +760,17 @@ trait Attributes
                     throw new DatabaseException('Vector dimensions must be a positive integer');
                 }
                 if ($size > self::MAX_VECTOR_DIMENSIONS) {
-                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
+                    throw new DatabaseException('Vector dimensions cannot exceed '.self::MAX_VECTOR_DIMENSIONS);
                 }
                 if ($default !== null) {
-                    if (!\is_array($default)) {
+                    if (! \is_array($default)) {
                         throw new DatabaseException('Vector default value must be an array');
                     }
                     if (\count($default) !== $size) {
-                        throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                        throw new DatabaseException('Vector default value must have exactly '.$size.' elements');
                     }
                     foreach ($default as $component) {
-                        if (!\is_int($component) && !\is_float($component)) {
+                        if (! \is_int($component) && ! \is_float($component)) {
                             throw new DatabaseException('Vector default value must contain only numeric elements');
                         }
                     }
@@ -830,7 +787,7 @@ trait Attributes
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,
-                    ColumnType::Relationship->value
+                    ColumnType::Relationship->value,
                 ];
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
@@ -838,22 +795,22 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Spatial)) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
+                throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
         }
 
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        if (! empty(array_diff($requiredFilters, $filters))) {
+            throw new DatabaseException("Attribute of type: $type requires the following filters: ".implode(',', $requiredFilters));
         }
 
         if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            if (! Structure::hasFormat($format, $type)) {
+                throw new DatabaseException('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         }
 
-        if (!\is_null($default)) {
+        if (! \is_null($default)) {
             if ($required) {
                 throw new DatabaseException('Cannot set a default value on a required attribute');
             }
@@ -885,7 +842,7 @@ trait Attributes
             throw new LimitException('Row width limit reached. Cannot update attribute.');
         }
 
-        if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && !$this->adapter->supports(Capability::SpatialIndexNull)) {
+        if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && ! $this->adapter->supports(Capability::SpatialIndexNull)) {
             $attributeMap = [];
             foreach ($attributes as $attrDoc) {
                 $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
@@ -900,15 +857,15 @@ trait Attributes
                 $indexAttributes = $index->getAttribute('attributes', []);
                 foreach ($indexAttributes as $attributeName) {
                     $lookup = \strtolower($attributeName);
-                    if (!isset($attributeMap[$lookup])) {
+                    if (! isset($attributeMap[$lookup])) {
                         continue;
                     }
                     $attrDoc = $attributeMap[$lookup];
                     $attrType = $attrDoc->getAttribute('type');
-                    $attrRequired = (bool)$attrDoc->getAttribute('required', false);
+                    $attrRequired = (bool) $attrDoc->getAttribute('required', false);
 
-                    if (in_array($attrType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && !$attrRequired) {
-                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
+                    if (in_array($attrType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true) && ! $attrRequired) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "'.$attributeName.'" as required or create the index on a column with no null values.');
                     }
                 }
             }
@@ -919,7 +876,7 @@ trait Attributes
         if ($altering) {
             $indexes = $collectionDoc->getAttribute('indexes');
 
-            if (!\is_null($newKey) && $id !== $newKey) {
+            if (! \is_null($newKey) && $id !== $newKey) {
                 foreach ($indexes as $index) {
                     if (in_array($id, $index['attributes'])) {
                         $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
@@ -936,7 +893,7 @@ trait Attributes
                     $this->adapter->supports(Capability::CastIndexArray),
                 );
 
-                if (!$validator->isValid($attribute)) {
+                if (! $validator->isValid($attribute)) {
                     throw new DependencyException($validator->getDescription());
                 }
             }
@@ -968,7 +925,7 @@ trait Attributes
                 );
 
                 foreach ($indexes as $index) {
-                    if (!$validator->isValid($index)) {
+                    if (! $validator->isValid($index)) {
                         throw new IndexException($validator->getDescription());
                     }
                 }
@@ -988,7 +945,7 @@ trait Attributes
             );
             $updated = $this->adapter->updateAttribute($collection, $updateAttrModel, $newKey);
 
-            if (!$updated) {
+            if (! $updated) {
                 throw new DatabaseException('Failed to update attribute');
             }
         }
@@ -1023,7 +980,7 @@ trait Attributes
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
                 '$id' => $collection,
-                '$collection' => self::METADATA
+                '$collection' => self::METADATA,
             ]));
         } catch (\Throwable $e) {
             // Ignore
@@ -1043,10 +1000,7 @@ trait Attributes
      * Used to check attribute limits without asking the database
      * Returns true if attribute can be added to collection, throws exception otherwise
      *
-     * @param Document $collection
-     * @param Document $attribute
      *
-     * @return bool
      * @throws LimitException
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
@@ -1059,14 +1013,14 @@ trait Attributes
             $this->adapter->getLimitForAttributes() > 0 &&
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is ' . $this->adapter->getCountOfAttributes($collection) . ' but the maximum is ' . $this->adapter->getLimitForAttributes() . '. Remove some attributes to free up space.');
+            throw new LimitException('Column limit reached. Cannot create new attribute. Current attribute count is '.$this->adapter->getCountOfAttributes($collection).' but the maximum is '.$this->adapter->getLimitForAttributes().'. Remove some attributes to free up space.');
         }
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is ' . $this->adapter->getAttributeWidth($collection) . ' bytes but the maximum is ' . $this->adapter->getDocumentSizeLimit() . ' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
+            throw new LimitException('Row width limit reached. Cannot create new attribute. Current row width is '.$this->adapter->getAttributeWidth($collection).' bytes but the maximum is '.$this->adapter->getDocumentSizeLimit().' bytes. Reduce the size of existing attributes or remove some attributes to free up space.');
         }
 
         return true;
@@ -1075,10 +1029,7 @@ trait Attributes
     /**
      * Delete Attribute
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws ConflictException
      * @throws DatabaseException
      */
@@ -1112,7 +1063,7 @@ trait Attributes
                 $this->adapter->supports(Capability::CastIndexArray),
             );
 
-            if (!$validator->isValid($attribute)) {
+            if (! $validator->isValid($attribute)) {
                 throw new DependencyException($validator->getDescription());
             }
         }
@@ -1134,7 +1085,7 @@ trait Attributes
 
         $shouldRollback = false;
         try {
-            if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
+            if (! $this->adapter->deleteAttribute($collection->getId(), $id)) {
                 throw new DatabaseException('Failed to delete attribute');
             }
             $shouldRollback = true;
@@ -1167,7 +1118,7 @@ trait Attributes
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
                 '$id' => $collection->getId(),
-                '$collection' => self::METADATA
+                '$collection' => self::METADATA,
             ]));
         } catch (\Throwable $e) {
             // Ignore
@@ -1185,10 +1136,8 @@ trait Attributes
     /**
      * Rename Attribute
      *
-     * @param string $collection
-     * @param string $old Current attribute ID
-     * @param string $new
-     * @return bool
+     * @param  string  $old  Current attribute ID
+     *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -1209,7 +1158,7 @@ trait Attributes
          */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = new Document();
+        $attribute = new Document;
 
         foreach ($attributes as $value) {
             if ($value->getId() === $old) {
@@ -1231,7 +1180,7 @@ trait Attributes
                 $this->adapter->supports(Capability::CastIndexArray),
             );
 
-            if (!$validator->isValid($attribute)) {
+            if (! $validator->isValid($attribute)) {
                 throw new DependencyException($validator->getDescription());
             }
         }
@@ -1250,7 +1199,7 @@ trait Attributes
         $renamed = false;
         try {
             $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
-            if (!$renamed) {
+            if (! $renamed) {
                 throw new DatabaseException('Failed to rename attribute');
             }
         } catch (\Throwable $e) {
@@ -1271,10 +1220,10 @@ trait Attributes
                 if ($newExistsInSchema) {
                     $renamed = true;
                 } else {
-                    throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+                    throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
                 }
             } else {
-                throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+                throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
             }
         }
 
@@ -1302,10 +1251,10 @@ trait Attributes
     /**
      * Cleanup (delete) a single attribute with retry logic
      *
-     * @param string $collectionId The collection ID
-     * @param string $attributeId The attribute ID
-     * @param int $maxAttempts Maximum retry attempts
-     * @return void
+     * @param  string  $collectionId  The collection ID
+     * @param  string  $attributeId  The attribute ID
+     * @param  int  $maxAttempts  Maximum retry attempts
+     *
      * @throws DatabaseException If cleanup fails after all retries
      */
     private function cleanupAttribute(
@@ -1324,9 +1273,9 @@ trait Attributes
     /**
      * Cleanup (delete) multiple attributes with retry logic
      *
-     * @param string $collectionId The collection ID
-     * @param array<Document> $attributeDocuments The attribute documents to cleanup
-     * @param int $maxAttempts Maximum retry attempts per attribute
+     * @param  string  $collectionId  The collection ID
+     * @param  array<Document>  $attributeDocuments  The attribute documents to cleanup
+     * @param  int  $maxAttempts  Maximum retry attempts per attribute
      * @return array<string> Array of error messages for failed cleanups (empty if all succeeded)
      */
     private function cleanupAttributes(
@@ -1351,16 +1300,15 @@ trait Attributes
     /**
      * Rollback metadata state by removing specified attributes from collection
      *
-     * @param Document $collection The collection document
-     * @param array<string> $attributeIds Attribute IDs to remove
-     * @return void
+     * @param  Document  $collection  The collection document
+     * @param  array<string>  $attributeIds  Attribute IDs to remove
      */
     private function rollbackAttributeMetadata(Document $collection, array $attributeIds): void
     {
         $attributes = $collection->getAttribute('attributes', []);
         $filteredAttributes = \array_filter(
             $attributes,
-            fn ($attr) => !\in_array($attr->getId(), $attributeIds)
+            fn ($attr) => ! \in_array($attr->getId(), $attributeIds)
         );
         $collection->setAttribute('attributes', \array_values($filteredAttributes));
     }

@@ -30,12 +30,8 @@ class RetryClient
 
     public function __construct(
         private Client $client,
-    ) {
-    }
+    ) {}
 
-    /**
-     * @return Client
-     */
     public function unwrap(): Client
     {
         return $this->client;
@@ -54,6 +50,7 @@ class RetryClient
                 && \str_contains($errstr, 'Resource temporarily unavailable')) {
                 return true; // Suppress the warning
             }
+
             return false; // Let other warnings propagate normally
         });
 

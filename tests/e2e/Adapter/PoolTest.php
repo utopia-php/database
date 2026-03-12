@@ -9,6 +9,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -19,7 +20,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
-use Utopia\Database\Attribute;
 use Utopia\Query\Schema\ColumnType;
 
 class PoolTest extends Base
@@ -30,26 +30,26 @@ class PoolTest extends Base
      * @var UtopiaPool<MySQL>
      */
     protected static UtopiaPool $pool;
+
     protected static string $namespace;
 
     /**
-     * @return Database
      * @throws Exception
      * @throws Duplicate
      * @throws Limit
      */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis', 6379);
         $redis->select(6);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $pool = new UtopiaPool(new Stack(), 'mysql', 10, function () {
+        $pool = new UtopiaPool(new Stack, 'mysql', 10, function () {
             $dbHost = 'mysql';
             $dbPort = '3307';
             $dbUser = 'root';
@@ -68,7 +68,7 @@ class PoolTest extends Base
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -83,7 +83,7 @@ class PoolTest extends Base
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
@@ -100,7 +100,7 @@ class PoolTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
@@ -118,8 +118,7 @@ class PoolTest extends Base
     /**
      * Execute raw SQL via the pool using reflection to access the adapter's PDO.
      *
-     * @param string $sql
-     * @param array<string, mixed> $binds
+     * @param  array<string, mixed>  $binds
      */
     private function execRawSQL(string $sql, array $binds = []): void
     {
@@ -141,7 +140,7 @@ class PoolTest extends Base
      * don't block document recreation. The createDocument method should
      * clean up orphaned perms and retry.
      */
-    public function testOrphanedPermissionsRecovery(): void
+    public function test_orphaned_permissions_recovery(): void
     {
         $database = $this->getDatabase();
         $collection = 'orphanedPermsRecovery';

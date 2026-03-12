@@ -7,9 +7,13 @@ use Utopia\Validator;
 class Datetime extends Validator
 {
     public const PRECISION_DAYS = 'days';
+
     public const PRECISION_HOURS = 'hours';
+
     public const PRECISION_MINUTES = 'minutes';
+
     public const PRECISION_SECONDS = 'seconds';
+
     public const PRECISION_ANY = 'any';
 
     /**
@@ -29,34 +33,34 @@ class Datetime extends Validator
 
     /**
      * Validator Description.
-     * @return string
      */
     public function getDescription(): string
     {
         $message = 'Value must be valid date';
 
         if ($this->offset > 0) {
-            $message .= " at least " . $this->offset . " seconds in the future and";
+            $message .= ' at least '.$this->offset.' seconds in the future and';
         } elseif ($this->requireDateInFuture) {
-            $message .= " in the future and";
+            $message .= ' in the future and';
         }
 
         if ($this->precision !== self::PRECISION_ANY) {
-            $message .= " with " . $this->precision . " precision";
+            $message .= ' with '.$this->precision.' precision';
         }
 
         $min = $this->min->format('Y-m-d H:i:s');
         $max = $this->max->format('Y-m-d H:i:s');
 
         $message .= " between {$min} and {$max}.";
+
         return $message;
     }
 
     /**
      * Is valid.
      * Returns true if valid or false if not.
-     * @param mixed $value
-     * @return bool
+     *
+     * @param  mixed  $value
      */
     public function isValid($value): bool
     {
@@ -66,7 +70,7 @@ class Datetime extends Validator
 
         try {
             $date = new \DateTime($value);
-            $now = new \DateTime();
+            $now = new \DateTime;
 
             if ($this->requireDateInFuture === true && $date < $now) {
                 return false;
@@ -100,9 +104,9 @@ class Datetime extends Validator
         // Custom year validation to account for PHP allowing year overflow
         $matches = [];
         if (preg_match('/(?<!\d)(\d{4})(?!\d)/', $value, $matches)) {
-            $year = (int)$matches[1];
-            $minYear = (int)$this->min->format('Y');
-            $maxYear = (int)$this->max->format('Y');
+            $year = (int) $matches[1];
+            $minYear = (int) $this->min->format('Y');
+            $maxYear = (int) $this->max->format('Y');
             if ($year < $minYear || $year > $maxYear) {
                 return false;
             }
@@ -121,8 +125,6 @@ class Datetime extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -133,8 +135,6 @@ class Datetime extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

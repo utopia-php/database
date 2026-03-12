@@ -4,7 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
 use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -29,7 +28,7 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
-     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
     {
@@ -41,9 +40,8 @@ class Pool extends Adapter
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
+     *
      * @throws DatabaseException
      */
     public function delegate(string $method, array $args): mixed
@@ -125,8 +123,10 @@ class Pool extends Adapter
      * from running on different connections.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
+     *
      * @throws \Throwable
      */
     public function withTransaction(callable $callback): mixed
@@ -376,8 +376,6 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-
-
     public function getCountOfAttributes(Document $collection): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -496,6 +494,7 @@ class Pool extends Adapter
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
+
         return $this;
     }
 

@@ -9,9 +9,7 @@ use Utopia\Database\Validator\UID;
 
 class Cursor extends Base
 {
-    public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
-    {
-    }
+    public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH) {}
 
     /**
      * Is valid.
@@ -20,12 +18,11 @@ class Cursor extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     * @return bool
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
@@ -42,7 +39,8 @@ class Cursor extends Base
             if ($validator->isValid($cursor)) {
                 return true;
             }
-            $this->message = 'Invalid cursor: ' . $validator->getDescription();
+            $this->message = 'Invalid cursor: '.$validator->getDescription();
+
             return false;
         }
 

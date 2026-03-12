@@ -13,8 +13,7 @@ class Order extends Base
     protected array $schema = [];
 
     /**
-     * @param array<Document> $attributes
-     * @param bool $supportForAttributes
+     * @param  array<Document>  $attributes
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
@@ -23,10 +22,6 @@ class Order extends Base
         }
     }
 
-    /**
-     * @param string $attribute
-     * @return bool
-     */
     protected function isValidAttribute(string $attribute): bool
     {
         if (\str_contains($attribute, '.')) {
@@ -40,14 +35,16 @@ class Order extends Base
             $attribute = \explode('.', $attribute)[0];
 
             if (isset($this->schema[$attribute])) {
-                $this->message = 'Cannot order by nested attribute: ' . $attribute;
+                $this->message = 'Cannot order by nested attribute: '.$attribute;
+
                 return false;
             }
         }
 
         // Search for attribute in schema
-        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
-            $this->message = 'Attribute not found in schema: ' . $attribute;
+        if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
+            $this->message = 'Attribute not found in schema: '.$attribute;
+
             return false;
         }
 
@@ -61,12 +58,11 @@ class Order extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     * @return bool
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 

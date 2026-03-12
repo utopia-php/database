@@ -3,7 +3,9 @@
 namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
-use Utopia\Database\RelationType;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -14,10 +16,8 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Capability;
-use Utopia\Database\Database;
-use Utopia\Database\Attribute;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
@@ -28,8 +28,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -171,7 +172,7 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('person', $library);
 
         $people = $database->find('person', [
-            Query::select(['name'])
+            Query::select(['name']),
         ]);
 
         $this->assertArrayNotHasKey('library', $people[0]);
@@ -181,7 +182,7 @@ trait OneToOneTests
 
         // Select related document attributes
         $person = $database->findOne('person', [
-            Query::select(['*', 'library.name'])
+            Query::select(['*', 'library.name']),
         ]);
 
         if ($person->isEmpty()) {
@@ -192,13 +193,11 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = $database->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name', '$id'])
+            Query::select(['*', 'library.name', '$id']),
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
-
-
 
         $document = $database->getDocument('person', $person->getId(), [
             Query::select(['name']),
@@ -449,8 +448,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -655,7 +655,7 @@ trait OneToOneTests
 
         // Select related document attributes
         $country = $database->findOne('country', [
-            Query::select(['*', 'city.name'])
+            Query::select(['*', 'city.name']),
         ]);
 
         if ($country->isEmpty()) {
@@ -666,7 +666,7 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
         $country = $database->getDocument('country', 'country1', [
-            Query::select(['*', 'city.name'])
+            Query::select(['*', 'city.name']),
         ]);
 
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
@@ -849,7 +849,7 @@ trait OneToOneTests
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Denmark'
+            'name' => 'Denmark',
         ]));
 
         // Update inverse document with new related document
@@ -885,7 +885,7 @@ trait OneToOneTests
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Denmark'
+            'name' => 'Denmark',
         ]));
 
         // Can delete parent document with no relation with on delete set to restrict
@@ -894,7 +894,6 @@ trait OneToOneTests
 
         $country8 = $database->getDocument('country', 'country8');
         $this->assertEquals(true, $country8->isEmpty());
-
 
         // Cannot delete document while still related to another with on delete set to restrict
         try {
@@ -980,8 +979,8 @@ trait OneToOneTests
             'code' => 'MUC',
             'newCountry' => [
                 '$id' => 'country7',
-                'name' => 'Germany'
-            ]
+                'name' => 'Germany',
+            ],
         ]));
 
         // Delete relationship
@@ -1006,8 +1005,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1056,7 +1056,7 @@ trait OneToOneTests
         ]));
 
         $documents = $database->find('parent', []);
-        $document  = array_pop($documents);
+        $document = array_pop($documents);
         $this->assertArrayHasKey('child1', $document);
         $this->assertEquals('foo', $document->getAttribute('child1')->getId());
         $this->assertArrayHasKey('children', $document);
@@ -1090,8 +1090,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1168,8 +1169,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1256,8 +1258,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1320,7 +1323,7 @@ trait OneToOneTests
                         ],
                         'name' => 'User 2',
                     ],
-                ]
+                ],
             ],
         ]));
 
@@ -1336,8 +1339,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1421,8 +1425,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1488,8 +1493,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1556,8 +1562,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1570,16 +1577,16 @@ trait OneToOneTests
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection1', new Document([
             '$id' => ID::unique(),
             'symbols_collection2' => $doc1->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
 
         $doc1 = $database->getDocument('$symbols_coll.ection2', $doc1->getId());
@@ -1594,8 +1601,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('one', [
@@ -1604,7 +1612,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('two', [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -1612,7 +1620,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
@@ -1632,8 +1640,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('one', [
@@ -1642,7 +1651,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('two', [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -1650,7 +1659,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
@@ -1670,8 +1679,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('one', [
@@ -1680,7 +1690,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('two', [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -1688,7 +1698,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne, twoWay: true));
@@ -1708,8 +1718,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $database->createCollection('one', [
@@ -1718,7 +1729,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
         $database->createCollection('two', [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
@@ -1726,7 +1737,7 @@ trait OneToOneTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToOne));
@@ -1746,8 +1757,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1940,8 +1952,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2012,7 +2025,7 @@ trait OneToOneTests
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
-        $junction = $database->getCollection('_' . $licenses->getSequence() . '_' . $drivers->getSequence());
+        $junction = $database->getCollection('_'.$licenses->getSequence().'_'.$drivers->getSequence());
 
         $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
         $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
@@ -2034,16 +2047,18 @@ trait OneToOneTests
 
         $this->assertEquals(true, $junction->isEmpty());
     }
+
     public function testUpdateParentAndChild_OneToOne(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         if (
-            !$database->getAdapter()->supports(Capability::Relationships) ||
-            !$database->getAdapter()->supports(Capability::BatchOperations)
+            ! $database->getAdapter()->supports(Capability::Relationships) ||
+            ! $database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2117,8 +2132,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships) || !$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2148,7 +2164,7 @@ trait OneToOneTests
                     Permission::delete(Role::any()),
                 ],
                 'name' => 'Child 1',
-            ]
+            ],
         ]));
 
         try {
@@ -2170,8 +2186,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2250,8 +2267,9 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2324,13 +2342,15 @@ trait OneToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 

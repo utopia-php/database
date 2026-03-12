@@ -3,9 +3,9 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
-use Utopia\Database\OrderDirection;
-use Utopia\Database\RelationType;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -17,11 +17,11 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Query;
-use Utopia\Database\Capability;
-use Utopia\Database\Attribute;
 use Utopia\Database\Index;
+use Utopia\Database\OrderDirection;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
@@ -33,8 +33,9 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Schemas)) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -125,14 +126,13 @@ trait CollectionTests
         $this->assertEquals('index4', $collection->getAttribute('indexes')[3]['$id']);
         $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[3]['type']);
 
-
         $database->deleteCollection('withSchema');
 
         // Test collection with dash (+attribute +index)
         $collection2 = $database->createCollection('with-dash', [
             new Attribute(key: 'attribute-one', type: ColumnType::String, size: 256, required: false, signed: true, array: false, filters: []),
         ], [
-            new Index(key: 'index-one', type: IndexType::Key, attributes: ['attribute-one'], lengths: [256], orders: ['ASC'])
+            new Index(key: 'index-one', type: IndexType::Key, attributes: ['attribute-one'], lengths: [256], orders: ['ASC']),
         ]);
 
         $this->assertEquals(false, $collection2->isEmpty());
@@ -151,10 +151,10 @@ trait CollectionTests
     public function testCreateCollectionValidator(): void
     {
         $collections = [
-            "validatorTest",
-            "validator-test",
-            "validator_test",
-            "validator.test",
+            'validatorTest',
+            'validator-test',
+            'validator_test',
+            'validator.test',
         ];
 
         $attributes = [
@@ -162,7 +162,7 @@ trait CollectionTests
             new Attribute(key: 'attribute-2', type: ColumnType::Integer, size: 0, required: false, signed: true, array: false, filters: []),
             new Attribute(key: 'attribute_3', type: ColumnType::Boolean, size: 0, required: false, signed: true, array: false, filters: []),
             new Attribute(key: 'attribute.4', type: ColumnType::Boolean, size: 0, required: false, signed: true, array: false, filters: []),
-            new Attribute(key: 'attribute5', type: ColumnType::String, size: 2500, required: false, signed: true, array: false, filters: [])
+            new Attribute(key: 'attribute5', type: ColumnType::String, size: 2500, required: false, signed: true, array: false, filters: []),
         ];
 
         $indexes = [
@@ -208,7 +208,6 @@ trait CollectionTests
         }
     }
 
-
     public function testCollectionNotFound(): void
     {
         /** @var Database $database */
@@ -237,8 +236,9 @@ trait CollectionTests
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
 
-        if (!$database->analyzeCollection('sizeTest2')) {
+        if (! $database->analyzeCollection('sizeTest2')) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -253,8 +253,8 @@ trait CollectionTests
 
         for ($i = 0; $i < $loopCount; $i++) {
             $database->createDocument('sizeTest2', new Document([
-                '$id' => 'doc' . $i,
-                'string1' => 'string1' . $i . str_repeat('A', 10000),
+                '$id' => 'doc'.$i,
+                'string1' => 'string1'.$i.str_repeat('A', 10000),
                 'string2' => 'string2',
                 'string3' => 'string3',
             ]));
@@ -268,7 +268,7 @@ trait CollectionTests
 
         $this->getDatabase()->getAuthorization()->skip(function () use ($loopCount) {
             for ($i = 0; $i < $loopCount; $i++) {
-                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
+                $this->getDatabase()->deleteDocument('sizeTest2', 'doc'.$i);
             }
         });
 
@@ -303,9 +303,9 @@ trait CollectionTests
 
         for ($i = 0; $i < $loopCount; $i++) {
             $this->getDatabase()->createDocument('sizeTestDisk2', new Document([
-                'string1' => 'string1' . $i,
-                'string2' => 'string2' . $i,
-                'string3' => 'string3' . $i,
+                'string1' => 'string1'.$i,
+                'string2' => 'string2'.$i,
+                'string3' => 'string3'.$i,
             ]));
         }
 
@@ -320,8 +320,9 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         // SQLite does not support fulltext indexes
-        if (!$database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -338,9 +339,9 @@ trait CollectionTests
 
         for ($i = 0; $i < $loopCount; $i++) {
             $database->createDocument('fullTextSizeTest', new Document([
-                'string1' => 'string1' . $i,
-                'string2' => 'string2' . $i,
-                'string3' => 'string3' . $i,
+                'string1' => 'string1'.$i,
+                'string2' => 'string2'.$i,
+                'string3' => 'string3'.$i,
             ]));
         }
 
@@ -371,7 +372,7 @@ trait CollectionTests
             'age' => 15,
             '$permissions' => [
                 Permission::read(Role::any()),
-            ]
+            ],
         ]));
 
         $document = $database->getDocument('redis', 'doc1');
@@ -394,8 +395,9 @@ trait CollectionTests
 
     public function testSchemaAttributes(): void
     {
-        if (!$this->getDatabase()->getAdapter()->supports(Capability::SchemaAttributes)) {
+        if (! $this->getDatabase()->getAdapter()->supports(Capability::SchemaAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -416,7 +418,6 @@ trait CollectionTests
             /**
              * @var Document $attribute
              */
-
             $attributes[$attribute->getId()] = $attribute;
         }
 
@@ -463,6 +464,7 @@ trait CollectionTests
 
         if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         /**
@@ -484,7 +486,6 @@ trait CollectionTests
         /**
          * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
          */
-
         try {
             $database->createRelationship(new Relationship(collection: $collection_2->getId(), relatedCollection: $collection_1->getId(), type: RelationType::OneToOne, twoWay: true));
 
@@ -553,7 +554,7 @@ trait CollectionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: false);
 
         $this->assertInstanceOf(Document::class, $collection);
@@ -604,8 +605,9 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::ConnectionId)) {
+        if (! $database->getAdapter()->supports(Capability::ConnectionId)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -657,7 +659,7 @@ trait CollectionTests
 
         // Attribute name tests
         foreach ($keywords as $keyword) {
-            $collectionName = 'rk' . $keyword; // rk is shorthand for reserved-keyword. We do this since there are some limits (64 chars max)
+            $collectionName = 'rk'.$keyword; // rk is shorthand for reserved-keyword. We do this since there are some limits (64 chars max)
 
             $collection = $database->createCollection($collectionName);
             $this->assertEquals($collectionName, $collection->getId());
@@ -672,29 +674,29 @@ trait CollectionTests
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                '$id' => 'reservedKeyDocument'
+                '$id' => 'reservedKeyDocument',
             ]);
-            $document->setAttribute($keyword, 'Reserved:' . $keyword);
+            $document->setAttribute($keyword, 'Reserved:'.$keyword);
 
             $document = $database->createDocument($collectionName, $document);
             $this->assertEquals('reservedKeyDocument', $document->getId());
-            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $document->getAttribute($keyword));
 
             $document = $database->getDocument($collectionName, 'reservedKeyDocument');
             $this->assertEquals('reservedKeyDocument', $document->getId());
-            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $document->getAttribute($keyword));
 
             $documents = $database->find($collectionName);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $documents[0]->getAttribute($keyword));
 
             $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:{$keyword}"])]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
             $documents = $database->find($collectionName, [
-                Query::orderDesc($keyword)
+                Query::orderDesc($keyword),
             ]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
@@ -754,8 +756,9 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -785,14 +788,14 @@ trait CollectionTests
         $this->assertEquals(0, \count($devices->getAttribute('indexes')));
     }
 
-
     public function testCascadeMultiDelete(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -808,21 +811,21 @@ trait CollectionTests
             '$id' => 'cascadeMultiDelete1',
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ],
             'cascadeMultiDelete2' => [
                 [
                     '$id' => 'cascadeMultiDelete2',
                     '$permissions' => [
                         Permission::read(Role::any()),
-                        Permission::delete(Role::any())
+                        Permission::delete(Role::any()),
                     ],
                     'cascadeMultiDelete3' => [
                         [
                             '$id' => 'cascadeMultiDelete3',
                             '$permissions' => [
                                 Permission::read(Role::any()),
-                                Permission::delete(Role::any())
+                                Permission::delete(Role::any()),
                             ],
                         ],
                     ],
@@ -862,15 +865,16 @@ trait CollectionTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Schemas)) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $token = static::getTestToken();
-        $schema1 = 'schema1_' . $token;
-        $schema2 = 'schema2_' . $token;
-        $sharedTablesDb = 'sharedTables_' . $token;
+        $schema1 = 'schema1_'.$token;
+        $schema2 = 'schema2_'.$token;
+        $sharedTablesDb = 'sharedTables_'.$token;
 
         if ($database->exists($schema1)) {
             $database->setDatabase($schema1)->delete();
@@ -916,14 +920,14 @@ trait CollectionTests
 
         $database->createCollection('people', [
             new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true),
-            new Attribute(key: 'lifeStory', type: ColumnType::String, size: 65536, required: true)
+            new Attribute(key: 'lifeStory', type: ColumnType::String, size: 65536, required: true),
         ], [
-            new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name'])
+            new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']),
         ], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $this->assertCount(1, $database->listCollections());
@@ -940,7 +944,7 @@ trait CollectionTests
                 Permission::read(Role::any()),
             ],
             'name' => 'Spiderman',
-            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.'
+            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.',
         ]));
 
         $doc = $database->getDocument('people', $docId);
@@ -951,7 +955,7 @@ trait CollectionTests
          * Remove Permissions
          */
         $doc->setAttribute('$permissions', [
-            Permission::read(Role::any())
+            Permission::read(Role::any()),
         ]);
 
         $database->updateDocument('people', $docId, $doc);
@@ -1019,6 +1023,7 @@ trait CollectionTests
             ->setNamespace($namespace)
             ->setDatabase($schema);
     }
+
     /**
      * @throws LimitException
      * @throws DuplicateException
@@ -1030,7 +1035,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         $database->createCollection('duplicates', permissions: [
-            Permission::read(Role::any())
+            Permission::read(Role::any()),
         ]);
 
         try {
@@ -1044,6 +1049,7 @@ trait CollectionTests
 
         $database->deleteCollection('duplicates');
     }
+
     public function testSharedTablesDuplicates(): void
     {
         /** @var Database $database */
@@ -1052,12 +1058,13 @@ trait CollectionTests
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Schemas)) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $sharedTablesDb = 'sharedTables_' . static::getTestToken();
+        $sharedTablesDb = 'sharedTables_'.static::getTestToken();
 
         if ($database->exists($sharedTablesDb)) {
             $database->setDatabase($sharedTablesDb)->delete();
@@ -1158,7 +1165,7 @@ trait CollectionTests
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE
+                Database::EVENT_DATABASE_DELETE,
             ];
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
@@ -1167,7 +1174,7 @@ trait CollectionTests
             });
 
             if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
-                $database->setDatabase('hellodb_' . static::getTestToken());
+                $database->setDatabase('hellodb_'.static::getTestToken());
                 $database->create();
             } else {
                 \array_shift($events);
@@ -1183,7 +1190,7 @@ trait CollectionTests
             $database->getCollection($collectionId);
             $database->createAttribute($collectionId, new Attribute(key: 'attr1', type: ColumnType::Integer, size: 2, required: false));
             $database->updateAttributeRequired($collectionId, 'attr1', true);
-            $indexId1 = 'index2_' . uniqid();
+            $indexId1 = 'index2_'.uniqid();
             $database->createIndex($collectionId, new Index(key: $indexId1, type: IndexType::Key, attributes: ['attr1']));
 
             $document = $database->createDocument($collectionId, new Document([
@@ -1233,7 +1240,7 @@ trait CollectionTests
             $database->deleteDocuments($collectionId);
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
-            $database->delete('hellodb_' . static::getTestToken());
+            $database->delete('hellodb_'.static::getTestToken());
 
             // Remove all listeners
             $database->on(Database::EVENT_ALL, 'test', null);
@@ -1269,7 +1276,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         // Setup: create the 'created_at' collection and document (previously done by testCreatedAtUpdatedAt)
-        if (!$database->exists($this->testDatabase, 'created_at')) {
+        if (! $database->exists($this->testDatabase, 'created_at')) {
             $database->createCollection('created_at');
             $database->createAttribute('created_at', new Attribute(key: 'title', type: ColumnType::String, size: 100, required: false));
             $database->createDocument('created_at', new Document([
@@ -1284,7 +1291,7 @@ trait CollectionTests
         }
 
         $document = $database->getDocument('created_at', 'uid123');
-        $this->assertEquals(true, !$document->isEmpty());
+        $this->assertEquals(true, ! $document->isEmpty());
         sleep(1);
         $document->setAttribute('title', 'new title');
         $database->updateDocument('created_at', 'uid123', $document);
@@ -1296,14 +1303,13 @@ trait CollectionTests
         $database->createCollection('created_at');
     }
 
-
     public function testTransformations(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         $database->createCollection('docs', attributes: [
-            new Attribute(key: 'name', type: ColumnType::String, size: 767, required: true)
+            new Attribute(key: 'name', type: ColumnType::String, size: 767, required: true),
         ]);
 
         $database->createDocument('docs', new Document([
@@ -1312,7 +1318,7 @@ trait CollectionTests
         ]));
 
         $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return "SELECT 1";
+            return 'SELECT 1';
         });
 
         $result = $database->getDocument('docs', 'doc1');
@@ -1341,7 +1347,7 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringNotContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
+            $this->assertStringNotContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
         }
 
         // non global collection should containt tenant in the cache key
@@ -1351,7 +1357,7 @@ trait CollectionTests
             $nonGlobalCollectionId
         );
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKeyRegular);
+            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKeyRegular);
         }
 
         // Non metadata collection should contain tenant in the cache key
@@ -1366,7 +1372,7 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
+            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
         }
 
         $db->resetGlobalCollections();
@@ -1378,8 +1384,9 @@ trait CollectionTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 

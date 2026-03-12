@@ -6,9 +6,10 @@ use Exception;
 use PDOException;
 use Throwable;
 use Utopia\Database\Adapter\SQL;
-use Utopia\Database\Database;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\CursorDirection;
-use Utopia\Database\OrderDirection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -22,17 +23,17 @@ use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
+use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\SetType;
-use Utopia\Database\Capability;
-use Utopia\Database\Attribute;
-use Utopia\Database\Index;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 trait DocumentTests
 {
     private static bool $documentsFixtureInit = false;
+
     private static ?Document $documentsFixtureDoc = null;
 
     /**
@@ -97,10 +98,12 @@ trait DocumentTests
 
         self::$documentsFixtureInit = true;
         self::$documentsFixtureDoc = $document;
+
         return $document;
     }
 
     private static bool $moviesFixtureInit = false;
+
     private static ?array $moviesFixtureData = null;
 
     /**
@@ -119,7 +122,7 @@ trait DocumentTests
 
         $database->createCollection('movies', permissions: [
             Permission::create(Role::any()),
-            Permission::update(Role::users())
+            Permission::update(Role::users()),
         ]);
 
         $database->createAttribute('movies', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
@@ -155,7 +158,7 @@ trait DocumentTests
             'price' => 39.50,
             'active' => true,
             'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works'
+            'with-dash' => 'Works',
         ]));
 
         $database->createDocument('movies', new Document([
@@ -166,7 +169,7 @@ trait DocumentTests
             'price' => 39.50,
             'active' => true,
             'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works'
+            'with-dash' => 'Works',
         ]));
 
         $database->createDocument('movies', new Document([
@@ -177,7 +180,7 @@ trait DocumentTests
             'price' => 25.94,
             'active' => true,
             'genres' => ['science fiction', 'action', 'comics'],
-            'with-dash' => 'Works2'
+            'with-dash' => 'Works2',
         ]));
 
         $database->createDocument('movies', new Document([
@@ -188,7 +191,7 @@ trait DocumentTests
             'price' => 25.99,
             'active' => true,
             'genres' => ['science fiction', 'action', 'comics'],
-            'with-dash' => 'Works2'
+            'with-dash' => 'Works2',
         ]));
 
         $database->createDocument('movies', new Document([
@@ -199,7 +202,7 @@ trait DocumentTests
             'price' => 0.0,
             'active' => false,
             'genres' => [],
-            'with-dash' => 'Works3'
+            'with-dash' => 'Works3',
         ]));
 
         $database->createDocument('movies', new Document([
@@ -222,15 +225,17 @@ trait DocumentTests
             'active' => false,
             'genres' => [],
             'with-dash' => 'Works3',
-            'nullable' => 'Not null'
+            'nullable' => 'Not null',
         ]));
 
         self::$moviesFixtureInit = true;
         self::$moviesFixtureData = ['$sequence' => $document->getSequence()];
+
         return self::$moviesFixtureData;
     }
 
     private static bool $incDecFixtureInit = false;
+
     private static ?Document $incDecFixtureDoc = null;
 
     /**
@@ -263,7 +268,7 @@ trait DocumentTests
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
-            ]
+            ],
         ]));
 
         $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
@@ -274,6 +279,7 @@ trait DocumentTests
         $document = $database->getDocument($collection, $document->getId());
         self::$incDecFixtureInit = true;
         self::$incDecFixtureDoc = $document;
+
         return $document;
     }
 
@@ -282,8 +288,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportNonUtfCharacters()) {
+        if (! $database->getAdapter()->getSupportNonUtfCharacters()) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -332,19 +339,19 @@ trait DocumentTests
         }
 
         $document = $database->createDocument(__FUNCTION__, new Document([
-            '$sequence' => (string)$sequence,
+            '$sequence' => (string) $sequence,
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
         ]));
 
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertEquals((string) $sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertEquals((string) $sequence, $document->getSequence());
 
-        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string) $sequence])]);
+        $this->assertEquals((string) $sequence, $document->getSequence());
     }
 
     public function testCreateDocument(): void
@@ -383,10 +390,9 @@ trait DocumentTests
         $this->assertIsString($document->getAttribute('id'));
         $this->assertEquals($sequence, $document->getAttribute('id'));
 
-
         $sequence = '56000';
         if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789def' ;
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789def';
         }
 
         // Test create document with manual internal id
@@ -538,7 +544,6 @@ trait DocumentTests
         /**
          * Insert ID attribute with NULL
          */
-
         $documentIdNull = $database->createDocument('documents', new Document([
             'id' => null,
             '$permissions' => [Permission::read(Role::any())],
@@ -562,7 +567,7 @@ trait DocumentTests
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->findOne('documents', [
-            query::isNull('id')
+            query::isNull('id'),
         ]);
         $this->assertNotEmpty($documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
@@ -601,7 +606,7 @@ trait DocumentTests
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
-            query::equal('id', [$sequence])
+            query::equal('id', [$sequence]),
         ]);
         $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
@@ -687,7 +692,7 @@ trait DocumentTests
         }
 
         $documents = $database->find($collection, [
-            Query::orderAsc()
+            Query::orderAsc(),
         ]);
 
         $this->assertEquals($count, \count($documents));
@@ -716,11 +721,11 @@ trait DocumentTests
         $documents = [];
         $offset = 1000000;
         for ($i = $offset; $i <= ($offset + 10); $i++) {
-            $sequence = (string)$i;
+            $sequence = (string) $i;
             if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
                 // Replace last 6 digits with $i to make it unique
-                $suffix = str_pad(substr((string)$i, -6), 6, '0', STR_PAD_LEFT);
-                $sequence = '01890dd5-7331-7f3a-9c1b-123456' . $suffix;
+                $suffix = str_pad(substr((string) $i, -6), 6, '0', STR_PAD_LEFT);
+                $sequence = '01890dd5-7331-7f3a-9c1b-123456'.$suffix;
             }
 
             $hash[$i] = $sequence;
@@ -741,7 +746,7 @@ trait DocumentTests
         $this->assertEquals($count, \count($documents));
 
         $documents = $database->find(__FUNCTION__, [
-            Query::orderAsc()
+            Query::orderAsc(),
         ]);
 
         foreach ($documents as $index => $document) {
@@ -828,8 +833,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -863,7 +869,7 @@ trait DocumentTests
          * Add 1 row
          */
         $data[] = [
-            '$id' => "101",
+            '$id' => '101',
             'number' => 101,
         ];
 
@@ -896,8 +902,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1015,8 +1022,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1087,8 +1095,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1176,8 +1185,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1216,7 +1226,7 @@ trait DocumentTests
         try {
             $database->upsertDocuments(__FUNCTION__, [
                 $existingDocument->removeAttribute('first'),
-                $newDocument
+                $newDocument,
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
@@ -1231,7 +1241,7 @@ trait DocumentTests
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
             $newDocument
-                ->setAttribute('last', 'last')
+                ->setAttribute('last', 'last'),
         ]);
 
         $this->assertEquals(2, $docs);
@@ -1246,7 +1256,7 @@ trait DocumentTests
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
             $newDocument
-                ->setAttribute('last', 'last')
+                ->setAttribute('last', 'last'),
         ]);
 
         $this->assertEquals(1, $docs);
@@ -1270,7 +1280,7 @@ trait DocumentTests
         // Ensure mismatch of attribute orders is allowed
         $docs = $database->upsertDocuments(__FUNCTION__, [
             $doc3,
-            $doc4
+            $doc4,
         ]);
 
         $this->assertEquals(2, $docs);
@@ -1290,8 +1300,9 @@ trait DocumentTests
 
     public function testUpsertDocumentsNoop(): void
     {
-        if (!$this->getDatabase()->getAdapter()->supports(Capability::Upserts)) {
+        if (! $this->getDatabase()->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1320,8 +1331,9 @@ trait DocumentTests
     public function testUpsertDuplicateIds(): void
     {
         $db = $this->getDatabase();
-        if (!$db->getAdapter()->supports(Capability::Upserts)) {
+        if (! $db->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1342,8 +1354,9 @@ trait DocumentTests
     public function testUpsertMixedPermissionDelta(): void
     {
         $db = $this->getDatabase();
-        if (!$db->getAdapter()->supports(Capability::Upserts)) {
+        if (! $db->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1354,24 +1367,24 @@ trait DocumentTests
             '$id' => 'a',
             'v' => 0,
             '$permissions' => [
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
         $d2 = $db->createDocument(__FUNCTION__, new Document([
             '$id' => 'b',
             'v' => 0,
             '$permissions' => [
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
 
         // d1 adds write, d2 removes update
         $d1->setAttribute('$permissions', [
             Permission::read(Role::any()),
-            Permission::update(Role::any())
+            Permission::update(Role::any()),
         ]);
         $d2->setAttribute('$permissions', [
-            Permission::read(Role::any())
+            Permission::read(Role::any()),
         ]);
 
         $db->upsertDocuments(__FUNCTION__, [$d1, $d2]);
@@ -1391,8 +1404,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1560,6 +1574,7 @@ trait DocumentTests
         $this->assertNull($document->getAttribute('bigint'));
         $this->assertNull($document->getAttribute('float'));
         $this->assertNull($document->getAttribute('boolean'));
+
         return $document;
     }
 
@@ -1768,9 +1783,6 @@ trait DocumentTests
         $this->assertArrayNotHasKey('float', $document);
     }
 
-    /**
-     * @return void
-     */
     public function testFind(): void
     {
         $this->initMoviesFixture();
@@ -1795,14 +1807,14 @@ trait DocumentTests
 
         $document = $database->findOne('movies', [
             Query::offset(2),
-            Query::orderAsc('name')
+            Query::orderAsc('name'),
         ]);
 
         $this->assertFalse($document->isEmpty());
         $this->assertEquals('Frozen', $document->getAttribute('name'));
 
         $document = $database->findOne('movies', [
-            Query::offset(10)
+            Query::offset(10),
         ]);
         $this->assertTrue($document->isEmpty());
     }
@@ -1965,7 +1977,6 @@ trait DocumentTests
         $this->assertEquals(0, count($documents));
     }
 
-
     public function testFindNotEqual(): void
     {
         $this->initMoviesFixture();
@@ -2044,13 +2055,14 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::QueryContains)) {
+        if (! $database->getAdapter()->supports(Capability::QueryContains)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $documents = $database->find('movies', [
-            Query::contains('genres', ['comics'])
+            Query::contains('genres', ['comics']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -2118,20 +2130,22 @@ trait DocumentTests
 
         $this->assertEquals(true, true); // Test must do an assertion
     }
+
     public function testFindFulltextSpecialChars(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Fulltext)) {
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $collection = 'full_text';
         $database->createCollection($collection, permissions: [
             Permission::create(Role::any()),
-            Permission::update(Role::users())
+            Permission::update(Role::users()),
         ]);
 
         $this->assertTrue($database->createAttribute($collection, new Attribute(key: 'ft', type: ColumnType::String, size: 128, required: true)));
@@ -2139,7 +2153,7 @@ trait DocumentTests
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
-            'ft' => 'Alf: chapter_4@nasa.com'
+            'ft' => 'Alf: chapter_4@nasa.com',
         ]));
 
         $documents = $database->find($collection, [
@@ -2149,7 +2163,7 @@ trait DocumentTests
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
-            'ft' => 'al@ba.io +-*)(<>~'
+            'ft' => 'al@ba.io +-*)(<>~',
         ]));
 
         $documents = $database->find($collection, [
@@ -2164,12 +2178,12 @@ trait DocumentTests
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
-            'ft' => 'donald duck'
+            'ft' => 'donald duck',
         ]));
 
         $database->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
-            'ft' => 'donald trump'
+            'ft' => 'donald trump',
         ]));
 
         $documents = $database->find($collection, [
@@ -2229,6 +2243,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
     }
+
     public function testFindByInternalID(): void
     {
         $data = $this->initMoviesFixture();
@@ -2258,7 +2273,7 @@ trait DocumentTests
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::orderAsc('name')
+            Query::orderAsc('name'),
         ]);
 
         $this->assertEquals(6, count($documents));
@@ -2269,6 +2284,7 @@ trait DocumentTests
         $this->assertEquals('Work in Progress', $documents[4]['name']);
         $this->assertEquals('Work in Progress 2', $documents[5]['name']);
     }
+
     public function testFindOrderByNatural(): void
     {
         $this->initMoviesFixture();
@@ -2296,6 +2312,7 @@ trait DocumentTests
         $this->assertEquals($base[4]['name'], $documents[4]['name']);
         $this->assertEquals($base[5]['name'], $documents[5]['name']);
     }
+
     public function testFindOrderByMultipleAttributes(): void
     {
         $this->initMoviesFixture();
@@ -2309,7 +2326,7 @@ trait DocumentTests
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::orderDesc('name')
+            Query::orderDesc('name'),
         ]);
 
         $this->assertEquals(6, count($documents));
@@ -2338,7 +2355,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -2347,7 +2364,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -2356,7 +2373,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -2364,7 +2381,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]),
         ]);
         $this->assertEmpty(count($documents));
 
@@ -2406,7 +2423,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::orderAsc('year'),
             Query::orderAsc('price'),
-            Query::cursorAfter($movies[$pos])
+            Query::cursorAfter($movies[$pos]),
         ]);
 
         $this->assertEquals(3, count($documents));
@@ -2417,7 +2434,6 @@ trait DocumentTests
             $this->assertEquals($document['year'], $movies[$i + 1 + $pos]['year']);
         }
     }
-
 
     public function testFindOrderByCursorBefore(): void
     {
@@ -2436,7 +2452,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -2445,7 +2461,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -2454,7 +2470,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2463,7 +2479,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2471,7 +2487,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]),
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -2494,7 +2510,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -2504,7 +2520,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -2514,7 +2530,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -2523,10 +2539,11 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]),
         ]);
         $this->assertEmpty(count($documents));
     }
+
     public function testFindOrderByBeforeNaturalOrder(): void
     {
         $this->initMoviesFixture();
@@ -2546,7 +2563,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -2556,7 +2573,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -2566,7 +2583,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2576,7 +2593,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2585,7 +2602,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]),
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -2602,14 +2619,14 @@ trait DocumentTests
         $movies = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
-            Query::orderDesc('year')
+            Query::orderDesc('year'),
         ]);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -2620,7 +2637,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -2630,7 +2647,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -2639,11 +2656,10 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]),
         ]);
         $this->assertEmpty(count($documents));
     }
-
 
     public function testFindOrderBySingleAttributeBefore(): void
     {
@@ -2657,14 +2673,14 @@ trait DocumentTests
         $movies = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
-            Query::orderDesc('year')
+            Query::orderDesc('year'),
         ]);
 
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -2674,7 +2690,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -2684,7 +2700,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2694,7 +2710,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2703,7 +2719,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]),
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -2721,7 +2737,7 @@ trait DocumentTests
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::orderAsc('year')
+            Query::orderAsc('year'),
         ]);
 
         $documents = $database->find('movies', [
@@ -2729,7 +2745,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -2740,7 +2756,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -2751,7 +2767,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -2761,7 +2777,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]),
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -2779,7 +2795,7 @@ trait DocumentTests
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::orderAsc('year')
+            Query::orderAsc('year'),
         ]);
 
         $documents = $database->find('movies', [
@@ -2787,7 +2803,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -2799,7 +2815,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[4])
+            Query::cursorBefore($movies[4]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -2810,7 +2826,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]),
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2821,7 +2837,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]),
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -2831,10 +2847,11 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]),
         ]);
         $this->assertEmpty(count($documents));
     }
+
     public function testFindOrderByAndCursor(): void
     {
         $this->initMoviesFixture();
@@ -2853,11 +2870,12 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]),
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
+
     public function testFindOrderByIdAndCursor(): void
     {
         $this->initMoviesFixture();
@@ -2876,7 +2894,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$id'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]),
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2901,7 +2919,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$createdAt'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]),
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2925,7 +2943,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$updatedAt'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]),
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2945,14 +2963,14 @@ trait DocumentTests
 
         $documents = $database->find('movies', [
             Query::createdBefore($futureDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
         $documents = $database->find('movies', [
             Query::createdBefore($pastDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -2972,14 +2990,14 @@ trait DocumentTests
 
         $documents = $database->find('movies', [
             Query::createdAfter($pastDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
         $documents = $database->find('movies', [
             Query::createdAfter($futureDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -2999,14 +3017,14 @@ trait DocumentTests
 
         $documents = $database->find('movies', [
             Query::updatedBefore($futureDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
         $documents = $database->find('movies', [
             Query::updatedBefore($pastDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -3026,14 +3044,14 @@ trait DocumentTests
 
         $documents = $database->find('movies', [
             Query::updatedAfter($pastDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
         $documents = $database->find('movies', [
             Query::updatedAfter($futureDate),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -3056,7 +3074,7 @@ trait DocumentTests
         // All documents should be between past and future
         $documents = $database->find('movies', [
             Query::createdBetween($pastDate, $futureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
@@ -3064,7 +3082,7 @@ trait DocumentTests
         // No documents should exist in this range
         $documents = $database->find('movies', [
             Query::createdBetween($pastDate, $pastDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -3072,7 +3090,7 @@ trait DocumentTests
         // Documents created between recent past and near future
         $documents = $database->find('movies', [
             Query::createdBetween($recentPastDate, $nearFutureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $count = count($documents);
@@ -3080,7 +3098,7 @@ trait DocumentTests
         // Same count should be returned with expanded range
         $documents = $database->find('movies', [
             Query::createdBetween($pastDate, $nearFutureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertGreaterThanOrEqual($count, count($documents));
@@ -3103,7 +3121,7 @@ trait DocumentTests
         // All documents should be between past and future
         $documents = $database->find('movies', [
             Query::updatedBetween($pastDate, $futureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertGreaterThan(0, count($documents));
@@ -3111,7 +3129,7 @@ trait DocumentTests
         // No documents should exist in this range
         $documents = $database->find('movies', [
             Query::updatedBetween($pastDate, $pastDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertEquals(0, count($documents));
@@ -3119,7 +3137,7 @@ trait DocumentTests
         // Documents updated between recent past and near future
         $documents = $database->find('movies', [
             Query::updatedBetween($recentPastDate, $nearFutureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $count = count($documents);
@@ -3127,7 +3145,7 @@ trait DocumentTests
         // Same count should be returned with expanded range
         $documents = $database->find('movies', [
             Query::updatedBetween($pastDate, $nearFutureDate),
-            Query::limit(25)
+            Query::limit(25),
         ]);
 
         $this->assertGreaterThanOrEqual($count, count($documents));
@@ -3145,7 +3163,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(4),
             Query::offset(0),
-            Query::orderAsc('name')
+            Query::orderAsc('name'),
         ]);
 
         $this->assertEquals(4, count($documents));
@@ -3154,7 +3172,6 @@ trait DocumentTests
         $this->assertEquals('Frozen', $documents[2]['name']);
         $this->assertEquals('Frozen II', $documents[3]['name']);
     }
-
 
     public function testFindLimitAndOffset(): void
     {
@@ -3168,7 +3185,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::limit(4),
             Query::offset(2),
-            Query::orderAsc('name')
+            Query::orderAsc('name'),
         ]);
 
         $this->assertEquals(4, count($documents));
@@ -3218,7 +3235,7 @@ trait DocumentTests
             'Slash/InMiddle',
             'Backslash\InMiddle',
             'Colon:InMiddle',
-            '"quoted":"colon"'
+            '"quoted":"colon"',
         ];
 
         foreach ($values as $value) {
@@ -3227,9 +3244,9 @@ trait DocumentTests
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
-                    Permission::delete(Role::any())
+                    Permission::delete(Role::any()),
                 ],
-                'value' => $value
+                'value' => $value,
             ]));
         }
 
@@ -3252,7 +3269,7 @@ trait DocumentTests
         foreach ($values as $value) {
             $documents = $database->find($collection, [
                 Query::limit(25),
-                Query::equal('value', [$value])
+                Query::equal('value', [$value]),
             ]);
 
             $this->assertEquals(1, count($documents));
@@ -3269,8 +3286,8 @@ trait DocumentTests
         try {
             $database->find('movies', [
                 Query::or([
-                    Query::equal('active', [true])
-                ])
+                    Query::equal('active', [true]),
+                ]),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -3287,8 +3304,8 @@ trait DocumentTests
         $queries = [
             Query::or([
                 Query::equal('active', [true]),
-                Query::equal('name', ['Frozen II'])
-            ])
+                Query::equal('name', ['Frozen II']),
+            ]),
         ];
         $this->assertCount(4, $database->find('movies', $queries));
         $this->assertEquals(4, $database->count('movies', $queries));
@@ -3298,8 +3315,8 @@ trait DocumentTests
             Query::or([
                 Query::equal('name', ['Frozen']),
                 Query::equal('name', ['Frozen II']),
-                Query::equal('director', ['Joe Johnston'])
-            ])
+                Query::equal('director', ['Joe Johnston']),
+            ]),
         ];
 
         $this->assertCount(3, $database->find('movies', $queries));
@@ -3320,8 +3337,8 @@ trait DocumentTests
                 Query::or([
                     Query::equal('active', [true]),
                     Query::equal('active', [false]),
-                ])
-            ])
+                ]),
+            ]),
         ];
 
         $documents = $database->find('movies', $queries);
@@ -3341,8 +3358,8 @@ trait DocumentTests
         try {
             $database->find('movies', [
                 Query::and([
-                    Query::equal('active', [true])
-                ])
+                    Query::equal('active', [true]),
+                ]),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -3359,8 +3376,8 @@ trait DocumentTests
         $queries = [
             Query::and([
                 Query::equal('active', [true]),
-                Query::equal('name', ['Frozen II'])
-            ])
+                Query::equal('name', ['Frozen II']),
+            ]),
         ];
         $this->assertCount(1, $database->find('movies', $queries));
         $this->assertEquals(1, $database->count('movies', $queries));
@@ -3378,8 +3395,8 @@ trait DocumentTests
                 Query::and([
                     Query::equal('active', [true]),
                     Query::equal('name', ['Frozen']),
-                ])
-            ])
+                ]),
+            ]),
         ];
 
         $documents = $database->find('movies', $queries);
@@ -3398,7 +3415,7 @@ trait DocumentTests
 
         $database->createCollection('movies_nested_id', permissions: [
             Permission::create(Role::any()),
-            Permission::update(Role::users())
+            Permission::update(Role::users()),
         ]);
 
         $this->assertEquals(true, $database->createAttribute('movies_nested_id', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true)));
@@ -3438,9 +3455,9 @@ trait DocumentTests
 
         $queries = [
             Query::or([
-                Query::equal('$id', ["1"]),
-                Query::equal('$id', ["2"])
-            ])
+                Query::equal('$id', ['1']),
+                Query::equal('$id', ['2']),
+            ]),
         ];
 
         $documents = $database->find('movies_nested_id', $queries);
@@ -3536,14 +3553,15 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::QueryContains)) {
+        if (! $database->getAdapter()->supports(Capability::QueryContains)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         // Test notContains with array attributes - should return documents that don't contain specified genres
         $documents = $database->find('movies', [
-            Query::notContains('genres', ['comics'])
+            Query::notContains('genres', ['comics']),
         ]);
 
         $this->assertEquals(4, count($documents)); // 6 readable movies (user:x role added earlier) minus 2 with 'comics' genre
@@ -3564,20 +3582,20 @@ trait DocumentTests
 
         // Test notContains with string attribute (substring search)
         $documents = $database->find('movies', [
-            Query::notContains('name', ['Captain'])
+            Query::notContains('name', ['Captain']),
         ]);
         $this->assertEquals(4, count($documents)); // 6 readable movies minus 2 containing 'Captain'
 
         // Test notContains combined with other queries (AND logic)
         $documents = $database->find('movies', [
             Query::notContains('genres', ['comics']),
-            Query::greaterThan('year', 2000)
+            Query::greaterThan('year', 2000),
         ]);
         $this->assertLessThanOrEqual(4, count($documents)); // Subset of readable movies without 'comics' and after 2000
 
         // Test notContains with case sensitivity
         $documents = $database->find('movies', [
-            Query::notContains('genres', ['COMICS']) // Different case
+            Query::notContains('genres', ['COMICS']), // Different case
         ]);
         $this->assertEquals(6, count($documents)); // All readable movies since case doesn't match
 
@@ -3606,7 +3624,7 @@ trait DocumentTests
                 $database->createIndex('movies', new Index(key: 'name', type: IndexType::Fulltext, attributes: ['name']));
             } catch (Throwable $e) {
                 // Index may already exist, ignore duplicate error
-                if (!str_contains($e->getMessage(), 'already exists')) {
+                if (! str_contains($e->getMessage(), 'already exists')) {
                     throw $e;
                 }
             }
@@ -3643,7 +3661,7 @@ trait DocumentTests
             // Test notSearch combined with other filters
             $documents = $database->find('movies', [
                 Query::notSearch('name', 'captain'),
-                Query::lessThan('year', 2010)
+                Query::lessThan('year', 2010),
             ]);
             $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-captain movies before 2010
 
@@ -3711,7 +3729,7 @@ trait DocumentTests
         // Test notStartsWith combined with other queries
         $documents = $database->find('movies', [
             Query::notStartsWith('name', 'Work'),
-            Query::equal('year', [2006])
+            Query::equal('year', [2006]),
         ]);
         $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-Work movies from 2006
     }
@@ -3764,7 +3782,7 @@ trait DocumentTests
         // Test notEndsWith combined with limit
         $documents = $database->find('movies', [
             Query::notEndsWith('name', 'Marvel'),
-            Query::limit(3)
+            Query::limit(3),
         ]);
         $this->assertEquals(3, count($documents)); // Limited to 3 results
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
@@ -3776,8 +3794,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::OrderRandom)) {
+        if (! $database->getAdapter()->supports(Capability::OrderRandom)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -3900,7 +3919,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::notBetween('price', 25.94, 25.99),
             Query::orderDesc('year'),
-            Query::limit(2)
+            Query::limit(2),
         ]);
         $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
 
@@ -3924,7 +3943,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year'])
+            Query::select(['name', 'year']),
         ]);
 
         foreach ($documents as $document) {
@@ -3942,7 +3961,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$id'])
+            Query::select(['name', 'year', '$id']),
         ]);
 
         foreach ($documents as $document) {
@@ -3960,7 +3979,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$sequence'])
+            Query::select(['name', 'year', '$sequence']),
         ]);
 
         foreach ($documents as $document) {
@@ -3978,7 +3997,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$collection'])
+            Query::select(['name', 'year', '$collection']),
         ]);
 
         foreach ($documents as $document) {
@@ -3996,7 +4015,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$createdAt'])
+            Query::select(['name', 'year', '$createdAt']),
         ]);
 
         foreach ($documents as $document) {
@@ -4014,7 +4033,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$updatedAt'])
+            Query::select(['name', 'year', '$updatedAt']),
         ]);
 
         foreach ($documents as $document) {
@@ -4032,7 +4051,7 @@ trait DocumentTests
         }
 
         $documents = $database->find('movies', [
-            Query::select(['name', 'year', '$permissions'])
+            Query::select(['name', 'year', '$permissions']),
         ]);
 
         foreach ($documents as $document) {
@@ -4088,7 +4107,6 @@ trait DocumentTests
         /**
          * Test, foreach with initial cursor
          */
-
         $first = $documents[0];
         $documents = [];
         $database->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
@@ -4099,7 +4117,6 @@ trait DocumentTests
         /**
          * Test, foreach with initial offset
          */
-
         $documents = [];
         $database->foreach('movies', queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
@@ -4116,7 +4133,7 @@ trait DocumentTests
 
         } catch (Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertEquals('Cursor ' . CursorDirection::Before->value . ' not supported in this method.', $e->getMessage());
+            $this->assertEquals('Cursor '.CursorDirection::Before->value.' not supported in this method.', $e->getMessage());
         }
 
     }
@@ -4171,13 +4188,13 @@ trait DocumentTests
 
         $this->getDatabase()->getAuthorization()->addRole('user:x');
 
-        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');
         $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])], 1);
@@ -4185,13 +4202,13 @@ trait DocumentTests
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
 
-        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');
         $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025, $sum);
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
@@ -4290,7 +4307,7 @@ trait DocumentTests
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => ['json']
+                    'filters' => ['json'],
                 ],
                 [
                     '$id' => ID::custom('sessions'),
@@ -4350,7 +4367,7 @@ trait DocumentTests
                     'attributes' => ['email'],
                     'lengths' => [1024],
                     'orders' => [OrderDirection::ASC->value],
-                ]
+                ],
             ],
         ]);
 
@@ -4370,7 +4387,7 @@ trait DocumentTests
             'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new \stdClass(),
+            'prefs' => new \stdClass,
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],
@@ -4410,8 +4427,8 @@ trait DocumentTests
         $this->assertEquals('[]', $result->getAttribute('sessions'));
         $this->assertEquals('[]', $result->getAttribute('tokens'));
         $this->assertEquals('[]', $result->getAttribute('memberships'));
-        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
-        $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
+        $this->assertEquals(['admin', 'developer', 'tester'], $result->getAttribute('roles'));
+        $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}'], $result->getAttribute('tags'));
 
         $result = $database->decode($collection, $document);
 
@@ -4434,13 +4451,14 @@ trait DocumentTests
         $this->assertEquals([], $result->getAttribute('sessions'));
         $this->assertEquals([], $result->getAttribute('tokens'));
         $this->assertEquals([], $result->getAttribute('memberships'));
-        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['admin', 'developer', 'tester'], $result->getAttribute('roles'));
         $this->assertEquals([
             new Document(['$id' => '1', 'label' => 'x']),
             new Document(['$id' => '2', 'label' => 'y']),
             new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
+
     public function testUpdateDocument(): void
     {
         $document = $this->initDocumentsFixture();
@@ -4525,12 +4543,12 @@ trait DocumentTests
     {
         $document = $this->initDocumentsFixture();
         $document->setAttribute('integer_signed', 7);
-        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime, function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
         $this->assertEquals(7, $result->getAttribute('integer_signed'));
 
-        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
         $document->setAttribute('integer_signed', 8);
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
@@ -4546,7 +4564,7 @@ trait DocumentTests
     public function testDeleteDocumentConflict(): void
     {
         $document = $this->initDocumentsFixture();
-        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);
         $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
             return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
@@ -4587,8 +4605,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -4603,14 +4622,14 @@ trait DocumentTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ], documentSecurity: false);
 
         for ($i = 0; $i < 10; $i++) {
             $database->createDocument($collection, new Document([
-                '$id' => 'doc' . $i,
-                'string' => 'text📝 ' . $i,
-                'integer' => $i
+                '$id' => 'doc'.$i,
+                'string' => 'text📝 '.$i,
+                'integer' => $i,
             ]));
         }
 
@@ -4665,7 +4684,7 @@ trait DocumentTests
         }
 
         // TEST: Can't delete documents in the past
-        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection, $database) {
@@ -4743,7 +4762,7 @@ trait DocumentTests
 
         // Test we can update more documents than batchSize
         $this->assertEquals(10, $database->updateDocuments($collection, new Document([
-            'string' => 'batchSize Test'
+            'string' => 'batchSize Test',
         ]), batchSize: 2));
 
         $documents = $database->find($collection);
@@ -4761,8 +4780,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -4777,14 +4797,14 @@ trait DocumentTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ], documentSecurity: false);
 
         for ($i = 0; $i < 10; $i++) {
             $database->createDocument($collection, new Document([
-                '$id' => 'doc' . $i,
-                'string' => 'text📝 ' . $i,
-                'integer' => $i
+                '$id' => 'doc'.$i,
+                'string' => 'text📝 '.$i,
+                'integer' => $i,
             ]));
         }
         // Test onNext is throwing the error without the onError
@@ -4813,7 +4833,7 @@ trait DocumentTests
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
             throw new Exception("Error thrown to test that update doesn't stop and error is caught");
-        }, onError:function ($e) {
+        }, onError: function ($e) {
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         });
@@ -4977,7 +4997,7 @@ trait DocumentTests
                 'price' => 39.50,
                 'active' => true,
                 'genres' => ['animation', 'kids'],
-                'with-dash' => 'Works4'
+                'with-dash' => 'Works4',
             ]));
 
             $this->fail('Failed to throw exception');
@@ -4995,8 +5015,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::UniqueIndex)) {
+        if (! $database->getAdapter()->supports(Capability::UniqueIndex)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -5043,6 +5064,7 @@ trait DocumentTests
 
         $database->deleteCollection('duplicateMessages');
     }
+
     public function testUniqueIndexDuplicateUpdate(): void
     {
         $this->initMoviesFixture();
@@ -5080,7 +5102,7 @@ trait DocumentTests
             'price' => 39.50,
             'active' => true,
             'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works4'
+            'with-dash' => 'Works4',
         ]));
 
         try {
@@ -5100,9 +5122,9 @@ trait DocumentTests
         for ($i = 0; $i < $amount; $i++) {
             $database->createDocument($collection, new Document(
                 array_merge([
-                    '$id' => 'doc' . $i,
-                    'text' => 'value' . $i,
-                    'integer' => $i
+                    '$id' => 'doc'.$i,
+                    'text' => 'value'.$i,
+                    'integer' => $i,
                 ], $documentSecurity ? [
                     '$permissions' => [
                         Permission::create(Role::any()),
@@ -5118,8 +5140,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -5127,12 +5150,12 @@ trait DocumentTests
             'bulk_delete',
             attributes: [
                 new Attribute(key: 'text', type: ColumnType::String, size: 100, required: true),
-                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true)
+                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true),
             ],
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ],
             documentSecurity: false
         );
@@ -5173,7 +5196,7 @@ trait DocumentTests
 
         $results = [];
         $count = $database->deleteDocuments('bulk_delete', [
-            Query::greaterThanEqual('integer', 5)
+            Query::greaterThanEqual('integer', 5),
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
@@ -5188,7 +5211,7 @@ trait DocumentTests
         $this->assertEquals(5, \count($docs));
 
         // TEST (FAIL): Can't delete documents in the past
-        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $oneHourAgo = (new \DateTime)->sub(new \DateInterval('PT1H'));
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {
@@ -5210,7 +5233,7 @@ trait DocumentTests
         $database->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ], false);
 
         $this->assertEquals(5, $database->deleteDocuments('bulk_delete'));
@@ -5233,7 +5256,7 @@ trait DocumentTests
         $database->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ], false);
 
         $database->deleteDocuments('bulk_delete');
@@ -5249,8 +5272,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -5258,13 +5282,13 @@ trait DocumentTests
             'bulk_delete_queries',
             attributes: [
                 new Attribute(key: 'text', type: ColumnType::String, size: 100, required: true),
-                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true)
+                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true),
             ],
             documentSecurity: false,
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ]
         );
 
@@ -5304,8 +5328,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -5313,12 +5338,12 @@ trait DocumentTests
             'bulk_delete_with_callback',
             attributes: [
                 new Attribute(key: 'text', type: ColumnType::String, size: 100, required: true),
-                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true)
+                new Attribute(key: 'integer', type: ColumnType::Integer, size: 10, required: true),
             ],
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ],
             documentSecurity: false
         );
@@ -5372,7 +5397,7 @@ trait DocumentTests
                 // simulating error throwing but should not stop deletion
                 throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
             },
-            onError:function ($e) {
+            onError: function ($e) {
                 $this->assertInstanceOf(Exception::class, $e);
                 $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
             }
@@ -5391,11 +5416,11 @@ trait DocumentTests
 
         $results = [];
         $count = $database->deleteDocuments('bulk_delete_with_callback', [
-            Query::greaterThanEqual('integer', 5)
+            Query::greaterThanEqual('integer', 5),
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
+        }, onError: function ($e) {
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
@@ -5418,8 +5443,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -5432,7 +5458,7 @@ trait DocumentTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ], documentSecurity: true);
 
         // Test limit
@@ -5473,15 +5499,16 @@ trait DocumentTests
 
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectException(Exception::class);
-            if (!$this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
+            if (! $this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
                 $this->expectExceptionMessage('Fulltext index is not supported');
             } else {
                 $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
             }
 
-            $database->createIndex('documents', new Index(key: 'fulltext_integer', type: IndexType::Fulltext, attributes: ['string','integer_signed']));
+            $database->createIndex('documents', new Index(key: 'fulltext_integer', type: IndexType::Fulltext, attributes: ['string', 'integer_signed']));
         } else {
             $this->expectNotToPerformAssertions();
+
             return;
         }
     }
@@ -5494,7 +5521,7 @@ trait DocumentTests
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ]);
 
         $database->createAttribute('validation', new Attribute(key: 'name', type: ColumnType::String, size: 10, required: false));
@@ -5599,6 +5626,7 @@ trait DocumentTests
             $document = $documents[0];
             $doc = $database->getDocument($document->getCollection(), $document->getId());
             $this->assertEquals($document->getTenant(), $doc->getTenant());
+
             return;
         }
 
@@ -5663,8 +5691,8 @@ trait DocumentTests
         // test - default behaviour of external datetime attribute not changed
         $doc = $database->createDocument($collection, new Document([
             '$id' => 'doc1',
-            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
-            'datetime' => ''
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
+            'datetime' => '',
         ]));
         $this->assertNotEmpty($doc->getAttribute('datetime'));
         $this->assertNotEmpty($doc->getAttribute('$createdAt'));
@@ -5679,8 +5707,8 @@ trait DocumentTests
         // test - modifying $createdAt and $updatedAt
         $doc = $database->createDocument($collection, new Document([
             '$id' => 'doc2',
-            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
-            '$createdAt' => $date
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
+            '$createdAt' => $date,
         ]));
 
         $this->assertEquals($doc->getAttribute('$createdAt'), $date);
@@ -5715,9 +5743,9 @@ trait DocumentTests
         // Test 1: Create with custom createdAt, then update with custom updatedAt
         $doc = $database->createDocument($collection, new Document([
             '$id' => 'doc1',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'initial',
-            '$createdAt' => $createDate
+            '$createdAt' => $createDate,
         ]));
 
         $this->assertEquals($createDate, $doc->getAttribute('$createdAt'));
@@ -5734,10 +5762,10 @@ trait DocumentTests
         // Test 2: Create with both custom dates
         $doc2 = $database->createDocument($collection, new Document([
             '$id' => 'doc2',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'both_dates',
             '$createdAt' => $createDate,
-            '$updatedAt' => $updateDate
+            '$updatedAt' => $updateDate,
         ]));
 
         $this->assertEquals($createDate, $doc2->getAttribute('$createdAt'));
@@ -5746,10 +5774,9 @@ trait DocumentTests
         // Test 3: Create without dates, then update with custom dates
         $doc3 = $database->createDocument($collection, new Document([
             '$id' => 'doc3',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
-            'string' => 'no_dates'
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
+            'string' => 'no_dates',
         ]));
-
 
         $doc3->setAttribute('string', 'updated_no_dates');
         $doc3->setAttribute('$createdAt', $createDate);
@@ -5762,8 +5789,8 @@ trait DocumentTests
         // Test 4: Update only createdAt
         $doc4 = $database->createDocument($collection, new Document([
             '$id' => 'doc4',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
-            'string' => 'initial'
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
+            'string' => 'initial',
         ]));
 
         $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
@@ -5789,9 +5816,9 @@ trait DocumentTests
         // Test 6: Create with updatedAt, update with createdAt
         $doc5 = $database->createDocument($collection, new Document([
             '$id' => 'doc5',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'doc5',
-            '$updatedAt' => $date2
+            '$updatedAt' => $date2,
         ]));
 
         $this->assertNotEquals($date2, $doc5->getAttribute('$createdAt'));
@@ -5807,10 +5834,10 @@ trait DocumentTests
         // Test 7: Create with both dates, update with different dates
         $doc6 = $database->createDocument($collection, new Document([
             '$id' => 'doc6',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'doc6',
             '$createdAt' => $date1,
-            '$updatedAt' => $date2
+            '$updatedAt' => $date2,
         ]));
 
         $this->assertEquals($date1, $doc6->getAttribute('$createdAt'));
@@ -5831,10 +5858,10 @@ trait DocumentTests
 
         $doc7 = $database->createDocument($collection, new Document([
             '$id' => 'doc7',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'doc7',
             '$createdAt' => $customDate,
-            '$updatedAt' => $customDate
+            '$updatedAt' => $customDate,
         ]));
 
         $this->assertNotEquals($customDate, $doc7->getAttribute('$createdAt'));
@@ -5853,9 +5880,9 @@ trait DocumentTests
         $database->setPreserveDates(true);
         $doc11 = $database->createDocument($collection, new Document([
             '$id' => 'doc11',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
             'string' => 'no_dates',
-            '$createdAt' => $customDate
+            '$createdAt' => $customDate,
         ]));
 
         $newUpdatedAt = $doc11->getUpdatedAt();
@@ -5882,7 +5909,7 @@ trait DocumentTests
 
         $createDate = '2000-01-01T10:00:00.000+00:00';
         $updateDate = '2000-02-01T15:30:00.000+00:00';
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
 
         // Test 1: Bulk create with different date configurations
         $documents = [
@@ -5890,38 +5917,38 @@ trait DocumentTests
                 '$id' => 'doc1',
                 '$permissions' => $permissions,
                 'string' => 'doc1',
-                '$createdAt' => $createDate
+                '$createdAt' => $createDate,
             ]),
             new Document([
                 '$id' => 'doc2',
                 '$permissions' => $permissions,
                 'string' => 'doc2',
-                '$updatedAt' => $updateDate
+                '$updatedAt' => $updateDate,
             ]),
             new Document([
                 '$id' => 'doc3',
                 '$permissions' => $permissions,
                 'string' => 'doc3',
                 '$createdAt' => $createDate,
-                '$updatedAt' => $updateDate
+                '$updatedAt' => $updateDate,
             ]),
             new Document([
                 '$id' => 'doc4',
                 '$permissions' => $permissions,
-                'string' => 'doc4'
+                'string' => 'doc4',
             ]),
             new Document([
                 '$id' => 'doc5',
                 '$permissions' => $permissions,
                 'string' => 'doc5',
-                '$createdAt' => null
+                '$createdAt' => null,
             ]),
             new Document([
                 '$id' => 'doc6',
                 '$permissions' => $permissions,
                 'string' => 'doc6',
-                '$updatedAt' => null
-            ])
+                '$updatedAt' => null,
+            ]),
         ];
 
         $database->createDocuments($collection, $documents);
@@ -5947,14 +5974,14 @@ trait DocumentTests
         $updateDoc = new Document([
             'string' => 'updated',
             '$createdAt' => $createDate,
-            '$updatedAt' => $updateDate
+            '$updatedAt' => $updateDate,
         ]);
         $ids = [];
         foreach ($documents as $doc) {
             $ids[] = $doc->getId();
         }
         $count = $database->updateDocuments($collection, $updateDoc, [
-            Query::equal('$id', $ids)
+            Query::equal('$id', $ids),
         ]);
         $this->assertEquals(6, $count);
 
@@ -5965,7 +5992,7 @@ trait DocumentTests
             $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
         }
 
-        foreach (['doc2', 'doc4','doc5','doc6'] as $id) {
+        foreach (['doc2', 'doc4', 'doc5', 'doc6'] as $id) {
             $doc = $database->getDocument($collection, $id);
             $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
             $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
@@ -5978,7 +6005,7 @@ trait DocumentTests
         $updateDocDisabled = new Document([
             'string' => 'disabled_update',
             '$createdAt' => $customDate,
-            '$updatedAt' => $customDate
+            '$updatedAt' => $customDate,
         ]);
 
         $countDisabled = $database->updateDocuments($collection, $updateDocDisabled);
@@ -5991,7 +6018,7 @@ trait DocumentTests
         $updateDocEnabled = new Document([
             'string' => 'enabled_update',
             '$createdAt' => $newDate,
-            '$updatedAt' => $newDate
+            '$updatedAt' => $newDate,
         ]);
 
         $countEnabled = $database->updateDocuments($collection, $updateDocEnabled);
@@ -6006,8 +6033,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -6022,7 +6050,7 @@ trait DocumentTests
         $date1 = '2000-01-01T10:00:00.000+00:00';
         $date2 = '2000-02-01T15:30:00.000+00:00';
         $date3 = '2000-03-01T20:45:00.000+00:00';
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
 
         // Test 1: Upsert new document with custom createdAt
         $upsertResults = [];
@@ -6031,8 +6059,8 @@ trait DocumentTests
                 '$id' => 'upsert1',
                 '$permissions' => $permissions,
                 'string' => 'upsert1_initial',
-                '$createdAt' => $createDate
-            ])
+                '$createdAt' => $createDate,
+            ]),
         ], onNext: function ($doc) use (&$upsertResults) {
             $upsertResults[] = $doc;
         });
@@ -6061,8 +6089,8 @@ trait DocumentTests
                 '$permissions' => $permissions,
                 'string' => 'upsert2_both_dates',
                 '$createdAt' => $createDate,
-                '$updatedAt' => $updateDate
-            ])
+                '$updatedAt' => $updateDate,
+            ]),
         ], onNext: function ($doc) use (&$upsertResults2) {
             $upsertResults2[] = $doc;
         });
@@ -6095,8 +6123,8 @@ trait DocumentTests
                 '$permissions' => $permissions,
                 'string' => 'upsert3_disabled',
                 '$createdAt' => $customDate,
-                '$updatedAt' => $customDate
-            ])
+                '$updatedAt' => $customDate,
+            ]),
         ], onNext: function ($doc) use (&$upsertResults3) {
             $upsertResults3[] = $doc;
         });
@@ -6127,26 +6155,26 @@ trait DocumentTests
                 '$id' => 'bulk_upsert1',
                 '$permissions' => $permissions,
                 'string' => 'bulk_upsert1_initial',
-                '$createdAt' => $createDate
+                '$createdAt' => $createDate,
             ]),
             new Document([
                 '$id' => 'bulk_upsert2',
                 '$permissions' => $permissions,
                 'string' => 'bulk_upsert2_initial',
-                '$updatedAt' => $updateDate
+                '$updatedAt' => $updateDate,
             ]),
             new Document([
                 '$id' => 'bulk_upsert3',
                 '$permissions' => $permissions,
                 'string' => 'bulk_upsert3_initial',
                 '$createdAt' => $createDate,
-                '$updatedAt' => $updateDate
+                '$updatedAt' => $updateDate,
             ]),
             new Document([
                 '$id' => 'bulk_upsert4',
                 '$permissions' => $permissions,
-                'string' => 'bulk_upsert4_initial'
-            ])
+                'string' => 'bulk_upsert4_initial',
+            ]),
         ];
 
         $bulkUpsertResults = [];
@@ -6176,7 +6204,7 @@ trait DocumentTests
         $updateUpsertDoc = new Document([
             'string' => 'bulk_upsert_updated',
             '$createdAt' => $newDate,
-            '$updatedAt' => $newDate
+            '$updatedAt' => $newDate,
         ]);
 
         $upsertIds = [];
@@ -6185,7 +6213,7 @@ trait DocumentTests
         }
 
         $database->updateDocuments($collection, $updateUpsertDoc, [
-            Query::equal('$id', $upsertIds)
+            Query::equal('$id', $upsertIds),
         ]);
 
         foreach ($upsertIds as $id) {
@@ -6199,7 +6227,7 @@ trait DocumentTests
         $updateUpsertDoc = new Document([
             'string' => 'bulk_upsert_updated',
             '$createdAt' => null,
-            '$updatedAt' => null
+            '$updatedAt' => null,
         ]);
 
         $upsertIds = [];
@@ -6208,7 +6236,7 @@ trait DocumentTests
         }
 
         $database->updateDocuments($collection, $updateUpsertDoc, [
-            Query::equal('$id', $upsertIds)
+            Query::equal('$id', $upsertIds),
         ]);
 
         foreach ($upsertIds as $id) {
@@ -6234,9 +6262,9 @@ trait DocumentTests
         $this->assertEquals(4, $countUpsertUpdate);
 
         foreach ($upsertUpdateResults as $doc) {
-            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for upsert update");
-            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for upsert update");
-            $this->assertEquals('bulk_upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
+            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), 'createdAt mismatch for upsert update');
+            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), 'updatedAt mismatch for upsert update');
+            $this->assertEquals('bulk_upsert_updated_via_upsert', $doc->getAttribute('string'), 'string mismatch for upsert update');
         }
 
         // Test 12: Bulk upsert with preserve dates disabled
@@ -6259,9 +6287,9 @@ trait DocumentTests
         $this->assertEquals(4, $countUpsertDisabled);
 
         foreach ($upsertDisabledResults as $doc) {
-            $this->assertNotEquals($customDate, $doc->getAttribute('$createdAt'), "createdAt should not be custom date when disabled");
-            $this->assertNotEquals($customDate, $doc->getAttribute('$updatedAt'), "updatedAt should not be custom date when disabled");
-            $this->assertEquals('bulk_upsert_disabled', $doc->getAttribute('string'), "string mismatch for disabled upsert");
+            $this->assertNotEquals($customDate, $doc->getAttribute('$createdAt'), 'createdAt should not be custom date when disabled');
+            $this->assertNotEquals($customDate, $doc->getAttribute('$updatedAt'), 'updatedAt should not be custom date when disabled');
+            $this->assertEquals('bulk_upsert_disabled', $doc->getAttribute('string'), 'string mismatch for disabled upsert');
         }
 
         $database->setPreserveDates(false);
@@ -6273,20 +6301,21 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Upserts)) {
+        if (! $database->getAdapter()->supports(Capability::Upserts)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $collectionName = "update_count";
+        $collectionName = 'update_count';
         $database->createCollection($collectionName);
 
         $database->createAttribute($collectionName, new Attribute(key: 'key', type: ColumnType::String, size: 60, required: false));
         $database->createAttribute($collectionName, new Attribute(key: 'value', type: ColumnType::String, size: 60, required: false));
 
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
 
-        $docs =  [
+        $docs = [
             new Document([
                 '$id' => 'bulk_upsert1',
                 '$permissions' => $permissions,
@@ -6305,8 +6334,8 @@ trait DocumentTests
             new Document([
                 '$id' => 'bulk_upsert4',
                 '$permissions' => $permissions,
-                'key' => 'bulk_upsert4_initial'
-            ])
+                'key' => 'bulk_upsert4_initial',
+            ]),
         ];
         $upsertUpdateResults = [];
         $count = $database->upsertDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
@@ -6317,7 +6346,7 @@ trait DocumentTests
 
         $updates = new Document(['value' => 'test']);
         $newDocs = [];
-        $count = $database->updateDocuments($collectionName, $updates, onNext:function ($doc) use (&$newDocs) {
+        $count = $database->updateDocuments($collectionName, $updates, onNext: function ($doc) use (&$newDocs) {
             $newDocs[] = $doc;
         });
 
@@ -6333,12 +6362,12 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // with different set of attributes
-        $colName = "docs_with_diff";
+        $colName = 'docs_with_diff';
         $database->createCollection($colName);
         $database->createAttribute($colName, new Attribute(key: 'key', type: ColumnType::String, size: 50, required: true));
         $database->createAttribute($colName, new Attribute(key: 'value', type: ColumnType::String, size: 50, required: false, default: 'value'));
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
-        $docs =  [
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
+        $docs = [
             new Document([
                 '$id' => 'doc1',
                 'key' => 'doc1',
@@ -6351,7 +6380,7 @@ trait DocumentTests
             new Document([
                 '$id' => 'doc3',
                 '$permissions' => $permissions,
-                'key' => 'doc3'
+                'key' => 'doc3',
             ]),
         ];
         $this->assertEquals(3, $database->createDocuments($colName, $docs));
@@ -6366,7 +6395,7 @@ trait DocumentTests
         $database->createDocument($colName, new Document([
             '$id' => 'doc4',
             '$permissions' => $permissions,
-            'key' => 'doc4'
+            'key' => 'doc4',
         ]));
 
         $this->assertEquals(2, $database->updateDocuments($colName, new Document(['key' => 'new doc'])));
@@ -6389,8 +6418,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
         // for schemaless the validation will be automatically skipped
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -6405,7 +6435,7 @@ trait DocumentTests
 
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
         $docs = $database->createDocuments($collectionId, [
-            new Document(['attrA' => null,'attrB' => 'B','$permissions' => $permissions])
+            new Document(['attrA' => null, 'attrB' => 'B', '$permissions' => $permissions]),
         ]);
 
         $docs = $database->find($collectionId);
@@ -6419,7 +6449,7 @@ trait DocumentTests
 
         try {
             $database->createDocuments($collectionId, [
-                new Document(['attrA' => null,'attrB' => 'B','$permissions' => $permissions])
+                new Document(['attrA' => null, 'attrB' => 'B', '$permissions' => $permissions]),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -6434,8 +6464,9 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -6502,7 +6533,7 @@ trait DocumentTests
         // Seed a few valid docs for bulk update
         for ($i = 0; $i < 2; $i++) {
             $database->createDocument($collection, new Document([
-                '$id' => 'b' . $i,
+                '$id' => 'b'.$i,
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'name' => 'ok',
                 'age' => 1,
@@ -6567,8 +6598,9 @@ trait DocumentTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -6598,8 +6630,8 @@ trait DocumentTests
             'tags' => ['php', 'database'],
             'config' => [
                 'debug' => false,
-                'timeout' => 30
-            ]
+                'timeout' => 30,
+            ],
         ];
 
         $document1 = $database->createDocument($collection, new Document([
@@ -6622,9 +6654,9 @@ trait DocumentTests
             'config' => [
                 'debug' => true,
                 'timeout' => 60,
-                'cache' => true
+                'cache' => true,
             ],
-            'updated' => true
+            'updated' => true,
         ];
 
         $document1->setAttribute('name', 'Updated Document');
@@ -6647,8 +6679,8 @@ trait DocumentTests
             'tags' => ['javascript', 'node'],
             'config' => [
                 'debug' => false,
-                'timeout' => 45
-            ]
+                'timeout' => 45,
+            ],
         ];
 
         $document2 = new Document([
@@ -6672,9 +6704,9 @@ trait DocumentTests
             'tags' => ['javascript', 'node', 'typescript'],
             'config' => [
                 'debug' => true,
-                'timeout' => 90
+                'timeout' => 90,
             ],
-            'migrated' => true
+            'migrated' => true,
         ]);
 
         $upsertedDoc2 = $database->upsertDocument($collection, $document2);
@@ -6697,7 +6729,7 @@ trait DocumentTests
                 'metadata' => [
                     'version' => '3.0.0',
                     'tags' => ['python', 'flask'],
-                    'config' => ['debug' => false]
+                    'config' => ['debug' => false],
                 ],
                 '$permissions' => $permissions,
             ]),
@@ -6707,7 +6739,7 @@ trait DocumentTests
                 'metadata' => [
                     'version' => '3.1.0',
                     'tags' => ['go', 'golang'],
-                    'config' => ['debug' => true]
+                    'config' => ['debug' => true],
                 ],
                 '$permissions' => $permissions,
             ]),
@@ -6720,9 +6752,9 @@ trait DocumentTests
                     'tags' => ['php', 'database', 'bulk'],
                     'config' => [
                         'debug' => false,
-                        'timeout' => 120
+                        'timeout' => 120,
                     ],
-                    'bulkUpdated' => true
+                    'bulkUpdated' => true,
                 ],
                 '$permissions' => $permissions,
             ]),
@@ -6755,8 +6787,9 @@ trait DocumentTests
         $database = static::getDatabase();
 
         // Skip test if regex is not supported
-        if (!$database->getAdapter()->supports(Capability::Regex)) {
+        if (! $database->getAdapter()->supports(Capability::Regex)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -6868,7 +6901,7 @@ trait DocumentTests
             // Convert database regex pattern to PHP regex format.
             // POSIX-style word boundary (\y) is not supported by PHP PCRE, so map it to \b.
             $normalizedPattern = str_replace('\y', '\b', $regexPattern);
-            $phpPattern = '/' . str_replace('/', '\/', $normalizedPattern) . '/';
+            $phpPattern = '/'.str_replace('/', '\/', $normalizedPattern).'/';
 
             // Get all documents to manually verify
             $allDocuments = $database->find('moviesRegex');
@@ -7028,7 +7061,7 @@ trait DocumentTests
 
         $this->assertTrue(
             $matchesCaseSensitive || $matchesCaseInsensitive,
-            "Query results should match either case-sensitive (" . count($expectedMatchesCaseSensitive) . " docs) or case-insensitive (" . count($expectedMatchesCaseInsensitive) . " docs) expectations. Got " . count($actualMatches) . " documents."
+            'Query results should match either case-sensitive ('.count($expectedMatchesCaseSensitive).' docs) or case-insensitive ('.count($expectedMatchesCaseInsensitive).' docs) expectations. Got '.count($actualMatches).' documents.'
         );
 
         // Test regex with case-insensitive pattern (if adapter supports it via flags)
@@ -7171,8 +7204,8 @@ trait DocumentTests
         // Test regex search pattern - match movies with word boundaries
         // Only test if word boundaries are supported (PCRE or POSIX)
         if ($wordBoundaryPattern !== null) {
-            $dbPattern = $wordBoundaryPattern . 'Work' . $wordBoundaryPattern;
-            $phpPattern = '/' . $wordBoundaryPatternPHP . 'Work' . $wordBoundaryPatternPHP . '/';
+            $dbPattern = $wordBoundaryPattern.'Work'.$wordBoundaryPattern;
+            $phpPattern = '/'.$wordBoundaryPatternPHP.'Work'.$wordBoundaryPatternPHP.'/';
             $documents = $database->find('moviesRegex', [
                 Query::regex('name', $dbPattern),
             ]);
@@ -7245,14 +7278,16 @@ trait DocumentTests
         );
         $database->deleteCollection('moviesRegex');
     }
+
     public function testRegexInjection(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
 
         // Skip test if regex is not supported
-        if (!$database->getAdapter()->supports(Capability::Regex)) {
+        if (! $database->getAdapter()->supports(Capability::Regex)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -7321,12 +7356,12 @@ trait DocumentTests
                         $foundOther = true;
 
                         // Verify that "other" doesn't actually match the pattern as a regex
-                        $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                        $matches = @preg_match('/'.str_replace('/', '\/', $pattern).'/', $text);
                         if ($matches === 0 || $matches === false) {
                             // "other" doesn't match the pattern but was returned
                             // This indicates potential injection vulnerability
                             $this->fail(
-                                "Potential injection detected: Pattern '{$pattern}' returned document 'other' " .
+                                "Potential injection detected: Pattern '{$pattern}' returned document 'other' ".
                                 "which doesn't match the pattern. This suggests SQL/MongoDB injection may have succeeded."
                             );
                         }
@@ -7336,7 +7371,7 @@ trait DocumentTests
                 // Additional verification: check that all returned documents actually match the pattern
                 foreach ($results as $doc) {
                     $text = $doc->getAttribute('text');
-                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                    $matches = @preg_match('/'.str_replace('/', '\/', $pattern).'/', $text);
 
                     // If pattern is invalid, skip validation
                     if ($matches === false) {
@@ -7346,7 +7381,7 @@ trait DocumentTests
                     // If document doesn't match but was returned, it's suspicious
                     if ($matches === 0) {
                         $this->fail(
-                            "Potential injection: Document '{$text}' was returned for pattern '{$pattern}' " .
+                            "Potential injection: Document '{$text}' was returned for pattern '{$pattern}' ".
                             "but doesn't match the regex pattern."
                         );
                     }
@@ -7377,7 +7412,7 @@ trait DocumentTests
                 // Verify each result actually matches
                 foreach ($results as $doc) {
                     $text = $doc->getAttribute('text');
-                    $matches = @preg_match('/' . str_replace('/', '\/', $pattern) . '/', $text);
+                    $matches = @preg_match('/'.str_replace('/', '\/', $pattern).'/', $text);
                     if ($matches !== false) {
                         $this->assertEquals(
                             1,
@@ -7387,7 +7422,7 @@ trait DocumentTests
                     }
                 }
             } catch (\Exception $e) {
-                $this->fail("Legitimate pattern '{$pattern}' should not throw exception: " . $e->getMessage());
+                $this->fail("Legitimate pattern '{$pattern}' should not throw exception: ".$e->getMessage());
             }
         }
 

@@ -17,7 +17,7 @@ class ID
 
         if ($padding > 0) {
             try {
-                $bytes = \random_bytes(\max(1, (int)\ceil(($padding / 2)))); // one byte expands to two chars
+                $bytes = \random_bytes(\max(1, (int) \ceil(($padding / 2)))); // one byte expands to two chars
             } catch (\Exception $e) {
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }

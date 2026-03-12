@@ -7,7 +7,9 @@ use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Mongo\RetryClient;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
@@ -18,6 +20,10 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Hook\MongoPermissionFilter;
+use Utopia\Database\Hook\MongoTenantFilter;
+use Utopia\Database\Hook\Read;
+use Utopia\Database\Hook\TenantWrite;
 use Utopia\Database\Index;
 use Utopia\Database\OrderDirection;
 use Utopia\Database\PermissionType;
@@ -25,20 +31,12 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Capability;
-use Utopia\Database\Hook\MongoPermissionFilter;
-use Utopia\Database\Hook\MongoTenantFilter;
-use Utopia\Database\Hook\Read;
-use Utopia\Database\Hook\TenantWrite;
-use Utopia\Database\Adapter\Mongo\RetryClient;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Mongo\Exception as MongoException;
 
-class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, Feature\Timeouts, Feature\InternalCasting, Feature\UTCCasting
+class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
 {
     /**
      * @var array<string>
@@ -62,7 +60,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         '$nor',
         '$exists',
         '$elemMatch',
-        '$exists'
+        '$exists',
     ];
 
     protected RetryClient $client;
@@ -79,10 +77,13 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Transaction/session state for MongoDB transactions
-     * @var array<string, mixed>|null $session
+     *
+     * @var array<string, mixed>|null
      */
     private ?array $session = null; // Store session array from startSession
+
     protected int $inTransaction = 0;
+
     protected bool $supportForAttributes = true;
 
     /**
@@ -90,7 +91,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      *
      * Set connection and settings
      *
-     * @param Client $client
      * @throws MongoException
      */
     public function __construct(Client $client)
@@ -121,7 +121,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
     protected function applyReadFilters(array $filters, string $collection, string $forPermission = 'read'): array
@@ -129,6 +129,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         foreach ($this->readHooks as $hook) {
             $filters = $hook->applyFilters($filters, $collection, $forPermission);
         }
+
         return $filters;
     }
 
@@ -152,7 +153,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->supports(Capability::Timeouts)) {
+        if (! $this->supports(Capability::Timeouts)) {
             return;
         }
 
@@ -168,14 +169,16 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
+     *
      * @throws \Throwable
      */
     public function withTransaction(callable $callback): mixed
     {
         // If the database is not a replica set, we can't use transactions
-        if (!$this->client->isReplicaSet()) {
+        if (! $this->client->isReplicaSet()) {
             return $callback();
         }
 
@@ -189,6 +192,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $this->startTransaction();
             $result = $callback();
             $this->commitTransaction();
+
             return $result;
         } catch (\Throwable $action) {
             try {
@@ -217,30 +221,31 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     public function startTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
-        if (!$this->client->isReplicaSet()) {
+        if (! $this->client->isReplicaSet()) {
             return true;
         }
 
         try {
             if ($this->inTransaction === 0) {
-                if (!$this->session) {
+                if (! $this->session) {
                     $this->session = $this->client->startSession(); // Get session array
                     $this->client->startTransaction($this->session); // Start the transaction
                 }
             }
             $this->inTransaction++;
+
             return true;
         } catch (\Throwable $e) {
             $this->session = null;
             $this->inTransaction = 0;
-            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new DatabaseException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
     }
 
     public function commitTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
-        if (!$this->client->isReplicaSet()) {
+        if (! $this->client->isReplicaSet()) {
             return true;
         }
 
@@ -250,7 +255,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
-                if (!$this->session) {
+                if (! $this->session) {
                     return false;
                 }
                 try {
@@ -263,6 +268,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                         $this->client->endSessions([$this->session]);
                         $this->session = null;
                         $this->inTransaction = 0;  // Reset counter when transaction is already terminated
+
                         return true;
                     }
                     throw $e;
@@ -277,6 +283,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
                 return true;
             }
+
             return true;
         } catch (\Throwable $e) {
             // Ensure cleanup on any failure
@@ -287,14 +294,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             }
             $this->session = null;
             $this->inTransaction = 0;
-            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new DatabaseException('Failed to commit transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
     }
 
     public function rollbackTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
-        if (!$this->client->isReplicaSet()) {
+        if (! $this->client->isReplicaSet()) {
             return true;
         }
 
@@ -304,7 +311,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
-                if (!$this->session) {
+                if (! $this->session) {
                     return false;
                 }
 
@@ -327,6 +334,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
                 return true;
             }
+
             return true;
         } catch (\Throwable $e) {
             try {
@@ -337,7 +345,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $this->session = null;
             $this->inTransaction = 0;
 
-            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new DatabaseException('Failed to rollback transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
     }
 
@@ -345,7 +353,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * Helper to add transaction/session context to command options if in transaction
      * Includes defensive check to ensure session is valid
      *
-     * @param array<string, mixed> $options
+     * @param  array<string, mixed>  $options
      * @return array<string, mixed>
      */
     private function getTransactionOptions(array $options = []): array
@@ -354,16 +362,16 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             // Pass the session array directly - the client will handle the transaction state internally
             $options['session'] = $this->session;
         }
+
         return $options;
     }
-
 
     /**
      * Create a safe MongoDB regex pattern by escaping special characters
      *
-     * @param string $value The user input to escape
-     * @param string $pattern The pattern template (e.g., ".*%s.*" for contains)
-     * @return Regex
+     * @param  string  $value  The user input to escape
+     * @param  string  $pattern  The pattern template (e.g., ".*%s.*" for contains)
+     *
      * @throws DatabaseException
      */
     private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
@@ -383,7 +391,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Ping Database
      *
-     * @return bool
      * @throws Exception
      * @throws MongoException
      */
@@ -391,7 +398,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     {
         return $this->getClient()->query([
             'ping' => 1,
-            'skipReadConcern' => true
+            'skipReadConcern' => true,
         ])->ok ?? false;
     }
 
@@ -402,10 +409,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Create Database
-     *
-     * @param string $name
-     *
-     * @return bool
      */
     public function create(string $name): bool
     {
@@ -416,24 +419,23 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string|null $collection (optional) collection name
+     * @param  string  $database  database name
+     * @param  string|null  $collection  (optional) collection name
      *
-     * @return bool
      * @throws Exception
      */
     public function exists(string $database, ?string $collection = null): bool
     {
-        if (!\is_null($collection)) {
-            $collection = $this->getNamespace() . "_" . $collection;
+        if (! \is_null($collection)) {
+            $collection = $this->getNamespace().'_'.$collection;
             try {
                 // Use listCollections command with filter for O(1) lookup
                 $result = $this->getClient()->query([
                     'listCollections' => 1,
-                    'filter' => ['name' => $collection]
+                    'filter' => ['name' => $collection],
                 ]);
 
-                return !empty($result->cursor->firstBatch);
+                return ! empty($result->cursor->firstBatch);
             } catch (\Exception $e) {
                 return false;
             }
@@ -446,13 +448,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * List Databases
      *
      * @return array<Document>
+     *
      * @throws Exception
      */
     public function list(): array
     {
         $list = [];
 
-        foreach ((array)$this->getClient()->listDatabaseNames() as $value) {
+        foreach ((array) $this->getClient()->listDatabaseNames() as $value) {
             $list[] = $value;
         }
 
@@ -462,9 +465,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Delete Database
      *
-     * @param string $name
      *
-     * @return bool
      * @throws Exception
      */
     public function delete(string $name): bool
@@ -477,18 +478,17 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param array<Attribute> $attributes
-     * @param array<Index> $indexes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     *
      * @throws Exception
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->getNamespace() . '_' . $this->filter($name);
+        $id = $this->getNamespace().'_'.$this->filter($name);
 
         // For metadata collections outside transactions, check if exists first
-        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        if (! $this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -529,7 +529,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             [
                 'key' => ['_permissions' => $this->getOrder(OrderDirection::ASC->value)],
                 'name' => '_permissions',
-            ]
+            ],
         ];
 
         if ($this->sharedTables) {
@@ -546,14 +546,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             throw $this->processException($e);
         }
 
-        if (!$indexesCreated) {
+        if (! $indexesCreated) {
             return false;
         }
 
         // Since attributes are not used by this adapter
         // Only act when $indexes is provided
 
-        if (!empty($indexes)) {
+        if (! empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
              */
@@ -603,7 +603,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 $newIndexes[$i] = [
                     'key' => $key,
                     'name' => $this->filter($index->key),
-                    'unique' => $unique
+                    'unique' => $unique,
                 ];
 
                 if ($index->type === IndexType::Fulltext) {
@@ -621,7 +621,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 // Add partial filter for indexes to avoid indexing null values
                 if (in_array($index->type, [
                     IndexType::Unique,
-                    IndexType::Key
+                    IndexType::Key,
                 ])) {
                     $partialFilter = [];
                     foreach ($attributes as $attr) {
@@ -639,10 +639,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                         // Use both $exists: true and $type to exclude nulls and ensure correct type
                         $partialFilter[$attr] = [
                             '$exists' => true,
-                            '$type' => $attrType
+                            '$type' => $attrType,
                         ];
                     }
-                    if (!empty($partialFilter)) {
+                    if (! empty($partialFilter)) {
                         $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
                     }
                 }
@@ -655,7 +655,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 throw $this->processException($e);
             }
 
-            if (!$indexesCreated) {
+            if (! $indexesCreated) {
                 return false;
             }
         }
@@ -667,6 +667,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * List Collections
      *
      * @return array<Document>
+     *
      * @throws Exception
      */
     public function listCollections(): array
@@ -675,7 +676,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
         // Note: listCollections is a metadata operation that should not run in transactions
         // to avoid transaction conflicts and readConcern issues
-        foreach ((array)$this->getClient()->listCollectionNames() as $value) {
+        foreach ((array) $this->getClient()->listCollectionNames() as $value) {
             $list[] = $value;
         }
 
@@ -684,8 +685,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Get Collection Size on disk
-     * @param string $collection
-     * @return int
+     *
      * @throws DatabaseException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
@@ -695,19 +695,18 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Get Collection Size of raw data
-     * @param string $collection
-     * @return int
+     *
      * @throws DatabaseException
      */
     public function getSizeOfCollection(string $collection): int
     {
         $namespace = $this->getNamespace();
         $collection = $this->filter($collection);
-        $collection = $namespace . '_' . $collection;
+        $collection = $namespace.'_'.$collection;
 
         $command = [
             'collStats' => $collection,
-            'scale' => 1
+            'scale' => 1,
         ];
 
         try {
@@ -718,28 +717,24 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 throw new DatabaseException('No size found');
             }
         } catch (Exception $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
     }
 
     /**
      * Delete Collection
      *
-     * @param string $id
-     * @return bool
      * @throws Exception
      */
     public function deleteCollection(string $id): bool
     {
-        $id = $this->getNamespace() . '_' . $this->filter($id);
-        return (!!$this->getClient()->dropCollection($id));
+        $id = $this->getNamespace().'_'.$this->filter($id);
+
+        return (bool) $this->getClient()->dropCollection($id);
     }
 
     /**
      * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
      */
     public function analyzeCollection(string $collection): bool
     {
@@ -748,10 +743,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Create Attribute
-     *
-     * @param string $collection
-     * @param Attribute $attribute
-     * @return bool
      */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
@@ -761,9 +752,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Create Attributes
      *
-     * @param string $collection
-     * @param array<Attribute> $attributes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     *
      * @throws DatabaseException
      */
     public function createAttributes(string $collection, array $attributes): bool
@@ -774,16 +764,13 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Delete Attribute
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws DatabaseException
      * @throws MongoException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         $this->getClient()->update(
             $collection,
@@ -798,19 +785,15 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Rename Attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $name
-     * @return bool
      * @throws DatabaseException
      * @throws MongoException
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
-        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
 
-        $from    = $this->filter($this->getInternalKeyForAttribute($id));
-        $to      = $this->filter($this->getInternalKeyForAttribute($name));
+        $from = $this->filter($this->getInternalKeyForAttribute($id));
+        $to = $this->filter($this->getInternalKeyForAttribute($name));
         $options = $this->getTransactionOptions();
 
         $this->getClient()->update(
@@ -824,20 +807,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         return true;
     }
 
-    /**
-     * @param Relationship $relationship
-     * @return bool
-     */
     public function createRelationship(Relationship $relationship): bool
     {
         return true;
     }
 
     /**
-     * @param Relationship $relationship
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @return bool
      * @throws DatabaseException
      * @throws MongoException
      */
@@ -846,42 +821,42 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $collectionName = $this->getNamespace() . '_' . $this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relationship->relatedCollection);
+        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
 
         $escapedKey = $this->escapeMongoFieldName($relationship->key);
-        $escapedNewKey = !\is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
+        $escapedNewKey = ! \is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
         $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
-        $escapedNewTwoWayKey = !\is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
+        $escapedNewTwoWayKey = ! \is_null($newTwoWayKey) ? $this->escapeMongoFieldName($newTwoWayKey) : null;
 
         $renameKey = [
             '$rename' => [
                 $escapedKey => $escapedNewKey,
-            ]
+            ],
         ];
 
         $renameTwoWayKey = [
             '$rename' => [
                 $escapedTwoWayKey => $escapedNewTwoWayKey,
-            ]
+            ],
         ];
 
         switch ($relationship->type) {
             case RelationType::OneToOne:
-                if (!\is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
-                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case RelationType::OneToMany:
-                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
             case RelationType::ManyToOne:
-                if (!\is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
                 }
                 break;
@@ -895,13 +870,13 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 }
 
                 $junction = $relationship->side === RelationSide::Parent
-                    ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
-                    : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
+                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence())
+                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence());
 
-                if (!\is_null($newKey) && $relationship->key !== $newKey) {
+                if (! \is_null($newKey) && $relationship->key !== $newKey) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }
-                if ($relationship->twoWay && !\is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
+                if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
@@ -913,16 +888,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param Relationship $relationship
-     * @return bool
      * @throws MongoException
      * @throws Exception
      */
     public function deleteRelationship(
         Relationship $relationship
     ): bool {
-        $collectionName = $this->getNamespace() . '_' . $this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace() . '_' . $this->filter($relationship->relatedCollection);
+        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
+        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
         $escapedKey = $this->escapeMongoFieldName($relationship->key);
         $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
 
@@ -964,8 +937,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 }
 
                 $junction = $relationship->side === RelationSide::Parent
-                    ? $this->getNamespace() . '_' . $this->filter('_' . $collectionDoc->getSequence() . '_' . $relatedCollectionDoc->getSequence())
-                    : $this->getNamespace() . '_' . $this->filter('_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence());
+                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence())
+                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence());
 
                 $this->getClient()->dropCollection($junction);
                 break;
@@ -979,16 +952,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param Index $index
-     * @param array<string, string> $indexAttributeTypes
-     * @param array<string, mixed> $collation
-     * @return bool
+     * @param  array<string, string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
+     *
      * @throws Exception
      */
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $id = $this->filter($index->key);
         $type = $index->type;
         $attributes = $index->attributes;
@@ -1038,7 +1009,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
          *  2.  Updated format.
          *  3.  Avoid adding collation to fulltext index
          */
-        if (!empty($collation) &&
+        if (! empty($collation) &&
             $type !== IndexType::Fulltext) {
             $indexes['collation'] = [
                 'locale' => 'en',
@@ -1068,7 +1039,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
-            if (!empty($partialFilter)) {
+            if (! empty($partialFilter)) {
                 $indexes['partialFilterExpression'] = $partialFilter;
             }
         }
@@ -1087,7 +1058,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 while ($retryCount < $maxRetries) {
                     try {
                         $indexList = $this->client->query([
-                            'listIndexes' => $name
+                            'listIndexes' => $name,
                         ]);
 
                         if (isset($indexList->cursor->firstBatch)) {
@@ -1096,7 +1067,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
                                 if (
                                     (isset($indexArray['name']) && $indexArray['name'] === $id) &&
-                                    (!isset($indexArray['buildState']) || $indexArray['buildState'] === 'ready')
+                                    (! isset($indexArray['buildState']) || $indexArray['buildState'] === 'ready')
                                 ) {
                                     return $result;
                                 }
@@ -1105,7 +1076,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                     } catch (\Exception $e) {
                         if ($retryCount >= $maxRetries - 1) {
                             throw new DatabaseException(
-                                'Timeout waiting for index creation: ' . $e->getMessage(),
+                                'Timeout waiting for index creation: '.$e->getMessage(),
                                 $e->getCode(),
                                 $e
                             );
@@ -1113,7 +1084,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                     }
 
                     $delay = \min($baseDelay * (2 ** $retryCount), $maxDelay);
-                    \usleep((int)$delay);
+                    \usleep((int) $delay);
                     $retryCount++;
                 }
 
@@ -1129,11 +1100,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Rename Index.
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
      *
-     * @return bool
      * @throws Exception
      */
     public function renameIndex(string $collection, string $old, string $new): bool
@@ -1171,8 +1138,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         try {
-            if (!$index) {
-                throw new DatabaseException('Index not found: ' . $old);
+            if (! $index) {
+                throw new DatabaseException('Index not found: '.$old);
             }
             $deletedindex = $this->deleteIndex($collection, $old);
             $createdindex = $this->createIndex($collection, new Index(
@@ -1197,15 +1164,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws Exception
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $id = $this->filter($id);
         $this->getClient()->dropIndexes($name, [$id]);
 
@@ -1215,16 +1179,13 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get Document
      *
-     * @param Document $collection
-     * @param string $id
-     * @param Query[] $queries
-     * @param bool $forUpdate
-     * @return Document
+     * @param  Query[]  $queries
+     *
      * @throws DatabaseException
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $filters = ['_uid' => $id];
 
@@ -1234,7 +1195,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $options = $this->getTransactionOptions();
 
         $selections = $this->getAttributeSelections($queries);
-        $hasProjection = !empty($selections) && !\in_array('*', $selections);
+        $hasProjection = ! empty($selections) && ! \in_array('*', $selections);
 
         if ($hasProjection) {
             $options['projection'] = $this->getAttributeProjection($selections);
@@ -1256,7 +1217,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $document = $this->castingAfter($collection, $document);
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
-        if (!$hasProjection) {
+        if (! $hasProjection) {
             $this->ensureRelationshipDefaults($collection, $document);
         }
 
@@ -1266,27 +1227,24 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Create Document
      *
-     * @param Document $collection
-     * @param Document $document
      *
-     * @return Document
      * @throws Exception
      */
     public function createDocument(Document $collection, Document $document): Document
     {
         $this->syncWriteHooks();
 
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $sequence = $document->getSequence();
 
         $document->removeAttribute('$sequence');
 
-        $record = $this->replaceChars('$', '_', (array)$document);
+        $record = $this->replaceChars('$', '_', (array) $document);
         $record = $this->decorateRow($record, $this->documentMetadata($document));
 
         // Insert manual id if set
-        if (!empty($sequence)) {
+        if (! empty($sequence)) {
             $record['_id'] = $sequence;
         }
         $options = $this->getTransactionOptions();
@@ -1302,13 +1260,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Returns the document after casting from
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
      */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        if (!$this->supports(Capability::InternalCasting)) {
+        if (! $this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1333,7 +1288,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
                     if (json_last_error() !== JSON_ERROR_NONE) {
-                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
                     }
                     $value = $decoded;
                 }
@@ -1344,7 +1299,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             foreach ($value as &$node) {
                 switch ($type) {
                     case ColumnType::Integer->value:
-                        $node = (int)$node;
+                        $node = (int) $node;
                         break;
                     case ColumnType::Datetime->value:
                         $node = $this->convertUTCDateToString($node);
@@ -1363,7 +1318,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
-        if (!$this->supports(Capability::DefinedAttributes)) {
+        if (! $this->supports(Capability::DefinedAttributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 // mongodb results out a stdclass for objects
                 if (is_object($value) && get_class($value) === stdClass::class) {
@@ -1373,6 +1328,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 }
             }
         }
+
         return $document;
     }
 
@@ -1394,14 +1350,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Returns the document after casting to
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
+     *
      * @throws Exception
      */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        if (!$this->supports(Capability::InternalCasting)) {
+        if (! $this->supports(Capability::InternalCasting)) {
             return $document;
         }
 
@@ -1427,7 +1381,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
                     if (json_last_error() !== JSON_ERROR_NONE) {
-                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
                     }
                     $value = $decoded;
                 }
@@ -1438,7 +1392,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             foreach ($value as &$node) {
                 switch ($type) {
                     case ColumnType::Datetime->value:
-                        if (!($node instanceof UTCDateTime)) {
+                        if (! ($node instanceof UTCDateTime)) {
                             $node = new UTCDateTime(new \DateTime($node));
                         }
                         break;
@@ -1455,7 +1409,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $indexes = $collection->getAttribute('indexes');
         $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === IndexType::Ttl->value);
 
-        if (!$this->supports(Capability::DefinedAttributes)) {
+        if (! $this->supports(Capability::DefinedAttributes)) {
             foreach ($document->getArrayCopy() as $key => $value) {
                 if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
                     continue;
@@ -1477,9 +1431,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Create Documents in batches
      *
-     * @param Document $collection
-     * @param array<Document> $documents
-     *
+     * @param  array<Document>  $documents
      * @return array<Document>
      *
      * @throws DuplicateException
@@ -1489,7 +1441,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     {
         $this->syncWriteHooks();
 
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
         $records = [];
@@ -1500,15 +1452,15 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $sequence = $document->getSequence();
 
             if ($hasSequence === null) {
-                $hasSequence = !empty($sequence);
+                $hasSequence = ! empty($sequence);
             } elseif ($hasSequence == empty($sequence)) {
                 throw new DatabaseException('All documents must have an sequence if one is set');
             }
 
-            $record = $this->replaceChars('$', '_', (array)$document);
+            $record = $this->replaceChars('$', '_', (array) $document);
             $record = $this->decorateRow($record, $this->documentMetadata($document));
 
-            if (!empty($sequence)) {
+            if (! empty($sequence)) {
                 $record['_id'] = $sequence;
             }
 
@@ -1530,12 +1482,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     *
-     * @param string $name
-     * @param array<string, mixed> $document
-     * @param array<string, mixed> $options
-     *
+     * @param  array<string, mixed>  $document
+     * @param  array<string, mixed>  $options
      * @return array<string, mixed>
+     *
      * @throws DuplicateException
      * @throws Exception
      */
@@ -1564,17 +1514,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Update Document
      *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     * @return Document
      * @throws DuplicateException
      * @throws DatabaseException
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
@@ -1602,21 +1547,17 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      *
      * Updates all documents which match the given query.
      *
-     * @param Document $collection
-     * @param Document $updates
-     * @param array<Document> $documents
-     *
-     * @return int
+     * @param  array<Document>  $documents
      *
      * @throws DatabaseException
      */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
         $queries = [
-            Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents))
+            Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents)),
         ];
 
         $filters = $this->buildFilters($queries);
@@ -1643,10 +1584,9 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Change> $changes
+     * @param  array<Change>  $changes
      * @return array<Document>
+     *
      * @throws DatabaseException
      */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
@@ -1659,7 +1599,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $this->syncReadHooks();
 
         try {
-            $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+            $name = $this->getNamespace().'_'.$this->filter($collection->getId());
             $attribute = $this->filter($attribute);
 
             $operations = [];
@@ -1672,7 +1612,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 $attributes['_updatedAt'] = $document['$updatedAt'];
                 $attributes['_permissions'] = $document->getPermissions();
 
-                if (!empty($document->getSequence())) {
+                if (! empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
                 }
 
@@ -1688,7 +1628,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 // Get fields to unset for schemaless mode
                 $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
 
-                if (!empty($attribute)) {
+                if (! empty($attribute)) {
                     // Get the attribute value before removing it from $set
                     $attributeValue = $record[$attribute] ?? 0;
 
@@ -1702,26 +1642,26 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                     // Increment the specific attribute and update all other fields
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
-                        '$set' => $record
+                        '$set' => $record,
                     ];
 
-                    if (!empty($unsetFields)) {
+                    if (! empty($unsetFields)) {
                         $update['$unset'] = $unsetFields;
                     }
                 } else {
                     // Update all fields
                     $update = [
-                        '$set' => $record
+                        '$set' => $record,
                     ];
 
-                    if (!empty($unsetFields)) {
+                    if (! empty($unsetFields)) {
                         $update['$unset'] = $unsetFields;
                     }
 
                     // Add UUID7 _id for new documents in upsert operations
                     if (empty($document->getSequence())) {
                         $update['$setOnInsert'] = [
-                            '_id' => $this->client->createUuid()
+                            '_id' => $this->client->createUuid(),
                         ];
                     }
                 }
@@ -1749,9 +1689,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get fields to unset for schemaless upsert operations
      *
-     * @param Document $oldDocument
-     * @param Document $newDocument
-     * @param array<string, mixed> $record
+     * @param  array<string, mixed>  $record
      * @return array<string, string>
      */
     private function getUpsertAttributeRemovals(Document $oldDocument, Document $newDocument, array $record): array
@@ -1775,7 +1713,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
             $dbKey = array_key_first($transformed);
 
-            if ($dbKey && !array_key_exists($dbKey, $record) && !in_array($dbKey, $protectedFields)) {
+            if ($dbKey && ! array_key_exists($dbKey, $record) && ! in_array($dbKey, $protectedFields)) {
                 $unsetFields[$dbKey] = '';
             }
         }
@@ -1786,9 +1724,9 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get sequences for documents that were created
      *
-     * @param string $collection
-     * @param array<Document> $documents
+     * @param  array<Document>  $documents
      * @return array<Document>
+     *
      * @throws DatabaseException
      * @throws MongoException
      */
@@ -1811,7 +1749,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         $sequences = [];
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = ['_uid' => ['$in' => $documentIds]];
 
@@ -1822,7 +1760,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             // Use cursor paging for large result sets
             $options = [
                 'projection' => ['_uid' => 1, '_id' => 1],
-                'batchSize' => self::DEFAULT_BATCH_SIZE
+                'batchSize' => self::DEFAULT_BATCH_SIZE,
             ];
 
             $options = $this->getTransactionOptions($options);
@@ -1831,7 +1769,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
             // Process first batch
             foreach ($results as $result) {
-                $sequences[$result->_uid] = (string)$result->_id;
+                $sequences[$result->_uid] = (string) $result->_id;
             }
 
             // Get cursor ID for subsequent batches
@@ -1839,7 +1777,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResponse = $this->client->getMore((int) $cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -1847,11 +1785,11 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 }
 
                 foreach ($moreResults as $result) {
-                    $sequences[$result->_uid] = (string)$result->_id;
+                    $sequences[$result->_uid] = (string) $result->_id;
                 }
 
                 // Update cursor ID for next iteration
-                $cursorId = (int)($moreResponse->cursor->id ?? 0);
+                $cursorId = (int) ($moreResponse->cursor->id ?? 0);
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1869,14 +1807,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Increase or decrease an attribute value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param string $updatedAt
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
      * @throws DatabaseException
      * @throws MongoException
      * @throws Exception
@@ -1900,7 +1830,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $options = $this->getTransactionOptions();
         try {
             $this->client->update(
-                $this->getNamespace() . '_' . $this->filter($collection),
+                $this->getNamespace().'_'.$this->filter($collection),
                 $filters,
                 [
                     '$inc' => [$attribute => $value],
@@ -1918,15 +1848,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws Exception
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = ['_uid' => $id];
         $filters = $this->applyReadFilters($filters, $collection);
@@ -1934,21 +1861,20 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
 
-        return (!!$result);
+        return (bool) $result;
     }
 
     /**
      * Delete Documents
      *
-     * @param string $collection
-     * @param array<string> $sequences
-     * @param array<string> $permissionIds
-     * @return int
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     *
      * @throws DatabaseException
      */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         foreach ($sequences as $index => $sequence) {
             $sequences[$index] = $sequence;
@@ -1975,24 +1901,18 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Update Attribute.
-     * @param string $collection
-     * @param Attribute $attribute
-     * @param string|null $newKey
-     *
-     * @return bool
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (!empty($newKey) && $newKey !== $attribute->key) {
+        if (! empty($newKey) && $newKey !== $attribute->key) {
             return $this->renameAttribute($collection, $attribute->key, $newKey);
         }
+
         return true;
     }
 
     /**
      * TODO Consider moving this to adapter.php
-     * @param string $attribute
-     * @return string
      */
     protected function getInternalKeyForAttribute(string $attribute): string
     {
@@ -2008,29 +1928,23 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         };
     }
 
-
     /**
      * Find Documents
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
-     *
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<string>  $orderTypes
+     * @param  array<string, mixed>  $cursor
      * @return array<Document>
+     *
      * @throws Exception
      * @throws TimeoutException
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         // Escape query attribute names that contain dots and match collection attributes
@@ -2044,10 +1958,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
         $options = [];
 
-        if (!\is_null($limit)) {
+        if (! \is_null($limit)) {
             $options['limit'] = $limit;
         }
-        if (!\is_null($offset)) {
+        if (! \is_null($offset)) {
             $options['skip'] = $offset;
         }
 
@@ -2056,7 +1970,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         $selections = $this->getAttributeSelections($queries);
-        $hasProjection = !empty($selections) && !\in_array('*', $selections);
+        $hasProjection = ! empty($selections) && ! \in_array('*', $selections);
         if ($hasProjection) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
@@ -2089,7 +2003,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
             $operator = $this->getQueryOperator($operator);
 
-            if (!empty($cursor)) {
+            if (! empty($cursor)) {
 
                 $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
@@ -2097,7 +2011,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
                     $tmp = $cursor[$originalPrev];
                     $andConditions[] = [
-                        $prevAttr => $tmp
+                        $prevAttr => $tmp,
                     ];
                 }
 
@@ -2107,7 +2021,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
                     if (count($orderAttributes) === 1) {
                         $filters[$attribute] = [
-                            $operator => $tmp
+                            $operator => $tmp,
                         ];
                         break;
                     }
@@ -2115,17 +2029,17 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
                 $andConditions[] = [
                     $attribute => [
-                        $operator => $tmp
-                    ]
+                        $operator => $tmp,
+                    ],
                 ];
 
                 $orFilters[] = [
-                    '$and' => $andConditions
+                    '$and' => $andConditions,
                 ];
             }
         }
 
-        if (!empty($orFilters)) {
+        if (! empty($orFilters)) {
             $filters['$or'] = $orFilters;
         }
 
@@ -2143,7 +2057,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $results = $response->cursor->firstBatch ?? [];
             // Process first batch
             foreach ($results as $result) {
-                $record = $this->replaceChars('_', '$', (array)$result);
+                $record = $this->replaceChars('_', '$', (array) $result);
                 $found[] = new Document($this->convertStdClassToArray($record));
             }
 
@@ -2152,7 +2066,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResponse = $this->client->getMore((int) $cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -2160,11 +2074,11 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 }
 
                 foreach ($moreResults as $result) {
-                    $record = $this->replaceChars('_', '$', (array)$result);
+                    $record = $this->replaceChars('_', '$', (array) $result);
                     $found[] = new Document($this->convertStdClassToArray($record));
                 }
 
-                $cursorId = (int)($moreResponse->cursor->id ?? 0);
+                $cursorId = (int) ($moreResponse->cursor->id ?? 0);
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -2174,7 +2088,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 try {
                     $this->client->query([
                         'killCursors' => $name,
-                        'cursors' => [(int)$cursorId]
+                        'cursors' => [(int) $cursorId],
                     ]);
                 } catch (\Exception $e) {
                     // Ignore errors during cursor cleanup
@@ -2187,7 +2101,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
-        if (!$hasProjection) {
+        if (! $hasProjection) {
             foreach ($found as $document) {
                 $this->ensureRelationshipDefaults($collection, $document);
             }
@@ -2196,12 +2110,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         return $found;
     }
 
-
     /**
      * Converts Appwrite database type to MongoDB BSON type code.
-     *
-     * @param string $appwriteType
-     * @return string
      */
     private function getMongoTypeCode(string $appwriteType): string
     {
@@ -2224,8 +2134,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Converts timestamp to Mongo\BSON datetime format.
      *
-     * @param string $dt
-     * @return UTCDateTime
      * @throws Exception
      */
     private function toMongoDatetime(string $dt): UTCDateTime
@@ -2237,10 +2145,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * Recursive function to replace chars in array keys, while
      * skipping any that are explicitly excluded.
      *
-     * @param array<string, mixed> $array
-     * @param string $from
-     * @param string $to
-     * @param array<string> $exclude
+     * @param  array<string, mixed>  $array
+     * @param  array<string>  $exclude
      * @return array<string, mixed>
      */
     private function replaceInternalIdsKeys(array $array, string $from, string $to, array $exclude = []): array
@@ -2248,7 +2154,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $result = [];
 
         foreach ($array as $key => $value) {
-            if (!in_array($key, $exclude)) {
+            if (! in_array($key, $exclude)) {
                 $key = str_replace($from, $to, $key);
             }
 
@@ -2260,19 +2166,16 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         return $result;
     }
 
-
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     * @return int
+     * @param  array<Query>  $queries
+     *
      * @throws Exception
      */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -2282,7 +2185,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         $filters = [];
         $options = [];
 
-        if (!\is_null($max) && $max > 0) {
+        if (! \is_null($max) && $max > 0) {
             $options['limit'] = $max;
         }
 
@@ -2304,34 +2207,33 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
          * To avoid these situations, on a sharded cluster, use the db.collection.aggregate() method"
          * https://www.mongodb.com/docs/manual/reference/command/count/#response
          **/
-
         $options = $this->getTransactionOptions();
         $pipeline = [];
 
         // Add match stage if filters are provided
-        if (!empty($filters)) {
+        if (! empty($filters)) {
             $pipeline[] = ['$match' => $this->client->toObject($filters)];
         }
 
         // Add limit stage if specified
-        if (!\is_null($max) && $max > 0) {
+        if (! \is_null($max) && $max > 0) {
             $pipeline[] = ['$limit' => $max];
         }
 
         // Use $group and $sum when limit is specified, $count when no limit
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
-        if (!\is_null($max) && $max > 0) {
+        if (! \is_null($max) && $max > 0) {
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [
                     '_id' => null,
-                    'total' => ['$sum' => 1]]
+                    'total' => ['$sum' => 1]],
             ];
         } else {
             // When no limit is passed, use $count for better performance
             $pipeline[] = [
-                '$count' => 'total'
+                '$count' => 'total',
             ];
         }
 
@@ -2340,12 +2242,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $result = $this->client->aggregate($name, $pipeline, $options);
 
             // Aggregation returns stdClass with cursor property containing firstBatch
-            if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
+            if (isset($result->cursor) && ! empty($result->cursor->firstBatch)) {
                 $firstResult = $result->cursor->firstBatch[0];
 
                 // Handle both $count and $group response formats
                 if (isset($firstResult->total)) {
-                    return (int)$firstResult->total;
+                    return (int) $firstResult->total;
                 }
             }
 
@@ -2355,22 +2257,16 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
     }
 
-
     /**
      * Sum an attribute
      *
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Query> $queries
-     * @param int|null $max
+     * @param  array<Query>  $queries
      *
-     * @return int|float
      * @throws Exception
      */
-
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -2388,26 +2284,25 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
         // the array of results from the cursor, and we return the total sum of the attribute
         $pipeline = [];
-        if (!empty($filters)) {
+        if (! empty($filters)) {
             $pipeline[] = ['$match' => $filters];
         }
-        if (!empty($max)) {
+        if (! empty($max)) {
             $pipeline[] = ['$limit' => $max];
         }
         $pipeline[] = [
             '$group' => [
                 '_id' => null,
-                'total' => ['$sum' => '$' . $attribute],
+                'total' => ['$sum' => '$'.$attribute],
             ],
         ];
 
         $options = $this->getTransactionOptions();
+
         return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
     }
 
     /**
-     * @return RetryClient
-     *
      * @throws Exception
      */
     protected function getClient(): RetryClient
@@ -2418,18 +2313,16 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Escape a field name for MongoDB storage.
      * MongoDB field names cannot start with $ or contain dots.
-     *
-     * @param string $name
-     * @return string
      */
     protected function escapeMongoFieldName(string $name): string
     {
         if (\str_starts_with($name, '$')) {
-            $name = '_' . \substr($name, 1);
+            $name = '_'.\substr($name, 1);
         }
         if (\str_contains($name, '.')) {
             $name = \str_replace('.', '__dot__', $name);
         }
+
         return $name;
     }
 
@@ -2438,8 +2331,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * This distinguishes field names with dots (like 'collectionSecurity.Parent') from
      * nested object paths (like 'profile.level1.value').
      *
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param  array<Query>  $queries
      */
     protected function escapeQueryAttributes(Document $collection, array $queries): void
     {
@@ -2467,9 +2359,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Ensure relationship attributes have default null values in MongoDB documents.
      * MongoDB doesn't store null fields, so we need to add them for schema compatibility.
-     *
-     * @param Document $collection
-     * @param Document $document
      */
     protected function ensureRelationshipDefaults(Document $collection, Document $document): void
     {
@@ -2477,7 +2366,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
-            if ($type === ColumnType::Relationship->value && !$document->offsetExists($key)) {
+            if ($type === ColumnType::Relationship->value && ! $document->offsetExists($key)) {
                 $options = $attribute['options'] ?? [];
                 $twoWay = $options['twoWay'] ?? false;
                 $side = $options['side'] ?? '';
@@ -2504,9 +2393,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * Keys cannot begin with $ in MongoDB
      * Convert $ prefix to _ on $id, $permissions, and $collection
      *
-     * @param string $from
-     * @param string $to
-     * @param array<string, mixed> $array
+     * @param  array<string, mixed>  $array
      * @return array<string, mixed>
      */
     protected function replaceChars(string $from, string $to, array $array): array
@@ -2515,7 +2402,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             'permissions',
             'createdAt',
             'updatedAt',
-            'collection'
+            'collection',
         ];
 
         // First pass: recursively process array values and collect keys to rename
@@ -2528,12 +2415,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $newKey = $k;
 
             // Handle key replacement for filtered attributes
-            $clean_key = str_replace($from, "", $k);
+            $clean_key = str_replace($from, '', $k);
             if (in_array($clean_key, $filter)) {
                 $newKey = str_replace($from, $to, $k);
-            } elseif (\is_string($k) && \str_starts_with($k, $from) && !in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
+            } elseif (\is_string($k) && \str_starts_with($k, $from) && ! in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
-                $newKey = $to . \substr($k, \strlen($from));
+                $newKey = $to.\substr($k, \strlen($from));
             }
 
             // Handle dot escaping in MongoDB field names
@@ -2556,7 +2443,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         // Handle special attribute mappings
         if ($from === '_') {
             if (isset($array['_id'])) {
-                $array['$sequence'] = (string)$array['_id'];
+                $array['$sequence'] = (string) $array['_id'];
                 unset($array['_id']);
             }
             if (isset($array['_uid'])) {
@@ -2586,9 +2473,9 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param array<Query> $queries
-     * @param string $separator
+     * @param  array<Query>  $queries
      * @return array<mixed>
+     *
      * @throws Exception
      */
     protected function buildFilters(array $queries, string $separator = '$and'): array
@@ -2602,9 +2489,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
                     $filters[$separator][] = [
                         $query->getAttribute() => [
-                            '$elemMatch' => $this->buildFilters($query->getValues(), $separator)
-                        ]
+                            '$elemMatch' => $this->buildFilters($query->getValues(), $separator),
+                        ],
                     ];
+
                     continue;
                 }
 
@@ -2620,15 +2508,15 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param Query $query
      * @return array<mixed>
+     *
      * @throws Exception
      */
     protected function buildFilter(Query $query): array
     {
         // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
         // so they can be correctly compared against datetime fields stored in MongoDB.
-        if (!$this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
+        if (! $this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
             $values = $query->getValues();
             foreach ($values as $k => $value) {
                 if (is_string($value) && $this->isExtendedISODatetime($value)) {
@@ -2677,8 +2565,9 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         };
 
         $filter = [];
-        if ($query->isObjectAttribute() && !\str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+        if ($query->isObjectAttribute() && ! \str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
             $this->handleObjectFilters($query, $filter);
+
             return $filter;
         }
 
@@ -2689,14 +2578,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         } elseif ($operator == '$all') {
             $filter[$attribute]['$all'] = $query->getValues();
         } elseif ($operator == '$in') {
-            if (in_array($query->getMethod(), [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY]) && !$query->onArray()) {
+            if (in_array($query->getMethod(), [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY]) && ! $query->onArray()) {
                 // contains support array values
                 if (is_array($value)) {
                     $filter['$or'] = array_map(function ($val) use ($attribute) {
                         return [
                             $attribute => [
-                                '$regex' => $this->createSafeRegex($val, '.*%s.*', 'i')
-                            ]
+                                '$regex' => $this->createSafeRegex($val, '.*%s.*', 'i'),
+                            ],
                         ];
                     }, $value);
                 } else {
@@ -2706,7 +2595,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
                 $filter[$attribute]['$in'] = $query->getValues();
             }
         } elseif ($operator === 'notContains') {
-            if (!$query->onArray()) {
+            if (! $query->onArray()) {
                 $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
             } else {
                 $filter[$attribute]['$nin'] = $query->getValues();
@@ -2729,7 +2618,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         } elseif ($query->getMethod() === Query::TYPE_NOT_BETWEEN) {
             $filter['$or'] = [
                 [$attribute => ['$lt' => $value[0]]],
-                [$attribute => ['$gt' => $value[1]]]
+                [$attribute => ['$gt' => $value[1]]],
             ];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
             $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '^%s')];
@@ -2747,14 +2636,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param Query $query
-     * @param array<string, mixed> $filter
-     * @return void
+     * @param  array<string, mixed>  $filter
      */
     private function handleObjectFilters(Query $query, array &$filter): void
     {
         $conditions = [];
-        $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS,Query::TYPE_NOT_EQUAL]);
+        $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL]);
         $values = $query->getValues();
         foreach ($values as $attribute => $value) {
             $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
@@ -2762,31 +2649,30 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $queryValue = $flattendQuery[$flattenedObjectKey];
             $queryAttribute = $query->getAttribute();
             $flattenedQueryField = array_key_first($flattendQuery);
-            $flattenedObjectKey = $flattenedQueryField === '' ? $queryAttribute : $queryAttribute . '.' . array_key_first($flattendQuery);
+            $flattenedObjectKey = $flattenedQueryField === '' ? $queryAttribute : $queryAttribute.'.'.array_key_first($flattendQuery);
             switch ($query->getMethod()) {
 
                 case Query::TYPE_CONTAINS:
                 case Query::TYPE_CONTAINS_ANY:
                 case Query::TYPE_CONTAINS_ALL:
-                case Query::TYPE_NOT_CONTAINS: {
+                case Query::TYPE_NOT_CONTAINS:
                     $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
                     $operator = $isNot ? '$nin' : '$in';
-                    $conditions[] = [ $flattenedObjectKey => [ $operator => $arrayValue] ];
+                    $conditions[] = [$flattenedObjectKey => [$operator => $arrayValue]];
                     break;
-                }
 
                 case Query::TYPE_EQUAL:
-                case Query::TYPE_NOT_EQUAL: {
+                case Query::TYPE_NOT_EQUAL:
                     if (\is_array($queryValue)) {
                         $operator = $isNot ? '$nin' : '$in';
-                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
                     } else {
                         $operator = $isNot ? '$ne' : '$eq';
-                        $conditions[] = [ $flattenedObjectKey => [ $operator => $queryValue] ];
+                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
                     }
 
                     break;
-                }
+
             }
         }
 
@@ -2801,9 +2687,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Flatten a nested associative array into Mongo-style dot notation.
      *
-     * @param string $key
-     * @param mixed $value
-     * @param string $prefix
      * @return array<string, mixed>
      */
     private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
@@ -2813,14 +2696,14 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
         $stack = [];
 
-        $initialKey = $prefix === '' ? $key : $prefix . '.' . $key;
+        $initialKey = $prefix === '' ? $key : $prefix.'.'.$key;
         $stack[] = [$initialKey, $value];
-        while (!empty($stack)) {
+        while (! empty($stack)) {
             [$currentPath, $currentValue] = array_pop($stack);
-            if (is_array($currentValue) && !array_is_list($currentValue)) {
+            if (is_array($currentValue) && ! array_is_list($currentValue)) {
                 foreach ($currentValue as $nextKey => $nextValue) {
-                    $nextKey = (string)$nextKey;
-                    $nextPath = $currentPath === '' ? $nextKey : $currentPath . '.' . $nextKey;
+                    $nextKey = (string) $nextKey;
+                    $nextPath = $currentPath === '' ? $nextKey : $currentPath.'.'.$nextKey;
                     $stack[] = [$nextPath,  $nextValue];
                 }
             } else {
@@ -2835,9 +2718,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get Query Operator
      *
-     * @param \Utopia\Query\Method $operator
      *
-     * @return string
      * @throws Exception
      */
     protected function getQueryOperator(\Utopia\Query\Method $operator): string
@@ -2869,15 +2750,15 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             Query::TYPE_EXISTS,
             Query::TYPE_NOT_EXISTS => '$exists',
             Query::TYPE_ELEM_MATCH => '$elemMatch',
-            default => throw new DatabaseException('Unknown operator: ' . $operator->value),
+            default => throw new DatabaseException('Unknown operator: '.$operator->value),
         };
     }
 
     protected function getQueryValue(\Utopia\Query\Method $method, mixed $value): mixed
     {
         return match ($method) {
-            Query::TYPE_STARTS_WITH => preg_quote($value, '/') . '.*',
-            Query::TYPE_ENDS_WITH => '.*' . preg_quote($value, '/'),
+            Query::TYPE_STARTS_WITH => preg_quote($value, '/').'.*',
+            Query::TYPE_ENDS_WITH => '.*'.preg_quote($value, '/'),
             default => $value,
         };
     }
@@ -2885,9 +2766,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get Mongo Order
      *
-     * @param string $order
      *
-     * @return int
      * @throws Exception
      */
     protected function getOrder(string $order): int
@@ -2895,19 +2774,18 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         return match ($order) {
             OrderDirection::ASC->value => 1,
             OrderDirection::DESC->value => -1,
-            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . OrderDirection::ASC->value . ', ' . OrderDirection::DESC->value),
+            default => throw new DatabaseException('Unknown sort order:'.$order.'. Must be one of '.OrderDirection::ASC->value.', '.OrderDirection::DESC->value),
         };
     }
 
     /**
      * Check if tenant should be added to index
      *
-     * @param Document|string $indexOrType Index document or index type string
-     * @return bool
+     * @param  Document|string  $indexOrType  Index document or index type string
      */
     protected function shouldAddTenantToIndex(Index|Document|string|IndexType $indexOrType): bool
     {
-        if (!$this->sharedTables) {
+        if (! $this->sharedTables) {
             return false;
         }
 
@@ -2925,9 +2803,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param  array<string>  $selections
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
@@ -2958,8 +2834,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Get max STRING limit
-     *
-     * @return int
      */
     public function getLimitForString(): int
     {
@@ -2969,8 +2843,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get max VARCHAR limit
      * MongoDB doesn't distinguish between string types, so using same as string limit
-     *
-     * @return int
      */
     public function getMaxVarcharLength(): int
     {
@@ -2979,8 +2851,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Get max INT limit
-     *
-     * @return int
      */
     public function getLimitForInt(): int
     {
@@ -2991,8 +2861,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get maximum column limit.
      * Returns 0 to indicate no limit
-     *
-     * @return int
      */
     public function getLimitForAttributes(): int
     {
@@ -3002,8 +2870,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get maximum index limit.
      * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
-     *
-     * @return int
      */
     public function getLimitForIndexes(): int
     {
@@ -3020,19 +2886,15 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         return new UTCDateTime(new \DateTime($value));
     }
 
-
-
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
+
         return $this->supportForAttributes;
     }
 
     /**
      * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
      */
     public function getCountOfAttributes(Document $collection): int
     {
@@ -3043,9 +2905,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
      */
     public function getCountOfIndexes(Document $collection): int
     {
@@ -3057,7 +2916,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Returns number of attributes used by default.
      *p
-     * @return int
      */
     public function getCountOfDefaultAttributes(): int
     {
@@ -3066,8 +2924,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     /**
      * Returns number of indexes used by default.
-     *
-     * @return int
      */
     public function getCountOfDefaultIndexes(): int
     {
@@ -3077,8 +2933,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get maximum width, in bytes, allowed for a SQL row
      * Return 0 when no restrictions apply
-     *
-     * @return int
      */
     public function getDocumentSizeLimit(): int
     {
@@ -3090,9 +2944,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     *
-     * @param Document $collection
-     * @return int
      */
     public function getAttributeWidth(Document $collection): int
     {
@@ -3102,14 +2953,13 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Flattens the array.
      *
-     * @param mixed $list
      * @return array<mixed>
      */
     protected function flattenArray(mixed $list): array
     {
-        if (!is_array($list)) {
+        if (! is_array($list)) {
             // make sure the input is an array
-            return array($list);
+            return [$list];
         }
 
         $newArray = [];
@@ -3122,7 +2972,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param array<string, mixed>|Document $target
+     * @param  array<string, mixed>|Document  $target
      * @return array<string, mixed>
      */
     protected function removeNullKeys(array|Document $target): array
@@ -3137,7 +2987,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
             $cleaned[$key] = $value;
         }
-
 
         return $cleaned;
     }
@@ -3157,9 +3006,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
             $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
+            if (! \str_contains($message, '_uid')) {
                 return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
+
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
@@ -3193,37 +3043,24 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
     protected function quote(string $string): string
     {
-        return "";
+        return '';
     }
 
-    /**
-     * @param mixed $stmt
-     * @return bool
-     */
     protected function execute(mixed $stmt): bool
     {
         return true;
     }
 
-    /**
-     * @return string
-     */
     public function getIdAttributeType(): string
     {
         return ColumnType::Uuid7->value;
     }
 
-    /**
-     * @return int
-     */
     public function getMaxIndexLength(): int
     {
         return 1024;
     }
 
-    /**
-     * @return int
-     */
     public function getMaxUIDLength(): int
     {
         return 255;
@@ -3235,8 +3072,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     }
 
     /**
-     * @param string $collection
-     * @param array<int> $tenants
+     * @param  array<int>  $tenants
      * @return int|null|array<string, array<int>>
      */
     public function getTenantFilters(
@@ -3244,7 +3080,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         array $tenants = [],
     ): int|null|array {
         $values = [];
-        if (!$this->sharedTables) {
+        if (! $this->sharedTables) {
             return $values;
         }
 
@@ -3264,7 +3100,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             return $values[0];
         }
 
-
         return ['$in' => $values];
     }
 
@@ -3276,7 +3111,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
      *
-     * @param string $wkb
      * @return float[][] Array of points, each as [x, y]
      */
     public function decodeLinestring(string $wkb): array
@@ -3287,7 +3121,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
      *
-     * @param string $wkb
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     public function decodePolygon(string $wkb): array
@@ -3298,9 +3131,8 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
     /**
      * Get the query to check for tenant when in shared tables mode
      *
-     * @param string $collection The collection being queried
-     * @param string $alias The alias of the parent collection if in a subquery
-     * @return string
+     * @param  string  $collection  The collection being queried
+     * @param  string  $alias  The alias of the parent collection if in a subquery
      */
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
@@ -3323,7 +3155,6 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
          *   YYYY-MM-DDTHH:mm:ss.fffffZ       (26)
          *   YYYY-MM-DDTHH:mm:ss.fffff+HH:MM  (31)
          */
-
         $len = strlen($val);
 
         // absolute minimum
@@ -3333,9 +3164,9 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
 
         // fixed datetime fingerprints
         if (
-            !isset($val[19]) ||
-            $val[4]  !== '-' ||
-            $val[7]  !== '-' ||
+            ! isset($val[19]) ||
+            $val[4] !== '-' ||
+            $val[7] !== '-' ||
             $val[10] !== 'T' ||
             $val[13] !== ':' ||
             $val[16] !== ':'
@@ -3352,7 +3183,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             $val[$len - 3] === ':'
         );
 
-        if (!$hasZ && !$hasOffset) {
+        if (! $hasZ && ! $hasOffset) {
             return false;
         }
 
@@ -3365,12 +3196,12 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         $digitPositions = [
-            0,1,2,3,
-            5,6,
-            8,9,
-            11,12,
-            14,15,
-            17,18
+            0, 1, 2, 3,
+            5, 6,
+            8, 9,
+            11, 12,
+            14, 15,
+            17, 18,
         ];
 
         $timeEnd = $hasZ ? $len - 1 : $len - 6;
@@ -3393,7 +3224,7 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
         }
 
         foreach ($digitPositions as $i) {
-            if (!ctype_digit($val[$i])) {
+            if (! ctype_digit($val[$i])) {
                 return false;
             }
         }
@@ -3410,10 +3241,10 @@ class Mongo extends Adapter implements Feature\Relationships, Feature\Upserts, F
             // Handle Extended JSON format from (array) cast
             // Format: {"$date":{"$numberLong":"1760405478290"}}
             if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
-                $milliseconds = (int)$node['$date']['$numberLong'];
+                $milliseconds = (int) $node['$date']['$numberLong'];
                 $seconds = intdiv($milliseconds, 1000);
                 $microseconds = ($milliseconds % 1000) * 1000;
-                $dateTime = \DateTime::createFromFormat('U.u', $seconds . '.' . str_pad((string)$microseconds, 6, '0'));
+                $dateTime = \DateTime::createFromFormat('U.u', $seconds.'.'.str_pad((string) $microseconds, 6, '0'));
                 if ($dateTime) {
                     $dateTime->setTimezone(new \DateTimeZone('UTC'));
                     $node = DateTime::format($dateTime);

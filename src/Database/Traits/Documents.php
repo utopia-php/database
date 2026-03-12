@@ -5,13 +5,11 @@ namespace Utopia\Database\Traits;
 use Exception;
 use Throwable;
 use Utopia\CLI\Console;
+use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
-use Utopia\Database\PermissionType;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -28,23 +26,25 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Capability;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 trait Documents
 {
     /**
-     * @param Document $collection
-     * @param array<Document> $documents
+     * @param  array<Document>  $documents
      * @return array<Document>
+     *
      * @throws DatabaseException
      */
     protected function refetchDocuments(Document $collection, array $documents): array
@@ -76,11 +76,8 @@ trait Documents
     /**
      * Get Document
      *
-     * @param string $collection
-     * @param string $id
-     * @param array<Query> $queries
-     * @param bool $forUpdate
-     * @return Document
+     * @param  array<Query>  $queries
+     *
      * @throws DatabaseException
      * @throws QueryException
      */
@@ -95,7 +92,7 @@ trait Documents
         }
 
         if (empty($id)) {
-            return new Document();
+            return new Document;
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -110,7 +107,7 @@ trait Documents
 
         if ($this->validate) {
             $validator = new DocumentValidator($attributes, $this->adapter->supports(Capability::DefinedAttributes));
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -135,7 +132,7 @@ trait Documents
         try {
             $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
         } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
             $cached = null;
         }
 
@@ -144,9 +141,9 @@ trait Documents
 
             if ($collection->getId() !== self::METADATA) {
 
-                if (!$this->authorization->isValid(new Input(PermissionType::Read->value, [
+                if (! $this->authorization->isValid(new Input(PermissionType::Read->value, [
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
+                    ...($documentSecurity ? $document->getRead() : []),
                 ]))) {
                     return $this->createDocumentInstance($collection->getId(), []);
                 }
@@ -191,9 +188,9 @@ trait Documents
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
-            if (!$this->authorization->isValid(new Input(PermissionType::Read->value, [
+            if (! $this->authorization->isValid(new Input(PermissionType::Read->value, [
                 ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
+                ...($documentSecurity ? $document->getRead() : []),
             ]))) {
                 return $this->createDocumentInstance($collection->getId(), []);
             }
@@ -203,7 +200,7 @@ trait Documents
         $document = $this->decode($collection, $document, $selections);
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
-        if ($this->relationshipHook !== null && !$this->relationshipHook->isInBatchPopulation() && $this->relationshipHook->isEnabled() && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->relationshipHook !== null && ! $this->relationshipHook->isInBatchPopulation() && $this->relationshipHook->isEnabled() && ! empty($relationships) && (empty($selects) || ! empty($nestedSelections))) {
             $documents = $this->silent(fn () => $this->relationshipHook->populateDocuments([$document], $collection, $this->relationshipHook->getFetchDepth(), $nestedSelections));
             $document = $documents[0];
         }
@@ -219,7 +216,7 @@ trait Documents
                 $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
-                Console::warning('Failed to save document to cache: ' . $e->getMessage());
+                Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
         }
 
@@ -228,14 +225,9 @@ trait Documents
         return $document;
     }
 
-    /**
-     * @param Document $collection
-     * @param Document $document
-     * @return bool
-     */
     private function isTtlExpired(Document $collection, Document $document): bool
     {
-        if (!$this->adapter->supports(Capability::TTLIndexes)) {
+        if (! $this->adapter->supports(Capability::TTLIndexes)) {
             return false;
         }
         foreach ($collection->getAttribute('indexes', []) as $index) {
@@ -243,27 +235,28 @@ trait Documents
                 continue;
             }
             $ttlSeconds = (int) $index->getAttribute('ttl', 0);
-            $ttlAttr    = $index->getAttribute('attributes')[0] ?? null;
-            if ($ttlSeconds <= 0 || !$ttlAttr) {
+            $ttlAttr = $index->getAttribute('attributes')[0] ?? null;
+            if ($ttlSeconds <= 0 || ! $ttlAttr) {
                 return false;
             }
             $val = $document->getAttribute($ttlAttr);
             if (is_string($val)) {
                 try {
                     $start = new \DateTime($val);
-                    return (new \DateTime()) > (clone $start)->modify("+{$ttlSeconds} seconds");
+
+                    return (new \DateTime) > (clone $start)->modify("+{$ttlSeconds} seconds");
                 } catch (\Throwable) {
                     return false;
                 }
             }
         }
+
         return false;
     }
 
     /**
-     * @param array<Document> $documents
-     * @param array<Query> $selectQueries
-     * @return void
+     * @param  array<Document>  $documents
+     * @param  array<Query>  $selectQueries
      */
     public function applySelectFiltersToDocuments(array $documents, array $selectQueries): void
     {
@@ -294,7 +287,7 @@ trait Documents
             $allKeys = \array_keys($doc->getArrayCopy());
             foreach ($allKeys as $attrKey) {
                 // Keep if: explicitly selected OR is internal attribute ($ prefix)
-                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
+                if (! isset($attributesToKeep[$attrKey]) && ! \str_starts_with($attrKey, '$')) {
                     $doc->removeAttribute($attrKey);
                 }
             }
@@ -304,9 +297,6 @@ trait Documents
     /**
      * Create Document
      *
-     * @param string $collection
-     * @param Document $document
-     * @return Document
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws StructureException
@@ -316,14 +306,14 @@ trait Documents
         if (
             $collection !== self::METADATA
             && $this->adapter->getSharedTables()
-            && !$this->adapter->getTenantPerDocument()
+            && ! $this->adapter->getTenantPerDocument()
             && empty($this->adapter->getTenant())
         ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         if (
-            !$this->adapter->getSharedTables()
+            ! $this->adapter->getSharedTables()
             && $this->adapter->getTenantPerDocument()
         ) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -333,7 +323,7 @@ trait Documents
 
         if ($collection->getId() !== self::METADATA) {
             $isValid = $this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()));
-            if (!$isValid) {
+            if (! $isValid) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
         }
@@ -346,8 +336,8 @@ trait Documents
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
-            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+            ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
+            ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
         if (empty($document->getPermissions())) {
             $document->setAttribute('$permissions', []);
@@ -369,8 +359,8 @@ trait Documents
         $document = $this->encode($collection, $document);
 
         if ($this->validate) {
-            $validator = new Permissions();
-            if (!$validator->isValid($document->getPermissions())) {
+            $validator = new Permissions;
+            if (! $validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
@@ -383,7 +373,7 @@ trait Documents
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
-            if (!$structure->isValid($document)) {
+            if (! $structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
             }
         }
@@ -395,11 +385,12 @@ trait Documents
             if ($hook?->isEnabled()) {
                 $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
             }
+
             return $this->adapter->createDocument($collection, $document);
         });
 
         $hook = $this->relationshipHook;
-        if ($hook !== null && !$hook->isInBatchPopulation() && $hook->isEnabled()) {
+        if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $fetchDepth = $hook->getWriteStackCount();
             $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
             $document = $this->adapter->castingAfter($collection, $documents[0]);
@@ -421,12 +412,10 @@ trait Documents
     /**
      * Create Documents in a batch
      *
-     * @param string $collection
-     * @param array<Document> $documents
-     * @param int $batchSize
-     * @param (callable(Document): void)|null $onNext
-     * @param (callable(Throwable): void)|null $onError
-     * @return int
+     * @param  array<Document>  $documents
+     * @param  (callable(Document): void)|null  $onNext
+     * @param  (callable(Throwable): void)|null  $onError
+     *
      * @throws AuthorizationException
      * @throws StructureException
      * @throws \Throwable
@@ -439,7 +428,7 @@ trait Documents
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
+        if (! $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
@@ -450,7 +439,7 @@ trait Documents
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA) {
-            if (!$this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()))) {
+            if (! $this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
         }
@@ -465,8 +454,8 @@ trait Documents
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
-                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
             if (empty($document->getPermissions())) {
                 $document->setAttribute('$permissions', []);
@@ -492,7 +481,7 @@ trait Documents
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->supports(Capability::DefinedAttributes)
                 );
-                if (!$validator->isValid($document)) {
+                if (! $validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
                 }
             }
@@ -512,7 +501,7 @@ trait Documents
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             $hook = $this->relationshipHook;
-            if ($hook !== null && !$hook->isInBatchPopulation() && $hook->isEnabled()) {
+            if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
                 $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
             }
 
@@ -533,7 +522,7 @@ trait Documents
 
         $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified
+            'modified' => $modified,
         ]));
 
         return $modified;
@@ -542,10 +531,6 @@ trait Documents
     /**
      * Update Document
      *
-     * @param string $collection
-     * @param string $id
-     * @param Document $document
-     * @return Document
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -554,7 +539,7 @@ trait Documents
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if (!$id) {
+        if (! $id) {
             throw new DatabaseException('Must define $id attribute');
         }
 
@@ -566,7 +551,7 @@ trait Documents
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
-                return new Document();
+                return new Document;
             }
 
             $skipPermissionsUpdate = true;
@@ -584,7 +569,7 @@ trait Documents
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            $document['$createdAt'] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
@@ -618,8 +603,8 @@ trait Documents
                             continue;
                         }
 
-                        $relationType = (string)$relationships[$key]['options']['relationType'];
-                        $side = (string)$relationships[$key]['options']['side'];
+                        $relationType = (string) $relationships[$key]['options']['relationType'];
+                        $side = (string) $relationships[$key]['options']['side'];
                         switch ($relationType) {
                             case RelationType::OneToOne->value:
                                 $oldValue = $old->getAttribute($key) instanceof Document
@@ -658,8 +643,8 @@ trait Documents
                                     break;
                                 }
 
-                                if (!\is_array($value) || !\array_is_list($value)) {
-                                    throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
+                                if (! \is_array($value) || ! \array_is_list($value)) {
+                                    throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, '.\gettype($value).' given.');
                                 }
 
                                 if (\count($old->getAttribute($key)) !== \count($value)) {
@@ -701,32 +686,32 @@ trait Documents
 
                 $updatePermissions = [
                     ...$collection->getUpdate(),
-                    ...($documentSecurity ? $old->getUpdate() : [])
+                    ...($documentSecurity ? $old->getUpdate() : []),
                 ];
 
                 $readPermissions = [
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $old->getRead() : [])
+                    ...($documentSecurity ? $old->getRead() : []),
                 ];
 
                 if ($shouldUpdate) {
-                    if (!$this->authorization->isValid(new Input(PermissionType::Update->value, $updatePermissions))) {
+                    if (! $this->authorization->isValid(new Input(PermissionType::Update->value, $updatePermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
                 } else {
-                    if (!$this->authorization->isValid(new Input(PermissionType::Read->value, $readPermissions))) {
+                    if (! $this->authorization->isValid(new Input(PermissionType::Read->value, $readPermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
                 }
             }
 
             if ($shouldUpdate) {
-                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
+                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || ! $this->preserveDates) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
             $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
-            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
@@ -741,7 +726,7 @@ trait Documents
                     $this->adapter->supports(Capability::DefinedAttributes),
                     $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+                if (! $structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
@@ -784,7 +769,7 @@ trait Documents
         }
 
         $hook = $this->relationshipHook;
-        if ($hook !== null && !$hook->isInBatchPopulation() && $hook->isEnabled()) {
+        if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth()));
             $document = $documents[0];
         }
@@ -806,13 +791,10 @@ trait Documents
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
-     * @param Document $updates
-     * @param array<Query> $queries
-     * @param int $batchSize
-     * @param (callable(Document $updated, Document $old): void)|null $onNext
-     * @param (callable(Throwable): void)|null $onError
-     * @return int
+     * @param  array<Query>  $queries
+     * @param  (callable(Document $updated, Document $old): void)|null  $onNext
+     * @param  (callable(Throwable): void)|null  $onError
+     *
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DuplicateException
@@ -843,7 +825,7 @@ trait Documents
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Update->value, $collection->getUpdate()));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -864,7 +846,7 @@ trait Documents
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
 
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -873,14 +855,14 @@ trait Documents
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("Cursor document must be from the same Collection.");
+        if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException('Cursor document must be from the same Collection.');
         }
 
         unset($updates['$id']);
         unset($updates['$tenant']);
 
-        if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
+        if (($updates->getCreatedAt() === null || ! $this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
@@ -891,7 +873,7 @@ trait Documents
         }
 
         $updatedAt = $updates->getUpdatedAt();
-        $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
+        $updates['$updatedAt'] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode(
             $collection,
@@ -909,7 +891,7 @@ trait Documents
                 null // No old document available in bulk updates
             );
 
-            if (!$validator->isValid($updates)) {
+            if (! $validator->isValid($updates)) {
                 throw new StructureException($validator->getDescription());
             }
         }
@@ -921,15 +903,15 @@ trait Documents
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
-            } elseif (!empty($limit)) {
+            } elseif (! empty($limit)) {
                 $limit -= $batchSize;
             }
 
             $new = [
-                Query::limit($batchSize)
+                Query::limit($batchSize),
             ];
 
-            if (!empty($last)) {
+            if (! empty($last)) {
                 $new[] = Query::cursorAfter($last);
             }
 
@@ -952,7 +934,7 @@ trait Documents
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
-                        if (!$document->offsetExists('$permissions')) {
+                        if (! $document->offsetExists('$permissions')) {
                             throw new QueryException('Permission document missing in select');
                         }
 
@@ -981,7 +963,7 @@ trait Documents
                         throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                     }
 
-                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
                     $encoded = $this->encode($collection, $document);
@@ -1033,7 +1015,7 @@ trait Documents
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified
+            'modified' => $modified,
         ]));
 
         return $modified;
@@ -1042,9 +1024,6 @@ trait Documents
     /**
      * Create or update a single document.
      *
-     * @param string $collection
-     * @param Document $document
-     * @return Document
      * @throws StructureException
      * @throws \Throwable
      */
@@ -1067,18 +1046,17 @@ trait Documents
             // No-op (unchanged): return the current persisted doc
             $result = $this->getDocument($collection, $document->getId());
         }
+
         return $result;
     }
 
     /**
      * Create or update documents.
      *
-     * @param string $collection
-     * @param array<Document> $documents
-     * @param int $batchSize
-     * @param (callable(Document, ?Document): void)|null $onNext
-     * @param (callable(Throwable): void)|null $onError
-     * @return int
+     * @param  array<Document>  $documents
+     * @param  (callable(Document, ?Document): void)|null  $onNext
+     * @param  (callable(Throwable): void)|null  $onError
+     *
      * @throws StructureException
      * @throws \Throwable
      */
@@ -1102,13 +1080,10 @@ trait Documents
     /**
      * Create or update documents, increasing the value of the given attribute by the value in each document.
      *
-     * @param string $collection
-     * @param string $attribute
-     * @param array<Document> $documents
-     * @param (callable(Document, ?Document): void)|null $onNext
-     * @param (callable(Throwable): void)|null $onError
-     * @param int $batchSize
-     * @return int
+     * @param  array<Document>  $documents
+     * @param  (callable(Document, ?Document): void)|null  $onNext
+     * @param  (callable(Throwable): void)|null  $onError
+     *
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
@@ -1173,11 +1148,11 @@ trait Documents
 
             // Only skip if no operators and regular attributes haven't changed
             $hasChanges = false;
-            if (!empty($operators)) {
+            if (! empty($operators)) {
                 $hasChanges = true;
-            } elseif (!empty($attribute)) {
+            } elseif (! empty($attribute)) {
                 $hasChanges = true;
-            } elseif (!$skipPermissionsUpdate) {
+            } elseif (! $skipPermissionsUpdate) {
                 $hasChanges = true;
             } else {
                 // Check if any of the provided attributes differ from old document
@@ -1191,7 +1166,7 @@ trait Documents
                 }
 
                 // Also check if old document has attributes that new document doesn't
-                if (!$hasChanges) {
+                if (! $hasChanges) {
                     $internalKeys = \array_map(
                         fn ($attr) => $attr['$id'],
                         self::INTERNAL_ATTRIBUTES
@@ -1200,7 +1175,7 @@ trait Documents
                     $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
 
                     foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
-                        if (!array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
+                        if (! array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
                             // Old document has an attribute that new document doesn't
                             $hasChanges = true;
                             break;
@@ -1209,9 +1184,10 @@ trait Documents
                 }
             }
 
-            if (!$hasChanges) {
+            if (! $hasChanges) {
                 // If not updating a single attribute and the document is the same as the old one, skip it
                 unset($documents[$key]);
+
                 continue;
             }
 
@@ -1219,14 +1195,13 @@ trait Documents
             // If old is not empty, check if user has update permission on the collection
             // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document
 
-
             if ($old->isEmpty()) {
-                if (!$this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()))) {
+                if (! $this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
-            } elseif (!$this->authorization->isValid(new Input(PermissionType::Update->value, [
+            } elseif (! $this->authorization->isValid(new Input(PermissionType::Update->value, [
                 ...$collection->getUpdate(),
-                ...($documentSecurity ? $old->getUpdate() : [])
+                ...($documentSecurity ? $old->getUpdate() : []),
             ]))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
@@ -1236,14 +1211,14 @@ trait Documents
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
-            if (!$this->preserveSequence) {
+            if (! $this->preserveSequence) {
                 $document->removeAttribute('$sequence');
             }
 
             $createdAt = $document->getCreatedAt();
-            if ($createdAt === null || !$this->preserveDates) {
+            if ($createdAt === null || ! $this->preserveDates) {
                 $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
                 $document->setAttribute('$createdAt', $createdAt);
@@ -1252,7 +1227,7 @@ trait Documents
             // Force matching optional parameter sets
             // Doesn't use decode as that intentionally skips null defaults to reduce payload size
             foreach ($collectionAttributes as $attr) {
-                if (!$attr->getAttribute('required') && !\array_key_exists($attr['$id'], (array)$document)) {
+                if (! $attr->getAttribute('required') && ! \array_key_exists($attr['$id'], (array) $document)) {
                     $document->setAttribute(
                         $attr['$id'],
                         $old->getAttribute($attr['$id'], ($attr['default'] ?? null))
@@ -1269,7 +1244,7 @@ trait Documents
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                    if (! $old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {
@@ -1289,12 +1264,12 @@ trait Documents
                     $old->isEmpty() ? null : $old
                 );
 
-                if (!$validator->isValid($document)) {
+                if (! $validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
                 }
             }
 
-            if (!$old->isEmpty()) {
+            if (! $old->isEmpty()) {
                 // Check if document was updated after the request timestamp
                 try {
                     $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
@@ -1302,7 +1277,7 @@ trait Documents
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
-                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
             }
@@ -1348,7 +1323,7 @@ trait Documents
             }
 
             $hook = $this->relationshipHook;
-            if ($hook !== null && !$hook->isInBatchPopulation() && $hook->isEnabled()) {
+            if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
                 $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
             }
 
@@ -1356,7 +1331,7 @@ trait Documents
             $hasOperators = false;
             foreach ($batch as $doc) {
                 $extracted = Operator::extractOperators($doc->getArrayCopy());
-                if (!empty($extracted['operators'])) {
+                if (! empty($extracted['operators'])) {
                     $hasOperators = true;
                     break;
                 }
@@ -1368,7 +1343,7 @@ trait Documents
 
             foreach ($batch as $index => $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
-                if (!$hasOperators) {
+                if (! $hasOperators) {
                     $doc = $this->decode($collection, $doc);
                 }
 
@@ -1382,7 +1357,7 @@ trait Documents
 
                 $old = $chunk[$index]->getOld();
 
-                if (!$old->isEmpty()) {
+                if (! $old->isEmpty()) {
                     $old = $this->adapter->castingAfter($collection, $old);
                 }
 
@@ -1406,12 +1381,12 @@ trait Documents
     /**
      * Increase a document attribute by a value
      *
-     * @param string $collection The collection ID
-     * @param string $id The document ID
-     * @param string $attribute The attribute to increase
-     * @param int|float $value The value to increase the attribute by, can be a float
-     * @param int|float|null $max The maximum value the attribute can reach after the increase, null means no limit
-     * @return Document
+     * @param  string  $collection  The collection ID
+     * @param  string  $id  The document ID
+     * @param  string  $attribute  The attribute to increase
+     * @param  int|float  $value  The value to increase the attribute by, can be a float
+     * @param  int|float|null  $max  The maximum value the attribute can reach after the increase, null means no limit
+     *
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws LimitException
@@ -1442,12 +1417,12 @@ trait Documents
 
             $whiteList = [
                 ColumnType::Integer->value,
-                ColumnType::Double->value
+                ColumnType::Double->value,
             ];
 
             /** @var Document $attr */
             $attr = \end($attr);
-            if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+            if (! \in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
         }
@@ -1463,21 +1438,21 @@ trait Documents
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-                if (!$this->authorization->isValid(new Input(PermissionType::Update->value, [
+                if (! $this->authorization->isValid(new Input(PermissionType::Update->value, [
                     ...$collection->getUpdate(),
-                    ...($documentSecurity ? $document->getUpdate() : [])
+                    ...($documentSecurity ? $document->getUpdate() : []),
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
             }
 
-            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
-                throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
+            if (! \is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
+                throw new LimitException('Attribute value exceeds maximum limit: '.$max);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : $updatedAt;
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -1502,16 +1477,9 @@ trait Documents
         return $document;
     }
 
-
     /**
      * Decrease a document attribute by a value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param int|float|null $min
-     * @return Document
      *
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -1540,14 +1508,14 @@ trait Documents
 
             $whiteList = [
                 ColumnType::Integer->value,
-                ColumnType::Double->value
+                ColumnType::Double->value,
             ];
 
             /**
              * @var Document $attr
              */
             $attr = \end($attr);
-            if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+            if (! \in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
         }
@@ -1563,21 +1531,21 @@ trait Documents
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-                if (!$this->authorization->isValid(new Input(PermissionType::Update->value, [
+                if (! $this->authorization->isValid(new Input(PermissionType::Update->value, [
                     ...$collection->getUpdate(),
-                    ...($documentSecurity ? $document->getUpdate() : [])
+                    ...($documentSecurity ? $document->getUpdate() : []),
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
             }
 
-            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
-                throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
+            if (! \is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
+                throw new LimitException('Attribute value exceeds minimum limit: '.$min);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : $updatedAt;
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -1605,10 +1573,7 @@ trait Documents
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      *
      * @throws AuthorizationException
      * @throws ConflictException
@@ -1631,9 +1596,9 @@ trait Documents
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-                if (!$this->authorization->isValid(new Input(PermissionType::Delete->value, [
+                if (! $this->authorization->isValid(new Input(PermissionType::Delete->value, [
                     ...$collection->getDelete(),
-                    ...($documentSecurity ? $document->getDelete() : [])
+                    ...($documentSecurity ? $document->getDelete() : []),
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
@@ -1646,7 +1611,7 @@ trait Documents
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }
 
-            if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
@@ -1673,12 +1638,10 @@ trait Documents
      *
      * Deletes all documents which match the given query, will respect the relationship's onDelete optin.
      *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int $batchSize
-     * @param (callable(Document, Document): void)|null $onNext
-     * @param (callable(Throwable): void)|null $onError
-     * @return int
+     * @param  array<Query>  $queries
+     * @param  (callable(Document, Document): void)|null  $onNext
+     * @param  (callable(Throwable): void)|null  $onError
+     *
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
@@ -1704,7 +1667,7 @@ trait Documents
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Delete->value, $collection->getDelete()));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -1725,7 +1688,7 @@ trait Documents
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
 
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -1734,8 +1697,8 @@ trait Documents
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("Cursor document must be from the same Collection.");
+        if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException('Cursor document must be from the same Collection.');
         }
 
         $originalLimit = $limit;
@@ -1745,15 +1708,15 @@ trait Documents
         while (true) {
             if ($limit && $limit < $batchSize && $limit > 0) {
                 $batchSize = $limit;
-            } elseif (!empty($limit)) {
+            } elseif (! empty($limit)) {
                 $limit -= $batchSize;
             }
 
             $new = [
-                Query::limit($batchSize)
+                Query::limit($batchSize),
             ];
 
-            if (!empty($last)) {
+            if (! empty($last)) {
                 $new[] = Query::cursorAfter($last);
             }
 
@@ -1777,7 +1740,7 @@ trait Documents
             $this->withTransaction(function () use ($collection, $sequences, $permissionIds, $batch) {
                 foreach ($batch as $document) {
                     $sequences[] = $document->getSequence();
-                    if (!empty($document->getPermissions())) {
+                    if (! empty($document->getPermissions())) {
                         $permissionIds[] = $document->getId();
                     }
 
@@ -1795,7 +1758,7 @@ trait Documents
                         throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                     }
 
-                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    if (! \is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
                 }
@@ -1834,7 +1797,7 @@ trait Documents
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified
+            'modified' => $modified,
         ]));
 
         return $modified;
@@ -1843,10 +1806,6 @@ trait Documents
     /**
      * Cleans the all the collection's documents from the cache
      * And the all related cached documents.
-     *
-     * @param string $collectionId
-     *
-     * @return bool
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
@@ -1866,9 +1825,6 @@ trait Documents
      * Cleans a specific document from cache
      * And related document reference in the collection cache.
      *
-     * @param string $collectionId
-     * @param string|null $id
-     * @return bool
      * @throws Exception
      */
     protected function purgeCachedDocumentInternal(string $collectionId, ?string $id): bool
@@ -1891,9 +1847,6 @@ trait Documents
      *
      * Note: Do not retry this method as it triggers events. Use purgeCachedDocumentInternal() with retry instead.
      *
-     * @param string $collectionId
-     * @param string|null $id
-     * @return bool
      * @throws Exception
      */
     public function purgeCachedDocument(string $collectionId, ?string $id): bool
@@ -1903,7 +1856,7 @@ trait Documents
         if ($id !== null) {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
                 '$id' => $id,
-                '$collection' => $collectionId
+                '$collection' => $collectionId,
             ]));
         }
 
@@ -1913,10 +1866,9 @@ trait Documents
     /**
      * Find Documents
      *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param string $forPermission
+     * @param  array<Query>  $queries
      * @return array<Document>
+     *
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
@@ -1946,7 +1898,7 @@ trait Documents
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -1954,7 +1906,7 @@ trait Documents
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -1984,7 +1936,7 @@ trait Documents
             $orderAttributes[] = '$sequence';
         }
 
-        if (!empty($cursor)) {
+        if (! empty($cursor)) {
             foreach ($orderAttributes as $order) {
                 if ($cursor->getAttribute($order) === null) {
                     throw new OrderException(
@@ -1995,11 +1947,11 @@ trait Documents
             }
         }
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+        if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException('cursor Document must be from the same Collection.');
         }
 
-        if (!empty($cursor)) {
+        if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);
             $cursor = $this->adapter->castingBefore($collection, $cursor);
             $cursor = $cursor->getArrayCopy();
@@ -2007,7 +1959,7 @@ trait Documents
             $cursor = [];
         }
 
-        /**  @var array<Query> $queries */
+        /** @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
             $this->convertQueries($collection, $filters)
@@ -2043,7 +1995,7 @@ trait Documents
         }
 
         $hook = $this->relationshipHook;
-        if ($hook !== null && !$hook->isInBatchPopulation() && $hook->isEnabled() && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+        if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled() && ! empty($relationships) && (empty($selects) || ! empty($nestedSelections))) {
             if (count($results) > 0) {
                 $results = $this->silent(fn () => $hook->populateDocuments($results, $collection, $hook->getFetchDepth(), $nestedSelections));
             }
@@ -2059,7 +2011,7 @@ trait Documents
                 $node = $this->createDocumentInstance($collection->getId(), $node->getArrayCopy());
             }
 
-            if (!$node->isEmpty()) {
+            if (! $node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
 
@@ -2075,11 +2027,8 @@ trait Documents
      * Helper method to iterate documents in collection using callback pattern
      * Alterative is
      *
-     * @param string $collection
-     * @param callable $callback
-     * @param array<Query> $queries
-     * @param string $forPermission
-     * @return void
+     * @param  array<Query>  $queries
+     *
      * @throws \Utopia\Database\Exception
      */
     public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = PermissionType::Read->value): void
@@ -2093,10 +2042,8 @@ trait Documents
      * Return each document of the given collection
      * that matches the given queries
      *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param string $forPermission
-     * @return \Generator
+     * @param  array<Query>  $queries
+     *
      * @throws \Utopia\Database\Exception
      */
     public function iterate(string $collection, array $queries = [], string $forPermission = PermissionType::Read->value): \Generator
@@ -2111,7 +2058,7 @@ trait Documents
 
         // Cursor before is not supported
         if ($cursor !== null && $cursorDirection === CursorDirection::Before->value) {
-            throw new DatabaseException('Cursor ' . CursorDirection::Before->value . ' not supported in this method.');
+            throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
         }
 
         $sum = $limit;
@@ -2120,14 +2067,14 @@ trait Documents
         while ($sum === $limit) {
             $newQueries = $queries;
             if ($latestDocument !== null) {
-                //reset offset and cursor as groupByType ignores same type query after first one is encountered
+                // reset offset and cursor as groupByType ignores same type query after first one is encountered
                 if ($offset !== null) {
                     array_unshift($newQueries, Query::offset(0));
                 }
 
                 array_unshift($newQueries, Query::cursorAfter($latestDocument));
             }
-            if (!$limitExists) {
+            if (! $limitExists) {
                 $newQueries[] = Query::limit($limit);
             }
             $results = $this->find($collection, $newQueries, $forPermission);
@@ -2147,23 +2094,22 @@ trait Documents
     }
 
     /**
-     * @param string $collection
-     * @param array<Query> $queries
-     * @return Document
+     * @param  array<Query>  $queries
+     *
      * @throws DatabaseException
      */
     public function findOne(string $collection, array $queries = []): Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
-            Query::limit(1)
+            Query::limit(1),
         ], $queries)));
 
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
 
-        if (!$found) {
-            return new Document();
+        if (! $found) {
+            return new Document;
         }
 
         return $found;
@@ -2174,11 +2120,8 @@ trait Documents
      *
      * Count the number of documents.
      *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int|null $max
+     * @param  array<Query>  $queries
      *
-     * @return int
      * @throws DatabaseException
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
@@ -2200,7 +2143,7 @@ trait Documents
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -2208,7 +2151,7 @@ trait Documents
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read->value, $collection->getRead()));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -2243,12 +2186,8 @@ trait Documents
      *
      * Sum an attribute for all the documents. Pass $max=0 for unlimited count
      *
-     * @param string $collection
-     * @param string $attribute
-     * @param array<Query> $queries
-     * @param int|null $max
+     * @param  array<Query>  $queries
      *
-     * @return int|float
      * @throws DatabaseException
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
@@ -2270,7 +2209,7 @@ trait Documents
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->supports(Capability::DefinedAttributes)
             );
-            if (!$validator->isValid($queries)) {
+            if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -2278,7 +2217,7 @@ trait Documents
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read->value, $collection->getRead()));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -2308,8 +2247,7 @@ trait Documents
     }
 
     /**
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param  array<Query>  $queries
      * @return array<string>
      */
     private function validateSelections(Document $collection, array $queries): array
@@ -2326,6 +2264,7 @@ trait Documents
                 foreach ($query->getValues() as $value) {
                     if (\str_contains($value, '.')) {
                         $relationshipSelections[] = $value;
+
                         continue;
                     }
                     $selections[] = $value;
@@ -2347,8 +2286,8 @@ trait Documents
         }
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
             $invalid = \array_diff($selections, $keys);
-            if (!empty($invalid) && !\in_array('*', $invalid)) {
-                throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+            if (! empty($invalid) && ! \in_array('*', $invalid)) {
+                throw new QueryException('Cannot select attributes: '.\implode(', ', $invalid));
             }
         }
 
@@ -2365,15 +2304,15 @@ trait Documents
     }
 
     /**
-     * @param array<Query> $queries
-     * @return void
+     * @param  array<Query>  $queries
+     *
      * @throws QueryException
      */
     private function checkQueryTypes(array $queries): void
     {
         foreach ($queries as $query) {
-            if (!$query instanceof Query) {
-                throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');
+            if (! $query instanceof Query) {
+                throw new QueryException('Invalid query type: "'.\gettype($query).'". Expected instances of "'.Query::class.'"');
             }
 
             if ($query->isNested()) {

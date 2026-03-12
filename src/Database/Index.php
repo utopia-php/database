@@ -14,8 +14,7 @@ class Index
         public array $lengths = [],
         public array $orders = [],
         public int $ttl = 1,
-    ) {
-    }
+    ) {}
 
     public function toDocument(): Document
     {

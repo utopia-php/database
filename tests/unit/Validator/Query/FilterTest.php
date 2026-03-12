@@ -10,12 +10,12 @@ use Utopia\Query\Schema\ColumnType;
 
 class FilterTest extends TestCase
 {
-    protected Filter|null $validator = null;
+    protected ?Filter $validator = null;
 
     /**
      * @throws \Utopia\Database\Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $attributes = [
             new Document([
@@ -50,7 +50,7 @@ class FilterTest extends TestCase
         );
     }
 
-    public function testSuccess(): void
+    public function test_success(): void
     {
         $this->assertTrue($this->validator->isValid(Query::between('string', '1975-12-06', '2050-12-06')));
         $this->assertTrue($this->validator->isValid(Query::isNotNull('string')));
@@ -58,12 +58,12 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::startsWith('string', 'super')));
         $this->assertTrue($this->validator->isValid(Query::endsWith('string', 'man')));
         $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['super'])));
-        $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100,10,-1])));
-        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ["1","10","-1"])));
+        $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100, 10, -1])));
+        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['1', '10', '-1'])));
         $this->assertTrue($this->validator->isValid(Query::contains('string', ['super'])));
     }
 
-    public function testFailure(): void
+    public function test_failure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::select(['attr'])));
         $this->assertEquals('Invalid query', $this->validator->getDescription());
@@ -84,11 +84,11 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
         $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
         $this->assertFalse($this->validator->isValid(Query::contains('integer', ['super'])));
-        $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100,-1])));
+        $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100, -1])));
         $this->assertFalse($this->validator->isValid(Query::contains('integer_array', [10.6])));
     }
 
-    public function testTypeMismatch(): void
+    public function test_type_mismatch(): void
     {
         $this->assertFalse($this->validator->isValid(Query::equal('string', [false])));
         $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
@@ -97,7 +97,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
     }
 
-    public function testEmptyValues(): void
+    public function test_empty_values(): void
     {
         $this->assertFalse($this->validator->isValid(Query::contains('string', [])));
         $this->assertEquals('Contains queries require at least one value.', $this->validator->getDescription());
@@ -106,7 +106,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
     }
 
-    public function testMaxValuesCount(): void
+    public function test_max_values_count(): void
     {
         $max = $this->validator->getMaxValuesCount();
         $values = [];
@@ -118,7 +118,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Query on attribute has greater than '.$max.' values: integer', $this->validator->getDescription());
     }
 
-    public function testNotContains(): void
+    public function test_not_contains(): void
     {
         // Test valid notContains queries
         $this->assertTrue($this->validator->isValid(Query::notContains('string', ['unwanted'])));
@@ -130,7 +130,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotContains queries require at least one value.', $this->validator->getDescription());
     }
 
-    public function testNotSearch(): void
+    public function test_not_search(): void
     {
         // Test valid notSearch queries
         $this->assertTrue($this->validator->isValid(Query::notSearch('string', 'unwanted')));
@@ -144,7 +144,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotSearch queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotStartsWith(): void
+    public function test_not_starts_with(): void
     {
         // Test valid notStartsWith queries
         $this->assertTrue($this->validator->isValid(Query::notStartsWith('string', 'temp')));
@@ -158,7 +158,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotStartsWith queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotEndsWith(): void
+    public function test_not_ends_with(): void
     {
         // Test valid notEndsWith queries
         $this->assertTrue($this->validator->isValid(Query::notEndsWith('string', '.tmp')));
@@ -172,7 +172,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotEndsWith queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotBetween(): void
+    public function test_not_between(): void
     {
         // Test valid notBetween queries
         $this->assertTrue($this->validator->isValid(Query::notBetween('integer', 0, 50)));

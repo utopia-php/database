@@ -8,17 +8,17 @@ use Utopia\Database\Validator\Query\Cursor;
 
 class CursorTest extends TestCase
 {
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
-        $validator = new Cursor();
+        $validator = new Cursor;
 
         $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
         $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
-        $validator = new Cursor();
+        $validator = new Cursor;
 
         $this->assertFalse($validator->isValid(Query::limit(-1)));
         $this->assertEquals('Invalid query', $validator->getDescription());

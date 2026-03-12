@@ -10,9 +10,6 @@ trait Databases
 {
     /**
      * Create Database
-     *
-     * @param string|null $database
-     * @return bool
      */
     public function create(?string $database = null): bool
     {
@@ -40,10 +37,8 @@ trait Databases
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string|null $database (optional) database name
-     * @param string|null $collection (optional) collection name
-     *
-     * @return bool
+     * @param  string|null  $database  (optional) database name
+     * @param  string|null  $collection  (optional) collection name
      */
     public function exists(?string $database = null, ?string $collection = null): bool
     {
@@ -73,8 +68,6 @@ trait Databases
     /**
      * Delete Database
      *
-     * @param string|null $database
-     * @return bool
      * @throws DatabaseException
      */
     public function delete(?string $database = null): bool
@@ -86,7 +79,7 @@ trait Databases
         try {
             $this->trigger(self::EVENT_DATABASE_DELETE, [
                 'name' => $database,
-                'deleted' => $deleted
+                'deleted' => $deleted,
             ]);
         } catch (\Throwable $e) {
             // Ignore

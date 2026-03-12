@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 class Operator
 {
     protected string $method = '';
+
     protected string $attribute = '';
 
     /**
@@ -24,9 +25,7 @@ class Operator
     /**
      * Construct a new operator object
      *
-     * @param string $method
-     * @param string $attribute
-     * @param array<mixed> $values
+     * @param  array<mixed>  $values
      */
     public function __construct(string $method, string $attribute = '', array $values = [])
     {
@@ -44,17 +43,11 @@ class Operator
         }
     }
 
-    /**
-     * @return string
-     */
     public function getMethod(): string
     {
         return $this->method;
     }
 
-    /**
-     * @return string
-     */
     public function getAttribute(): string
     {
         return $this->attribute;
@@ -68,10 +61,6 @@ class Operator
         return $this->values;
     }
 
-    /**
-     * @param mixed $default
-     * @return mixed
-     */
     public function getValue(mixed $default = null): mixed
     {
         return $this->values[0] ?? $default;
@@ -79,9 +68,6 @@ class Operator
 
     /**
      * Sets method
-     *
-     * @param string $method
-     * @return self
      */
     public function setMethod(string $method): self
     {
@@ -92,9 +78,6 @@ class Operator
 
     /**
      * Sets attribute
-     *
-     * @param string $attribute
-     * @return self
      */
     public function setAttribute(string $attribute): self
     {
@@ -106,8 +89,7 @@ class Operator
     /**
      * Sets values
      *
-     * @param array<mixed> $values
-     * @return self
+     * @param  array<mixed>  $values
      */
     public function setValues(array $values): self
     {
@@ -118,8 +100,6 @@ class Operator
 
     /**
      * Sets value
-     * @param mixed $value
-     * @return self
      */
     public function setValue(mixed $value): self
     {
@@ -130,9 +110,6 @@ class Operator
 
     /**
      * Check if method is supported
-     *
-     * @param string $value
-     * @return bool
      */
     public static function isMethod(string $value): bool
     {
@@ -141,65 +118,57 @@ class Operator
 
     /**
      * Check if method is a numeric operation
-     *
-     * @return bool
      */
     public function isNumericOperation(): bool
     {
         $type = OperatorType::tryFrom($this->method);
+
         return $type !== null && $type->isNumeric();
     }
 
     /**
      * Check if method is an array operation
-     *
-     * @return bool
      */
     public function isArrayOperation(): bool
     {
         $type = OperatorType::tryFrom($this->method);
+
         return $type !== null && $type->isArray();
     }
 
     /**
      * Check if method is a string operation
-     *
-     * @return bool
      */
     public function isStringOperation(): bool
     {
         $type = OperatorType::tryFrom($this->method);
+
         return $type !== null && $type->isString();
     }
 
     /**
      * Check if method is a boolean operation
-     *
-     * @return bool
      */
     public function isBooleanOperation(): bool
     {
         $type = OperatorType::tryFrom($this->method);
+
         return $type !== null && $type->isBoolean();
     }
 
-
     /**
      * Check if method is a date operation
-     *
-     * @return bool
      */
     public function isDateOperation(): bool
     {
         $type = OperatorType::tryFrom($this->method);
+
         return $type !== null && $type->isDate();
     }
 
     /**
      * Parse operator from string
      *
-     * @param string $operator
-     * @return self
      * @throws OperatorException
      */
     public static function parse(string $operator): self
@@ -207,11 +176,11 @@ class Operator
         try {
             $operator = \json_decode($operator, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            throw new OperatorException('Invalid operator: ' . $e->getMessage());
+            throw new OperatorException('Invalid operator: '.$e->getMessage());
         }
 
-        if (!\is_array($operator)) {
-            throw new OperatorException('Invalid operator. Must be an array, got ' . \gettype($operator));
+        if (! \is_array($operator)) {
+            throw new OperatorException('Invalid operator. Must be an array, got '.\gettype($operator));
         }
 
         return self::parseOperator($operator);
@@ -220,8 +189,8 @@ class Operator
     /**
      * Parse operator from array
      *
-     * @param array<string, mixed> $operator
-     * @return self
+     * @param  array<string, mixed>  $operator
+     *
      * @throws OperatorException
      */
     public static function parseOperator(array $operator): self
@@ -230,20 +199,20 @@ class Operator
         $attribute = $operator['attribute'] ?? '';
         $values = $operator['values'] ?? [];
 
-        if (!\is_string($method)) {
-            throw new OperatorException('Invalid operator method. Must be a string, got ' . \gettype($method));
+        if (! \is_string($method)) {
+            throw new OperatorException('Invalid operator method. Must be a string, got '.\gettype($method));
         }
 
-        if (!self::isMethod($method)) {
-            throw new OperatorException('Invalid operator method: ' . $method);
+        if (! self::isMethod($method)) {
+            throw new OperatorException('Invalid operator method: '.$method);
         }
 
-        if (!\is_string($attribute)) {
-            throw new OperatorException('Invalid operator attribute. Must be a string, got ' . \gettype($attribute));
+        if (! \is_string($attribute)) {
+            throw new OperatorException('Invalid operator attribute. Must be a string, got '.\gettype($attribute));
         }
 
-        if (!\is_array($values)) {
-            throw new OperatorException('Invalid operator values. Must be an array, got ' . \gettype($values));
+        if (! \is_array($values)) {
+            throw new OperatorException('Invalid operator values. Must be an array, got '.\gettype($values));
         }
 
         return new self($method, $attribute, $values);
@@ -252,9 +221,9 @@ class Operator
     /**
      * Parse an array of operators
      *
-     * @param array<string> $operators
-     *
+     * @param  array<string>  $operators
      * @return array<Operator>
+     *
      * @throws OperatorException
      */
     public static function parseOperators(array $operators): array
@@ -281,7 +250,6 @@ class Operator
     }
 
     /**
-     * @return string
      * @throws OperatorException
      */
     public function toString(): string
@@ -289,16 +257,14 @@ class Operator
         try {
             return \json_encode($this->toArray(), flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            throw new OperatorException('Invalid Json: ' . $e->getMessage());
+            throw new OperatorException('Invalid Json: '.$e->getMessage());
         }
     }
 
     /**
      * Helper method to create increment operator
      *
-     * @param int|float $value
-     * @param int|float|null $max Maximum value (won't increment beyond this)
-     * @return Operator
+     * @param  int|float|null  $max  Maximum value (won't increment beyond this)
      */
     public static function increment(int|float $value = 1, int|float|null $max = null): self
     {
@@ -306,15 +272,14 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
+
         return new self(OperatorType::Increment->value, '', $values);
     }
 
     /**
      * Helper method to create decrement operator
      *
-     * @param int|float $value
-     * @param int|float|null $min Minimum value (won't decrement below this)
-     * @return Operator
+     * @param  int|float|null  $min  Minimum value (won't decrement below this)
      */
     public static function decrement(int|float $value = 1, int|float|null $min = null): self
     {
@@ -322,15 +287,14 @@ class Operator
         if ($min !== null) {
             $values[] = $min;
         }
+
         return new self(OperatorType::Decrement->value, '', $values);
     }
-
 
     /**
      * Helper method to create array append operator
      *
-     * @param array<mixed> $values
-     * @return Operator
+     * @param  array<mixed>  $values
      */
     public static function arrayAppend(array $values): self
     {
@@ -340,8 +304,7 @@ class Operator
     /**
      * Helper method to create array prepend operator
      *
-     * @param array<mixed> $values
-     * @return Operator
+     * @param  array<mixed>  $values
      */
     public static function arrayPrepend(array $values): self
     {
@@ -350,10 +313,6 @@ class Operator
 
     /**
      * Helper method to create array insert operator
-     *
-     * @param int $index
-     * @param mixed $value
-     * @return Operator
      */
     public static function arrayInsert(int $index, mixed $value): self
     {
@@ -362,9 +321,6 @@ class Operator
 
     /**
      * Helper method to create array remove operator
-     *
-     * @param mixed $value
-     * @return Operator
      */
     public static function arrayRemove(mixed $value): self
     {
@@ -374,8 +330,7 @@ class Operator
     /**
      * Helper method to create concatenation operator
      *
-     * @param mixed $value Value to concatenate (string or array)
-     * @return Operator
+     * @param  mixed  $value  Value to concatenate (string or array)
      */
     public static function stringConcat(mixed $value): self
     {
@@ -384,10 +339,6 @@ class Operator
 
     /**
      * Helper method to create replace operator
-     *
-     * @param string $search
-     * @param string $replace
-     * @return Operator
      */
     public static function stringReplace(string $search, string $replace): self
     {
@@ -397,9 +348,7 @@ class Operator
     /**
      * Helper method to create multiply operator
      *
-     * @param int|float $factor
-     * @param int|float|null $max Maximum value (won't multiply beyond this)
-     * @return Operator
+     * @param  int|float|null  $max  Maximum value (won't multiply beyond this)
      */
     public static function multiply(int|float $factor, int|float|null $max = null): self
     {
@@ -407,15 +356,15 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
+
         return new self(OperatorType::Multiply->value, '', $values);
     }
 
     /**
      * Helper method to create divide operator
      *
-     * @param int|float $divisor
-     * @param int|float|null $min Minimum value (won't divide below this)
-     * @return Operator
+     * @param  int|float|null  $min  Minimum value (won't divide below this)
+     *
      * @throws OperatorException if divisor is zero
      */
     public static function divide(int|float $divisor, int|float|null $min = null): self
@@ -427,25 +376,22 @@ class Operator
         if ($min !== null) {
             $values[] = $min;
         }
+
         return new self(OperatorType::Divide->value, '', $values);
     }
 
     /**
      * Helper method to create toggle operator
-     *
-     * @return Operator
      */
     public static function toggle(): self
     {
         return new self(OperatorType::Toggle->value, '', []);
     }
 
-
     /**
      * Helper method to create date add days operator
      *
-     * @param int $days Number of days to add (can be negative to subtract)
-     * @return Operator
+     * @param  int  $days  Number of days to add (can be negative to subtract)
      */
     public static function dateAddDays(int $days): self
     {
@@ -455,8 +401,7 @@ class Operator
     /**
      * Helper method to create date subtract days operator
      *
-     * @param int $days Number of days to subtract
-     * @return Operator
+     * @param  int  $days  Number of days to subtract
      */
     public static function dateSubDays(int $days): self
     {
@@ -465,8 +410,6 @@ class Operator
 
     /**
      * Helper method to create date set now operator
-     *
-     * @return Operator
      */
     public static function dateSetNow(): self
     {
@@ -476,8 +419,8 @@ class Operator
     /**
      * Helper method to create modulo operator
      *
-     * @param int|float $divisor The divisor for modulo operation
-     * @return Operator
+     * @param  int|float  $divisor  The divisor for modulo operation
+     *
      * @throws OperatorException if divisor is zero
      */
     public static function modulo(int|float $divisor): self
@@ -485,15 +428,15 @@ class Operator
         if ($divisor == 0) {
             throw new OperatorException('Modulo by zero is not allowed');
         }
+
         return new self(OperatorType::Modulo->value, '', [$divisor]);
     }
 
     /**
      * Helper method to create power operator
      *
-     * @param int|float $exponent The exponent to raise to
-     * @param int|float|null $max Maximum value (won't exceed this)
-     * @return Operator
+     * @param  int|float  $exponent  The exponent to raise to
+     * @param  int|float|null  $max  Maximum value (won't exceed this)
      */
     public static function power(int|float $exponent, int|float|null $max = null): self
     {
@@ -501,14 +444,12 @@ class Operator
         if ($max !== null) {
             $values[] = $max;
         }
+
         return new self(OperatorType::Power->value, '', $values);
     }
 
-
     /**
      * Helper method to create array unique operator
-     *
-     * @return Operator
      */
     public static function arrayUnique(): self
     {
@@ -518,8 +459,7 @@ class Operator
     /**
      * Helper method to create array intersect operator
      *
-     * @param array<mixed> $values Values to intersect with current array
-     * @return Operator
+     * @param  array<mixed>  $values  Values to intersect with current array
      */
     public static function arrayIntersect(array $values): self
     {
@@ -529,8 +469,7 @@ class Operator
     /**
      * Helper method to create array diff operator
      *
-     * @param array<mixed> $values Values to remove from current array
-     * @return Operator
+     * @param  array<mixed>  $values  Values to remove from current array
      */
     public static function arrayDiff(array $values): self
     {
@@ -540,9 +479,8 @@ class Operator
     /**
      * Helper method to create array filter operator
      *
-     * @param string $condition Filter condition ('equals', 'notEquals', 'greaterThan', 'lessThan', 'null', 'notNull')
-     * @param mixed $value Value to filter by (not used for 'null'/'notNull' conditions)
-     * @return Operator
+     * @param  string  $condition  Filter condition ('equals', 'notEquals', 'greaterThan', 'lessThan', 'null', 'notNull')
+     * @param  mixed  $value  Value to filter by (not used for 'null'/'notNull' conditions)
      */
     public static function arrayFilter(string $condition, mixed $value = null): self
     {
@@ -551,9 +489,6 @@ class Operator
 
     /**
      * Check if a value is an operator instance
-     *
-     * @param mixed $value
-     * @return bool
      */
     public static function isOperator(mixed $value): bool
     {
@@ -563,7 +498,7 @@ class Operator
     /**
      * Extract operators from document data
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array{operators: array<string, Operator>, updates: array<string, mixed>}
      */
     public static function extractOperators(array $data): array
@@ -588,5 +523,4 @@ class Operator
             'updates' => $updates,
         ];
     }
-
 }

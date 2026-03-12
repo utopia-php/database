@@ -24,54 +24,36 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
+    use AttributeTests;
     use CollectionTests;
     use CustomDocumentTypeTests;
     use DocumentTests;
-    use AttributeTests;
+    use GeneralTests;
     use IndexTests;
+    use ObjectAttributeTests;
     use OperatorTests;
     use PermissionTests;
     use RelationshipTests;
-    use SpatialTests;
     use SchemalessTests;
-    use ObjectAttributeTests;
+    use SpatialTests;
     use VectorTests;
-    use GeneralTests;
 
     protected static string $namespace;
 
-    /**
-     * @var Authorization
-     */
     protected static ?Authorization $authorization = null;
 
-    /**
-     * @return Database
-     */
     abstract protected function getDatabase(): Database;
 
-    /**
-     * @param string $collection
-     * @param string $column
-     *
-     * @return bool
-     */
     abstract protected function deleteColumn(string $collection, string $column): bool;
 
-    /**
-     * @param string $collection
-     * @param string $index
-     *
-     * @return bool
-     */
     abstract protected function deleteIndex(string $collection, string $index): bool;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
-        $this->testDatabase = 'utopiaTests_' . static::getTestToken();
+        $this->testDatabase = 'utopiaTests_'.static::getTestToken();
 
         if (is_null(self::$authorization)) {
-            self::$authorization = new Authorization();
+            self::$authorization = new Authorization;
         }
 
         self::$authorization->addRole('any');
@@ -82,7 +64,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function tearDown(): void
+    protected function tearDown(): void
     {
         self::$authorization->setDefaultStatus(true);
 

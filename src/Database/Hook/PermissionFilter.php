@@ -33,8 +33,8 @@ class PermissionFilter implements Filter, JoinFilter
         protected string $quoteChar = '`',
     ) {
         foreach ([$documentColumn, $permDocumentColumn, $permRoleColumn, $permTypeColumn, $permColumnColumn] as $col) {
-            if (!\preg_match(self::IDENTIFIER_PATTERN, $col)) {
-                throw new \InvalidArgumentException('Invalid column name: ' . $col);
+            if (! \preg_match(self::IDENTIFIER_PATTERN, $col)) {
+                throw new \InvalidArgumentException('Invalid column name: '.$col);
             }
         }
     }
@@ -48,8 +48,8 @@ class PermissionFilter implements Filter, JoinFilter
         /** @var string $permTable */
         $permTable = ($this->permissionsTable)($table);
 
-        if (!\preg_match(self::IDENTIFIER_PATTERN, $permTable)) {
-            throw new \InvalidArgumentException('Invalid permissions table name: ' . $permTable);
+        if (! \preg_match(self::IDENTIFIER_PATTERN, $permTable)) {
+            throw new \InvalidArgumentException('Invalid permissions table name: '.$permTable);
         }
 
         $quotedPermTable = $this->quoteTableIdentifier($permTable);
@@ -73,7 +73,7 @@ class PermissionFilter implements Filter, JoinFilter
         $subFilterBindings = [];
         if ($this->subqueryFilter !== null) {
             $subCondition = $this->subqueryFilter->filter($permTable);
-            $subFilterClause = ' AND ' . $subCondition->expression;
+            $subFilterClause = ' AND '.$subCondition->expression;
             $subFilterBindings = $subCondition->bindings;
         }
 
@@ -99,7 +99,7 @@ class PermissionFilter implements Filter, JoinFilter
     {
         $q = $this->quoteChar;
         $parts = \explode('.', $table);
-        $quoted = \array_map(fn (string $part): string => $q . \str_replace($q, $q . $q, $part) . $q, $parts);
+        $quoted = \array_map(fn (string $part): string => $q.\str_replace($q, $q.$q, $part).$q, $parts);
 
         return \implode('.', $quoted);
     }

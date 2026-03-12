@@ -4,7 +4,6 @@ namespace Utopia\Database\Traits;
 
 use Exception;
 use Utopia\Database\Capability;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -26,11 +25,8 @@ trait Indexes
     /**
      * Update index metadata. Utility method for update index methods.
      *
-     * @param string $collection
-     * @param string $id
-     * @param callable(Document, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
+     * @param  callable(Document, Document, int|string): void  $updateCallback  method that receives document, and returns it with changes applied
      *
-     * @return Document
      * @throws ConflictException
      * @throws DatabaseException
      */
@@ -67,11 +63,7 @@ trait Indexes
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
      *
-     * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -110,7 +102,7 @@ trait Indexes
         $renamed = false;
         try {
             $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            if (!$renamed) {
+            if (! $renamed) {
                 throw new DatabaseException('Failed to rename index');
             }
         } catch (\Throwable $e) {
@@ -124,7 +116,7 @@ trait Indexes
                 $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
             } catch (\Throwable) {
                 // Reverse also failed — genuine error
-                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
             }
         }
 
@@ -149,10 +141,7 @@ trait Indexes
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param Index $index
      *
-     * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -210,7 +199,7 @@ trait Indexes
                      * mysql does not save length in collection when length = attributes size
                      */
                     if ($attributeType === ColumnType::String->value) {
-                        if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
+                        if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }
                     }
@@ -262,7 +251,7 @@ trait Indexes
                 $this->adapter->supports(Capability::TTLIndexes),
                 $this->adapter->supports(Capability::Objects)
             );
-            if (!$validator->isValid($indexDoc)) {
+            if (! $validator->isValid($indexDoc)) {
                 throw new IndexException($validator->getDescription());
             }
         }
@@ -272,7 +261,7 @@ trait Indexes
         try {
             $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
 
-            if (!$created) {
+            if (! $created) {
                 throw new DatabaseException('Failed to create index');
             }
         } catch (DuplicateException $e) {
@@ -299,10 +288,7 @@ trait Indexes
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -331,7 +317,7 @@ trait Indexes
         try {
             $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
-            if (!$deleted) {
+            if (! $deleted) {
                 throw new DatabaseException('Failed to delete index');
             }
             $shouldRollback = true;
@@ -376,7 +362,6 @@ trait Indexes
             silentRollback: true
         );
 
-
         try {
             $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
         } catch (\Throwable $e) {
@@ -390,10 +375,10 @@ trait Indexes
      * Cleanup an index that was created in the adapter but whose metadata
      * persistence failed.
      *
-     * @param string $collectionId The collection ID
-     * @param string $indexId The index ID
-     * @param int $maxAttempts Maximum retry attempts
-     * @return void
+     * @param  string  $collectionId  The collection ID
+     * @param  string  $indexId  The index ID
+     * @param  int  $maxAttempts  Maximum retry attempts
+     *
      * @throws DatabaseException If cleanup fails after all retries
      */
     private function cleanupIndex(

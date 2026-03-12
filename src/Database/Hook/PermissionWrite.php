@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\PermissionType;
@@ -22,25 +21,17 @@ class PermissionWrite implements Write
         return $row;
     }
 
-    public function afterCreate(string $table, array $metadata, mixed $context): void
-    {
-    }
+    public function afterCreate(string $table, array $metadata, mixed $context): void {}
 
-    public function afterUpdate(string $table, array $metadata, mixed $context): void
-    {
-    }
+    public function afterUpdate(string $table, array $metadata, mixed $context): void {}
 
-    public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void
-    {
-    }
+    public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void {}
 
-    public function afterDelete(string $table, array $ids, mixed $context): void
-    {
-    }
+    public function afterDelete(string $table, array $ids, mixed $context): void {}
 
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
-        $permBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection . '_perms'));
+        $permBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
         $hasPermissions = false;
 
         foreach ($documents as $document) {
@@ -69,12 +60,12 @@ class PermissionWrite implements Write
         $additions = [];
         foreach (self::PERM_TYPES as $type) {
             $removed = \array_diff($permissions[$type->value], $document->getPermissionsByType($type->value));
-            if (!empty($removed)) {
+            if (! empty($removed)) {
                 $removals[$type->value] = $removed;
             }
 
             $added = \array_diff($document->getPermissionsByType($type->value), $permissions[$type->value]);
-            if (!empty($added)) {
+            if (! empty($added)) {
                 $additions[$type->value] = $added;
             }
         }
@@ -85,12 +76,12 @@ class PermissionWrite implements Write
 
     public function afterDocumentBatchUpdate(string $collection, Document $updates, array $documents, WriteContext $context): void
     {
-        if (!$updates->offsetExists('$permissions')) {
+        if (! $updates->offsetExists('$permissions')) {
             return;
         }
 
         $removeConditions = [];
-        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection . '_perms'));
+        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
         $hasAdditions = false;
 
         foreach ($documents as $document) {
@@ -102,7 +93,7 @@ class PermissionWrite implements Write
 
             foreach (self::PERM_TYPES as $type) {
                 $diff = \array_diff($permissions[$type->value], $updates->getPermissionsByType($type->value));
-                if (!empty($diff)) {
+                if (! empty($diff)) {
                     $removeConditions[] = Query::and([
                         Query::equal('_document', [$document->getId()]),
                         Query::equal('_type', [$type->value]),
@@ -114,7 +105,7 @@ class PermissionWrite implements Write
             $metadata = $this->documentMetadata($document);
             foreach (self::PERM_TYPES as $type) {
                 $diff = \array_diff($updates->getPermissionsByType($type->value), $permissions[$type->value]);
-                if (!empty($diff)) {
+                if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = ($context->decorateRow)([
                             '_document' => $document->getId(),
@@ -128,8 +119,8 @@ class PermissionWrite implements Write
             }
         }
 
-        if (!empty($removeConditions)) {
-            $removeBuilder = ($context->newBuilder)($collection . '_perms');
+        if (! empty($removeConditions)) {
+            $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
             $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
@@ -146,7 +137,7 @@ class PermissionWrite implements Write
     public function afterDocumentUpsert(string $collection, array $changes, WriteContext $context): void
     {
         $removeConditions = [];
-        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection . '_perms'));
+        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
         $hasAdditions = false;
 
         foreach ($changes as $change) {
@@ -161,7 +152,7 @@ class PermissionWrite implements Write
 
             foreach (self::PERM_TYPES as $type) {
                 $toRemove = \array_diff($current[$type->value], $document->getPermissionsByType($type->value));
-                if (!empty($toRemove)) {
+                if (! empty($toRemove)) {
                     $removeConditions[] = Query::and([
                         Query::equal('_document', [$document->getId()]),
                         Query::equal('_type', [$type->value]),
@@ -184,8 +175,8 @@ class PermissionWrite implements Write
             }
         }
 
-        if (!empty($removeConditions)) {
-            $removeBuilder = ($context->newBuilder)($collection . '_perms');
+        if (! empty($removeConditions)) {
+            $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
             $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
@@ -205,12 +196,12 @@ class PermissionWrite implements Write
             return;
         }
 
-        $permsBuilder = ($context->newBuilder)($collection . '_perms');
+        $permsBuilder = ($context->newBuilder)($collection.'_perms');
         $permsBuilder->filter([Query::equal('_document', \array_values($documentIds))]);
         $permsResult = $permsBuilder->delete();
         $stmtPermissions = ($context->executeResult)($permsResult, Database::EVENT_PERMISSIONS_DELETE);
 
-        if (!$stmtPermissions->execute()) {
+        if (! $stmtPermissions->execute()) {
             throw new \Utopia\Database\Exception('Failed to delete permissions');
         }
     }
@@ -220,7 +211,7 @@ class PermissionWrite implements Write
      */
     private function readCurrentPermissions(string $collection, Document $document, WriteContext $context): array
     {
-        $readBuilder = ($context->newBuilder)($collection . '_perms');
+        $readBuilder = ($context->newBuilder)($collection.'_perms');
         $readBuilder->select(['_type', '_permission']);
         $readBuilder->filter([Query::equal('_document', [$document->getId()])]);
 
@@ -237,12 +228,13 @@ class PermissionWrite implements Write
 
         return \array_reduce($rows, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
+
             return $carry;
         }, $initial);
     }
 
     /**
-     * @param array<string, list<string>> $removals
+     * @param  array<string, list<string>>  $removals
      */
     private function deletePermissions(string $collection, Document $document, array $removals, WriteContext $context): void
     {
@@ -259,7 +251,7 @@ class PermissionWrite implements Write
             ]);
         }
 
-        $removeBuilder = ($context->newBuilder)($collection . '_perms');
+        $removeBuilder = ($context->newBuilder)($collection.'_perms');
         $removeBuilder->filter([Query::or($removeConditions)]);
         $deleteResult = $removeBuilder->delete();
         $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
@@ -267,7 +259,7 @@ class PermissionWrite implements Write
     }
 
     /**
-     * @param array<string, list<string>> $additions
+     * @param  array<string, list<string>>  $additions
      */
     private function insertPermissions(string $collection, Document $document, array $additions, WriteContext $context): void
     {
@@ -275,7 +267,7 @@ class PermissionWrite implements Write
             return;
         }
 
-        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection . '_perms'));
+        $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
         $metadata = $this->documentMetadata($document);
 
         foreach ($additions as $type => $perms) {
@@ -314,6 +306,7 @@ class PermissionWrite implements Write
                 $rows[] = ($context->decorateRow)($row, $metadata);
             }
         }
+
         return $rows;
     }
 

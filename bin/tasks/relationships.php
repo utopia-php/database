@@ -34,19 +34,18 @@ $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
  * @Example
  * docker compose exec tests bin/relationships --adapter=mariadb --limit=1000
  */
-
 $cli
     ->task('relationships')
     ->desc('Load database with mock relationships for testing')
     ->param('adapter', '', new Text(0), 'Database adapter')
     ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
-    ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
+    ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->param('runs', 1, new Integer(true), 'Number of times to run benchmarks', true)
     ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) {
         $start = null;
         $namespace = '_ns';
-        $cache = new Cache(new NoCache());
+        $cache = new Cache(new NoCache);
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
@@ -149,8 +148,9 @@ $cli
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported");
+
             return;
         }
 
@@ -176,7 +176,7 @@ $cli
         $pdo = null;
 
         $pool = new PDOPool(
-            (new PDOConfig())
+            (new PDOConfig)
                 ->withHost($cfg['host'])
                 ->withPort($cfg['port'])
                 ->withDbName($name)
@@ -235,20 +235,19 @@ $cli
         displayBenchmarkResults($results, $runs);
     });
 
-
 function createGlobalDocuments(Database $database, int $limit): array
 {
     global $genresPool, $namesPool;
 
     // Scale categories based on limit (minimum 9, scales up to 100 max)
-    $numCategories = min(100, max(9, (int)($limit / 10000)));
+    $numCategories = min(100, max(9, (int) ($limit / 10000)));
     $categoryDocs = [];
     for ($i = 0; $i < $numCategories; $i++) {
         $genre = $genresPool[$i % count($genresPool)];
         $categoryDocs[] = new Document([
-            '$id' => 'category_' . \uniqid(),
-            'name' => \ucfirst($genre) . ($i >= count($genresPool) ? ' ' . ($i + 1) : ''),
-            'description' => 'Articles about ' . $genre,
+            '$id' => 'category_'.\uniqid(),
+            'name' => \ucfirst($genre).($i >= count($genresPool) ? ' '.($i + 1) : ''),
+            'description' => 'Articles about '.$genre,
         ]);
     }
 
@@ -256,13 +255,13 @@ function createGlobalDocuments(Database $database, int $limit): array
     $database->createDocuments('categories', $categoryDocs);
 
     // Scale users based on limit (10% of total documents)
-    $numUsers = max(1000, (int)($limit / 10));
+    $numUsers = max(1000, (int) ($limit / 10));
     $userDocs = [];
     for ($u = 0; $u < $numUsers; $u++) {
         $userDocs[] = new Document([
-            '$id' => 'user_' . \uniqid(),
-            'username' => $namesPool[\array_rand($namesPool)] . '_' . $u,
-            'email' => 'user' . $u . '@example.com',
+            '$id' => 'user_'.\uniqid(),
+            'username' => $namesPool[\array_rand($namesPool)].'_'.$u,
+            'email' => 'user'.$u.'@example.com',
             'password' => \bin2hex(\random_bytes(8)),
         ]);
     }
@@ -292,18 +291,18 @@ function createRelationshipDocuments(Database $database, array $categories, arra
             'name' => $namesPool[array_rand($namesPool)],
             'created' => DateTime::now(),
             'bio' => \substr(\bin2hex(\random_bytes(32)), 0, 100),
-            'avatar' => 'https://example.com/avatar/' . $a,
-            'website' => 'https://example.com/user/' . $a,
+            'avatar' => 'https://example.com/avatar/'.$a,
+            'website' => 'https://example.com/user/'.$a,
         ]);
 
         // Create profile for author (one-to-one relationship)
         $profile = new Document([
             'bio_extended' => \substr(\bin2hex(\random_bytes(128)), 0, 500),
             'social_links' => [
-                'https://twitter.com/author' . $a,
-                'https://linkedin.com/in/author' . $a,
+                'https://twitter.com/author'.$a,
+                'https://linkedin.com/in/author'.$a,
             ],
-            'verified' => (bool)\mt_rand(0, 1),
+            'verified' => (bool) \mt_rand(0, 1),
         ]);
         $author->setAttribute('profiles', $profile);
 
@@ -311,7 +310,7 @@ function createRelationshipDocuments(Database $database, array $categories, arra
         $authorArticles = [];
         for ($i = 0; $i < $numArticlesPerAuthor; $i++) {
             $article = new Document([
-                'title' => 'Article ' . ($i + 1) . ' by ' . $author->getAttribute('name'),
+                'title' => 'Article '.($i + 1).' by '.$author->getAttribute('name'),
                 'text' => \substr(\bin2hex(\random_bytes(64)), 0, \mt_rand(100, 200)),
                 'genre' => $genresPool[array_rand($genresPool)],
                 'views' => \mt_rand(0, 1000),
@@ -323,7 +322,7 @@ function createRelationshipDocuments(Database $database, array $categories, arra
             $comments = [];
             for ($c = 0; $c < $numCommentsPerArticle; $c++) {
                 $comment = new Document([
-                    'content' => 'Comment ' . ($c + 1),
+                    'content' => 'Comment '.($c + 1),
                     'likes' => \mt_rand(0, 10000),
                     'user' => $users[\array_rand($users)],
                 ]);
@@ -464,36 +463,36 @@ function benchmarkPagination(Database $database): array
 function displayRelationshipStructure(): void
 {
     Console::success("\n========================================");
-    Console::success("Relationship Structure");
+    Console::success('Relationship Structure');
     Console::success("========================================\n");
 
-    Console::info("Collections:");
-    Console::log("  • authors      (name, created, bio, avatar, website)");
-    Console::log("  • articles     (title, text, genre, views, tags[])");
-    Console::log("  • comments     (content, likes)");
-    Console::log("  • users        (username, email, password)");
-    Console::log("  • profiles     (bio_extended, social_links[], verified)");
-    Console::log("  • categories   (name, description)");
-    Console::log("");
+    Console::info('Collections:');
+    Console::log('  • authors      (name, created, bio, avatar, website)');
+    Console::log('  • articles     (title, text, genre, views, tags[])');
+    Console::log('  • comments     (content, likes)');
+    Console::log('  • users        (username, email, password)');
+    Console::log('  • profiles     (bio_extended, social_links[], verified)');
+    Console::log('  • categories   (name, description)');
+    Console::log('');
 
-    Console::info("Relationships:");
-    Console::log("  ┌─────────────────────────────────────────────────────────────┐");
-    Console::log("  │  authors ◄─────────────► articles  (Many-to-Many)          │");
-    Console::log("  │    └─► profiles (One-to-One)                                │");
-    Console::log("  │                                                              │");
-    Console::log("  │  articles ─────────────► comments  (One-to-Many)            │");
-    Console::log("  │    └─► categories (Many-to-One)                             │");
-    Console::log("  │                                                              │");
-    Console::log("  │  users ────────────────► comments  (One-to-Many)            │");
-    Console::log("  └─────────────────────────────────────────────────────────────┘");
-    Console::log("");
+    Console::info('Relationships:');
+    Console::log('  ┌─────────────────────────────────────────────────────────────┐');
+    Console::log('  │  authors ◄─────────────► articles  (Many-to-Many)          │');
+    Console::log('  │    └─► profiles (One-to-One)                                │');
+    Console::log('  │                                                              │');
+    Console::log('  │  articles ─────────────► comments  (One-to-Many)            │');
+    Console::log('  │    └─► categories (Many-to-One)                             │');
+    Console::log('  │                                                              │');
+    Console::log('  │  users ────────────────► comments  (One-to-Many)            │');
+    Console::log('  └─────────────────────────────────────────────────────────────┘');
+    Console::log('');
 
-    Console::info("Relationship Coverage:");
-    Console::log("  ✓ One-to-One:    authors ◄─► profiles");
-    Console::log("  ✓ One-to-Many:   articles ─► comments, users ─► comments");
-    Console::log("  ✓ Many-to-One:   articles ─► categories");
-    Console::log("  ✓ Many-to-Many:  authors ◄─► articles");
-    Console::log("");
+    Console::info('Relationship Coverage:');
+    Console::log('  ✓ One-to-One:    authors ◄─► profiles');
+    Console::log('  ✓ One-to-Many:   articles ─► comments, users ─► comments');
+    Console::log('  ✓ Many-to-One:   articles ─► categories');
+    Console::log('  ✓ Many-to-Many:  authors ◄─► articles');
+    Console::log('');
 }
 
 /**
@@ -525,7 +524,7 @@ function displayBenchmarkResults(array $results, int $runs): void
     }
 
     Console::success("\n========================================");
-    Console::success("Benchmark Results (Average of {$runs} run" . ($runs > 1 ? 's' : '') . ")");
+    Console::success("Benchmark Results (Average of {$runs} run".($runs > 1 ? 's' : '').')');
     Console::success("========================================\n");
 
     // Calculate column widths
@@ -533,19 +532,19 @@ function displayBenchmarkResults(array $results, int $runs): void
     $timeWidth = 12;
 
     // Print header
-    $header = str_pad('Collection', $collectionWidth) . ' | ';
+    $header = str_pad('Collection', $collectionWidth).' | ';
     foreach ($benchmarkLabels as $label) {
-        $header .= str_pad($label, $timeWidth) . ' | ';
+        $header .= str_pad($label, $timeWidth).' | ';
     }
     Console::info($header);
     Console::info(str_repeat('-', strlen($header)));
 
     // Print results for each collection
     foreach ($collections as $collection) {
-        $row = str_pad(ucfirst($collection), $collectionWidth) . ' | ';
+        $row = str_pad(ucfirst($collection), $collectionWidth).' | ';
         foreach ($benchmarks as $benchmark) {
             $time = number_format($averages[$benchmark][$collection] * 1000, 2); // Convert to ms
-            $row .= str_pad($time . ' ms', $timeWidth) . ' | ';
+            $row .= str_pad($time.' ms', $timeWidth).' | ';
         }
         Console::log($row);
     }

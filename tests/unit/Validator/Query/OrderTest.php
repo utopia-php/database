@@ -12,12 +12,12 @@ use Utopia\Query\Schema\ColumnType;
 
 class OrderTest extends TestCase
 {
-    protected Base|null $validator = null;
+    protected ?Base $validator = null;
 
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->validator = new Order(
             attributes: [
@@ -37,7 +37,7 @@ class OrderTest extends TestCase
         );
     }
 
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
         $this->assertTrue($this->validator->isValid(Query::orderAsc('attr')));
         $this->assertTrue($this->validator->isValid(Query::orderAsc()));
@@ -45,7 +45,7 @@ class OrderTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::orderDesc()));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::limit(-1)));
         $this->assertEquals('Invalid query', $this->validator->getDescription());

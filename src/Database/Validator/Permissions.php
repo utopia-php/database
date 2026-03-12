@@ -19,8 +19,8 @@ class Permissions extends Roles
     /**
      * Permissions constructor.
      *
-     * @param int $length maximum amount of permissions. 0 means unlimited.
-     * @param array<string> $allowed allowed permissions. Defaults to all available.
+     * @param  int  $length  maximum amount of permissions. 0 means unlimited.
+     * @param  array<string>  $allowed  allowed permissions. Defaults to all available.
      */
     public function __construct(int $length = 0, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value, PermissionType::Write->value])
     {
@@ -32,8 +32,6 @@ class Permissions extends Roles
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -45,35 +43,38 @@ class Permissions extends Roles
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $permissions
-     *
-     * @return bool
+     * @param  mixed  $permissions
      */
     public function isValid($permissions): bool
     {
-        if (!\is_array($permissions)) {
+        if (! \is_array($permissions)) {
             $this->message = 'Permissions must be an array of strings.';
+
             return false;
         }
 
         if ($this->length && \count($permissions) > $this->length) {
-            $this->message = 'You can only provide up to ' . $this->length . ' permissions.';
+            $this->message = 'You can only provide up to '.$this->length.' permissions.';
+
             return false;
         }
 
         foreach ($permissions as $permission) {
-            if (!\is_string($permission)) {
+            if (! \is_string($permission)) {
                 $this->message = 'Every permission must be of type string.';
+
                 return false;
             }
 
             if ($permission === '*') {
                 $this->message = 'Wildcard permission "*" has been replaced. Use "any" instead.';
+
                 return false;
             }
 
             if (\str_contains($permission, 'role:')) {
                 $this->message = 'Permissions using the "role:" prefix have been replaced. Use "users", "guests", or "any" instead.';
+
                 return false;
             }
 
@@ -84,8 +85,9 @@ class Permissions extends Roles
                     break;
                 }
             }
-            if (!$isAllowed) {
-                $this->message = 'Permission "' . $permission . '" is not allowed. Must be one of: ' . \implode(', ', $this->allowed) . '.';
+            if (! $isAllowed) {
+                $this->message = 'Permission "'.$permission.'" is not allowed. Must be one of: '.\implode(', ', $this->allowed).'.';
+
                 return false;
             }
 
@@ -93,6 +95,7 @@ class Permissions extends Roles
                 $permission = Permission::parse($permission);
             } catch (\Exception $e) {
                 $this->message = $e->getMessage();
+
                 return false;
             }
 
@@ -100,10 +103,11 @@ class Permissions extends Roles
             $identifier = $permission->getIdentifier();
             $dimension = $permission->getDimension();
 
-            if (!$this->isValidRole($role, $identifier, $dimension)) {
+            if (! $this->isValidRole($role, $identifier, $dimension)) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -111,8 +115,6 @@ class Permissions extends Roles
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -123,8 +125,6 @@ class Permissions extends Roles
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

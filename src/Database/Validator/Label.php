@@ -11,21 +11,17 @@ class Label extends Key
         int $maxLength = Database::MAX_UID_DEFAULT_LENGTH
     ) {
         parent::__construct($allowInternal, $maxLength);
-        $this->message = 'Value must be a valid string between 1 and ' . $this->maxLength . ' chars containing only alphanumeric chars';
+        $this->message = 'Value must be a valid string between 1 and '.$this->maxLength.' chars containing only alphanumeric chars';
     }
 
     /**
      * Is valid.
      *
      * Returns true if valid or false if not.
-     *
-     * @param $value
-     *
-     * @return bool
      */
     public function isValid($value): bool
     {
-        if (!parent::isValid($value)) {
+        if (! parent::isValid($value)) {
             return false;
         }
 

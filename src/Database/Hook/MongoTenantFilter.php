@@ -2,24 +2,20 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Database\Database;
-
 class MongoTenantFilter implements Read
 {
     /**
-     * @param int|null $tenant
-     * @param \Closure(string, array<int>=): (int|null|array<string, array<int>>) $getTenantFilters
+     * @param  \Closure(string, array<int>=): (int|null|array<string, array<int>>)  $getTenantFilters
      */
     public function __construct(
         private ?int $tenant,
         private bool $sharedTables,
         private \Closure $getTenantFilters,
-    ) {
-    }
+    ) {}
 
     public function applyFilters(array $filters, string $collection, string $forPermission = 'read'): array
     {
-        if (!$this->sharedTables || $this->tenant === null) {
+        if (! $this->sharedTables || $this->tenant === null) {
             return $filters;
         }
 

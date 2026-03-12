@@ -2,6 +2,8 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -12,8 +14,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Database\Capability;
-use Utopia\Database\Attribute;
 use Utopia\Query\Schema\ColumnType;
 
 trait OperatorTests
@@ -23,11 +23,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection with various attribute types
         $collectionId = 'test_operators';
@@ -47,42 +47,42 @@ trait OperatorTests
             'score' => 15.5,
             'tags' => ['initial', 'tag'],
             'numbers' => [1, 2, 3],
-            'name' => 'Test Document'
+            'name' => 'Test Document',
         ]));
 
         // Test increment operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'count' => Operator::increment(5)
+            'count' => Operator::increment(5),
         ]));
         $this->assertEquals(15, $updated->getAttribute('count'));
 
         // Test decrement operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'count' => Operator::decrement(3)
+            'count' => Operator::decrement(3),
         ]));
         $this->assertEquals(12, $updated->getAttribute('count'));
 
         // Test increment with float
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'score' => Operator::increment(2.5)
+            'score' => Operator::increment(2.5),
         ]));
         $this->assertEquals(18.0, $updated->getAttribute('score'));
 
         // Test append operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'tags' => Operator::arrayAppend(['new', 'appended'])
+            'tags' => Operator::arrayAppend(['new', 'appended']),
         ]));
         $this->assertEquals(['initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
 
         // Test prepend operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'tags' => Operator::arrayPrepend(['first'])
+            'tags' => Operator::arrayPrepend(['first']),
         ]));
         $this->assertEquals(['first', 'initial', 'tag', 'new', 'appended'], $updated->getAttribute('tags'));
 
         // Test insert operator
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'numbers' => Operator::arrayInsert(1, 99)
+            'numbers' => Operator::arrayInsert(1, 99),
         ]));
         $this->assertEquals([1, 99, 2, 3], $updated->getAttribute('numbers'));
 
@@ -91,7 +91,7 @@ trait OperatorTests
             'count' => Operator::increment(8),
             'score' => Operator::decrement(3.0),
             'numbers' => Operator::arrayAppend([4, 5]),
-            'name' => 'Updated Name' // Regular update mixed with operators
+            'name' => 'Updated Name', // Regular update mixed with operators
         ]));
 
         $this->assertEquals(20, $updated->getAttribute('count'));
@@ -103,13 +103,13 @@ trait OperatorTests
 
         // Test increment with default value (1)
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'count' => Operator::increment() // Should increment by 1
+            'count' => Operator::increment(), // Should increment by 1
         ]));
         $this->assertEquals(21, $updated->getAttribute('count'));
 
         // Test insert at beginning (index 0)
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'numbers' => Operator::arrayInsert(0, 0)
+            'numbers' => Operator::arrayInsert(0, 0),
         ]));
         $this->assertEquals([0, 1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
 
@@ -117,7 +117,7 @@ trait OperatorTests
         $numbers = $updated->getAttribute('numbers');
         $lastIndex = count($numbers);
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
-            'numbers' => Operator::arrayInsert($lastIndex, 100)
+            'numbers' => Operator::arrayInsert($lastIndex, 100),
         ]));
         $this->assertEquals([0, 1, 99, 2, 3, 4, 5, 100], $updated->getAttribute('numbers'));
 
@@ -129,11 +129,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_batch_operators';
@@ -151,7 +151,7 @@ trait OperatorTests
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => $i * 10,
                 'tags' => ["tag_{$i}"],
-                'category' => 'test'
+                'category' => 'test',
             ]));
         }
 
@@ -161,7 +161,7 @@ trait OperatorTests
             new Document([
                 'count' => Operator::increment(5),
                 'tags' => Operator::arrayAppend(['batch_updated']),
-                'category' => 'updated' // Regular update mixed with operators
+                'category' => 'updated', // Regular update mixed with operators
             ])
         );
 
@@ -182,7 +182,7 @@ trait OperatorTests
         $count = $database->updateDocuments(
             $collectionId,
             new Document([
-                'count' => Operator::increment(10)
+                'count' => Operator::increment(10),
             ]),
             [Query::equal('$id', ['doc_1', 'doc_2'])]
         );
@@ -206,11 +206,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create comprehensive test collection
         $collectionId = 'test_all_operators_bulk';
@@ -252,17 +252,17 @@ trait OperatorTests
                 'power_val' => $i + 1.0,
                 'title' => "Title {$i}",
                 'content' => "old content {$i}",
-                'tags' => ["tag_{$i}", "common"],
-                'categories' => ["cat_{$i}", "test"],
-                'items' => ["item_{$i}", "shared", "item_{$i}"],
-                'duplicates' => ["a", "b", "a", "c", "b", "d"],
+                'tags' => ["tag_{$i}", 'common'],
+                'categories' => ["cat_{$i}", 'test'],
+                'items' => ["item_{$i}", 'shared', "item_{$i}"],
+                'duplicates' => ['a', 'b', 'a', 'c', 'b', 'd'],
                 'numbers' => [1, 2, 3, 4, 5],
-                'intersect_items' => ["a", "b", "c", "d"],
-                'diff_items' => ["x", "y", "z", "w"],
+                'intersect_items' => ['a', 'b', 'c', 'd'],
+                'diff_items' => ['x', 'y', 'z', 'w'],
                 'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 'active' => $i % 2 === 0,
-                'last_update' => DateTime::addSeconds(new \DateTime(), -86400),
-                'next_update' => DateTime::addSeconds(new \DateTime(), 86400)
+                'last_update' => DateTime::addSeconds(new \DateTime, -86400),
+                'next_update' => DateTime::addSeconds(new \DateTime, 86400),
             ]));
         }
 
@@ -289,7 +289,7 @@ trait OperatorTests
                 'active' => Operator::toggle(),                    // Boolean
                 'last_update' => Operator::dateAddDays(1),         // Date
                 'next_update' => Operator::dateSubDays(1),         // Date
-                'now_field' => Operator::dateSetNow()              // Date
+                'now_field' => Operator::dateSetNow(),              // Date
             ])
         );
 
@@ -356,11 +356,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_operators_with_queries';
@@ -379,7 +379,7 @@ trait OperatorTests
                 'category' => $i <= 3 ? 'A' : 'B',
                 'count' => $i * 10,
                 'score' => $i * 1.5,
-                'active' => $i % 2 === 0
+                'active' => $i % 2 === 0,
             ]));
         }
 
@@ -388,7 +388,7 @@ trait OperatorTests
             $collectionId,
             new Document([
                 'count' => Operator::increment(100),
-                'score' => Operator::multiply(2)
+                'score' => Operator::multiply(2),
             ]),
             [Query::equal('category', ['A'])]
         );
@@ -410,7 +410,7 @@ trait OperatorTests
             $collectionId,
             new Document([
                 'active' => Operator::toggle(),
-                'score' => Operator::multiply(10)
+                'score' => Operator::multiply(10),
             ]),
             [Query::lessThan('count', 50)]
         );
@@ -438,11 +438,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_operator_errors';
@@ -458,7 +458,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'text_field' => 'hello',
             'number_field' => 42,
-            'array_field' => ['item1', 'item2']
+            'array_field' => ['item1', 'item2'],
         ]));
 
         // Test increment on non-numeric field
@@ -466,7 +466,7 @@ trait OperatorTests
         $this->expectExceptionMessage("Cannot apply increment operator to non-numeric field 'text_field'");
 
         $database->updateDocument($collectionId, 'error_test_doc', new Document([
-            'text_field' => Operator::increment(1)
+            'text_field' => Operator::increment(1),
         ]));
 
         $database->deleteCollection($collectionId);
@@ -477,11 +477,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_array_operator_errors';
@@ -495,7 +495,7 @@ trait OperatorTests
             '$id' => 'array_error_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'text_field' => 'hello',
-            'array_field' => ['item1', 'item2']
+            'array_field' => ['item1', 'item2'],
         ]));
 
         // Test append on non-array field
@@ -503,7 +503,7 @@ trait OperatorTests
         $this->expectExceptionMessage("Cannot apply arrayAppend operator to non-array field 'text_field'");
 
         $database->updateDocument($collectionId, 'array_error_test_doc', new Document([
-            'text_field' => Operator::arrayAppend(['new_item'])
+            'text_field' => Operator::arrayAppend(['new_item']),
         ]));
 
         $database->deleteCollection($collectionId);
@@ -514,11 +514,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_insert_operator_errors';
@@ -530,15 +530,15 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'insert_error_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'array_field' => ['item1', 'item2']
+            'array_field' => ['item1', 'item2'],
         ]));
 
         // Test insert with negative index
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage("Cannot apply arrayInsert operator: index must be a non-negative integer");
+        $this->expectExceptionMessage('Cannot apply arrayInsert operator: index must be a non-negative integer');
 
         $database->updateDocument($collectionId, 'insert_error_test_doc', new Document([
-            'array_field' => Operator::arrayInsert(-1, 'new_item')
+            'array_field' => Operator::arrayInsert(-1, 'new_item'),
         ]));
 
         $database->deleteCollection($collectionId);
@@ -552,11 +552,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create comprehensive test collection
         $collectionId = 'test_operator_edge_cases';
@@ -579,13 +579,13 @@ trait OperatorTests
             'float_field' => 3.14,
             'bool_field' => true,
             'array_field' => ['a', 'b', 'c'],
-            'date_field' => '2023-01-01 00:00:00'
+            'date_field' => '2023-01-01 00:00:00',
         ]));
 
         // Test: Math operator on string field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'string_field' => Operator::increment(5)
+                'string_field' => Operator::increment(5),
             ]));
             $this->fail('Expected exception for increment on string field');
         } catch (DatabaseException $e) {
@@ -595,17 +595,17 @@ trait OperatorTests
         // Test: String operator on numeric field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'int_field' => Operator::stringConcat(' suffix')
+                'int_field' => Operator::stringConcat(' suffix'),
             ]));
             $this->fail('Expected exception for concat on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply stringConcat operator", $e->getMessage());
+            $this->assertStringContainsString('Cannot apply stringConcat operator', $e->getMessage());
         }
 
         // Test: Array operator on non-array field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'string_field' => Operator::arrayAppend(['new'])
+                'string_field' => Operator::arrayAppend(['new']),
             ]));
             $this->fail('Expected exception for arrayAppend on string field');
         } catch (DatabaseException $e) {
@@ -615,7 +615,7 @@ trait OperatorTests
         // Test: Boolean operator on non-boolean field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'int_field' => Operator::toggle()
+                'int_field' => Operator::toggle(),
             ]));
             $this->fail('Expected exception for toggle on integer field');
         } catch (DatabaseException $e) {
@@ -625,7 +625,7 @@ trait OperatorTests
         // Test: Date operator on non-date field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'string_field' => Operator::dateAddDays(5)
+                'string_field' => Operator::dateAddDays(5),
             ]));
             $this->fail('Expected exception for dateAddDays on string field');
         } catch (DatabaseException $e) {
@@ -641,11 +641,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_division_zero';
         $database->createCollection($collectionId);
@@ -654,38 +654,38 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'number' => 100.0
+            'number' => 100.0,
         ]));
 
         // Test: Division by zero
         try {
             $database->updateDocument($collectionId, 'zero_test_doc', new Document([
-                'number' => Operator::divide(0)
+                'number' => Operator::divide(0),
             ]));
             $this->fail('Expected exception for division by zero');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Division by zero is not allowed", $e->getMessage());
+            $this->assertStringContainsString('Division by zero is not allowed', $e->getMessage());
         }
 
         // Test: Modulo by zero
         try {
             $database->updateDocument($collectionId, 'zero_test_doc', new Document([
-                'number' => Operator::modulo(0)
+                'number' => Operator::modulo(0),
             ]));
             $this->fail('Expected exception for modulo by zero');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Modulo by zero is not allowed", $e->getMessage());
+            $this->assertStringContainsString('Modulo by zero is not allowed', $e->getMessage());
         }
 
         // Test: Valid division
         $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
-            'number' => Operator::divide(2)
+            'number' => Operator::divide(2),
         ]));
         $this->assertEquals(50.0, $updated->getAttribute('number'));
 
         // Test: Valid modulo
         $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
-            'number' => Operator::modulo(7)
+            'number' => Operator::modulo(7),
         ]));
         $this->assertEquals(1.0, $updated->getAttribute('number')); // 50 % 7 = 1
 
@@ -697,11 +697,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_insert_bounds';
         $database->createCollection($collectionId);
@@ -710,28 +710,28 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'bounds_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c'] // Length = 3
+            'items' => ['a', 'b', 'c'], // Length = 3
         ]));
 
         // Test: Insert at out of bounds index
         try {
             $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
-                'items' => Operator::arrayInsert(10, 'new') // Index 10 > length 3
+                'items' => Operator::arrayInsert(10, 'new'), // Index 10 > length 3
             ]));
             $this->fail('Expected exception for out of bounds insert');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply arrayInsert operator: index 10 is out of bounds for array of length 3", $e->getMessage());
+            $this->assertStringContainsString('Cannot apply arrayInsert operator: index 10 is out of bounds for array of length 3', $e->getMessage());
         }
 
         // Test: Insert at valid index (end)
         $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
-            'items' => Operator::arrayInsert(3, 'd') // Insert at end
+            'items' => Operator::arrayInsert(3, 'd'), // Insert at end
         ]));
         $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
 
         // Test: Insert at valid index (middle)
         $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
-            'items' => Operator::arrayInsert(2, 'x') // Insert at index 2
+            'items' => Operator::arrayInsert(2, 'x'), // Insert at index 2
         ]));
         $this->assertEquals(['a', 'b', 'x', 'c', 'd'], $updated->getAttribute('items'));
 
@@ -743,11 +743,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_operator_limits';
         $database->createCollection($collectionId);
@@ -758,18 +758,18 @@ trait OperatorTests
             '$id' => 'limits_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'counter' => 10,
-            'score' => 5.0
+            'score' => 5.0,
         ]));
 
         // Test: Increment with max limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
-            'counter' => Operator::increment(100, 50) // Increment by 100 but max is 50
+            'counter' => Operator::increment(100, 50), // Increment by 100 but max is 50
         ]));
         $this->assertEquals(50, $updated->getAttribute('counter')); // Should be capped at 50
 
         // Test: Decrement with min limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
-            'score' => Operator::decrement(10, 0) // Decrement score by 10 but min is 0
+            'score' => Operator::decrement(10, 0), // Decrement score by 10 but min is 0
         ]));
         $this->assertEquals(0, $updated->getAttribute('score')); // Should be capped at 0
 
@@ -778,17 +778,17 @@ trait OperatorTests
             '$id' => 'limits_test_doc2',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'counter' => 10,
-            'score' => 5.0
+            'score' => 5.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
-            'counter' => Operator::multiply(10, 75) // 10 * 10 = 100, but max is 75
+            'counter' => Operator::multiply(10, 75), // 10 * 10 = 100, but max is 75
         ]));
         $this->assertEquals(75, $updated->getAttribute('counter')); // Should be capped at 75
 
         // Test: Power with max limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
-            'score' => Operator::power(3, 100) // 5^3 = 125, but max is 100
+            'score' => Operator::power(3, 100), // 5^3 = 125, but max is 100
         ]));
         $this->assertEquals(100, $updated->getAttribute('score')); // Should be capped at 100
 
@@ -800,11 +800,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_filter';
         $database->createCollection($collectionId);
@@ -815,18 +815,18 @@ trait OperatorTests
             '$id' => 'filter_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'numbers' => [1, 2, 3, 4, 5],
-            'tags' => ['apple', 'banana', 'cherry']
+            'tags' => ['apple', 'banana', 'cherry'],
         ]));
 
         // Test: Filter with equals condition on numbers
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
-            'numbers' => Operator::arrayFilter('equal', 3) // Keep only 3
+            'numbers' => Operator::arrayFilter('equal', 3), // Keep only 3
         ]));
         $this->assertEquals([3], $updated->getAttribute('numbers'));
 
         // Test: Filter with not-equals condition on strings
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
-            'tags' => Operator::arrayFilter('notEqual', 'banana') // Remove 'banana'
+            'tags' => Operator::arrayFilter('notEqual', 'banana'), // Remove 'banana'
         ]));
         $this->assertEquals(['apple', 'cherry'], $updated->getAttribute('tags'));
 
@@ -838,11 +838,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_replace';
         $database->createCollection($collectionId);
@@ -853,19 +853,19 @@ trait OperatorTests
             '$id' => 'replace_test_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'text' => 'The quick brown fox',
-            'number' => 42
+            'number' => 42,
         ]));
 
         // Test: Valid replace operation
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-            'text' => Operator::stringReplace('quick', 'slow')
+            'text' => Operator::stringReplace('quick', 'slow'),
         ]));
         $this->assertEquals('The slow brown fox', $updated->getAttribute('text'));
 
         // Test: Replace on non-string field
         try {
             $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-                'number' => Operator::stringReplace('4', '5')
+                'number' => Operator::stringReplace('4', '5'),
             ]));
             $this->fail('Expected exception for replace on integer field');
         } catch (DatabaseException $e) {
@@ -874,7 +874,7 @@ trait OperatorTests
 
         // Test: Replace with empty string
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-            'text' => Operator::stringReplace('slow', '')
+            'text' => Operator::stringReplace('slow', ''),
         ]));
         $this->assertEquals('The  brown fox', $updated->getAttribute('text')); // Two spaces where 'slow' was
 
@@ -886,11 +886,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_null_handling';
         $database->createCollection($collectionId);
@@ -903,35 +903,35 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'nullable_int' => null,
             'nullable_string' => null,
-            'nullable_bool' => null
+            'nullable_bool' => null,
         ]));
 
         // Test: Increment on null numeric field (should treat as 0)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_int' => Operator::increment(5)
+            'nullable_int' => Operator::increment(5),
         ]));
         $this->assertEquals(5, $updated->getAttribute('nullable_int'));
 
         // Test: Concat on null string field (should treat as empty string)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_string' => Operator::stringConcat('hello')
+            'nullable_string' => Operator::stringConcat('hello'),
         ]));
         $this->assertEquals('hello', $updated->getAttribute('nullable_string'));
 
         // Test: Toggle on null boolean field (should treat as false)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_bool' => Operator::toggle()
+            'nullable_bool' => Operator::toggle(),
         ]));
         $this->assertEquals(true, $updated->getAttribute('nullable_bool'));
 
         // Test operators on non-null values
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_int' => Operator::multiply(2)  // 5 * 2 = 10
+            'nullable_int' => Operator::multiply(2),  // 5 * 2 = 10
         ]));
         $this->assertEquals(10, $updated->getAttribute('nullable_int'));
 
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_string' => Operator::stringReplace('hello', 'hi')
+            'nullable_string' => Operator::stringReplace('hello', 'hi'),
         ]));
         $this->assertEquals('hi', $updated->getAttribute('nullable_string'));
 
@@ -943,11 +943,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_complex_operators';
         $database->createCollection($collectionId);
@@ -963,12 +963,12 @@ trait OperatorTests
             'stats' => [10, 20, 20, 30, 20, 40],
             'metadata' => ['key1', 'key2', 'key3'],
             'score' => 50.0,
-            'name' => 'Test'
+            'name' => 'Test',
         ]));
 
         // Test: Multiple operations on same array
         $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
-            'stats' => Operator::arrayUnique() // Should remove duplicate 20s
+            'stats' => Operator::arrayUnique(), // Should remove duplicate 20s
         ]));
         $stats = $updated->getAttribute('stats');
         $this->assertCount(4, $stats); // [10, 20, 30, 40]
@@ -976,7 +976,7 @@ trait OperatorTests
 
         // Test: Array intersection
         $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
-            'stats' => Operator::arrayIntersect([20, 30, 50]) // Keep only 20 and 30
+            'stats' => Operator::arrayIntersect([20, 30, 50]), // Keep only 20 and 30
         ]));
         $this->assertEquals([20, 30], $updated->getAttribute('stats'));
 
@@ -987,11 +987,11 @@ trait OperatorTests
             'stats' => [1, 2, 3, 4, 5],
             'metadata' => ['a', 'b', 'c'],
             'score' => 100.0,
-            'name' => 'Test2'
+            'name' => 'Test2',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'complex_test_doc2', new Document([
-            'stats' => Operator::arrayDiff([2, 4, 6]) // Remove 2 and 4
+            'stats' => Operator::arrayDiff([2, 4, 6]), // Remove 2 and 4
         ]));
         $this->assertEquals([1, 3, 5], $updated->getAttribute('stats'));
 
@@ -1003,11 +1003,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_increment_operator';
         $database->createCollection($collectionId);
@@ -1016,11 +1016,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => 5
+            'count' => 5,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::increment(3)
+            'count' => Operator::increment(3),
         ]));
 
         $this->assertEquals(8, $updated->getAttribute('count'));
@@ -1028,11 +1028,11 @@ trait OperatorTests
         // Edge case: null value
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => null
+            'count' => null,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::increment(3)
+            'count' => Operator::increment(3),
         ]));
 
         $this->assertEquals(3, $updated->getAttribute('count'));
@@ -1045,11 +1045,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_string_concat_operator';
         $database->createCollection($collectionId);
@@ -1058,11 +1058,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'title' => 'Hello'
+            'title' => 'Hello',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'title' => Operator::stringConcat(' World')
+            'title' => Operator::stringConcat(' World'),
         ]));
 
         $this->assertEquals('Hello World', $updated->getAttribute('title'));
@@ -1070,11 +1070,11 @@ trait OperatorTests
         // Edge case: null value
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'title' => null
+            'title' => null,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'title' => Operator::stringConcat('Test')
+            'title' => Operator::stringConcat('Test'),
         ]));
 
         $this->assertEquals('Test', $updated->getAttribute('title'));
@@ -1087,11 +1087,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_modulo_operator';
         $database->createCollection($collectionId);
@@ -1100,11 +1100,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'number' => 10
+            'number' => 10,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'number' => Operator::modulo(3)
+            'number' => Operator::modulo(3),
         ]));
 
         $this->assertEquals(1, $updated->getAttribute('number'));
@@ -1117,11 +1117,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_toggle_operator';
         $database->createCollection($collectionId);
@@ -1130,18 +1130,18 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'active' => false
+            'active' => false,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(true, $updated->getAttribute('active'));
 
         // Test toggle again
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(false, $updated->getAttribute('active'));
@@ -1149,17 +1149,16 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
-
     public function testOperatorArrayUnique(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_unique_operator';
         $database->createCollection($collectionId);
@@ -1168,11 +1167,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'a', 'c', 'b']
+            'items' => ['a', 'b', 'a', 'c', 'b'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
 
         $result = $updated->getAttribute('items');
@@ -1190,11 +1189,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Setup collection
         $collectionId = 'operator_increment_test';
@@ -1206,39 +1205,39 @@ trait OperatorTests
         // Success case - integer
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => 5
+            'count' => 5,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::increment(3)
+            'count' => Operator::increment(3),
         ]));
 
         $this->assertEquals(8, $updated->getAttribute('count'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::increment(5, 10)
+            'count' => Operator::increment(5, 10),
         ]));
         $this->assertEquals(10, $updated->getAttribute('count')); // Should cap at 10
 
         // Success case - float
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'score' => 2.5
+            'score' => 2.5,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'score' => Operator::increment(1.5)
+            'score' => Operator::increment(1.5),
         ]));
         $this->assertEquals(4.0, $updated->getAttribute('score'));
 
         // Edge case: null value
         $doc3 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => null
+            'count' => null,
         ]));
         $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
-            'count' => Operator::increment(5)
+            'count' => Operator::increment(5),
         ]));
         $this->assertEquals(5, $updated->getAttribute('count'));
 
@@ -1249,11 +1248,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_decrement_test';
         $database->createCollection($collectionId);
@@ -1262,28 +1261,28 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => 10
+            'count' => 10,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::decrement(3)
+            'count' => Operator::decrement(3),
         ]));
 
         $this->assertEquals(7, $updated->getAttribute('count'));
 
         // Success case - with min limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'count' => Operator::decrement(10, 5)
+            'count' => Operator::decrement(10, 5),
         ]));
         $this->assertEquals(5, $updated->getAttribute('count')); // Should stop at min 5
 
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'count' => null
+            'count' => null,
         ]));
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'count' => Operator::decrement(3)
+            'count' => Operator::decrement(3),
         ]));
         $this->assertEquals(-3, $updated->getAttribute('count'));
 
@@ -1294,11 +1293,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_multiply_test';
         $database->createCollection($collectionId);
@@ -1307,18 +1306,18 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 4.0
+            'value' => 4.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::multiply(2.5)
+            'value' => Operator::multiply(2.5),
         ]));
 
         $this->assertEquals(10.0, $updated->getAttribute('value'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::multiply(3, 20)
+            'value' => Operator::multiply(3, 20),
         ]));
         $this->assertEquals(20.0, $updated->getAttribute('value')); // Should cap at 20
 
@@ -1329,11 +1328,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_divide_test';
         $database->createCollection($collectionId);
@@ -1342,18 +1341,18 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 10.0
+            'value' => 10.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::divide(2)
+            'value' => Operator::divide(2),
         ]));
 
         $this->assertEquals(5.0, $updated->getAttribute('value'));
 
         // Success case - with min limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::divide(10, 2)
+            'value' => Operator::divide(10, 2),
         ]));
         $this->assertEquals(2.0, $updated->getAttribute('value')); // Should stop at min 2
 
@@ -1364,11 +1363,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_modulo_test';
         $database->createCollection($collectionId);
@@ -1377,11 +1376,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'number' => 10
+            'number' => 10,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'number' => Operator::modulo(3)
+            'number' => Operator::modulo(3),
         ]));
 
         $this->assertEquals(1, $updated->getAttribute('number'));
@@ -1393,11 +1392,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_power_test';
         $database->createCollection($collectionId);
@@ -1406,18 +1405,18 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'number' => 2
+            'number' => 2,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'number' => Operator::power(3)
+            'number' => Operator::power(3),
         ]));
 
         $this->assertEquals(8, $updated->getAttribute('number'));
 
         // Success case - with max limit
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'number' => Operator::power(4, 50)
+            'number' => Operator::power(4, 50),
         ]));
         $this->assertEquals(50, $updated->getAttribute('number')); // Should cap at 50
 
@@ -1428,11 +1427,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_concat_test';
         $database->createCollection($collectionId);
@@ -1441,11 +1440,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => 'Hello'
+            'text' => 'Hello',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'text' => Operator::stringConcat(' World')
+            'text' => Operator::stringConcat(' World'),
         ]));
 
         $this->assertEquals('Hello World', $updated->getAttribute('text'));
@@ -1453,10 +1452,10 @@ trait OperatorTests
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => null
+            'text' => null,
         ]));
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'text' => Operator::stringConcat('Test')
+            'text' => Operator::stringConcat('Test'),
         ]));
         $this->assertEquals('Test', $updated->getAttribute('text'));
 
@@ -1467,11 +1466,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_replace_test';
         $database->createCollection($collectionId);
@@ -1480,11 +1479,11 @@ trait OperatorTests
         // Success case - single replacement
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => 'Hello World'
+            'text' => 'Hello World',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'text' => Operator::stringReplace('World', 'Universe')
+            'text' => Operator::stringReplace('World', 'Universe'),
         ]));
 
         $this->assertEquals('Hello Universe', $updated->getAttribute('text'));
@@ -1492,11 +1491,11 @@ trait OperatorTests
         // Success case - multiple occurrences
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => 'test test test'
+            'text' => 'test test test',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'text' => Operator::stringReplace('test', 'demo')
+            'text' => Operator::stringReplace('test', 'demo'),
         ]));
 
         $this->assertEquals('demo demo demo', $updated->getAttribute('text'));
@@ -1508,11 +1507,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_append_test';
         $database->createCollection($collectionId);
@@ -1521,11 +1520,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'tags' => ['initial']
+            'tags' => ['initial'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'tags' => Operator::arrayAppend(['new', 'items'])
+            'tags' => Operator::arrayAppend(['new', 'items']),
         ]));
 
         $this->assertEquals(['initial', 'new', 'items'], $updated->getAttribute('tags'));
@@ -1533,20 +1532,20 @@ trait OperatorTests
         // Edge case: empty array
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'tags' => []
+            'tags' => [],
         ]));
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'tags' => Operator::arrayAppend(['first'])
+            'tags' => Operator::arrayAppend(['first']),
         ]));
         $this->assertEquals(['first'], $updated->getAttribute('tags'));
 
         // Edge case: null array
         $doc3 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'tags' => null
+            'tags' => null,
         ]));
         $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
-            'tags' => Operator::arrayAppend(['test'])
+            'tags' => Operator::arrayAppend(['test']),
         ]));
         $this->assertEquals(['test'], $updated->getAttribute('tags'));
 
@@ -1557,11 +1556,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_prepend_test';
         $database->createCollection($collectionId);
@@ -1570,11 +1569,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['existing']
+            'items' => ['existing'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayPrepend(['first', 'second'])
+            'items' => Operator::arrayPrepend(['first', 'second']),
         ]));
 
         $this->assertEquals(['first', 'second', 'existing'], $updated->getAttribute('items'));
@@ -1586,11 +1585,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_insert_test';
         $database->createCollection($collectionId);
@@ -1599,18 +1598,18 @@ trait OperatorTests
         // Success case - middle insertion
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'numbers' => [1, 2, 4]
+            'numbers' => [1, 2, 4],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(2, 3)
+            'numbers' => Operator::arrayInsert(2, 3),
         ]));
 
         $this->assertEquals([1, 2, 3, 4], $updated->getAttribute('numbers'));
 
         // Success case - beginning insertion
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(0, 0)
+            'numbers' => Operator::arrayInsert(0, 0),
         ]));
 
         $this->assertEquals([0, 1, 2, 3, 4], $updated->getAttribute('numbers'));
@@ -1618,7 +1617,7 @@ trait OperatorTests
         // Success case - end insertion
         $numbers = $updated->getAttribute('numbers');
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(count($numbers), 5)
+            'numbers' => Operator::arrayInsert(count($numbers), 5),
         ]));
 
         $this->assertEquals([0, 1, 2, 3, 4, 5], $updated->getAttribute('numbers'));
@@ -1630,11 +1629,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_remove_test';
         $database->createCollection($collectionId);
@@ -1643,11 +1642,11 @@ trait OperatorTests
         // Success case - single occurrence
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayRemove('b')
+            'items' => Operator::arrayRemove('b'),
         ]));
 
         $this->assertEquals(['a', 'c'], $updated->getAttribute('items'));
@@ -1655,18 +1654,18 @@ trait OperatorTests
         // Success case - multiple occurrences
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['x', 'y', 'x', 'z', 'x']
+            'items' => ['x', 'y', 'x', 'z', 'x'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'items' => Operator::arrayRemove('x')
+            'items' => Operator::arrayRemove('x'),
         ]));
 
         $this->assertEquals(['y', 'z'], $updated->getAttribute('items'));
 
         // Success case - non-existent value
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayRemove('nonexistent')
+            'items' => Operator::arrayRemove('nonexistent'),
         ]));
 
         $this->assertEquals(['a', 'c'], $updated->getAttribute('items')); // Should remain unchanged
@@ -1678,11 +1677,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_unique_test';
         $database->createCollection($collectionId);
@@ -1691,11 +1690,11 @@ trait OperatorTests
         // Success case - with duplicates
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'a', 'c', 'b', 'a']
+            'items' => ['a', 'b', 'a', 'c', 'b', 'a'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
 
         $result = $updated->getAttribute('items');
@@ -1705,11 +1704,11 @@ trait OperatorTests
         // Success case - no duplicates
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['x', 'y', 'z']
+            'items' => ['x', 'y', 'z'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
 
         $this->assertEquals(['x', 'y', 'z'], $updated->getAttribute('items'));
@@ -1721,11 +1720,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_intersect_test';
         $database->createCollection($collectionId);
@@ -1734,11 +1733,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c', 'd']
+            'items' => ['a', 'b', 'c', 'd'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayIntersect(['b', 'c', 'e'])
+            'items' => Operator::arrayIntersect(['b', 'c', 'e']),
         ]));
 
         $result = $updated->getAttribute('items');
@@ -1747,7 +1746,7 @@ trait OperatorTests
 
         // Success case - no intersection
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayIntersect(['x', 'y', 'z'])
+            'items' => Operator::arrayIntersect(['x', 'y', 'z']),
         ]));
 
         $this->assertEquals([], $updated->getAttribute('items'));
@@ -1759,11 +1758,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_diff_test';
         $database->createCollection($collectionId);
@@ -1772,11 +1771,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c', 'd']
+            'items' => ['a', 'b', 'c', 'd'],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayDiff(['b', 'd'])
+            'items' => Operator::arrayDiff(['b', 'd']),
         ]));
 
         $result = $updated->getAttribute('items');
@@ -1785,7 +1784,7 @@ trait OperatorTests
 
         // Success case - empty diff array
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayDiff([])
+            'items' => Operator::arrayDiff([]),
         ]));
 
         $result = $updated->getAttribute('items');
@@ -1799,11 +1798,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_filter_test';
         $database->createCollection($collectionId);
@@ -1814,40 +1813,40 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'numbers' => [1, 2, 3, 2, 4],
-            'mixed' => ['a', 'b', null, 'c', null]
+            'mixed' => ['a', 'b', null, 'c', null],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayFilter('equal', 2)
+            'numbers' => Operator::arrayFilter('equal', 2),
         ]));
 
         $this->assertEquals([2, 2], $updated->getAttribute('numbers'));
 
         // Success case - isNotNull condition
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'mixed' => Operator::arrayFilter('isNotNull')
+            'mixed' => Operator::arrayFilter('isNotNull'),
         ]));
 
         $this->assertEquals(['a', 'b', 'c'], $updated->getAttribute('mixed'));
 
         // Success case - greaterThan condition (reset array first)
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => [1, 2, 3, 2, 4]
+            'numbers' => [1, 2, 3, 2, 4],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayFilter('greaterThan', 2)
+            'numbers' => Operator::arrayFilter('greaterThan', 2),
         ]));
 
         $this->assertEquals([3, 4], $updated->getAttribute('numbers'));
 
         // Success case - lessThan condition (reset array first)
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => [1, 2, 3, 2, 4]
+            'numbers' => [1, 2, 3, 2, 4],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayFilter('lessThan', 3)
+            'numbers' => Operator::arrayFilter('lessThan', 3),
         ]));
 
         $this->assertEquals([1, 2, 2], $updated->getAttribute('numbers'));
@@ -1859,11 +1858,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_filter_numeric_test';
         $database->createCollection($collectionId);
@@ -1874,38 +1873,38 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'integers' => [1, 5, 10, 15, 20, 25],
-            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5]
+            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5],
         ]));
 
         // Test greaterThan with integers
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'integers' => Operator::arrayFilter('greaterThan', 10)
+            'integers' => Operator::arrayFilter('greaterThan', 10),
         ]));
         $this->assertEquals([15, 20, 25], $updated->getAttribute('integers'));
 
         // Reset and test lessThan with integers
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'integers' => [1, 5, 10, 15, 20, 25]
+            'integers' => [1, 5, 10, 15, 20, 25],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'integers' => Operator::arrayFilter('lessThan', 15)
+            'integers' => Operator::arrayFilter('lessThan', 15),
         ]));
         $this->assertEquals([1, 5, 10], $updated->getAttribute('integers'));
 
         // Test greaterThan with floats
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'floats' => Operator::arrayFilter('greaterThan', 10.5)
+            'floats' => Operator::arrayFilter('greaterThan', 10.5),
         ]));
         $this->assertEquals([15.5, 20.5, 25.5], $updated->getAttribute('floats'));
 
         // Reset and test lessThan with floats
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5]
+            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5],
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'floats' => Operator::arrayFilter('lessThan', 15.5)
+            'floats' => Operator::arrayFilter('lessThan', 15.5),
         ]));
         $this->assertEquals([1.5, 5.5, 10.5], $updated->getAttribute('floats'));
 
@@ -1916,11 +1915,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_toggle_test';
         $database->createCollection($collectionId);
@@ -1929,18 +1928,18 @@ trait OperatorTests
         // Success case - true to false
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'active' => true
+            'active' => true,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(false, $updated->getAttribute('active'));
 
         // Success case - false to true
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(true, $updated->getAttribute('active'));
@@ -1948,11 +1947,11 @@ trait OperatorTests
         // Success case - null to true
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'active' => null
+            'active' => null,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(true, $updated->getAttribute('active'));
@@ -1964,11 +1963,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_date_add_test';
         $database->createCollection($collectionId);
@@ -1977,18 +1976,18 @@ trait OperatorTests
         // Success case - positive days
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'date' => '2023-01-01 00:00:00'
+            'date' => '2023-01-01 00:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'date' => Operator::dateAddDays(5)
+            'date' => Operator::dateAddDays(5),
         ]));
 
         $this->assertEquals('2023-01-06T00:00:00.000+00:00', $updated->getAttribute('date'));
 
         // Success case - negative days (subtracting)
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'date' => Operator::dateAddDays(-3)
+            'date' => Operator::dateAddDays(-3),
         ]));
 
         $this->assertEquals('2023-01-03T00:00:00.000+00:00', $updated->getAttribute('date'));
@@ -2000,11 +1999,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_date_sub_test';
         $database->createCollection($collectionId);
@@ -2013,11 +2012,11 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'date' => '2023-01-10 00:00:00'
+            'date' => '2023-01-10 00:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'date' => Operator::dateSubDays(3)
+            'date' => Operator::dateSubDays(3),
         ]));
 
         $this->assertEquals('2023-01-07T00:00:00.000+00:00', $updated->getAttribute('date'));
@@ -2029,11 +2028,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'operator_date_now_test';
         $database->createCollection($collectionId);
@@ -2042,18 +2041,18 @@ trait OperatorTests
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'timestamp' => '2020-01-01 00:00:00'
+            'timestamp' => '2020-01-01 00:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'timestamp' => Operator::dateSetNow()
+            'timestamp' => Operator::dateSetNow(),
         ]));
 
         $result = $updated->getAttribute('timestamp');
         $this->assertNotEmpty($result);
 
         // Verify it's a recent timestamp (within last minute)
-        $now = new \DateTime();
+        $now = new \DateTime;
         $resultDate = new \DateTime($result);
         $diff = $now->getTimestamp() - $resultDate->getTimestamp();
         $this->assertLessThan(60, $diff); // Should be within 60 seconds
@@ -2061,16 +2060,15 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
-
     public function testMixedOperators(): void
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'mixed_operators_test';
         $database->createCollection($collectionId);
@@ -2087,7 +2085,7 @@ trait OperatorTests
             'score' => 10.0,
             'tags' => ['initial'],
             'name' => 'Test',
-            'active' => false
+            'active' => false,
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
@@ -2095,7 +2093,7 @@ trait OperatorTests
             'score' => Operator::multiply(1.5),
             'tags' => Operator::arrayAppend(['new', 'item']),
             'name' => Operator::stringConcat(' Document'),
-            'active' => Operator::toggle()
+            'active' => Operator::toggle(),
         ]));
 
         $this->assertEquals(8, $updated->getAttribute('count'));
@@ -2111,11 +2109,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'batch_operators_test';
         $database->createCollection($collectionId);
@@ -2128,15 +2126,15 @@ trait OperatorTests
             $docs[] = $database->createDocument($collectionId, new Document([
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => $i * 5,
-                'category' => 'test'
+                'category' => 'test',
             ]));
         }
 
         // Test updateDocuments with operators
         $updateCount = $database->updateDocuments($collectionId, new Document([
-            'count' => Operator::increment(10)
+            'count' => Operator::increment(10),
         ]), [
-            Query::equal('category', ['test'])
+            Query::equal('category', ['test']),
         ]);
 
         $this->assertEquals(3, $updateCount);
@@ -2144,7 +2142,7 @@ trait OperatorTests
         // Fetch the updated documents to verify the operator worked
         $updated = $database->find($collectionId, [
             Query::equal('category', ['test']),
-            Query::orderAsc('count')
+            Query::orderAsc('count'),
         ]);
         $this->assertCount(3, $updated);
         $this->assertEquals(15, $updated[0]->getAttribute('count')); // 5 + 10
@@ -2163,8 +2161,9 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2174,14 +2173,14 @@ trait OperatorTests
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['second', 'third', 'fourth']
+            'items' => ['second', 'third', 'fourth'],
         ]));
 
         $this->assertEquals(['second', 'third', 'fourth'], $doc->getAttribute('items'));
 
         // Attempt to insert at index 0
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayInsert(0, 'first')
+            'items' => Operator::arrayInsert(0, 'first'),
         ]));
 
         // Refetch to get the actual database value
@@ -2206,8 +2205,9 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2217,14 +2217,14 @@ trait OperatorTests
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => [1, 2, 4, 5, 6]
+            'items' => [1, 2, 4, 5, 6],
         ]));
 
         $this->assertEquals([1, 2, 4, 5, 6], $doc->getAttribute('items'));
 
         // Attempt to insert at index 2 (middle position)
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayInsert(2, 3)
+            'items' => Operator::arrayInsert(2, 3),
         ]));
 
         // Refetch to get the actual database value
@@ -2249,8 +2249,9 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2260,7 +2261,7 @@ trait OperatorTests
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['apple', 'banana', 'cherry']
+            'items' => ['apple', 'banana', 'cherry'],
         ]));
 
         $this->assertEquals(['apple', 'banana', 'cherry'], $doc->getAttribute('items'));
@@ -2268,7 +2269,7 @@ trait OperatorTests
         // Attempt to insert at end (index = length)
         $items = $doc->getAttribute('items');
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'items' => Operator::arrayInsert(count($items), 'date')
+            'items' => Operator::arrayInsert(count($items), 'date'),
         ]));
 
         // Refetch to get the actual database value
@@ -2293,8 +2294,9 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2304,14 +2306,14 @@ trait OperatorTests
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'numbers' => [1, 3, 5]
+            'numbers' => [1, 3, 5],
         ]));
 
         $this->assertEquals([1, 3, 5], $doc->getAttribute('numbers'));
 
         // First insert: add 2 at index 1
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(1, 2)
+            'numbers' => Operator::arrayInsert(1, 2),
         ]));
 
         // Refetch to get the actual database value
@@ -2326,7 +2328,7 @@ trait OperatorTests
 
         // Second insert: add 4 at index 3
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(3, 4)
+            'numbers' => Operator::arrayInsert(3, 4),
         ]));
 
         // Refetch to get the actual database value
@@ -2341,7 +2343,7 @@ trait OperatorTests
 
         // Third insert: add 0 at beginning
         $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayInsert(0, 0)
+            'numbers' => Operator::arrayInsert(0, 0),
         ]));
 
         // Refetch to get the actual database value
@@ -2370,11 +2372,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_increment_max_violation';
         $database->createCollection($collectionId);
@@ -2397,14 +2399,14 @@ trait OperatorTests
         // Create a document with score at 95 (within valid range)
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'score' => 95
+            'score' => 95,
         ]));
 
         $this->assertEquals(95, $doc->getAttribute('score'));
 
         // Test case 1: Small increment that stays within MAX_INT should work
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'score' => Operator::increment(5)
+            'score' => Operator::increment(5),
         ]));
         // Refetch to get the actual computed value
         $updated = $database->getDocument($collectionId, $doc->getId());
@@ -2415,7 +2417,7 @@ trait OperatorTests
         // but post-operator validation is missing
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'score' => Database::MAX_INT - 10 // Start near the maximum
+            'score' => Database::MAX_INT - 10, // Start near the maximum
         ]));
 
         $this->assertEquals(Database::MAX_INT - 10, $doc2->getAttribute('score'));
@@ -2425,7 +2427,7 @@ trait OperatorTests
         // but currently succeeds because validation happens before operator application
         try {
             $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-                'score' => Operator::increment(20) // Will result in MAX_INT + 10
+                'score' => Operator::increment(20), // Will result in MAX_INT + 10
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2436,7 +2438,7 @@ trait OperatorTests
             $this->assertLessThanOrEqual(
                 Database::MAX_INT,
                 $finalScore,
-                "BUG EXPOSED: INCREMENT pushed score to {$finalScore}, exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
+                "BUG EXPOSED: INCREMENT pushed score to {$finalScore}, exceeding MAX_INT (".Database::MAX_INT.'). Post-operator validation is missing!'
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the constraint violation
@@ -2458,11 +2460,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_concat_length_violation';
         $database->createCollection($collectionId);
@@ -2473,7 +2475,7 @@ trait OperatorTests
         // Create a document with a 15-character title (within limit)
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'title' => 'Hello World'  // 11 characters
+            'title' => 'Hello World',  // 11 characters
         ]));
 
         $this->assertEquals('Hello World', $doc->getAttribute('title'));
@@ -2484,7 +2486,7 @@ trait OperatorTests
         // but currently succeeds because validation only checks the input, not the result
         try {
             $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-                'title' => Operator::stringConcat(' - Extended Title')  // Adding 18 chars = 29 total
+                'title' => Operator::stringConcat(' - Extended Title'),  // Adding 18 chars = 29 total
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2517,11 +2519,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_multiply_range_violation';
         $database->createCollection($collectionId);
@@ -2532,7 +2534,7 @@ trait OperatorTests
         // Create a document with quantity that when multiplied will exceed MAX_INT
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'quantity' => 1000000000  // 1 billion
+            'quantity' => 1000000000,  // 1 billion
         ]));
 
         $this->assertEquals(1000000000, $doc->getAttribute('quantity'));
@@ -2542,7 +2544,7 @@ trait OperatorTests
         // but currently may succeed or cause overflow because validation is missing
         try {
             $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-                'quantity' => Operator::multiply(10)  // 1,000,000,000 * 10 = 10,000,000,000 > MAX_INT
+                'quantity' => Operator::multiply(10),  // 1,000,000,000 * 10 = 10,000,000,000 > MAX_INT
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2553,7 +2555,7 @@ trait OperatorTests
             $this->assertLessThanOrEqual(
                 Database::MAX_INT,
                 $finalQuantity,
-                "BUG EXPOSED: MULTIPLY created value {$finalQuantity}, exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
+                "BUG EXPOSED: MULTIPLY created value {$finalQuantity}, exceeding MAX_INT (".Database::MAX_INT.'). Post-operator validation is missing!'
             );
 
             // Also verify the value didn't overflow into negative (integer overflow behavior)
@@ -2579,11 +2581,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_multiply_negative';
         $database->createCollection($collectionId);
@@ -2593,11 +2595,11 @@ trait OperatorTests
         $doc1 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_multiply',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 10.0
+            'value' => 10.0,
         ]));
 
         $updated1 = $database->updateDocument($collectionId, 'negative_multiply', new Document([
-            'value' => Operator::multiply(-2)
+            'value' => Operator::multiply(-2),
         ]));
         $this->assertEquals(-20.0, $updated1->getAttribute('value'), 'Multiply by negative should work correctly');
 
@@ -2605,11 +2607,11 @@ trait OperatorTests
         $doc2 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_with_max',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 10.0
+            'value' => 10.0,
         ]));
 
         $updated2 = $database->updateDocument($collectionId, 'negative_with_max', new Document([
-            'value' => Operator::multiply(-2, 100)  // max=100, but result will be -20
+            'value' => Operator::multiply(-2, 100),  // max=100, but result will be -20
         ]));
         $this->assertEquals(-20.0, $updated2->getAttribute('value'), 'Negative multiplier with max should not trigger overflow check');
 
@@ -2617,11 +2619,11 @@ trait OperatorTests
         $doc3 = $database->createDocument($collectionId, new Document([
             '$id' => 'pos_times_neg',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 50.0
+            'value' => 50.0,
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'pos_times_neg', new Document([
-            'value' => Operator::multiply(-3, 100)  // 50 * -3 = -150, should not be capped at 100
+            'value' => Operator::multiply(-3, 100),  // 50 * -3 = -150, should not be capped at 100
         ]));
         $this->assertEquals(-150.0, $updated3->getAttribute('value'), 'Positive * negative should compute correctly (result is negative, no cap)');
 
@@ -2629,11 +2631,11 @@ trait OperatorTests
         $doc4 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_overflow',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => -60.0
+            'value' => -60.0,
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_overflow', new Document([
-            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, should be capped at 100
+            'value' => Operator::multiply(-3, 100),  // -60 * -3 = 180, should be capped at 100
         ]));
         $this->assertEquals(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
 
@@ -2641,11 +2643,11 @@ trait OperatorTests
         $doc5 = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_multiply',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 50.0
+            'value' => 50.0,
         ]));
 
         $updated5 = $database->updateDocument($collectionId, 'zero_multiply', new Document([
-            'value' => Operator::multiply(0, 100)
+            'value' => Operator::multiply(0, 100),
         ]));
         $this->assertEquals(0.0, $updated5->getAttribute('value'), 'Multiply by zero should result in zero');
 
@@ -2661,11 +2663,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_divide_negative';
         $database->createCollection($collectionId);
@@ -2675,11 +2677,11 @@ trait OperatorTests
         $doc1 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_divide',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 20.0
+            'value' => 20.0,
         ]));
 
         $updated1 = $database->updateDocument($collectionId, 'negative_divide', new Document([
-            'value' => Operator::divide(-2)
+            'value' => Operator::divide(-2),
         ]));
         $this->assertEquals(-10.0, $updated1->getAttribute('value'), 'Divide by negative should work correctly');
 
@@ -2687,11 +2689,11 @@ trait OperatorTests
         $doc2 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_with_min',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 20.0
+            'value' => 20.0,
         ]));
 
         $updated2 = $database->updateDocument($collectionId, 'negative_with_min', new Document([
-            'value' => Operator::divide(-2, -50)  // min=-50, result will be -10
+            'value' => Operator::divide(-2, -50),  // min=-50, result will be -10
         ]));
         $this->assertEquals(-10.0, $updated2->getAttribute('value'), 'Negative divisor with min should not trigger underflow check');
 
@@ -2699,11 +2701,11 @@ trait OperatorTests
         $doc3 = $database->createDocument($collectionId, new Document([
             '$id' => 'pos_div_neg',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 100.0
+            'value' => 100.0,
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
-            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so floor at -10
+            'value' => Operator::divide(-4, -10),  // 100 / -4 = -25, which is below min -10, so floor at -10
         ]));
         $this->assertEquals(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
 
@@ -2711,11 +2713,11 @@ trait OperatorTests
         $doc4 = $database->createDocument($collectionId, new Document([
             '$id' => 'negative_underflow',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 40.0
+            'value' => 40.0,
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_underflow', new Document([
-            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so floor at -10
+            'value' => Operator::divide(-2, -10),  // 40 / -2 = -20, which is below min -10, so floor at -10
         ]));
         $this->assertEquals(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
 
@@ -2733,11 +2735,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_item_type_violation';
         $database->createCollection($collectionId);
@@ -2749,7 +2751,7 @@ trait OperatorTests
         // Create a document with valid integer array
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'numbers' => [10, 20, 30]
+            'numbers' => [10, 20, 30],
         ]));
 
         $this->assertEquals([10, 20, 30], $doc->getAttribute('numbers'));
@@ -2760,14 +2762,14 @@ trait OperatorTests
             // Create a fresh document for this test
             $doc2 = $database->createDocument($collectionId, new Document([
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-                'numbers' => [100, 200]
+                'numbers' => [100, 200],
             ]));
 
             // Try to append values that would exceed MAX_INT
             $hugeValue = Database::MAX_INT + 1000;  // Exceeds integer maximum
 
             $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-                'numbers' => Operator::arrayAppend([$hugeValue])
+                'numbers' => Operator::arrayAppend([$hugeValue]),
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2779,7 +2781,7 @@ trait OperatorTests
             $this->assertLessThanOrEqual(
                 Database::MAX_INT,
                 $lastNumber,
-                "BUG EXPOSED: ARRAY_APPEND added value {$lastNumber} exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
+                "BUG EXPOSED: ARRAY_APPEND added value {$lastNumber} exceeding MAX_INT (".Database::MAX_INT.'). Post-operator validation is missing!'
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the constraint violation
@@ -2793,7 +2795,7 @@ trait OperatorTests
         try {
             $doc3 = $database->createDocument($collectionId, new Document([
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-                'numbers' => [1, 2, 3]
+                'numbers' => [1, 2, 3],
             ]));
 
             // Append a mix of valid and invalid values
@@ -2801,7 +2803,7 @@ trait OperatorTests
             $mixedValues = [40, 50, Database::MAX_INT + 100];
 
             $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
-                'numbers' => Operator::arrayAppend($mixedValues)
+                'numbers' => Operator::arrayAppend($mixedValues),
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2813,7 +2815,7 @@ trait OperatorTests
                 $this->assertLessThanOrEqual(
                     Database::MAX_INT,
                     $num,
-                    "BUG EXPOSED: ARRAY_APPEND added invalid value {$num} exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
+                    "BUG EXPOSED: ARRAY_APPEND added invalid value {$num} exceeding MAX_INT (".Database::MAX_INT.'). Post-operator validation is missing!'
                 );
             }
         } catch (StructureException $e) {
@@ -2821,7 +2823,7 @@ trait OperatorTests
             $this->assertTrue(
                 str_contains($e->getMessage(), 'invalid type') ||
                 str_contains($e->getMessage(), 'array items must be between'),
-                'Expected constraint violation message, got: ' . $e->getMessage()
+                'Expected constraint violation message, got: '.$e->getMessage()
             );
         } catch (TypeException $e) {
             // Also acceptable
@@ -2840,11 +2842,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
@@ -2858,12 +2860,12 @@ trait OperatorTests
             '$id' => 'extreme_int_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'bigint_max' => $maxValue,
-            'bigint_min' => $minValue
+            'bigint_min' => $minValue,
         ]));
 
         // Test increment near max with limit
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
-            'bigint_max' => Operator::increment(2000, PHP_INT_MAX - 500)
+            'bigint_max' => Operator::increment(2000, PHP_INT_MAX - 500),
         ]));
         // Should be capped at max
         $this->assertLessThanOrEqual(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
@@ -2871,7 +2873,7 @@ trait OperatorTests
 
         // Test decrement near min with limit
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
-            'bigint_min' => Operator::decrement(2000, PHP_INT_MIN + 500)
+            'bigint_min' => Operator::decrement(2000, PHP_INT_MIN + 500),
         ]));
         // Should be capped at min
         $this->assertGreaterThanOrEqual(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
@@ -2889,11 +2891,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_negative_power';
         $database->createCollection($collectionId);
@@ -2903,12 +2905,12 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'neg_power_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 8.0
+            'value' => 8.0,
         ]));
 
         // Test negative exponent: 8^(-2) = 1/64 = 0.015625
         $updated = $database->updateDocument($collectionId, 'neg_power_doc', new Document([
-            'value' => Operator::power(-2)
+            'value' => Operator::power(-2),
         ]));
 
         $this->assertEqualsWithDelta(0.015625, $updated->getAttribute('value'), 0.000001);
@@ -2925,11 +2927,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_fractional_power';
         $database->createCollection($collectionId);
@@ -2939,23 +2941,23 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'frac_power_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 16.0
+            'value' => 16.0,
         ]));
 
         // Test fractional exponent: 16^(0.5) = sqrt(16) = 4
         $updated = $database->updateDocument($collectionId, 'frac_power_doc', new Document([
-            'value' => Operator::power(0.5)
+            'value' => Operator::power(0.5),
         ]));
 
         $this->assertEqualsWithDelta(4.0, $updated->getAttribute('value'), 0.000001);
 
         // Test cube root: 27^(1/3) = 3
         $database->updateDocument($collectionId, 'frac_power_doc', new Document([
-            'value' => 27.0
+            'value' => 27.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'frac_power_doc', new Document([
-            'value' => Operator::power(1 / 3)
+            'value' => Operator::power(1 / 3),
         ]));
 
         $this->assertEqualsWithDelta(3.0, $updated->getAttribute('value'), 0.000001);
@@ -2972,11 +2974,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_empty_strings';
         $database->createCollection($collectionId);
@@ -2985,35 +2987,35 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_str_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => ''
+            'text' => '',
         ]));
 
         // Test concatenation to empty string
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::stringConcat('hello')
+            'text' => Operator::stringConcat('hello'),
         ]));
         $this->assertEquals('hello', $updated->getAttribute('text'));
 
         // Test concatenation of empty string
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::stringConcat('')
+            'text' => Operator::stringConcat(''),
         ]));
         $this->assertEquals('hello', $updated->getAttribute('text'));
 
         // Test replace with empty search string (should do nothing or replace all)
         $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => 'test'
+            'text' => 'test',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::stringReplace('', 'X')
+            'text' => Operator::stringReplace('', 'X'),
         ]));
         // Empty search should not change the string
         $this->assertEquals('test', $updated->getAttribute('text'));
 
         // Test replace with empty replace string (deletion)
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::stringReplace('t', '')
+            'text' => Operator::stringReplace('t', ''),
         ]));
         $this->assertEquals('es', $updated->getAttribute('text'));
 
@@ -3029,11 +3031,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_unicode';
         $database->createCollection($collectionId);
@@ -3042,28 +3044,28 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'unicode_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => '你好'
+            'text' => '你好',
         ]));
 
         // Test concatenation with emoji
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::stringConcat('👋🌍')
+            'text' => Operator::stringConcat('👋🌍'),
         ]));
         $this->assertEquals('你好👋🌍', $updated->getAttribute('text'));
 
         // Test replace with Chinese characters
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::stringReplace('你好', '再见')
+            'text' => Operator::stringReplace('你好', '再见'),
         ]));
         $this->assertEquals('再见👋🌍', $updated->getAttribute('text'));
 
         // Test with combining characters (é = e + ´)
         $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => 'cafe\u{0301}' // café with combining acute accent
+            'text' => 'cafe\u{0301}', // café with combining acute accent
         ]));
 
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::stringConcat(' ☕')
+            'text' => Operator::stringConcat(' ☕'),
         ]));
         $this->assertStringContainsString('☕', $updated->getAttribute('text'));
 
@@ -3079,11 +3081,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_empty_arrays';
         $database->createCollection($collectionId);
@@ -3092,48 +3094,48 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_array_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => []
+            'items' => [],
         ]));
 
         // Test append to empty array
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => Operator::arrayAppend(['first'])
+            'items' => Operator::arrayAppend(['first']),
         ]));
         $this->assertEquals(['first'], $updated->getAttribute('items'));
 
         // Reset and test prepend to empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => []
+            'items' => [],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => Operator::arrayPrepend(['prepended'])
+            'items' => Operator::arrayPrepend(['prepended']),
         ]));
         $this->assertEquals(['prepended'], $updated->getAttribute('items'));
 
         // Test insert at index 0 of empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => []
+            'items' => [],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => Operator::arrayInsert(0, 'zero')
+            'items' => Operator::arrayInsert(0, 'zero'),
         ]));
         $this->assertEquals(['zero'], $updated->getAttribute('items'));
 
         // Test unique on empty array
         $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => []
+            'items' => [],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
         // Test remove from empty array (should stay empty)
         $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
-            'items' => Operator::arrayRemove('nonexistent')
+            'items' => Operator::arrayRemove('nonexistent'),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
@@ -3149,11 +3151,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_special_values';
         $database->createCollection($collectionId);
@@ -3162,12 +3164,12 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'special_values_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'mixed' => ['', 'text', '', 'text']
+            'mixed' => ['', 'text', '', 'text'],
         ]));
 
         // Test unique with empty strings (should deduplicate)
         $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
-            'mixed' => Operator::arrayUnique()
+            'mixed' => Operator::arrayUnique(),
         ]));
         $this->assertContains('', $updated->getAttribute('mixed'));
         $this->assertContains('text', $updated->getAttribute('mixed'));
@@ -3176,11 +3178,11 @@ trait OperatorTests
 
         // Test remove empty string
         $database->updateDocument($collectionId, 'special_values_doc', new Document([
-            'mixed' => ['', 'a', '', 'b']
+            'mixed' => ['', 'a', '', 'b'],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
-            'mixed' => Operator::arrayRemove('')
+            'mixed' => Operator::arrayRemove(''),
         ]));
         $this->assertNotContains('', $updated->getAttribute('mixed'));
         $this->assertEquals(['a', 'b'], $updated->getAttribute('mixed'));
@@ -3197,11 +3199,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_negative_modulo';
         $database->createCollection($collectionId);
@@ -3211,11 +3213,11 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'neg_mod_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => -17
+            'value' => -17,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
-            'value' => Operator::modulo(5)
+            'value' => Operator::modulo(5),
         ]));
 
         // In PHP/MySQL: -17 % 5 = -2
@@ -3223,11 +3225,11 @@ trait OperatorTests
 
         // Test positive % negative
         $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
-            'value' => 17
+            'value' => 17,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
-            'value' => Operator::modulo(-5)
+            'value' => Operator::modulo(-5),
         ]));
 
         // In PHP/MySQL: 17 % -5 = 2
@@ -3245,11 +3247,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_float_precision';
         $database->createCollection($collectionId);
@@ -3258,16 +3260,16 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precision_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 0.1
+            'value' => 0.1,
         ]));
 
         // Test repeated additions that expose floating point errors
         // 0.1 + 0.1 + 0.1 should be 0.3, but might be 0.30000000000000004
         $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
-            'value' => Operator::increment(0.1)
+            'value' => Operator::increment(0.1),
         ]));
         $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
-            'value' => Operator::increment(0.1)
+            'value' => Operator::increment(0.1),
         ]));
 
         // Use delta for float comparison
@@ -3275,11 +3277,11 @@ trait OperatorTests
 
         // Test division that creates repeating decimal
         $database->updateDocument($collectionId, 'precision_doc', new Document([
-            'value' => 10.0
+            'value' => 10.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
-            'value' => Operator::divide(3.0)
+            'value' => Operator::divide(3.0),
         ]));
 
         // 10/3 = 3.333...
@@ -3297,11 +3299,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_long_strings';
         $database->createCollection($collectionId);
@@ -3313,12 +3315,12 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'long_str_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => $longString
+            'text' => $longString,
         ]));
 
         // Concat another 10k
         $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
-            'text' => Operator::stringConcat(str_repeat('B', 10000))
+            'text' => Operator::stringConcat(str_repeat('B', 10000)),
         ]));
 
         $result = $updated->getAttribute('text');
@@ -3328,7 +3330,7 @@ trait OperatorTests
 
         // Test replace on long string
         $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
-            'text' => Operator::stringReplace('A', 'X')
+            'text' => Operator::stringReplace('A', 'X'),
         ]));
 
         $result = $updated->getAttribute('text');
@@ -3347,11 +3349,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_date_boundaries';
         $database->createCollection($collectionId);
@@ -3361,12 +3363,12 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'date_boundary_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'date' => '2023-12-31 23:59:59'
+            'date' => '2023-12-31 23:59:59',
         ]));
 
         // Add 1 day (should roll to next year)
         $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => Operator::dateAddDays(1)
+            'date' => Operator::dateAddDays(1),
         ]));
 
         $resultDate = $updated->getAttribute('date');
@@ -3374,11 +3376,11 @@ trait OperatorTests
 
         // Test leap year: Feb 28, 2024 + 1 day = Feb 29, 2024 (leap year)
         $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => '2024-02-28 12:00:00'
+            'date' => '2024-02-28 12:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => Operator::dateAddDays(1)
+            'date' => Operator::dateAddDays(1),
         ]));
 
         $resultDate = $updated->getAttribute('date');
@@ -3386,11 +3388,11 @@ trait OperatorTests
 
         // Test non-leap year: Feb 28, 2023 + 1 day = Mar 1, 2023
         $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => '2023-02-28 12:00:00'
+            'date' => '2023-02-28 12:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => Operator::dateAddDays(1)
+            'date' => Operator::dateAddDays(1),
         ]));
 
         $resultDate = $updated->getAttribute('date');
@@ -3398,11 +3400,11 @@ trait OperatorTests
 
         // Test large day addition (cross multiple months)
         $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => '2023-01-01 00:00:00'
+            'date' => '2023-01-01 00:00:00',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
-            'date' => Operator::dateAddDays(365)
+            'date' => Operator::dateAddDays(365),
         ]));
 
         $resultDate = $updated->getAttribute('date');
@@ -3420,11 +3422,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_insert_boundaries';
         $database->createCollection($collectionId);
@@ -3433,19 +3435,19 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'boundary_insert_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         // Test insert at exact length (index 3 of array with 3 elements = append)
         $updated = $database->updateDocument($collectionId, 'boundary_insert_doc', new Document([
-            'items' => Operator::arrayInsert(3, 'd')
+            'items' => Operator::arrayInsert(3, 'd'),
         ]));
         $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
 
         // Test insert beyond length (should throw exception)
         try {
             $database->updateDocument($collectionId, 'boundary_insert_doc', new Document([
-                'items' => Operator::arrayInsert(10, 'z')
+                'items' => Operator::arrayInsert(10, 'z'),
             ]));
             $this->fail('Expected exception for out of bounds insert');
         } catch (DatabaseException $e) {
@@ -3464,11 +3466,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_sequential_ops';
         $database->createCollection($collectionId);
@@ -3479,43 +3481,43 @@ trait OperatorTests
             '$id' => 'sequential_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'counter' => 10,
-            'text' => 'start'
+            'text' => 'start',
         ]));
 
         // Apply operators sequentially and verify cumulative effect
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'counter' => Operator::increment(5)
+            'counter' => Operator::increment(5),
         ]));
         $this->assertEquals(15, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'counter' => Operator::multiply(2)
+            'counter' => Operator::multiply(2),
         ]));
         $this->assertEquals(30, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'counter' => Operator::decrement(10)
+            'counter' => Operator::decrement(10),
         ]));
         $this->assertEquals(20, $updated->getAttribute('counter'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'counter' => Operator::divide(2)
+            'counter' => Operator::divide(2),
         ]));
         $this->assertEquals(10, $updated->getAttribute('counter'));
 
         // Sequential string operations
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::stringConcat('-middle')
+            'text' => Operator::stringConcat('-middle'),
         ]));
         $this->assertEquals('start-middle', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::stringConcat('-end')
+            'text' => Operator::stringConcat('-end'),
         ]));
         $this->assertEquals('start-middle-end', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::stringReplace('-', '_')
+            'text' => Operator::stringReplace('-', '_'),
         ]));
         $this->assertEquals('start_middle_end', $updated->getAttribute('text'));
 
@@ -3531,11 +3533,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_zero_values';
         $database->createCollection($collectionId);
@@ -3544,34 +3546,34 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 0.0
+            'value' => 0.0,
         ]));
 
         // Increment from zero
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
-            'value' => Operator::increment(5)
+            'value' => Operator::increment(5),
         ]));
         $this->assertEquals(5.0, $updated->getAttribute('value'));
 
         // Multiply by zero (should become zero)
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
-            'value' => Operator::multiply(0)
+            'value' => Operator::multiply(0),
         ]));
         $this->assertEquals(0.0, $updated->getAttribute('value'));
 
         // Power with zero base: 0^5 = 0
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
-            'value' => Operator::power(5)
+            'value' => Operator::power(5),
         ]));
         $this->assertEquals(0.0, $updated->getAttribute('value'));
 
         // Increment and test power with zero exponent: n^0 = 1
         $database->updateDocument($collectionId, 'zero_doc', new Document([
-            'value' => 99.0
+            'value' => 99.0,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
-            'value' => Operator::power(0)
+            'value' => Operator::power(0),
         ]));
         $this->assertEquals(1.0, $updated->getAttribute('value'));
 
@@ -3587,11 +3589,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_empty_results';
         $database->createCollection($collectionId);
@@ -3600,28 +3602,28 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_result_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         // Intersect with no common elements (result should be empty array)
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
-            'items' => Operator::arrayIntersect(['x', 'y', 'z'])
+            'items' => Operator::arrayIntersect(['x', 'y', 'z']),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
         // Reset and test diff that removes all elements
         $database->updateDocument($collectionId, 'empty_result_doc', new Document([
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
-            'items' => Operator::arrayDiff(['a', 'b', 'c'])
+            'items' => Operator::arrayDiff(['a', 'b', 'c']),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
         // Test intersect on empty array
         $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
-            'items' => Operator::arrayIntersect(['x', 'y'])
+            'items' => Operator::arrayIntersect(['x', 'y']),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
@@ -3637,11 +3639,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_replace_multiple';
         $database->createCollection($collectionId);
@@ -3650,22 +3652,22 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'replace_multi_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'text' => 'the cat and the dog'
+            'text' => 'the cat and the dog',
         ]));
 
         // Replace all occurrences of 'the'
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
-            'text' => Operator::stringReplace('the', 'a')
+            'text' => Operator::stringReplace('the', 'a'),
         ]));
         $this->assertEquals('a cat and a dog', $updated->getAttribute('text'));
 
         // Replace with overlapping patterns
         $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
-            'text' => 'aaa bbb aaa ccc aaa'
+            'text' => 'aaa bbb aaa ccc aaa',
         ]));
 
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
-            'text' => Operator::stringReplace('aaa', 'X')
+            'text' => Operator::stringReplace('aaa', 'X'),
         ]));
         $this->assertEquals('X bbb X ccc X', $updated->getAttribute('text'));
 
@@ -3681,11 +3683,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_precise_floats';
         $database->createCollection($collectionId);
@@ -3694,12 +3696,12 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precise_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 3.141592653589793
+            'value' => 3.141592653589793,
         ]));
 
         // Increment by precise float
         $updated = $database->updateDocument($collectionId, 'precise_doc', new Document([
-            'value' => Operator::increment(2.718281828459045)
+            'value' => Operator::increment(2.718281828459045),
         ]));
 
         // π + e ≈ 5.859874482048838
@@ -3707,7 +3709,7 @@ trait OperatorTests
 
         // Decrement by precise float
         $updated = $database->updateDocument($collectionId, 'precise_doc', new Document([
-            'value' => Operator::decrement(1.414213562373095)
+            'value' => Operator::decrement(1.414213562373095),
         ]));
 
         // (π + e) - √2 ≈ 4.44566
@@ -3725,11 +3727,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_single_element';
         $database->createCollection($collectionId);
@@ -3738,38 +3740,38 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'single_elem_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['only']
+            'items' => ['only'],
         ]));
 
         // Remove the only element
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => Operator::arrayRemove('only')
+            'items' => Operator::arrayRemove('only'),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
         // Reset and test unique on single element
         $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => ['single']
+            'items' => ['single'],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
         $this->assertEquals(['single'], $updated->getAttribute('items'));
 
         // Test intersect with single element (match)
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => Operator::arrayIntersect(['single'])
+            'items' => Operator::arrayIntersect(['single']),
         ]));
         $this->assertEquals(['single'], $updated->getAttribute('items'));
 
         // Test intersect with single element (no match)
         $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => ['single']
+            'items' => ['single'],
         ]));
 
         $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
-            'items' => Operator::arrayIntersect(['other'])
+            'items' => Operator::arrayIntersect(['other']),
         ]));
         $this->assertEquals([], $updated->getAttribute('items'));
 
@@ -3785,11 +3787,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_toggle_default';
         $database->createCollection($collectionId);
@@ -3806,13 +3808,13 @@ trait OperatorTests
 
         // Toggle from default false to true
         $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
-            'flag' => Operator::toggle()
+            'flag' => Operator::toggle(),
         ]));
         $this->assertEquals(true, $updated->getAttribute('flag'));
 
         // Toggle back
         $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
-            'flag' => Operator::toggle()
+            'flag' => Operator::toggle(),
         ]));
         $this->assertEquals(false, $updated->getAttribute('flag'));
 
@@ -3828,11 +3830,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_attribute_constraints';
         $database->createCollection($collectionId);
@@ -3842,22 +3844,22 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'constraint_doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'small_int' => 100
+            'small_int' => 100,
         ]));
 
         // Test increment with max that's within bounds
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
-            'small_int' => Operator::increment(50, 120)
+            'small_int' => Operator::increment(50, 120),
         ]));
         $this->assertEquals(120, $updated->getAttribute('small_int'));
 
         // Test multiply that would exceed without limit
         $database->updateDocument($collectionId, 'constraint_doc', new Document([
-            'small_int' => 1000
+            'small_int' => 1000,
         ]));
 
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
-            'small_int' => Operator::multiply(1000, 5000)
+            'small_int' => Operator::multiply(1000, 5000),
         ]));
         $this->assertEquals(5000, $updated->getAttribute('small_int'));
 
@@ -3869,11 +3871,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_bulk_callback';
@@ -3890,7 +3892,7 @@ trait OperatorTests
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => $i * 10,
                 'score' => $i * 5.5,
-                'tags' => ["initial_{$i}"]
+                'tags' => ["initial_{$i}"],
             ]));
         }
 
@@ -3900,7 +3902,7 @@ trait OperatorTests
             new Document([
                 'count' => Operator::increment(7),
                 'score' => Operator::multiply(2),
-                'tags' => Operator::arrayAppend(['updated'])
+                'tags' => Operator::arrayAppend(['updated']),
             ]),
             [],
             Database::INSERT_BATCH_SIZE,
@@ -3935,11 +3937,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_upsert_callback';
@@ -3955,7 +3957,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'count' => 100,
             'value' => 50.0,
-            'items' => ['item1']
+            'items' => ['item1'],
         ]));
 
         $database->createDocument($collectionId, new Document([
@@ -3963,7 +3965,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'count' => 200,
             'value' => 75.0,
-            'items' => ['item2']
+            'items' => ['item2'],
         ]));
 
         $callbackResults = [];
@@ -3975,22 +3977,22 @@ trait OperatorTests
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => Operator::increment(50),
                 'value' => Operator::divide(2),
-                'items' => Operator::arrayAppend(['new_item'])
+                'items' => Operator::arrayAppend(['new_item']),
             ]),
             new Document([
                 '$id' => 'existing_2',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => Operator::decrement(25),
                 'value' => Operator::multiply(1.5),
-                'items' => Operator::arrayPrepend(['prepended'])
+                'items' => Operator::arrayPrepend(['prepended']),
             ]),
             new Document([
                 '$id' => 'new_doc',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
                 'count' => 500,
                 'value' => 100.0,
-                'items' => ['new']
-            ])
+                'items' => ['new'],
+            ]),
         ];
 
         $count = $database->upsertDocuments(
@@ -4032,11 +4034,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection
         $collectionId = 'test_single_upsert';
@@ -4052,7 +4054,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'count' => 100,
             'score' => 50.0,
-            'tags' => ['tag1', 'tag2']
+            'tags' => ['tag1', 'tag2'],
         ]));
 
         $this->assertEquals(100, $doc->getAttribute('count'));
@@ -4065,7 +4067,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'count' => Operator::increment(25),
             'score' => Operator::multiply(2),
-            'tags' => Operator::arrayAppend(['tag3'])
+            'tags' => Operator::arrayAppend(['tag3']),
         ]));
 
         // Verify operators were applied correctly
@@ -4084,7 +4086,7 @@ trait OperatorTests
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'count' => Operator::decrement(50),
             'score' => Operator::divide(4),
-            'tags' => Operator::arrayPrepend(['tag0'])
+            'tags' => Operator::arrayPrepend(['tag0']),
         ]));
 
         $this->assertEquals(75, $updated->getAttribute('count')); // 125 - 50
@@ -4099,11 +4101,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         // Create test collection with all attribute types needed for operators
         $collectionId = 'test_upsert_new_ops';
@@ -4232,8 +4234,9 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -4282,8 +4285,8 @@ trait OperatorTests
             'diff_items' => ['x', 'y', 'z', 'w'],
             'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             'active' => false,
-            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
-            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400)
+            'date_field1' => DateTime::addSeconds(new \DateTime, -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime, 86400),
         ]));
 
         $database->createDocument($collectionId, new Document([
@@ -4306,8 +4309,8 @@ trait OperatorTests
             'diff_items' => ['x', 'y', 'z', 'w'],
             'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             'active' => true,
-            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
-            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400)
+            'date_field1' => DateTime::addSeconds(new \DateTime, -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime, 86400),
         ]));
 
         // Prepare upsert documents: 2 updates + 1 new insert with ALL operators
@@ -4335,7 +4338,7 @@ trait OperatorTests
                 'active' => Operator::toggle(),
                 'date_field1' => Operator::dateAddDays(1),
                 'date_field2' => Operator::dateSubDays(1),
-                'date_field3' => Operator::dateSetNow()
+                'date_field3' => Operator::dateSetNow(),
             ]),
             // Update existing doc 2
             new Document([
@@ -4360,7 +4363,7 @@ trait OperatorTests
                 'active' => Operator::toggle(),
                 'date_field1' => Operator::dateAddDays(1),
                 'date_field2' => Operator::dateSubDays(1),
-                'date_field3' => Operator::dateSetNow()
+                'date_field3' => Operator::dateSetNow(),
             ]),
             // Insert new doc 3 (operators should use default values)
             new Document([
@@ -4384,8 +4387,8 @@ trait OperatorTests
                 'filter_numbers' => [11, 12, 13],
                 'active' => true,
                 'date_field1' => DateTime::now(),
-                'date_field2' => DateTime::now()
-            ])
+                'date_field2' => DateTime::now(),
+            ]),
         ];
 
         // Execute bulk upsert
@@ -4463,11 +4466,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_array_not_null';
         $database->createCollection($collectionId);
@@ -4477,11 +4480,11 @@ trait OperatorTests
         $doc1 = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_unique',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => []
+            'items' => [],
         ]));
 
         $updated1 = $database->updateDocument($collectionId, 'empty_unique', new Document([
-            'items' => Operator::arrayUnique()
+            'items' => Operator::arrayUnique(),
         ]));
         $this->assertIsArray($updated1->getAttribute('items'), 'ARRAY_UNIQUE should return array not NULL');
         $this->assertEquals([], $updated1->getAttribute('items'), 'ARRAY_UNIQUE on empty array should return []');
@@ -4490,11 +4493,11 @@ trait OperatorTests
         $doc2 = $database->createDocument($collectionId, new Document([
             '$id' => 'no_intersect',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         $updated2 = $database->updateDocument($collectionId, 'no_intersect', new Document([
-            'items' => Operator::arrayIntersect(['x', 'y', 'z'])
+            'items' => Operator::arrayIntersect(['x', 'y', 'z']),
         ]));
         $this->assertIsArray($updated2->getAttribute('items'), 'ARRAY_INTERSECT should return array not NULL');
         $this->assertEquals([], $updated2->getAttribute('items'), 'ARRAY_INTERSECT with no matches should return []');
@@ -4503,11 +4506,11 @@ trait OperatorTests
         $doc3 = $database->createDocument($collectionId, new Document([
             '$id' => 'diff_all',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'items' => ['a', 'b', 'c']
+            'items' => ['a', 'b', 'c'],
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'diff_all', new Document([
-            'items' => Operator::arrayDiff(['a', 'b', 'c'])
+            'items' => Operator::arrayDiff(['a', 'b', 'c']),
         ]));
         $this->assertIsArray($updated3->getAttribute('items'), 'ARRAY_DIFF should return array not NULL');
         $this->assertEquals([], $updated3->getAttribute('items'), 'ARRAY_DIFF removing all elements should return []');
@@ -4525,11 +4528,11 @@ trait OperatorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Operators)) {
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-
 
         $collectionId = 'test_operator_cache';
         $database->createCollection($collectionId);
@@ -4539,7 +4542,7 @@ trait OperatorTests
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'cache_test',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'counter' => 10
+            'counter' => 10,
         ]));
 
         // First read to potentially cache
@@ -4550,7 +4553,7 @@ trait OperatorTests
         $count = $database->updateDocuments(
             $collectionId,
             new Document([
-                'counter' => Operator::increment(5)
+                'counter' => Operator::increment(5),
             ]),
             [Query::equal('$id', ['cache_test'])]
         );
@@ -4565,7 +4568,7 @@ trait OperatorTests
         $database->updateDocuments(
             $collectionId,
             new Document([
-                'counter' => Operator::multiply(2)
+                'counter' => Operator::multiply(2),
             ])
         );
 

@@ -16,40 +16,36 @@ use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testEmptyQueries(): void
+    public function test_empty_queries(): void
     {
-        $validator = new Queries();
+        $validator = new Queries;
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
-    public function testInvalidMethod(): void
+    public function test_invalid_method(): void
     {
-        $validator = new Queries();
-        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ["value"])]));
+        $validator = new Queries;
+        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
 
-        $validator = new Queries([new Limit()]);
-        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ["value"])]));
+        $validator = new Queries([new Limit]);
+        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
     }
 
-    public function testInvalidValue(): void
+    public function test_invalid_value(): void
     {
-        $validator = new Queries([new Limit()]);
+        $validator = new Queries([new Limit]);
         $this->assertEquals(false, $validator->isValid([Query::limit(-1)]));
     }
 
     /**
      * @throws Exception
      */
-    public function testValid(): void
+    public function test_valid(): void
     {
         $attributes = [
             new Document([
@@ -68,11 +64,11 @@ class QueriesTest extends TestCase
 
         $validator = new Queries(
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
+                new Limit,
+                new Offset,
+                new Order($attributes),
             ]
         );
 

@@ -6,6 +6,7 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -18,15 +19,18 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
-use Utopia\Database\Attribute;
 use Utopia\Query\Schema\ColumnType;
 
 class MirrorTest extends Base
 {
     protected static ?Mirror $database = null;
+
     protected static ?PDO $destinationPdo = null;
+
     protected static ?PDO $sourcePdo = null;
+
     protected static Database $source;
+
     protected static Database $destination;
 
     protected static string $namespace;
@@ -37,7 +41,7 @@ class MirrorTest extends Base
      */
     protected function getDatabase(bool $fresh = false): Mirror
     {
-        if (!is_null(self::$database) && !$fresh) {
+        if (! is_null(self::$database) && ! $fresh) {
             return self::$database;
         }
 
@@ -48,7 +52,7 @@ class MirrorTest extends Base
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis');
         $redis->select(5);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
@@ -63,7 +67,7 @@ class MirrorTest extends Base
 
         $mirrorPdo = new PDO("mysql:host={$mirrorHost};port={$mirrorPort};charset=utf8mb4", $mirrorUser, $mirrorPass, MariaDB::getPDOAttributes());
 
-        $mirrorRedis = new Redis();
+        $mirrorRedis = new Redis;
         $mirrorRedis->connect('redis-mirror');
         $mirrorRedis->select(5);
         $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
@@ -76,10 +80,10 @@ class MirrorTest extends Base
         $token = static::getTestToken();
         $schemas = [
             $this->testDatabase,
-            'schema1_' . $token,
-            'schema2_' . $token,
-            'sharedTables_' . $token,
-            'sharedTablesTenantPerDocument_' . $token,
+            'schema1_'.$token,
+            'schema2_'.$token,
+            'sharedTables_'.$token,
+            'sharedTablesTenantPerDocument_'.$token,
         ];
 
         /**
@@ -99,7 +103,7 @@ class MirrorTest extends Base
         $database
             ->setDatabase($this->testDatabase)
             ->setAuthorization(self::$authorization)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         $database->create();
 
@@ -110,7 +114,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetMirrorSource(): void
+    public function test_get_mirror_source(): void
     {
         $database = $this->getDatabase();
         $source = $database->getSource();
@@ -122,7 +126,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetMirrorDestination(): void
+    public function test_get_mirror_destination(): void
     {
         $database = $this->getDatabase();
         $destination = $database->getDestination();
@@ -136,7 +140,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testCreateMirroredCollection(): void
+    public function test_create_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -154,7 +158,7 @@ class MirrorTest extends Base
      * @throws Conflict
      * @throws Exception
      */
-    public function testUpdateMirroredCollection(): void
+    public function test_update_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -184,7 +188,7 @@ class MirrorTest extends Base
         );
     }
 
-    public function testDeleteMirroredCollection(): void
+    public function test_delete_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -205,7 +209,7 @@ class MirrorTest extends Base
      * @throws Structure
      * @throws Exception
      */
-    public function testCreateMirroredDocument(): void
+    public function test_create_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
@@ -218,7 +222,7 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testCreateMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         // Assert document is created in both databases
@@ -242,7 +246,7 @@ class MirrorTest extends Base
      * @throws Structure
      * @throws Exception
      */
-    public function testUpdateMirroredDocument(): void
+    public function test_update_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
@@ -256,7 +260,7 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testUpdateMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         $document = $database->updateDocument(
@@ -277,7 +281,7 @@ class MirrorTest extends Base
         );
     }
 
-    public function testDeleteMirroredDocument(): void
+    public function test_delete_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
@@ -291,7 +295,7 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testDeleteMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         $database->deleteDocument('testDeleteMirroredDocument', $document->getId());
@@ -303,12 +307,12 @@ class MirrorTest extends Base
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$sourcePdo->exec($sql);
 
-        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$destinationPdo->exec($sql);
@@ -318,12 +322,12 @@ class MirrorTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$sourcePdo->exec($sql);
 
-        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$destinationPdo->exec($sql);

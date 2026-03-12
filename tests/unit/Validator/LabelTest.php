@@ -7,21 +7,16 @@ use Utopia\Database\Validator\Label;
 
 class LabelTest extends TestCase
 {
-    /**
-     * @var Label
-     */
     protected ?Label $object = null;
 
-    public function setUp(): void
+    protected function setUp(): void
     {
-        $this->object = new Label();
+        $this->object = new Label;
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testValues(): void
+    public function test_values(): void
     {
         // Must be strings
         $this->assertEquals(false, $this->object->isValid(false));

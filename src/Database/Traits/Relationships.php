@@ -31,7 +31,8 @@ trait Relationships
      * Skip relationships for all the calls inside the callback
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
     public function skipRelationships(callable $callback): mixed
@@ -69,15 +70,15 @@ trait Relationships
     /**
      * Cleanup a relationship on failure
      *
-     * @param string $collectionId The collection ID
-     * @param string $relatedCollectionId The related collection ID
-     * @param RelationType $type The relationship type
-     * @param bool $twoWay Whether the relationship is two-way
-     * @param string $key The relationship key
-     * @param string $twoWayKey The two-way relationship key
-     * @param RelationSide $side The relationship side
-     * @param int $maxAttempts Maximum retry attempts
-     * @return void
+     * @param  string  $collectionId  The collection ID
+     * @param  string  $relatedCollectionId  The related collection ID
+     * @param  RelationType  $type  The relationship type
+     * @param  bool  $twoWay  Whether the relationship is two-way
+     * @param  string  $key  The relationship key
+     * @param  string  $twoWayKey  The two-way relationship key
+     * @param  RelationSide  $side  The relationship side
+     * @param  int  $maxAttempts  Maximum retry attempts
+     *
      * @throws DatabaseException If cleanup fails after all retries
      */
     private function cleanupRelationship(
@@ -110,8 +111,6 @@ trait Relationships
     /**
      * Create a relationship attribute
      *
-     * @param Relationship $relationship
-     * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -136,8 +135,8 @@ trait Relationships
 
         $type = $relationship->type;
         $twoWay = $relationship->twoWay;
-        $id = !empty($relationship->key) ? $relationship->key : $this->adapter->filter($relatedCollection->getId());
-        $twoWayKey = !empty($relationship->twoWayKey) ? $relationship->twoWayKey : $this->adapter->filter($collection->getId());
+        $id = ! empty($relationship->key) ? $relationship->key : $this->adapter->filter($relatedCollection->getId());
+        $twoWayKey = ! empty($relationship->twoWayKey) ? $relationship->twoWayKey : $this->adapter->filter($collection->getId());
         $onDelete = $relationship->onDelete;
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -193,7 +192,7 @@ trait Relationships
 
         $junctionCollection = null;
         if ($type === RelationType::ManyToMany) {
-            $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+            $junctionCollection = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
             $junctionAttributes = [
                 new Attribute(
                     key: $id,
@@ -210,12 +209,12 @@ trait Relationships
             ];
             $junctionIndexes = [
                 new Index(
-                    key: '_index_' . $id,
+                    key: '_index_'.$id,
                     type: IndexType::Key,
                     attributes: [$id],
                 ),
                 new Index(
-                    key: '_index_' . $twoWayKey,
+                    key: '_index_'.$twoWayKey,
                     type: IndexType::Key,
                     attributes: [$twoWayKey],
                 ),
@@ -249,12 +248,12 @@ trait Relationships
         try {
             $created = $this->adapter->createRelationship($adapterRelationship);
 
-            if (!$created) {
+            if (! $created) {
                 if ($junctionCollection !== null) {
                     try {
                         $this->silent(fn () => $this->cleanupCollection($junctionCollection));
                     } catch (\Throwable $e) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$e->getMessage());
                     }
                 }
                 throw new DatabaseException('Failed to create relationship');
@@ -294,23 +293,23 @@ trait Relationships
                             RelationSide::Parent
                         );
                     } catch (\Throwable $e) {
-                        Console::error("Failed to cleanup relationship '{$id}': " . $e->getMessage());
+                        Console::error("Failed to cleanup relationship '{$id}': ".$e->getMessage());
                     }
 
                     if ($junctionCollection !== null) {
                         try {
                             $this->cleanupCollection($junctionCollection);
                         } catch (\Throwable $e) {
-                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $e->getMessage());
+                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$e->getMessage());
                         }
                     }
                 }
 
-                throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
+                throw new DatabaseException('Failed to create relationship: '.$e->getMessage());
             }
 
-            $indexKey = '_index_' . $id;
-            $twoWayIndexKey = '_index_' . $twoWayKey;
+            $indexKey = '_index_'.$id;
+            $twoWayIndexKey = '_index_'.$twoWayKey;
             $indexesCreated = [];
 
             try {
@@ -342,7 +341,7 @@ trait Relationships
                     try {
                         $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
                     } catch (\Throwable $cleanupError) {
-                        Console::error("Failed to cleanup index '{$indexInfo['index']}': " . $cleanupError->getMessage());
+                        Console::error("Failed to cleanup index '{$indexInfo['index']}': ".$cleanupError->getMessage());
                     }
                 }
 
@@ -357,7 +356,7 @@ trait Relationships
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 } catch (\Throwable $cleanupError) {
-                    Console::error("Failed to cleanup metadata for relationship '{$id}': " . $cleanupError->getMessage());
+                    Console::error("Failed to cleanup metadata for relationship '{$id}': ".$cleanupError->getMessage());
                 }
 
                 // Cleanup relationship
@@ -372,18 +371,18 @@ trait Relationships
                         RelationSide::Parent
                     );
                 } catch (\Throwable $cleanupError) {
-                    Console::error("Failed to cleanup relationship '{$id}': " . $cleanupError->getMessage());
+                    Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
                 }
 
                 if ($junctionCollection !== null) {
                     try {
                         $this->cleanupCollection($junctionCollection);
                     } catch (\Throwable $cleanupError) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': " . $cleanupError->getMessage());
+                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
                     }
                 }
 
-                throw new DatabaseException('Failed to create relationship indexes: ' . $e->getMessage());
+                throw new DatabaseException('Failed to create relationship indexes: '.$e->getMessage());
             }
         });
 
@@ -399,13 +398,8 @@ trait Relationships
     /**
      * Update a relationship attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @param bool|null $twoWay
-     * @param string|null $onDelete
-     * @return bool
+     * @param  string|null  $onDelete
+     *
      * @throws ConflictException
      * @throws DatabaseException
      */
@@ -430,7 +424,7 @@ trait Relationships
         $attributes = $collection->getAttribute('attributes', []);
 
         if (
-            !\is_null($newKey)
+            ! \is_null($newKey)
             && \in_array($newKey, \array_map(fn ($attribute) => $attribute['key'], $attributes))
         ) {
             throw new DuplicateException('Relationship already exists');
@@ -452,12 +446,12 @@ trait Relationships
         // Determine if we need to alter the database (rename columns/indexes)
         $oldAttribute = $attributes[$attributeIndex];
         $oldTwoWayKey = $oldAttribute['options']['twoWayKey'];
-        $altering = (!\is_null($newKey) && $newKey !== $id)
-            || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $oldTwoWayKey);
+        $altering = (! \is_null($newKey) && $newKey !== $id)
+            || (! \is_null($newTwoWayKey) && $newTwoWayKey !== $oldTwoWayKey);
 
         // Validate new keys don't already exist
         if (
-            !\is_null($newTwoWayKey)
+            ! \is_null($newTwoWayKey)
             && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedCollection->getAttribute('attributes', [])))
         ) {
             throw new DuplicateException('Related attribute already exists');
@@ -487,7 +481,7 @@ trait Relationships
                     $actualNewTwoWayKey
                 );
 
-                if (!$adapterUpdated) {
+                if (! $adapterUpdated) {
                     throw new DatabaseException('Failed to update relationship');
                 }
             } catch (\Throwable $e) {
@@ -507,10 +501,10 @@ trait Relationships
                     if ($newKeyExists) {
                         $adapterUpdated = true;
                     } else {
-                        throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
+                        throw new DatabaseException("Failed to update relationship '{$id}': ".$e->getMessage(), previous: $e);
                     }
                 } else {
-                    throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
+                    throw new DatabaseException("Failed to update relationship '{$id}': ".$e->getMessage(), previous: $e);
                 }
             }
         }
@@ -583,13 +577,13 @@ trait Relationships
         $renameIndex = function (string $collection, string $key, string $newKey) {
             $this->updateIndexMeta(
                 $collection,
-                '_index_' . $key,
+                '_index_'.$key,
                 function ($index) use ($newKey) {
                     $index->setAttribute('attributes', [$newKey]);
                 }
             );
             $this->silent(
-                fn () => $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+                fn () => $this->renameIndex($collection, '_index_'.$key, '_index_'.$newKey)
             );
         };
 
@@ -726,7 +720,7 @@ trait Relationships
                 }
             }
 
-            throw new DatabaseException("Failed to update relationship indexes for '{$id}': " . $e->getMessage(), previous: $e);
+            throw new DatabaseException("Failed to update relationship indexes for '{$id}': ".$e->getMessage(), previous: $e);
         }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -738,10 +732,7 @@ trait Relationships
     /**
      * Delete a relationship attribute
      *
-     * @param string $collection
-     * @param string $id
      *
-     * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -795,8 +786,8 @@ trait Relationships
         $deletedJunction = null;
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side, &$deletedIndexes, &$deletedJunction) {
-            $indexKey = '_index_' . $id;
-            $twoWayIndexKey = '_index_' . $twoWayKey;
+            $indexKey = '_index_'.$id;
+            $twoWayIndexKey = '_index_'.$twoWayKey;
 
             switch ($type) {
                 case RelationType::OneToOne->value:
@@ -869,7 +860,7 @@ trait Relationships
         try {
             $deleted = $this->adapter->deleteRelationship($deleteRelModel);
 
-            if (!$deleted) {
+            if (! $deleted) {
                 throw new DatabaseException('Failed to delete relationship');
             }
             $shouldRollback = true;
@@ -923,7 +914,7 @@ trait Relationships
             }
 
             // Restore junction collection metadata for M2M
-            if ($deletedJunction !== null && !$deletedJunction->isEmpty()) {
+            if ($deletedJunction !== null && ! $deletedJunction->isEmpty()) {
                 try {
                     $this->silent(fn () => $this->createDocument(self::METADATA, $deletedJunction));
                 } catch (\Throwable) {
@@ -932,7 +923,7 @@ trait Relationships
             }
 
             throw new DatabaseException(
-                "Failed to persist metadata after retries for relationship deletion '{$id}': " . $e->getMessage(),
+                "Failed to persist metadata after retries for relationship deletion '{$id}': ".$e->getMessage(),
                 previous: $e
             );
         }
@@ -952,7 +943,7 @@ trait Relationships
     private function getJunctionCollection(Document $collection, Document $relatedCollection, string $side): string
     {
         return $side === RelationSide::Parent->value
-            ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
-            : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+            ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
+            : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
     }
 }

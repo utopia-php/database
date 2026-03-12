@@ -10,8 +10,8 @@ use Utopia\Query\Schema\ColumnType;
 class Document extends Queries
 {
     /**
-     * @param array<mixed> $attributes
-     * @param bool $supportForAttributes
+     * @param  array<mixed>  $attributes
+     *
      * @throws Exception
      */
     public function __construct(array $attributes, bool $supportForAttributes = true)

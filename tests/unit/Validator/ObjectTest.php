@@ -7,17 +7,17 @@ use Utopia\Database\Validator\ObjectValidator;
 
 class ObjectTest extends TestCase
 {
-    public function testValidAssociativeObjects(): void
+    public function test_valid_associative_objects(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValidator;
 
         $this->assertTrue($validator->isValid(['key' => 'value']));
         $this->assertTrue($validator->isValid([
             'a' => [
                 'b' => [
-                    'c' => 123
-                ]
-            ]
+                    'c' => 123,
+                ],
+            ],
         ]));
 
         $this->assertTrue($validator->isValid([
@@ -25,43 +25,43 @@ class ObjectTest extends TestCase
             'metadata' => [
                 'rating' => 4.5,
                 'info' => [
-                    'category' => 'science'
-                ]
-            ]
+                    'category' => 'science',
+                ],
+            ],
         ]));
 
         $this->assertTrue($validator->isValid([
             'key1' => null,
-            'key2' => ['nested' => null]
+            'key2' => ['nested' => null],
         ]));
 
         $this->assertTrue($validator->isValid([
-            'meta' => (object)['x' => 1]
+            'meta' => (object) ['x' => 1],
         ]));
 
         $this->assertTrue($validator->isValid([
             'a' => 1,
-            2 => 'b'
+            2 => 'b',
         ]));
 
     }
 
-    public function testInvalidStructures(): void
+    public function test_invalid_structures(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValidator;
 
         $this->assertFalse($validator->isValid(['a', 'b', 'c']));
 
         $this->assertFalse($validator->isValid('not an array'));
 
         $this->assertFalse($validator->isValid([
-            0 => 'value'
+            0 => 'value',
         ]));
     }
 
-    public function testEmptyCases(): void
+    public function test_empty_cases(): void
     {
-        $validator = new ObjectValidator();
+        $validator = new ObjectValidator;
 
         $this->assertTrue($validator->isValid([]));
 

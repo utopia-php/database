@@ -17,44 +17,40 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexedQueriesTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testEmptyQueries(): void
+    public function test_empty_queries(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
-    public function testInvalidQuery(): void
+    public function test_invalid_query(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
 
-        $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
+        $this->assertEquals(false, $validator->isValid(['this.is.invalid']));
     }
 
-    public function testInvalidMethod(): void
+    public function test_invalid_method(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new IndexedQueries([], [], [new Limit]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
-    public function testInvalidValue(): void
+    public function test_invalid_value(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new IndexedQueries([], [], [new Limit]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
-    public function testValid(): void
+    public function test_valid(): void
     {
         $attributes = [
             new Document([
@@ -80,11 +76,11 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
+                new Limit,
+                new Offset,
+                new Order($attributes),
             ]
         );
 
@@ -122,7 +118,7 @@ class IndexedQueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid([$query]));
     }
 
-    public function testMissingIndex(): void
+    public function test_missing_index(): void
     {
         $attributes = [
             new Document([
@@ -143,11 +139,11 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
+                new Limit,
+                new Offset,
+                new Order($attributes),
             ]
         );
 
@@ -168,7 +164,7 @@ class IndexedQueriesTest extends TestCase
         $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
     }
 
-    public function testTwoAttributesFulltext(): void
+    public function test_two_attributes_fulltext(): void
     {
         $attributes = [
             new Document([
@@ -188,7 +184,7 @@ class IndexedQueriesTest extends TestCase
         $indexes = [
             new Document([
                 'type' => IndexType::Fulltext->value,
-                'attributes' => ['ft1','ft2'],
+                'attributes' => ['ft1', 'ft2'],
             ]),
         ];
 
@@ -196,19 +192,18 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
+                new Limit,
+                new Offset,
+                new Order($attributes),
             ]
         );
 
         $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
     }
 
-
-    public function testJsonParse(): void
+    public function test_json_parse(): void
     {
         try {
             Query::parse('{"method":"equal","attribute":"name","values":["value"]'); // broken Json;

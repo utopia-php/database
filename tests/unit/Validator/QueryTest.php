@@ -19,7 +19,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $attributes = [
             [
@@ -99,14 +99,12 @@ class QueryTest extends TestCase
         }
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     /**
      * @throws Exception
      */
-    public function testQuery(): void
+    public function test_query(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -136,7 +134,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testAttributeNotFound(): void
+    public function test_attribute_not_found(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -152,7 +150,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testAttributeWrongType(): void
+    public function test_attribute_wrong_type(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -164,7 +162,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryDate(): void
+    public function test_query_date(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -175,7 +173,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryLimit(): void
+    public function test_query_limit(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -189,7 +187,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryOffset(): void
+    public function test_query_offset(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -203,7 +201,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryOrder(): void
+    public function test_query_order(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -223,7 +221,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryCursor(): void
+    public function test_query_cursor(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -234,7 +232,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryGetByType(): void
+    public function test_query_get_by_type(): void
     {
         $queries = [
             Query::equal('key', ['value']),
@@ -305,7 +303,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueryEmpty(): void
+    public function test_query_empty(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -334,7 +332,7 @@ class QueryTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testOrQuery(): void
+    public function test_or_query(): void
     {
         $validator = new Documents($this->attributes, [], ColumnType::Integer->value);
 
@@ -351,7 +349,7 @@ class QueryTest extends TestCase
                 Query::or(
                     [
                         Query::equal('price', [0]),
-                        Query::equal('not_found', [''])
+                        Query::equal('not_found', ['']),
                     ]
                 )]
         ));
@@ -364,7 +362,7 @@ class QueryTest extends TestCase
                 Query::or(
                     [
                         Query::select(['price']),
-                        Query::limit(1)
+                        Query::limit(1),
                     ]
                 )]
         ));

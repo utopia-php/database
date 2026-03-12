@@ -20,8 +20,7 @@ class Attribute
         public array $filters = [],
         public ?string $status = null,
         public ?array $options = null,
-    ) {
-    }
+    ) {}
 
     public function toDocument(): Document
     {
@@ -71,7 +70,7 @@ class Attribute
     /**
      * Create from an associative array (used by batch operations).
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {

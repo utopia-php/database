@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -9,7 +10,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Attribute;
 use Utopia\Query\Schema\ColumnType;
 
 // Test custom document classes
@@ -82,7 +82,9 @@ trait CustomDocumentTypeTests
 
         // @phpstan-ignore-next-line - Testing with invalid class name
         $database->setDocumentType('users', 'NonExistentClass');
-    }    public function testSetDocumentTypeWithNonDocumentClass(): void
+    }
+
+    public function testSetDocumentTypeWithNonDocumentClass(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

@@ -28,8 +28,7 @@ class Select extends Base
     ];
 
     /**
-     * @param array<Document> $attributes
-     * @param bool $supportForAttributes
+     * @param  array<Document>  $attributes
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
@@ -45,12 +44,11 @@ class Select extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     * @return bool
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
@@ -65,17 +63,19 @@ class Select extends Base
 
         if (\count($value->getValues()) === 0) {
             $this->message = 'No attributes selected';
+
             return false;
         }
 
         if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
             $this->message = 'Duplicate attributes selected';
+
             return false;
 
         }
         foreach ($value->getValues() as $attribute) {
             if (\str_contains($attribute, '.')) {
-                //special symbols with `dots`
+                // special symbols with `dots`
                 if (isset($this->schema[$attribute])) {
                     continue;
                 }
@@ -90,11 +90,13 @@ class Select extends Base
                 continue;
             }
 
-            if ($this->supportForAttributes && !isset($this->schema[$attribute]) && $attribute !== '*') {
-                $this->message = 'Attribute not found in schema: ' . $attribute;
+            if ($this->supportForAttributes && ! isset($this->schema[$attribute]) && $attribute !== '*') {
+                $this->message = 'Attribute not found in schema: '.$attribute;
+
                 return false;
             }
         }
+
         return true;
     }
 

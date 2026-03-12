@@ -2,18 +2,18 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Capability;
-use Utopia\Database\Database;
-use Utopia\Database\Attribute;
 use Utopia\Database\Index;
+use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -24,8 +24,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -69,8 +70,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -90,8 +92,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -111,8 +114,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -123,26 +127,26 @@ trait VectorTests
         // Create documents with vector data
         $doc1 = $database->createDocument('vectorDocuments', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Document 1',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $doc2 = $database->createDocument('vectorDocuments', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Document 2',
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         $doc3 = $database->createDocument('vectorDocuments', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Document 3',
-            'embedding' => [0.0, 0.0, 1.0]
+            'embedding' => [0.0, 0.0, 1.0],
         ]));
 
         $this->assertNotEmpty($doc1->getId());
@@ -162,8 +166,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -174,26 +179,26 @@ trait VectorTests
         // Create test documents with read permissions
         $doc1 = $database->createDocument('vectorQueries', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Test 1',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $doc2 = $database->createDocument('vectorQueries', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Test 2',
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         $doc3 = $database->createDocument('vectorQueries', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Test 3',
-            'embedding' => [0.5, 0.5, 0.0]
+            'embedding' => [0.5, 0.5, 0.0],
         ]));
 
         // Verify documents were created
@@ -203,12 +208,12 @@ trait VectorTests
 
         // Test without vector queries first
         $allDocs = $database->find('vectorQueries');
-        $this->assertCount(3, $allDocs, "Should have 3 documents in collection");
+        $this->assertCount(3, $allDocs, 'Should have 3 documents in collection');
 
         // Test vector dot product query
         $results = $database->find('vectorQueries', [
             Query::vectorDot('embedding', [1.0, 0.0, 0.0]),
-            Query::orderAsc('$id')
+            Query::orderAsc('$id'),
         ]);
 
         $this->assertCount(3, $results);
@@ -216,7 +221,7 @@ trait VectorTests
         // Test vector cosine distance query
         $results = $database->find('vectorQueries', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::orderAsc('$id')
+            Query::orderAsc('$id'),
         ]);
 
         $this->assertCount(3, $results);
@@ -224,7 +229,7 @@ trait VectorTests
         // Test vector euclidean distance query
         $results = $database->find('vectorQueries', [
             Query::vectorEuclidean('embedding', [1.0, 0.0, 0.0]),
-            Query::orderAsc('$id')
+            Query::orderAsc('$id'),
         ]);
 
         $this->assertCount(3, $results);
@@ -232,7 +237,7 @@ trait VectorTests
         // Test vector queries with limit - should return only top results
         $results = $database->find('vectorQueries', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(2)
+            Query::limit(2),
         ]);
 
         $this->assertCount(2, $results);
@@ -242,7 +247,7 @@ trait VectorTests
         // Test vector query with limit of 1
         $results = $database->find('vectorQueries', [
             Query::vectorDot('embedding', [0.0, 1.0, 0.0]),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertCount(1, $results);
@@ -251,7 +256,7 @@ trait VectorTests
         // Test vector query combined with other filters
         $results = $database->find('vectorQueries', [
             Query::vectorCosine('embedding', [0.5, 0.5, 0.0]),
-            Query::notEqual('name', 'Test 1')
+            Query::notEqual('name', 'Test 1'),
         ]);
 
         $this->assertCount(2, $results);
@@ -263,7 +268,7 @@ trait VectorTests
         // Test vector query with specific name filter
         $results = $database->find('vectorQueries', [
             Query::vectorEuclidean('embedding', [0.7, 0.7, 0.0]),
-            Query::equal('name', ['Test 3'])
+            Query::equal('name', ['Test 3']),
         ]);
 
         $this->assertCount(1, $results);
@@ -273,7 +278,7 @@ trait VectorTests
         $results = $database->find('vectorQueries', [
             Query::vectorDot('embedding', [0.5, 0.5, 0.0]),
             Query::limit(2),
-            Query::offset(1)
+            Query::offset(1),
         ]);
 
         $this->assertCount(2, $results);
@@ -283,7 +288,7 @@ trait VectorTests
         $results = $database->find('vectorQueries', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::equal('name', ['Test 2']),
-            Query::equal('name', ['Test 3'])  // Impossible condition
+            Query::equal('name', ['Test 3']),  // Impossible condition
         ]);
 
         $this->assertCount(0, $results);
@@ -293,7 +298,7 @@ trait VectorTests
         $results = $database->find('vectorQueries', [
             Query::vectorDot('embedding', [0.4, 0.6, 0.0]),
             Query::orderDesc('name'),
-            Query::limit(2)
+            Query::limit(2),
         ]);
 
         $this->assertCount(2, $results);
@@ -314,8 +319,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -326,7 +332,7 @@ trait VectorTests
         // Test that vector queries fail on non-vector attributes
         $this->expectException(DatabaseException::class);
         $database->find('vectorValidation', [
-            Query::vectorDot('name', [1.0, 0.0, 0.0])
+            Query::vectorDot('name', [1.0, 0.0, 0.0]),
         ]);
 
         // Cleanup
@@ -338,8 +344,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -365,22 +372,22 @@ trait VectorTests
         // Test that queries work with indexes
         $database->createDocument('vectorIndexes', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $database->createDocument('vectorIndexes', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         // Query should use the appropriate index based on the operator
         $results = $database->find('vectorIndexes', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertCount(1, $results);
@@ -394,8 +401,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -408,9 +416,9 @@ trait VectorTests
 
         $database->createDocument('vectorDimMismatch', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0] // Only 2 dimensions, expects 3
+            'embedding' => [1.0, 0.0], // Only 2 dimensions, expects 3
         ]));
 
         // Cleanup
@@ -422,8 +430,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -434,9 +443,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorInvalidTypes', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => ['one', 'two', 'three']
+                'embedding' => ['one', 'two', 'three'],
             ]));
             $this->fail('Should have thrown exception for non-numeric vector values');
         } catch (DatabaseException $e) {
@@ -447,9 +456,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorInvalidTypes', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [1.0, 'two', 3.0]
+                'embedding' => [1.0, 'two', 3.0],
             ]));
             $this->fail('Should have thrown exception for mixed type vector values');
         } catch (DatabaseException $e) {
@@ -465,8 +474,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -476,9 +486,9 @@ trait VectorTests
         // Test with null vector (should work for non-required attribute)
         $doc1 = $database->createDocument('vectorNullEmpty', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => null
+            'embedding' => null,
         ]));
 
         $this->assertNull($doc1->getAttribute('embedding'));
@@ -487,9 +497,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorNullEmpty', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => []
+                'embedding' => [],
             ]));
             $this->fail('Should have thrown exception for empty vector');
         } catch (DatabaseException $e) {
@@ -505,8 +515,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -520,9 +531,9 @@ trait VectorTests
 
         $doc = $database->createDocument('vectorLarge', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => $largeVector
+            'embedding' => $largeVector,
         ]));
 
         $this->assertCount(1536, $doc->getAttribute('embedding'));
@@ -533,7 +544,7 @@ trait VectorTests
         $searchVector[0] = 1.0;
 
         $results = $database->find('vectorLarge', [
-            Query::vectorCosine('embedding', $searchVector)
+            Query::vectorCosine('embedding', $searchVector),
         ]);
 
         $this->assertCount(1, $results);
@@ -547,8 +558,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -559,23 +571,23 @@ trait VectorTests
         $doc = $database->createDocument('vectorUpdates', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $this->assertEquals([1.0, 0.0, 0.0], $doc->getAttribute('embedding'));
 
         // Update the vector
         $updated = $database->updateDocument('vectorUpdates', $doc->getId(), new Document([
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         $this->assertEquals([0.0, 1.0, 0.0], $updated->getAttribute('embedding'));
 
         // Test partial update (should replace entire vector)
         $updated2 = $database->updateDocument('vectorUpdates', $doc->getId(), new Document([
-            'embedding' => [0.5, 0.5, 0.5]
+            'embedding' => [0.5, 0.5, 0.5],
         ]));
 
         $this->assertEquals([0.5, 0.5, 0.5], $updated2->getAttribute('embedding'));
@@ -589,8 +601,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -602,25 +615,25 @@ trait VectorTests
         // Create documents with multiple vector attributes
         $doc1 = $database->createDocument('multiVector', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Doc 1',
             'embedding1' => [1.0, 0.0, 0.0],
-            'embedding2' => [1.0, 0.0, 0.0, 0.0, 0.0]
+            'embedding2' => [1.0, 0.0, 0.0, 0.0, 0.0],
         ]));
 
         $doc2 = $database->createDocument('multiVector', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Doc 2',
             'embedding1' => [0.0, 1.0, 0.0],
-            'embedding2' => [0.0, 1.0, 0.0, 0.0, 0.0]
+            'embedding2' => [0.0, 1.0, 0.0, 0.0, 0.0],
         ]));
 
         // Query by first vector
         $results = $database->find('multiVector', [
-            Query::vectorCosine('embedding1', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -628,7 +641,7 @@ trait VectorTests
 
         // Query by second vector
         $results = $database->find('multiVector', [
-            Query::vectorCosine('embedding2', [0.0, 1.0, 0.0, 0.0, 0.0])
+            Query::vectorCosine('embedding2', [0.0, 1.0, 0.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -643,8 +656,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -656,14 +670,14 @@ trait VectorTests
         for ($i = 0; $i < 10; $i++) {
             $database->createDocument('vectorPagination', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'index' => $i,
                 'embedding' => [
                     cos($i * M_PI / 10),
                     sin($i * M_PI / 10),
-                    0.0
-                ]
+                    0.0,
+                ],
             ]));
         }
 
@@ -674,7 +688,7 @@ trait VectorTests
         $page1 = $database->find('vectorPagination', [
             Query::vectorCosine('embedding', $searchVector),
             Query::limit(3),
-            Query::offset(0)
+            Query::offset(0),
         ]);
 
         $this->assertCount(3, $page1);
@@ -683,7 +697,7 @@ trait VectorTests
         $page2 = $database->find('vectorPagination', [
             Query::vectorCosine('embedding', $searchVector),
             Query::limit(3),
-            Query::offset(3)
+            Query::offset(3),
         ]);
 
         $this->assertCount(3, $page2);
@@ -696,7 +710,7 @@ trait VectorTests
         // Test with cursor pagination
         $firstBatch = $database->find('vectorPagination', [
             Query::vectorCosine('embedding', $searchVector),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $this->assertCount(5, $firstBatch);
@@ -705,7 +719,7 @@ trait VectorTests
         $nextBatch = $database->find('vectorPagination', [
             Query::vectorCosine('embedding', $searchVector),
             Query::cursorAfter($lastDoc),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $this->assertCount(5, $nextBatch);
@@ -720,8 +734,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -745,9 +760,9 @@ trait VectorTests
         foreach ($docs as $doc) {
             $database->createDocument('vectorTextSearch', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                ...$doc
+                ...$doc,
             ]));
         }
 
@@ -755,7 +770,7 @@ trait VectorTests
         $results = $database->find('vectorTextSearch', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::equal('category', ['AI']),
-            Query::limit(2)
+            Query::limit(2),
         ]);
 
         $this->assertCount(2, $results);
@@ -766,7 +781,7 @@ trait VectorTests
         $results = $database->find('vectorTextSearch', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::search('title', 'Learning'),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $this->assertCount(2, $results);
@@ -778,7 +793,7 @@ trait VectorTests
         $results = $database->find('vectorTextSearch', [
             Query::vectorEuclidean('embedding', [0.5, 0.5, 0.0]),
             Query::notEqual('category', ['Web']),
-            Query::limit(3)
+            Query::limit(3),
         ]);
 
         $this->assertCount(3, $results);
@@ -795,8 +810,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -806,9 +822,9 @@ trait VectorTests
         // Test with very small values (near zero)
         $doc1 = $database->createDocument('vectorSpecialFloats', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1e-10, 1e-10, 1e-10]
+            'embedding' => [1e-10, 1e-10, 1e-10],
         ]));
 
         $this->assertNotNull($doc1->getId());
@@ -816,9 +832,9 @@ trait VectorTests
         // Test with very large values
         $doc2 = $database->createDocument('vectorSpecialFloats', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1e10, 1e10, 1e10]
+            'embedding' => [1e10, 1e10, 1e10],
         ]));
 
         $this->assertNotNull($doc2->getId());
@@ -826,9 +842,9 @@ trait VectorTests
         // Test with negative values
         $doc3 = $database->createDocument('vectorSpecialFloats', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [-1.0, -0.5, -0.1]
+            'embedding' => [-1.0, -0.5, -0.1],
         ]));
 
         $this->assertNotNull($doc3->getId());
@@ -836,16 +852,16 @@ trait VectorTests
         // Test with mixed sign values
         $doc4 = $database->createDocument('vectorSpecialFloats', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [-1.0, 0.0, 1.0]
+            'embedding' => [-1.0, 0.0, 1.0],
         ]));
 
         $this->assertNotNull($doc4->getId());
 
         // Query with negative vector
         $results = $database->find('vectorSpecialFloats', [
-            Query::vectorCosine('embedding', [-1.0, -1.0, -1.0])
+            Query::vectorCosine('embedding', [-1.0, -1.0, -1.0]),
         ]);
 
         $this->assertGreaterThan(0, count($results));
@@ -859,8 +875,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -878,10 +895,10 @@ trait VectorTests
 
             $database->createDocument('vectorPerf', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'name' => "Doc $i",
-                'embedding' => $vector
+                'embedding' => $vector,
             ]));
         }
 
@@ -891,7 +908,7 @@ trait VectorTests
         $startTime = microtime(true);
         $results1 = $database->find('vectorPerf', [
             Query::vectorCosine('embedding', $searchVector),
-            Query::limit(10)
+            Query::limit(10),
         ]);
         $timeWithoutIndex = microtime(true) - $startTime;
 
@@ -904,7 +921,7 @@ trait VectorTests
         $startTime = microtime(true);
         $results2 = $database->find('vectorPerf', [
             Query::vectorCosine('embedding', $searchVector),
-            Query::limit(10)
+            Query::limit(10),
         ]);
         $timeWithIndex = microtime(true) - $startTime;
 
@@ -925,8 +942,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -936,16 +954,16 @@ trait VectorTests
 
         $database->createDocument('vectorValidation2', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'text' => 'Test',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         // Test vector query with wrong dimension count
         try {
             $database->find('vectorValidation2', [
-                Query::vectorCosine('embedding', [1.0, 0.0]) // Wrong dimension
+                Query::vectorCosine('embedding', [1.0, 0.0]), // Wrong dimension
             ]);
             $this->fail('Should have thrown exception for dimension mismatch');
         } catch (DatabaseException $e) {
@@ -955,7 +973,7 @@ trait VectorTests
         // Test vector query on non-vector attribute
         try {
             $database->find('vectorValidation2', [
-                Query::vectorCosine('text', [1.0, 0.0, 0.0])
+                Query::vectorCosine('text', [1.0, 0.0, 0.0]),
             ]);
             $this->fail('Should have thrown exception for non-vector attribute');
         } catch (DatabaseException $e) {
@@ -971,8 +989,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -982,21 +1001,21 @@ trait VectorTests
         // Create documents with normalized and non-normalized vectors
         $doc1 = $database->createDocument('vectorNorm', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0] // Already normalized
+            'embedding' => [1.0, 0.0, 0.0], // Already normalized
         ]));
 
         $doc2 = $database->createDocument('vectorNorm', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [3.0, 4.0, 0.0] // Not normalized (magnitude = 5)
+            'embedding' => [3.0, 4.0, 0.0], // Not normalized (magnitude = 5)
         ]));
 
         // Cosine similarity should work regardless of normalization
         $results = $database->find('vectorNorm', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1014,8 +1033,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1026,9 +1046,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorInfinity', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [INF, 0.0, 0.0]
+                'embedding' => [INF, 0.0, 0.0],
             ]));
             $this->fail('Should have thrown exception for INF value');
         } catch (DatabaseException $e) {
@@ -1039,9 +1059,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorInfinity', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [-INF, 0.0, 0.0]
+                'embedding' => [-INF, 0.0, 0.0],
             ]));
             $this->fail('Should have thrown exception for -INF value');
         } catch (DatabaseException $e) {
@@ -1057,8 +1077,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1069,9 +1090,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorNaN', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [NAN, 0.0, 0.0]
+                'embedding' => [NAN, 0.0, 0.0],
             ]));
             $this->fail('Should have thrown exception for NaN value');
         } catch (DatabaseException $e) {
@@ -1087,8 +1108,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1099,9 +1121,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorAssoc', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => ['x' => 1.0, 'y' => 0.0, 'z' => 0.0]
+                'embedding' => ['x' => 1.0, 'y' => 0.0, 'z' => 0.0],
             ]));
             $this->fail('Should have thrown exception for associative array');
         } catch (DatabaseException $e) {
@@ -1117,8 +1139,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1132,9 +1155,9 @@ trait VectorTests
             $vector[2] = 1.0; // Skip index 1
             $database->createDocument('vectorSparse', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => $vector
+                'embedding' => $vector,
             ]));
             $this->fail('Should have thrown exception for sparse array');
         } catch (DatabaseException $e) {
@@ -1150,8 +1173,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1162,9 +1186,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorNested', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [[1.0], [0.0], [0.0]]
+                'embedding' => [[1.0], [0.0], [0.0]],
             ]));
             $this->fail('Should have thrown exception for nested array');
         } catch (DatabaseException $e) {
@@ -1180,8 +1204,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1192,9 +1217,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorBooleans', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [true, false, true]
+                'embedding' => [true, false, true],
             ]));
             $this->fail('Should have thrown exception for boolean values');
         } catch (DatabaseException $e) {
@@ -1210,8 +1235,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1222,9 +1248,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorStringNums', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => ['1.0', '2.0', '3.0']
+                'embedding' => ['1.0', '2.0', '3.0'],
             ]));
             $this->fail('Should have thrown exception for string numbers');
         } catch (DatabaseException $e) {
@@ -1235,9 +1261,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorStringNums', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [' 1.0 ', '2.0', '3.0']
+                'embedding' => [' 1.0 ', '2.0', '3.0'],
             ]));
             $this->fail('Should have thrown exception for string numbers with spaces');
         } catch (DatabaseException $e) {
@@ -1253,8 +1279,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1278,40 +1305,40 @@ trait VectorTests
         // Create parent documents with vectors
         $parent1 = $database->createDocument('vectorParent', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Parent 1',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $parent2 = $database->createDocument('vectorParent', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Parent 2',
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         // Create child documents
         $child1 = $database->createDocument('vectorChild', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'title' => 'Child 1',
-            'parent' => $parent1->getId()
+            'parent' => $parent1->getId(),
         ]));
 
         $child2 = $database->createDocument('vectorChild', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'title' => 'Child 2',
-            'parent' => $parent2->getId()
+            'parent' => $parent2->getId(),
         ]));
 
         // Query parents by vector similarity
         $results = $database->find('vectorParent', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1326,7 +1353,7 @@ trait VectorTests
         // Query with vector and relationship filter combined
         $results = $database->find('vectorParent', [
             Query::vectorCosine('embedding', [0.5, 0.5, 0.0]),
-            Query::equal('name', ['Parent 1'])
+            Query::equal('name', ['Parent 1']),
         ]);
 
         $this->assertCount(1, $results);
@@ -1341,8 +1368,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1366,34 +1394,34 @@ trait VectorTests
         // Create documents
         $author = $database->createDocument('vectorAuthors', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Author 1',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $book1 = $database->createDocument('vectorBooks', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'title' => 'Book 1',
             'embedding' => [0.9, 0.1, 0.0],
-            'author' => $author->getId()
+            'author' => $author->getId(),
         ]));
 
         $book2 = $database->createDocument('vectorBooks', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'title' => 'Book 2',
             'embedding' => [0.8, 0.2, 0.0],
-            'author' => $author->getId()
+            'author' => $author->getId(),
         ]));
 
         // Query books by vector similarity
         $results = $database->find('vectorBooks', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertCount(1, $results);
@@ -1414,8 +1442,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1425,9 +1454,9 @@ trait VectorTests
         // Create document with all-zeros vector
         $doc = $database->createDocument('vectorZeros', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.0, 0.0, 0.0]
+            'embedding' => [0.0, 0.0, 0.0],
         ]));
 
         $this->assertEquals([0.0, 0.0, 0.0], $doc->getAttribute('embedding'));
@@ -1435,14 +1464,14 @@ trait VectorTests
         // Create another document with non-zero vector
         $doc2 = $database->createDocument('vectorZeros', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         // Query with zero vector - cosine similarity should handle gracefully
         $results = $database->find('vectorZeros', [
-            Query::vectorCosine('embedding', [0.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [0.0, 0.0, 0.0]),
         ]);
 
         // Should return documents, though similarity may be undefined
@@ -1450,7 +1479,7 @@ trait VectorTests
 
         // Query with non-zero vector against zero vectors
         $results = $database->find('vectorZeros', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1464,8 +1493,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1475,21 +1505,21 @@ trait VectorTests
         // Create multiple documents with zero vectors
         $database->createDocument('vectorCosineZero', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.0, 0.0, 0.0]
+            'embedding' => [0.0, 0.0, 0.0],
         ]));
 
         $database->createDocument('vectorCosineZero', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.0, 0.0, 0.0]
+            'embedding' => [0.0, 0.0, 0.0],
         ]));
 
         // Query with zero vector - should not cause division by zero error
         $results = $database->find('vectorCosineZero', [
-            Query::vectorCosine('embedding', [0.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [0.0, 0.0, 0.0]),
         ]);
 
         // Should handle gracefully and return results
@@ -1504,8 +1534,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1516,10 +1547,10 @@ trait VectorTests
         // Create document with vector
         $doc = $database->createDocument('vectorDeleteAttr', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Test',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $this->assertNotNull($doc->getAttribute('embedding'));
@@ -1548,8 +1579,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1563,9 +1595,9 @@ trait VectorTests
         // Create document
         $database->createDocument('vectorDeleteIndexedAttr', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         // Delete the attribute - should also delete indexes
@@ -1586,8 +1618,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1599,26 +1632,26 @@ trait VectorTests
 
             $database->createDocument('vectorPermissions', new Document([
                 '$permissions' => [
-                    Permission::read(Role::user('user1'))
+                    Permission::read(Role::user('user1')),
                 ],
                 'name' => 'Doc 1',
-                'embedding' => [1.0, 0.0, 0.0]
+                'embedding' => [1.0, 0.0, 0.0],
             ]));
 
             $database->createDocument('vectorPermissions', new Document([
                 '$permissions' => [
-                    Permission::read(Role::user('user2'))
+                    Permission::read(Role::user('user2')),
                 ],
                 'name' => 'Doc 2',
-                'embedding' => [0.9, 0.1, 0.0]
+                'embedding' => [0.9, 0.1, 0.0],
             ]));
 
             $database->createDocument('vectorPermissions', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'name' => 'Doc 3',
-                'embedding' => [0.8, 0.2, 0.0]
+                'embedding' => [0.8, 0.2, 0.0],
             ]));
         });
 
@@ -1626,7 +1659,7 @@ trait VectorTests
         $database->getAuthorization()->addRole(Role::user('user1')->toString());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1640,7 +1673,7 @@ trait VectorTests
         $database->getAuthorization()->addRole(Role::user('user2')->toString());
         $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1661,8 +1694,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1679,7 +1713,7 @@ trait VectorTests
             $database->createDocument('vectorPermScoring', new Document([
                 '$permissions' => $perms,
                 'score' => $i,
-                'embedding' => [1.0 - ($i * 0.1), $i * 0.1, 0.0]
+                'embedding' => [1.0 - ($i * 0.1), $i * 0.1, 0.0],
             ]));
         }
 
@@ -1687,7 +1721,7 @@ trait VectorTests
         $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermScoring', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(3)
+            Query::limit(3),
         ]);
 
         // Should only get the 2 accessible documents
@@ -1707,8 +1741,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1720,17 +1755,17 @@ trait VectorTests
         for ($i = 0; $i < 10; $i++) {
             $database->createDocument('vectorCursorBefore', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'index' => $i,
-                'embedding' => [1.0 - ($i * 0.05), $i * 0.05, 0.0]
+                'embedding' => [1.0 - ($i * 0.05), $i * 0.05, 0.0],
             ]));
         }
 
         // Get first 5 results
         $firstBatch = $database->find('vectorCursorBefore', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $this->assertCount(5, $firstBatch);
@@ -1740,7 +1775,7 @@ trait VectorTests
         $beforeBatch = $database->find('vectorCursorBefore', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::cursorBefore($fourthDoc),
-            Query::limit(3)
+            Query::limit(3),
         ]);
 
         // Should get the 3 documents before the 4th one
@@ -1757,8 +1792,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1770,17 +1806,17 @@ trait VectorTests
         for ($i = 0; $i < 20; $i++) {
             $database->createDocument('vectorBackward', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'value' => $i,
-                'embedding' => [cos($i * 0.1), sin($i * 0.1), 0.0]
+                'embedding' => [cos($i * 0.1), sin($i * 0.1), 0.0],
             ]));
         }
 
         // Get last batch
         $allResults = $database->find('vectorBackward', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(20)
+            Query::limit(20),
         ]);
 
         // Navigate backwards from the end
@@ -1788,7 +1824,7 @@ trait VectorTests
         $backwardBatch = $database->find('vectorBackward', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::cursorBefore($lastDoc),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $this->assertCount(5, $backwardBatch);
@@ -1798,7 +1834,7 @@ trait VectorTests
         $moreBackward = $database->find('vectorBackward', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::cursorBefore($firstOfBackward),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         // Should get at least some results (may be less than 5 due to cursor position)
@@ -1814,8 +1850,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1825,9 +1862,9 @@ trait VectorTests
         // Create document
         $doc = $database->createDocument('vectorDimUpdate', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $this->assertCount(3, $doc->getAttribute('embedding'));
@@ -1850,8 +1887,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1862,9 +1900,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorRequiredNull', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => null
+                'embedding' => null,
             ]));
             $this->fail('Should have thrown exception for null required vector');
         } catch (DatabaseException $e) {
@@ -1875,8 +1913,8 @@ trait VectorTests
         try {
             $database->createDocument('vectorRequiredNull', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
-                ]
+                    Permission::read(Role::any()),
+                ],
             ]));
             $this->fail('Should have thrown exception for missing required vector');
         } catch (DatabaseException $e) {
@@ -1892,8 +1930,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1905,21 +1944,21 @@ trait VectorTests
         $doc = $database->createDocument('vectorConcurrent', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
             ],
             'embedding' => [1.0, 0.0, 0.0],
-            'version' => 1
+            'version' => 1,
         ]));
 
         // Simulate concurrent updates
         $update1 = $database->updateDocument('vectorConcurrent', $doc->getId(), new Document([
             'embedding' => [0.0, 1.0, 0.0],
-            'version' => 2
+            'version' => 2,
         ]));
 
         $update2 = $database->updateDocument('vectorConcurrent', $doc->getId(), new Document([
             'embedding' => [0.0, 0.0, 1.0],
-            'version' => 3
+            'version' => 3,
         ]));
 
         // Last update should win
@@ -1936,8 +1975,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1955,9 +1995,9 @@ trait VectorTests
         // Create documents
         $database->createDocument('vectorDeleteIdx', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         // Delete index
@@ -1971,7 +2011,7 @@ trait VectorTests
 
         // Queries should still work (without index optimization)
         $results = $database->find('vectorDeleteIdx', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(1, $results);
@@ -1985,8 +2025,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2006,21 +2047,21 @@ trait VectorTests
         // Create document
         $database->createDocument('vectorMultiIdx', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'embedding1' => [1.0, 0.0, 0.0],
-            'embedding2' => [0.0, 1.0, 0.0]
+            'embedding2' => [0.0, 1.0, 0.0],
         ]));
 
         // Query using first index
         $results = $database->find('vectorMultiIdx', [
-            Query::vectorCosine('embedding1', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
         ]);
         $this->assertCount(1, $results);
 
         // Query using second index
         $results = $database->find('vectorMultiIdx', [
-            Query::vectorEuclidean('embedding2', [0.0, 1.0, 0.0])
+            Query::vectorEuclidean('embedding2', [0.0, 1.0, 0.0]),
         ]);
         $this->assertCount(1, $results);
 
@@ -2033,8 +2074,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2068,8 +2110,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2079,21 +2122,21 @@ trait VectorTests
         // Create documents without any index
         $database->createDocument('vectorNoIndex', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $database->createDocument('vectorNoIndex', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.0, 1.0, 0.0]
+            'embedding' => [0.0, 1.0, 0.0],
         ]));
 
         // Queries should still work (sequential scan)
         $results = $database->find('vectorNoIndex', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -2107,8 +2150,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2117,7 +2161,7 @@ trait VectorTests
 
         // No documents in collection
         $results = $database->find('vectorEmptyQuery', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
         ]);
 
         $this->assertCount(0, $results);
@@ -2131,8 +2175,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2142,16 +2187,16 @@ trait VectorTests
         // Create documents with single-dimension vectors
         $doc1 = $database->createDocument('vectorSingleDim', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1.0]
+            'embedding' => [1.0],
         ]));
 
         $doc2 = $database->createDocument('vectorSingleDim', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [0.5]
+            'embedding' => [0.5],
         ]));
 
         $this->assertEquals([1.0], $doc1->getAttribute('embedding'));
@@ -2159,7 +2204,7 @@ trait VectorTests
 
         // Query with single dimension
         $results = $database->find('vectorSingleDim', [
-            Query::vectorCosine('embedding', [1.0])
+            Query::vectorCosine('embedding', [1.0]),
         ]);
 
         $this->assertCount(2, $results);
@@ -2173,8 +2218,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2185,20 +2231,20 @@ trait VectorTests
         for ($i = 0; $i < 100; $i++) {
             $database->createDocument('vectorLongResults', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'embedding' => [
                     sin($i * 0.1),
                     cos($i * 0.1),
-                    sin($i * 0.05)
-                ]
+                    sin($i * 0.05),
+                ],
             ]));
         }
 
         // Query all results
         $results = $database->find('vectorLongResults', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(100)
+            Query::limit(100),
         ]);
 
         $this->assertCount(100, $results);
@@ -2212,8 +2258,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2224,30 +2271,30 @@ trait VectorTests
         for ($i = 0; $i < 10; $i++) {
             $database->createDocument('vectorMultiQuery', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'embedding' => [
                     cos($i * M_PI / 10),
                     sin($i * M_PI / 10),
-                    0.0
-                ]
+                    0.0,
+                ],
             ]));
         }
 
         // Execute multiple different vector queries
         $results1 = $database->find('vectorMultiQuery', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $results2 = $database->find('vectorMultiQuery', [
             Query::vectorEuclidean('embedding', [0.0, 1.0, 0.0]),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         $results3 = $database->find('vectorMultiQuery', [
             Query::vectorDot('embedding', [0.5, 0.5, 0.0]),
-            Query::limit(5)
+            Query::limit(5),
         ]);
 
         // All should return results
@@ -2270,8 +2317,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2282,9 +2330,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorNonNumeric', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [1.0, null, 0.0]
+                'embedding' => [1.0, null, 0.0],
             ]));
             $this->fail('Should reject null in vector array');
         } catch (DatabaseException $e) {
@@ -2295,9 +2343,9 @@ trait VectorTests
         try {
             $database->createDocument('vectorNonNumeric', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => [1.0, (object)['x' => 1], 0.0]
+                'embedding' => [1.0, (object) ['x' => 1], 0.0],
             ]));
             $this->fail('Should reject object in vector array');
         } catch (\Throwable $e) {
@@ -2313,8 +2361,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2324,16 +2373,16 @@ trait VectorTests
         // Test with very large float values (but not INF)
         $doc = $database->createDocument('vectorLargeVals', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => [1e38, -1e38, 1e37]
+            'embedding' => [1e38, -1e38, 1e37],
         ]));
 
         $this->assertNotNull($doc->getId());
 
         // Query should work
         $results = $database->find('vectorLargeVals', [
-            Query::vectorCosine('embedding', [1e38, -1e38, 1e37])
+            Query::vectorCosine('embedding', [1e38, -1e38, 1e37]),
         ]);
 
         $this->assertCount(1, $results);
@@ -2347,8 +2396,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2359,9 +2409,9 @@ trait VectorTests
         $highPrecision = [0.123456789012345, 0.987654321098765, 0.555555555555555];
         $doc = $database->createDocument('vectorPrecision', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => $highPrecision
+            'embedding' => $highPrecision,
         ]));
 
         // Retrieve and check precision (may have some loss)
@@ -2382,8 +2432,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2397,9 +2448,9 @@ trait VectorTests
 
         $doc = $database->createDocument('vector16000', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'embedding' => $largeVector
+            'embedding' => $largeVector,
         ]));
 
         $this->assertCount(16000, $doc->getAttribute('embedding'));
@@ -2410,7 +2461,7 @@ trait VectorTests
 
         $results = $database->find('vector16000', [
             Query::vectorCosine('embedding', $searchVector),
-            Query::limit(1)
+            Query::limit(1),
         ]);
 
         $this->assertCount(1, $results);
@@ -2424,8 +2475,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2441,9 +2493,9 @@ trait VectorTests
 
             $database->createDocument('vectorLargeDataset', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
-                'embedding' => $vector
+                'embedding' => $vector,
             ]));
         }
 
@@ -2454,7 +2506,7 @@ trait VectorTests
         $searchVector = array_fill(0, 128, 0.5);
         $results = $database->find('vectorLargeDataset', [
             Query::vectorCosine('embedding', $searchVector),
-            Query::limit(10)
+            Query::limit(10),
         ]);
 
         $this->assertCount(10, $results);
@@ -2468,8 +2520,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2480,32 +2533,32 @@ trait VectorTests
         // Create documents
         $database->createDocument('vectorFilterDisabled', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'status' => 'active',
-            'embedding' => [1.0, 0.0, 0.0]
+            'embedding' => [1.0, 0.0, 0.0],
         ]));
 
         $database->createDocument('vectorFilterDisabled', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'status' => 'disabled',
-            'embedding' => [0.9, 0.1, 0.0]
+            'embedding' => [0.9, 0.1, 0.0],
         ]));
 
         $database->createDocument('vectorFilterDisabled', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'status' => 'active',
-            'embedding' => [0.8, 0.2, 0.0]
+            'embedding' => [0.8, 0.2, 0.0],
         ]));
 
         // Query with filter excluding disabled
         $results = $database->find('vectorFilterDisabled', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::notEqual('status', ['disabled'])
+            Query::notEqual('status', ['disabled']),
         ]);
 
         $this->assertCount(2, $results);
@@ -2522,8 +2575,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2536,11 +2590,11 @@ trait VectorTests
         for ($i = 0; $i < 5; $i++) {
             $database->createDocument('vectorFilterOverride', new Document([
                 '$permissions' => [
-                    Permission::read(Role::any())
+                    Permission::read(Role::any()),
                 ],
                 'category' => $i < 3 ? 'A' : 'B',
                 'priority' => $i,
-                'embedding' => [1.0 - ($i * 0.1), $i * 0.1, 0.0]
+                'embedding' => [1.0 - ($i * 0.1), $i * 0.1, 0.0],
             ]));
         }
 
@@ -2549,7 +2603,7 @@ trait VectorTests
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::equal('category', ['A']),
             Query::greaterThan('priority', 0),
-            Query::limit(2)
+            Query::limit(2),
         ]);
 
         // Should get category A documents with priority > 0
@@ -2568,8 +2622,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2581,18 +2636,18 @@ trait VectorTests
         // Create documents
         $database->createDocument('vectorMultiFilters', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Doc 1',
             'embedding1' => [1.0, 0.0, 0.0],
-            'embedding2' => [0.0, 1.0, 0.0]
+            'embedding2' => [0.0, 1.0, 0.0],
         ]));
 
         // Try to use multiple vector queries - should reject
         try {
             $database->find('vectorMultiFilters', [
                 Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
-                Query::vectorCosine('embedding2', [0.0, 1.0, 0.0])
+                Query::vectorCosine('embedding2', [0.0, 1.0, 0.0]),
             ]);
             $this->fail('Should not allow multiple vector queries');
         } catch (DatabaseException $e) {
@@ -2608,8 +2663,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2621,11 +2677,11 @@ trait VectorTests
         // Create document
         $database->createDocument('vectorNested', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'name' => 'Doc 1',
             'embedding1' => [1.0, 0.0, 0.0],
-            'embedding2' => [0.0, 1.0, 0.0]
+            'embedding2' => [0.0, 1.0, 0.0],
         ]));
 
         // Try to use vector query in nested OR clause with another vector query - should reject
@@ -2634,8 +2690,8 @@ trait VectorTests
                 Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
                 Query::or([
                     Query::vectorCosine('embedding2', [0.0, 1.0, 0.0]),
-                    Query::equal('name', ['Doc 1'])
-                ])
+                    Query::equal('name', ['Doc 1']),
+                ]),
             ]);
             $this->fail('Should not allow multiple vector queries across nested queries');
         } catch (DatabaseException $e) {
@@ -2651,8 +2707,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2661,7 +2718,7 @@ trait VectorTests
 
         $database->createDocument('vectorCount', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'embedding' => [1.0, 0.0, 0.0],
         ]));
@@ -2680,8 +2737,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2692,26 +2750,26 @@ trait VectorTests
         // Create documents with different values
         $database->createDocument('vectorSum', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'embedding' => [1.0, 0.0, 0.0],
-            'value' => 10
+            'value' => 10,
         ]));
 
         $database->createDocument('vectorSum', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'embedding' => [0.0, 1.0, 0.0],
-            'value' => 20
+            'value' => 20,
         ]));
 
         $database->createDocument('vectorSum', new Document([
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'embedding' => [0.5, 0.5, 0.0],
-            'value' => 30
+            'value' => 30,
         ]));
 
         // Test sum with vector query - should sum all matching documents
@@ -2737,8 +2795,9 @@ trait VectorTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Vectors)) {
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -2749,7 +2808,7 @@ trait VectorTests
             '$id' => 'vectorUpsert',
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
             ],
             'embedding' => [1.0, 0.0, 0.0],
         ]));
@@ -2763,7 +2822,7 @@ trait VectorTests
             '$id' => 'vectorUpsert',
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
             ],
             'embedding' => [2.0, 0.0, 0.0],
         ]));

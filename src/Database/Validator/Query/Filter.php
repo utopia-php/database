@@ -23,10 +23,7 @@ class Filter extends Base
     protected array $schema = [];
 
     /**
-     * @param array<Document> $attributes
-     * @param int $maxValuesCount
-     * @param \DateTime $minAllowedDate
-     * @param \DateTime $maxAllowedDate
+     * @param  array<Document>  $attributes
      */
     public function __construct(
         array $attributes,
@@ -41,16 +38,13 @@ class Filter extends Base
         }
     }
 
-    /**
-     * @param string $attribute
-     * @return bool
-     */
     protected function isValidAttribute(string $attribute): bool
     {
         if (
             \in_array('encrypt', $this->schema[$attribute]['filters'] ?? [])
         ) {
-            $this->message = 'Cannot query encrypted attribute: ' . $attribute;
+            $this->message = 'Cannot query encrypted attribute: '.$attribute;
+
             return false;
         }
 
@@ -66,8 +60,9 @@ class Filter extends Base
         }
 
         // Search for attribute in schema
-        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
-            $this->message = 'Attribute not found in schema: ' . $attribute;
+        if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
+            $this->message = 'Attribute not found in schema: '.$attribute;
+
             return false;
         }
 
@@ -75,21 +70,18 @@ class Filter extends Base
     }
 
     /**
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @param Method $method
-     * @return bool
+     * @param  array<mixed>  $values
      */
     protected function isValidAttributeAndValues(string $attribute, array $values, Method $method): bool
     {
-        if (!$this->isValidAttribute($attribute)) {
+        if (! $this->isValidAttribute($attribute)) {
             return false;
         }
 
         $originalAttribute = $attribute;
         // isset check if for special symbols "." in the attribute name
         // same for nested path on object
-        if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
+        if (\str_contains($attribute, '.') && ! isset($this->schema[$attribute])) {
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
@@ -101,10 +93,11 @@ class Filter extends Base
             return $this->isValidAttribute($attribute);
         }
 
-        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+        if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
             // First check maxValuesCount guard for any IN-style value arrays
             if (count($values) > $this->maxValuesCount) {
-                $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+                $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+
                 return false;
             }
 
@@ -119,11 +112,12 @@ class Filter extends Base
         }
 
         if (count($values) > $this->maxValuesCount) {
-            $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+            $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+
             return false;
         }
 
-        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+        if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
             return true;
         }
         $attributeSchema = $this->schema[$attribute];
@@ -134,8 +128,9 @@ class Filter extends Base
 
         // If the query method is spatial-only, the attribute must be a spatial type
         $query = new Query($method);
-        if ($query->isSpatialQuery() && !in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
-            $this->message = 'Spatial query "' . $method->value . '" cannot be applied on non-spatial attribute: ' . $attribute;
+        if ($query->isSpatialQuery() && ! in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
+            $this->message = 'Spatial query "'.$method->value.'" cannot be applied on non-spatial attribute: '.$attribute;
+
             return false;
         }
 
@@ -160,16 +155,16 @@ class Filter extends Base
                     $signed = $attributeSchema['signed'] ?? true;
                     $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
-                    $unsigned = !$signed && $bits < 64;
+                    $unsigned = ! $signed && $bits < 64;
                     $validator = new Integer(false, $bits, $unsigned);
                     break;
 
                 case ColumnType::Double->value:
-                    $validator = new FloatValidator();
+                    $validator = new FloatValidator;
                     break;
 
                 case ColumnType::Boolean->value:
-                    $validator = new Boolean();
+                    $validator = new Boolean;
                     break;
 
                 case ColumnType::Datetime->value:
@@ -192,8 +187,9 @@ class Filter extends Base
 
                     // object containment queries on the base object attribute
                     elseif (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS], true)
-                        && !$this->isValidObjectQueryValues($value)) {
-                        $this->message = 'Invalid object query structure for attribute "' . $attribute . '"';
+                        && ! $this->isValidObjectQueryValues($value)) {
+                        $this->message = 'Invalid object query structure for attribute "'.$attribute.'"';
+
                         return false;
                     }
 
@@ -201,21 +197,25 @@ class Filter extends Base
                 case ColumnType::Point->value:
                 case ColumnType::Linestring->value:
                 case ColumnType::Polygon->value:
-                    if (!is_array($value)) {
+                    if (! is_array($value)) {
                         $this->message = 'Spatial data must be an array';
+
                         return false;
                     }
+
                     continue 2;
 
                 case ColumnType::Vector->value:
                     // For vector queries, validate that the value is an array of floats
-                    if (!is_array($value)) {
+                    if (! is_array($value)) {
                         $this->message = 'Vector query value must be an array';
+
                         return false;
                     }
                     foreach ($value as $component) {
-                        if (!is_numeric($component)) {
+                        if (! is_numeric($component)) {
                             $this->message = 'Vector query value must contain only numeric values';
+
                             return false;
                         }
                     }
@@ -223,16 +223,20 @@ class Filter extends Base
                     $expectedSize = $attributeSchema['size'] ?? 0;
                     if (count($value) !== $expectedSize) {
                         $this->message = "Vector query value must have {$expectedSize} elements";
+
                         return false;
                     }
+
                     continue 2;
                 default:
                     $this->message = 'Unknown Data type';
+
                     return false;
             }
 
-            if (!$validator->isValid($value)) {
-                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
+            if (! $validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "'.$attribute.'"';
+
                 return false;
             }
         }
@@ -246,21 +250,25 @@ class Filter extends Base
 
             if ($options['relationType'] === RelationType::OneToOne->value && $options['twoWay'] === false && $options['side'] === RelationSide::Child->value) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
             if ($options['relationType'] === RelationType::OneToMany->value && $options['side'] === RelationSide::Parent->value) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
             if ($options['relationType'] === RelationType::ManyToOne->value && $options['side'] === RelationSide::Child->value) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
             if ($options['relationType'] === RelationType::ManyToMany->value) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
         }
@@ -268,23 +276,24 @@ class Filter extends Base
         $array = $attributeSchema['array'] ?? false;
 
         if (
-            !$array &&
+            ! $array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== ColumnType::String->value &&
             $attributeSchema['type'] !== ColumnType::Object->value &&
-            !in_array($attributeSchema['type'], [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])
+            ! in_array($attributeSchema['type'], [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
-            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array, string, or object.';
+            $this->message = 'Cannot query '.$queryType.' on attribute "'.$attribute.'" because it is not an array, string, or object.';
 
             return false;
         }
 
         if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
+            ! in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
         ) {
-            $this->message = 'Cannot query '. $method->value .' on attribute "' . $attribute . '" because it is an array.';
+            $this->message = 'Cannot query '.$method->value.' on attribute "'.$attribute.'" because it is an array.';
+
             return false;
         }
 
@@ -292,10 +301,12 @@ class Filter extends Base
         if (\in_array($method, Query::VECTOR_TYPES)) {
             if ($attributeSchema['type'] !== ColumnType::Vector->value) {
                 $this->message = 'Vector queries can only be used on vector attributes';
+
                 return false;
             }
             if ($array) {
                 $this->message = 'Vector queries cannot be used on array attributes';
+
                 return false;
             }
         }
@@ -304,8 +315,7 @@ class Filter extends Base
     }
 
     /**
-     * @param array<mixed> $values
-     * @return bool
+     * @param  array<mixed>  $values
      */
     protected function isEmpty(array $values): bool
     {
@@ -330,13 +340,10 @@ class Filter extends Base
      *   ['a' => [1, 2], 'b' => [212]]        // multiple top-level paths
      *   ['projects' => [[...]]]              // list of objects
      *   ['role' => ['name' => [...], 'ex' => [...]]]  // multiple nested paths
-     *
-     * @param mixed $values
-     * @return bool
      */
     private function isValidObjectQueryValues(mixed $values): bool
     {
-        if (!is_array($values)) {
+        if (! is_array($values)) {
             return true;
         }
 
@@ -356,7 +363,7 @@ class Filter extends Base
         }
 
         foreach ($values as $value) {
-            if (!$this->isValidObjectQueryValues($value)) {
+            if (! $this->isValidObjectQueryValues($value)) {
                 return false;
             }
         }
@@ -371,8 +378,7 @@ class Filter extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     * @return bool
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
@@ -387,7 +393,8 @@ class Filter extends Base
             case Query::TYPE_EXISTS:
             case Query::TYPE_NOT_EXISTS:
                 if ($this->isEmpty($value->getValues())) {
-                    $this->message = \ucfirst($method->value) . ' queries require at least one value.';
+                    $this->message = \ucfirst($method->value).' queries require at least one value.';
+
                     return false;
                 }
 
@@ -397,10 +404,12 @@ class Filter extends Base
             case Query::TYPE_DISTANCE_NOT_EQUAL:
             case Query::TYPE_DISTANCE_GREATER_THAN:
             case Query::TYPE_DISTANCE_LESS_THAN:
-                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
+                if (count($value->getValues()) !== 1 || ! is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
                     $this->message = 'Distance query requires [[geometry, distance]] parameters';
+
                     return false;
                 }
+
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_NOT_EQUAL:
@@ -416,7 +425,8 @@ class Filter extends Base
             case Query::TYPE_NOT_ENDS_WITH:
             case Query::TYPE_REGEX:
                 if (count($value->getValues()) != 1) {
-                    $this->message = \ucfirst($method->value) . ' queries require exactly one value.';
+                    $this->message = \ucfirst($method->value).' queries require exactly one value.';
+
                     return false;
                 }
 
@@ -425,7 +435,8 @@ class Filter extends Base
             case Query::TYPE_BETWEEN:
             case Query::TYPE_NOT_BETWEEN:
                 if (count($value->getValues()) != 2) {
-                    $this->message = \ucfirst($method->value) . ' queries require exactly two values.';
+                    $this->message = \ucfirst($method->value).' queries require exactly two values.';
+
                     return false;
                 }
 
@@ -439,24 +450,26 @@ class Filter extends Base
             case Query::TYPE_VECTOR_COSINE:
             case Query::TYPE_VECTOR_EUCLIDEAN:
                 // Validate that the attribute is a vector type
-                if (!$this->isValidAttribute($attribute)) {
+                if (! $this->isValidAttribute($attribute)) {
                     return false;
                 }
 
                 // Handle dotted attributes (relationships)
                 $attributeKey = $attribute;
-                if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+                if (\str_contains($attributeKey, '.') && ! isset($this->schema[$attributeKey])) {
                     $attributeKey = \explode('.', $attributeKey)[0];
                 }
 
                 $attributeSchema = $this->schema[$attributeKey];
                 if ($attributeSchema['type'] !== ColumnType::Vector->value) {
                     $this->message = 'Vector queries can only be used on vector attributes';
+
                     return false;
                 }
 
                 if (count($value->getValues()) != 1) {
-                    $this->message = \ucfirst($method->value) . ' queries require exactly one vector value.';
+                    $this->message = \ucfirst($method->value).' queries require exactly one vector value.';
+
                     return false;
                 }
 
@@ -466,12 +479,14 @@ class Filter extends Base
                 $filters = Query::groupForDatabase($value->getValues())['filters'];
 
                 if (count($value->getValues()) !== count($filters)) {
-                    $this->message = \ucfirst($method->value) . ' queries can only contain filter queries';
+                    $this->message = \ucfirst($method->value).' queries can only contain filter queries';
+
                     return false;
                 }
 
                 if (count($filters) < 2) {
-                    $this->message = \ucfirst($method->value) . ' queries require at least two queries';
+                    $this->message = \ucfirst($method->value).' queries require at least two queries';
+
                     return false;
                 }
 
@@ -481,11 +496,12 @@ class Filter extends Base
                 // elemMatch is not supported when adapter supports attributes (schema mode)
                 if ($this->supportForAttributes) {
                     $this->message = 'elemMatch is not supported by the database';
+
                     return false;
                 }
 
                 // Validate that the attribute (array field) exists
-                if (!$this->isValidAttribute($attribute)) {
+                if (! $this->isValidAttribute($attribute)) {
                     return false;
                 }
 
@@ -494,22 +510,27 @@ class Filter extends Base
                 $filters = Query::groupForDatabase($value->getValues())['filters'];
                 if (count($value->getValues()) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
+
                     return false;
                 }
 
                 if (count($filters) < 1) {
                     $this->message = 'elemMatch queries require at least one query';
+
                     return false;
                 }
+
                 return true;
 
             default:
                 // Handle spatial query types and any other query types
                 if ($value->isSpatialQuery()) {
                     if ($this->isEmpty($value->getValues())) {
-                        $this->message = \ucfirst($method->value) . ' queries require at least one value.';
+                        $this->message = \ucfirst($method->value).' queries require at least one value.';
+
                         return false;
                     }
+
                     return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
                 }
 

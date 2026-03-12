@@ -9,15 +9,11 @@ use Utopia\Database\Query;
 
 class QueryTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testCreate(): void
+    public function test_create(): void
     {
         $query = new Query(Query::TYPE_EQUAL, 'title', ['Iron Man']);
 
@@ -85,7 +81,7 @@ class QueryTest extends TestCase
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([10], $query->getValues());
 
-        $cursor = new Document();
+        $cursor = new Document;
         $query = Query::cursorAfter($cursor);
 
         $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
@@ -179,10 +175,9 @@ class QueryTest extends TestCase
     }
 
     /**
-     * @return void
      * @throws QueryException
      */
-    public function testParse(): void
+    public function test_parse(): void
     {
         $jsonString = Query::equal('title', ['Iron Man'])->toString();
         $query = Query::parse($jsonString);
@@ -347,7 +342,7 @@ class QueryTest extends TestCase
 
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
-            Query::equal('actors', ['Johnny Depp'])
+            Query::equal('actors', ['Johnny Depp']),
         ])->toString();
 
         $query = Query::parse($json);
@@ -395,7 +390,7 @@ class QueryTest extends TestCase
         $this->assertEquals([], $query->getValues());
     }
 
-    public function testIsMethod(): void
+    public function test_is_method(): void
     {
         $this->assertTrue(Query::isMethod('equal'));
         $this->assertTrue(Query::isMethod('notEqual'));
@@ -459,7 +454,7 @@ class QueryTest extends TestCase
         $this->assertFalse(Query::isMethod('lte '));
     }
 
-    public function testNewQueryTypesInTypesArray(): void
+    public function test_new_query_types_in_types_array(): void
     {
         $this->assertContains(Query::TYPE_NOT_CONTAINS, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_SEARCH, Query::TYPES);

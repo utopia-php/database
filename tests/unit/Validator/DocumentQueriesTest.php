@@ -21,7 +21,7 @@ class DocumentQueriesTest extends TestCase
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->collection = [
             '$collection' => ID::custom(Database::METADATA),
@@ -47,19 +47,17 @@ class DocumentQueriesTest extends TestCase
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
-                ])
-            ]
+                ]),
+            ],
         ];
     }
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     /**
      * @throws Exception
      */
-    public function testValidQueries(): void
+    public function test_valid_queries(): void
     {
         $validator = new DocumentQueries($this->collection['attributes']);
 
@@ -76,7 +74,7 @@ class DocumentQueriesTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testInvalidQueries(): void
+    public function test_invalid_queries(): void
     {
         $validator = new DocumentQueries($this->collection['attributes']);
         $queries = [Query::limit(1)];

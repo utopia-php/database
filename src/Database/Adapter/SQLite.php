@@ -7,6 +7,7 @@ use PDO;
 use PDOException;
 use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -19,7 +20,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
-use Utopia\Database\Capability;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Query\Schema\IndexType;
@@ -66,17 +66,17 @@ class SQLite extends MariaDB
 
         return array_values(array_filter(
             parent::capabilities(),
-            fn (Capability $c) => !in_array($c, $remove, true)
+            fn (Capability $c) => ! in_array($c, $remove, true)
         ));
     }
 
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\SQLite();
+        return new \Utopia\Query\Builder\SQLite;
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     public function startTransaction(): bool
     {
@@ -89,14 +89,14 @@ class SQLite extends MariaDB
                 $result = $this->getPDO()->beginTransaction();
             } else {
                 $result = $this->getPDO()
-                    ->prepare('SAVEPOINT transaction' . $this->inTransaction)
+                    ->prepare('SAVEPOINT transaction'.$this->inTransaction)
                     ->execute();
             }
         } catch (PDOException $e) {
-            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
+        if (! $result) {
             throw new TransactionException('Failed to start transaction');
         }
 
@@ -109,9 +109,6 @@ class SQLite extends MariaDB
      * Check if Database exists
      * Optionally check if collection exists in Database
      *
-     * @param string $database
-     * @param string|null $collection
-     * @return bool
      * @throws DatabaseException
      */
     public function exists(string $database, ?string $collection = null): bool
@@ -139,18 +136,16 @@ class SQLite extends MariaDB
 
         $document = $stmt->fetchAll();
         $stmt->closeCursor();
-        if (!empty($document)) {
+        if (! empty($document)) {
             $document = $document[0];
         }
 
-        return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
+        return ($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}";
     }
 
     /**
      * Create Database
      *
-     * @param string $name
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -162,8 +157,6 @@ class SQLite extends MariaDB
     /**
      * Delete Database
      *
-     * @param string $name
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -175,10 +168,9 @@ class SQLite extends MariaDB
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param array<Attribute> $attributes
-     * @param array<Index> $indexes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -212,15 +204,15 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
-				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
-				" . \substr(\implode(' ', $attributeStrings), 0, -2) . "
+				`_permissions` MEDIUMTEXT DEFAULT NULL".(! empty($attributes) ? ',' : '').'
+				'.\substr(\implode(' ', $attributeStrings), 0, -2).'
 			)
-		";
+		';
 
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
-			CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+			CREATE TABLE {$this->getSQLTable($id.'_perms')} (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
@@ -268,35 +260,33 @@ class SQLite extends MariaDB
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+
         return true;
     }
 
-
     /**
      * Get Collection Size of raw data
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
      *
+     * @throws DatabaseException
      */
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
         $namespace = $this->getNamespace();
-        $name = $namespace . '_' . $collection;
-        $permissions = $namespace . '_' . $collection . '_perms';
+        $name = $namespace.'_'.$collection;
+        $permissions = $namespace.'_'.$collection.'_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
-             FROM \"dbstat\" 
+        $collectionSize = $this->getPDO()->prepare('
+             SELECT SUM("pgsize") 
+             FROM "dbstat" 
              WHERE name = :name;
-        ");
+        ');
 
-        $permissionsSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
-             FROM \"dbstat\"
+        $permissionsSize = $this->getPDO()->prepare('
+             SELECT SUM("pgsize") 
+             FROM "dbstat"
              WHERE name = :name;
-        ");
+        ');
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':name', $permissions);
@@ -306,7 +296,7 @@ class SQLite extends MariaDB
             $permissionsSize->execute();
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
@@ -314,8 +304,7 @@ class SQLite extends MariaDB
 
     /**
      * Get Collection Size on disk
-     * @param string $collection
-     * @return int
+     *
      * @throws DatabaseException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
@@ -325,8 +314,7 @@ class SQLite extends MariaDB
 
     /**
      * Delete Collection
-     * @param string $id
-     * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -341,7 +329,7 @@ class SQLite extends MariaDB
             ->prepare($sql)
             ->execute();
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id . '_perms')}";
+        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id.'_perms')}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
@@ -353,9 +341,6 @@ class SQLite extends MariaDB
 
     /**
      * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
      */
     public function analyzeCollection(string $collection): bool
     {
@@ -365,16 +350,12 @@ class SQLite extends MariaDB
     /**
      * Update Attribute
      *
-     * @param string $collection
-     * @param Attribute $attribute
-     * @param string|null $newKey
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (!empty($newKey) && $newKey !== $attribute->key) {
+        if (! empty($newKey) && $newKey !== $attribute->key) {
             return $this->renameAttribute($collection, $attribute->key, $newKey);
         }
 
@@ -384,9 +365,6 @@ class SQLite extends MariaDB
     /**
      * Delete Attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -439,10 +417,6 @@ class SQLite extends MariaDB
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -488,11 +462,9 @@ class SQLite extends MariaDB
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param Index $index
-     * @param array<string,string> $indexAttributeTypes
-     * @param array<string, mixed> $collation
-     * @return bool
+     * @param  array<string,string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -512,7 +484,7 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
         $stmt->execute();
         $existingIndex = $stmt->fetch();
-        if (!empty($existingIndex)) {
+        if (! empty($existingIndex)) {
             return true;
         }
 
@@ -528,9 +500,6 @@ class SQLite extends MariaDB
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
-     * @return bool
      * @throws Exception
      * @throws PDOException
      */
@@ -558,9 +527,6 @@ class SQLite extends MariaDB
     /**
      * Create Document
      *
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -581,7 +547,7 @@ class SQLite extends MariaDB
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
             $row = ['_uid' => $document->getId()];
 
-            if (!empty($document->getSequence())) {
+            if (! empty($document->getSequence())) {
                 $row['_id'] = $document->getSequence();
             }
 
@@ -591,7 +557,7 @@ class SQLite extends MariaDB
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $value = (is_bool($value)) ? (int)$value : $value;
+                $value = (is_bool($value)) ? (int) $value : $value;
                 $row[$column] = $value;
             }
 
@@ -602,7 +568,7 @@ class SQLite extends MariaDB
 
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("SELECT last_insert_rowid() AS id");
+            $statment = $this->getPDO()->prepare('SELECT last_insert_rowid() AS id');
             $statment->execute();
             $last = $statment->fetch();
 
@@ -622,11 +588,6 @@ class SQLite extends MariaDB
     /**
      * Update Document
      *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
@@ -665,13 +626,13 @@ class SQLite extends MariaDB
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
-                    $value = (is_bool($value)) ? (int)$value : $value;
+                    $value = (is_bool($value)) ? (int) $value : $value;
                     $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
                 } else {
                     if (is_array($value)) {
                         $value = json_encode($value);
                     }
-                    $value = (is_bool($value)) ? (int)$value : $value;
+                    $value = (is_bool($value)) ? (int) $value : $value;
                     $regularRow[$column] = $value;
                 }
             }
@@ -694,14 +655,9 @@ class SQLite extends MariaDB
         return $document;
     }
 
-
     /**
      * Override getSpatialGeomFromText to return placeholder unchanged for SQLite
      * SQLite does not support ST_GeomFromText, so we return the raw placeholder
-     *
-     * @param string $wktPlaceholder
-     * @param int|null $srid
-     * @return string
      */
     protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
     {
@@ -711,8 +667,6 @@ class SQLite extends MariaDB
     /**
      * Get SQL Index Type
      *
-     * @param string $type
-     * @return string
      * @throws Exception
      */
     protected function getSQLIndexType(string $type): string
@@ -720,18 +674,15 @@ class SQLite extends MariaDB
         return match ($type) {
             IndexType::Key->value => 'INDEX',
             IndexType::Unique->value => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . IndexType::Key->value . ', ' . IndexType::Unique->value . ', ' . IndexType::Fulltext->value),
+            default => throw new DatabaseException('Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
         };
     }
 
     /**
      * Get SQL Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @return string
+     * @param  array<string>  $attributes
+     *
      * @throws Exception
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
@@ -750,7 +701,7 @@ class SQLite extends MariaDB
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . IndexType::Key->value . ', ' . IndexType::Unique->value . ', ' . IndexType::Fulltext->value);
+                throw new DatabaseException('Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value);
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
@@ -778,9 +729,6 @@ class SQLite extends MariaDB
 
     /**
      * Get SQL table
-     *
-     * @param string $name
-     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -792,7 +740,7 @@ class SQLite extends MariaDB
      */
     protected function getSQLTableRaw(string $name): string
     {
-        return $this->getNamespace() . '_' . $this->filter($name);
+        return $this->getNamespace().'_'.$this->filter($name);
     }
 
     /**
@@ -977,9 +925,10 @@ class SQLite extends MariaDB
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
             ) {
-                if (!\str_contains($message, '_uid')) {
+                if (! \str_contains($message, '_uid')) {
                     return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
                 }
+
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
         }
@@ -994,8 +943,6 @@ class SQLite extends MariaDB
 
     /**
      * Get the SQL function for random ordering
-     *
-     * @return string
      */
     protected function getRandomOrder(): string
     {
@@ -1005,8 +952,6 @@ class SQLite extends MariaDB
     /**
      * Check if SQLite math functions (like POWER) are available
      * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
-     *
-     * @return bool
      */
     private function getSupportForMathFunctions(): bool
     {
@@ -1021,10 +966,12 @@ class SQLite extends MariaDB
             $stmt = $this->getPDO()->query('SELECT POWER(2, 3) as test');
             $result = $stmt->fetch();
             $available = ($result['test'] == 8);
+
             return $available;
         } catch (PDOException $e) {
             // Function doesn't exist
             $available = false;
+
             return false;
         }
     }
@@ -1032,11 +979,6 @@ class SQLite extends MariaDB
     /**
      * Bind operator parameters to statement
      * Override to handle SQLite-specific operator bindings
-     *
-     * @param \PDOStatement|PDOStatementProxy $stmt
-     * @param Operator $operator
-     * @param int &$bindIndex
-     * @return void
      */
     protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
@@ -1053,7 +995,7 @@ class SQLite extends MariaDB
         // For ARRAY_FILTER, bind the filter value if present
         if ($method === OperatorType::ArrayFilter->value) {
             $values = $operator->getValues();
-            if (!empty($values) && count($values) >= 2) {
+            if (! empty($values) && count($values) >= 2) {
                 $filterType = $values[0];
                 $filterValue = $values[1];
 
@@ -1061,11 +1003,12 @@ class SQLite extends MariaDB
                 $comparisonTypes = ['equal', 'notEqual', 'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual'];
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
-                    $value = (is_bool($filterValue)) ? (int)$filterValue : $filterValue;
+                    $value = (is_bool($filterValue)) ? (int) $filterValue : $filterValue;
                     $stmt->bindValue(":{$bindKey}", $value, $this->getPDOType($value));
                     $bindIndex++;
                 }
             }
+
             return;
         }
 
@@ -1074,7 +1017,7 @@ class SQLite extends MariaDB
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getOperatorBuilderExpression(string $column, Operator $operator): array
     {
@@ -1083,11 +1026,11 @@ class SQLite extends MariaDB
             $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex);
 
             if ($fullExpression === null) {
-                throw new DatabaseException('Operator cannot be expressed in SQL: ' . $operator->getMethod());
+                throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod());
             }
 
             $quotedColumn = $this->quote($column);
-            $prefix = $quotedColumn . ' = ';
+            $prefix = $quotedColumn.' = ';
             $expression = $fullExpression;
             if (str_starts_with($expression, $prefix)) {
                 $expression = substr($expression, strlen($prefix));
@@ -1108,7 +1051,7 @@ class SQLite extends MariaDB
             $positionalBindings = [];
             $replacements = [];
             foreach (array_keys($namedBindings) as $key) {
-                $search = ':' . $key;
+                $search = ':'.$key;
                 $offset = 0;
                 while (($pos = strpos($expression, $search, $offset)) !== false) {
                     $replacements[] = ['pos' => $pos, 'len' => strlen($search), 'key' => $key];
@@ -1143,11 +1086,6 @@ class SQLite extends MariaDB
      *
      * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
      * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
-     *
-     * @param string $column
-     * @param Operator $operator
-     * @param int &$bindIndex
-     * @return ?string
      */
     protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
@@ -1164,12 +1102,14 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case OperatorType::Decrement->value:
@@ -1180,12 +1120,14 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
                         WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case OperatorType::Multiply->value:
@@ -1196,6 +1138,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
@@ -1203,6 +1146,7 @@ class SQLite extends MariaDB
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case OperatorType::Divide->value:
@@ -1213,22 +1157,25 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
             case OperatorType::Modulo->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) % :$bindKey";
 
             case OperatorType::Power->value:
-                if (!$this->getSupportForMathFunctions()) {
+                if (! $this->getSupportForMathFunctions()) {
                     throw new DatabaseException(
-                        'SQLite POWER operator requires math functions. ' .
+                        'SQLite POWER operator requires math functions. '.
                         'Compile SQLite with -DSQLITE_ENABLE_MATH_FUNCTIONS or use multiply operators instead.'
                     );
                 }
@@ -1240,6 +1187,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
                         WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
@@ -1247,12 +1195,14 @@ class SQLite extends MariaDB
                         ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
                     END";
                 }
+
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
                 // String operators
             case OperatorType::StringConcat->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
 
             case OperatorType::StringReplace->value:
@@ -1260,6 +1210,7 @@ class SQLite extends MariaDB
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
                 // Boolean operators
@@ -1271,6 +1222,7 @@ class SQLite extends MariaDB
             case OperatorType::ArrayAppend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: merge arrays by using json_group_array on extracted elements
                 // We use json_each to extract elements from both arrays and combine them
                 return "{$quotedColumn} = (
@@ -1285,6 +1237,7 @@ class SQLite extends MariaDB
             case OperatorType::ArrayPrepend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: prepend by extracting and recombining with new elements first
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
@@ -1305,6 +1258,7 @@ class SQLite extends MariaDB
             case OperatorType::ArrayRemove->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: remove specific value from array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
@@ -1317,6 +1271,7 @@ class SQLite extends MariaDB
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: Insert element at specific index by:
                 // 1. Take elements before index (0 to index-1)
                 // 2. Add new element
@@ -1349,6 +1304,7 @@ class SQLite extends MariaDB
             case OperatorType::ArrayIntersect->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: keep only values that exist in both arrays
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
@@ -1359,6 +1315,7 @@ class SQLite extends MariaDB
             case OperatorType::ArrayDiff->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 // SQLite: remove values that exist in the comparison array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
@@ -1412,7 +1369,7 @@ class SQLite extends MariaDB
                             'greaterThanEqual' => '>=',
                             'lessThan' => '<',
                             'lessThanEqual' => '<=',
-                            default => throw new OperatorException('Unsupported filter type: ' . $filterType),
+                            default => throw new OperatorException('Unsupported filter type: '.$filterType),
                         };
 
                         // For numeric comparisons, cast to REAL; for equal/notEqual, use text comparison
@@ -1460,29 +1417,32 @@ class SQLite extends MariaDB
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "CASE WHEN _tenant = excluded._tenant THEN excluded.{$quoted} ELSE {$quoted} END";
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "{$quoted} + excluded.{$quoted}";
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+
         return "CASE WHEN _tenant = excluded._tenant THEN {$quoted} + excluded.{$quoted} ELSE {$quoted} END";
     }
 
@@ -1490,14 +1450,14 @@ class SQLite extends MariaDB
      * Override executeUpsertBatch because SQLite uses ON CONFLICT syntax which
      * is not supported by the MySQL query builder that SQLite inherits.
      *
-     * @param string $name The filtered collection name
-     * @param array<\Utopia\Database\Change> $changes The changes to upsert
-     * @param array<string> $spatialAttributes Spatial column names
-     * @param string $attribute Increment attribute name (empty if none)
-     * @param array<string, Operator> $operators Operator map keyed by attribute name
-     * @param array<string, mixed> $attributeDefaults Attribute default values
-     * @param bool $hasOperators Whether this batch contains operator expressions
-     * @return void
+     * @param  string  $name  The filtered collection name
+     * @param  array<\Utopia\Database\Change>  $changes  The changes to upsert
+     * @param  array<string>  $spatialAttributes  Spatial column names
+     * @param  string  $attribute  Increment attribute name (empty if none)
+     * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
+     * @param  array<string, mixed>  $attributeDefaults  Attribute default values
+     * @param  bool  $hasOperators  Whether this batch contains operator expressions
+     *
      * @throws \Utopia\Database\Exception
      */
     protected function executeUpsertBatch(
@@ -1523,7 +1483,7 @@ class SQLite extends MariaDB
                 $currentRegularAttributes = $extracted['updates'];
                 $extractedOperators = $extracted['operators'];
 
-                if ($change->getOld()->isEmpty() && !empty($extractedOperators)) {
+                if ($change->getOld()->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
                         $currentRegularAttributes[$operatorKey] = $this->applyOperatorToValue($operator, $default);
@@ -1542,7 +1502,7 @@ class SQLite extends MariaDB
 
             $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
 
-            if (!empty($document->getSequence())) {
+            if (! empty($document->getSequence())) {
                 $currentRegularAttributes['_id'] = $document->getSequence();
             }
 
@@ -1568,7 +1528,7 @@ class SQLite extends MariaDB
         foreach ($allColumnNames as $attr) {
             $columnsArray[] = "{$this->quote($this->filter($attr))}";
         }
-        $columns = '(' . \implode(', ', $columnsArray) . ')';
+        $columns = '('.\implode(', ', $columnsArray).')';
 
         foreach ($documentsData as $docData) {
             $currentRegularAttributes = $docData['regularAttributes'];
@@ -1582,20 +1542,20 @@ class SQLite extends MariaDB
                 }
 
                 if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
-                    $bindKey = 'key_' . $bindIndex;
-                    $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
+                    $bindKey = 'key_'.$bindIndex;
+                    $bindKeys[] = $this->getSpatialGeomFromText(':'.$bindKey);
                 } else {
                     if ($this->supports(Capability::IntegerBooleans)) {
-                        $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                        $attrValue = (\is_bool($attrValue)) ? (int) $attrValue : $attrValue;
                     }
-                    $bindKey = 'key_' . $bindIndex;
-                    $bindKeys[] = ':' . $bindKey;
+                    $bindKey = 'key_'.$bindIndex;
+                    $bindKeys[] = ':'.$bindKey;
                 }
                 $bindValues[$bindKey] = $attrValue;
                 $bindIndex++;
             }
 
-            $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+            $batchKeys[] = '('.\implode(', ', $bindKeys).')';
         }
 
         $regularAttributes = [];
@@ -1625,7 +1585,7 @@ class SQLite extends MariaDB
         $updateColumns = [];
         $opIndex = 0;
 
-        if (!empty($attribute)) {
+        if (! empty($attribute)) {
             $updateColumns = [
                 $getUpdateClause($attribute, increment: true),
                 $getUpdateClause('_updatedAt'),
@@ -1641,7 +1601,7 @@ class SQLite extends MariaDB
                         $updateColumns[] = $operatorSQL;
                     }
                 } else {
-                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                    if (! in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
                         $updateColumns[] = $getUpdateClause($filteredAttr);
                     }
                 }
@@ -1652,9 +1612,9 @@ class SQLite extends MariaDB
 
         $stmt = $this->getPDO()->prepare(
             "INSERT INTO {$this->getSQLTable($name)} {$columns}
-            VALUES " . \implode(', ', $batchKeys) . "
+            VALUES ".\implode(', ', $batchKeys)."
             ON CONFLICT {$conflictKeys} DO UPDATE
-                SET " . \implode(', ', $updateColumns)
+                SET ".\implode(', ', $updateColumns)
         );
 
         foreach ($bindValues as $key => $binding) {
@@ -1676,5 +1636,4 @@ class SQLite extends MariaDB
     {
         return false;
     }
-
 }

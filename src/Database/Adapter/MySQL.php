@@ -3,13 +3,13 @@
 namespace Utopia\Database\Adapter;
 
 use PDOException;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Capability;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
@@ -31,20 +31,18 @@ class MySQL extends MariaDB
                 Capability::MultiDimensionDistance,
                 Capability::CastIndexArray,
             ]),
-            fn (Capability $c) => !in_array($c, $remove, true)
+            fn (Capability $c) => ! in_array($c, $remove, true)
         ));
     }
 
     /**
      * Set max execution time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
+     *
      * @throws DatabaseException
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        if (!$this->supports(Capability::Timeouts)) {
+        if (! $this->supports(Capability::Timeouts)) {
             return;
         }
         if ($milliseconds <= 0) {
@@ -65,29 +63,28 @@ class MySQL extends MariaDB
 
     /**
      * Get size of collection on disk
-     * @param string $collection
-     * @return int
+     *
      * @throws DatabaseException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
-        $collection = $this->getNamespace() . '_' . $collection;
+        $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
-        $name = $database . '/' . $collection;
-        $permissions = $database . '/' . $collection . '_perms';
+        $name = $database.'/'.$collection;
+        $permissions = $database.'/'.$collection.'_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
+        $collectionSize = $this->getPDO()->prepare('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :name
-        ");
+        ');
 
-        $permissionsSize = $this->getPDO()->prepare("
+        $permissionsSize = $this->getPDO()->prepare('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :permissions
-        ");
+        ');
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);
@@ -97,7 +94,7 @@ class MySQL extends MariaDB
             $permissionsSize->execute();
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
@@ -106,14 +103,8 @@ class MySQL extends MariaDB
     /**
      * Handle distance spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $type
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
-    */
+     * @param  array<string, mixed>  $binds
+     */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
@@ -127,20 +118,21 @@ class MySQL extends MariaDB
             Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
             Query::TYPE_DISTANCE_GREATER_THAN => '>',
             Query::TYPE_DISTANCE_LESS_THAN => '<',
-            default => throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod()->value),
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
 
         if ($useMeters) {
-            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::DEFAULT_SRID . ")";
+            $attr = "ST_SRID({$alias}.{$attribute}, ".Database::DEFAULT_SRID.')';
             $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
+
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
         // need to use srid 0 because of geometric distance
-        $attr = "ST_SRID({$alias}.{$attribute}, " . 0 . ")";
+        $attr = "ST_SRID({$alias}.{$attribute}, ". 0 .')';
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
+
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
     }
-
 
     protected function processException(PDOException $e): \Exception
     {
@@ -172,73 +164,67 @@ class MySQL extends MariaDB
 
     protected function createBuilder(): \Utopia\Query\Builder\SQL
     {
-        return new \Utopia\Query\Builder\MySQL();
+        return new \Utopia\Query\Builder\MySQL;
     }
 
     /**
      * Spatial type attribute
-    */
+     */
     public function getSpatialSQLType(string $type, bool $required): string
     {
         switch ($type) {
             case ColumnType::Point->value:
                 $type = 'POINT SRID 4326';
-                if (!$this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
+
                 return $type;
 
             case ColumnType::Linestring->value:
                 $type = 'LINESTRING SRID 4326';
-                if (!$this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
-                return $type;
 
+                return $type;
 
             case ColumnType::Polygon->value:
                 $type = 'POLYGON SRID 4326';
-                if (!$this->supports(Capability::SpatialIndexNull)) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
+
                 return $type;
         }
+
         return '';
     }
-
 
     /**
      * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
-     *
-     * @return string
      */
     protected function getSpatialAxisOrderSpec(): string
     {
         return "'axis-order=long-lat'";
     }
 
-
     /**
      * Get SQL expression for operator
      * Override for MySQL-specific operator implementations
-     *
-     * @param string $column
-     * @param \Utopia\Database\Operator $operator
-     * @param int &$bindIndex
-     * @return ?string
      */
     protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
     {
@@ -249,11 +235,13 @@ class MySQL extends MariaDB
             case OperatorType::ArrayAppend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case OperatorType::ArrayPrepend->value:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
             case OperatorType::ArrayUnique->value:
@@ -269,5 +257,4 @@ class MySQL extends MariaDB
         // For all other operators, use parent implementation
         return parent::getOperatorSQL($column, $operator, $bindIndex);
     }
-
 }

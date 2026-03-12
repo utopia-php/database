@@ -5,8 +5,7 @@ namespace Utopia\Database;
 use DateTime;
 use Exception;
 use Throwable;
-use Utopia\Database\Change;
-use Utopia\Database\CursorDirection;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -16,15 +15,13 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Hook\Write;
-use Utopia\Database\PermissionType;
 use Utopia\Database\Validator\Authorization;
 
-abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Transactions
+abstract class Adapter implements Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Documents, Feature\Indexes, Feature\Transactions
 {
     protected string $database = '';
+
     protected string $hostname = '';
 
     protected string $namespace = '';
@@ -63,15 +60,12 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      */
     protected array $writeHooks = [];
 
-    /**
-     * @var Authorization
-     */
     protected Authorization $authorization;
 
     /**
      * Check if this adapter supports a given capability.
      *
-     * @param Capability $feature Capability enum case
+     * @param  Capability  $feature  Capability enum case
      */
     public function supports(Capability $feature): bool
     {
@@ -95,6 +89,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     public function addWriteHook(Write $hook): static
     {
         $this->writeHooks[] = $hook;
+
         return $this;
     }
 
@@ -102,8 +97,9 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     {
         $this->writeHooks = \array_values(\array_filter(
             $this->writeHooks,
-            fn (Write $h) => !($h instanceof $class)
+            fn (Write $h) => ! ($h instanceof $class)
         ));
+
         return $this;
     }
 
@@ -118,8 +114,8 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Apply all write hooks' decorateRow to a row.
      *
-     * @param array<string, mixed> $row
-     * @param array<string, mixed> $metadata
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $metadata
      * @return array<string, mixed>
      */
     protected function decorateRow(array $row, array $metadata): array
@@ -127,11 +123,11 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
         foreach ($this->writeHooks as $hook) {
             $row = $hook->decorateRow($row, $metadata);
         }
+
         return $row;
     }
 
     /**
-     * @param Document $document
      * @return array<string, mixed>
      */
     protected function documentMetadata(Document $document): array
@@ -140,8 +136,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     }
 
     /**
-     * @param Authorization $authorization
-     *
      * @return $this
      */
     public function setAuthorization(Authorization $authorization): self
@@ -155,10 +149,8 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     {
         return $this->authorization;
     }
+
     /**
-     * @param string $key
-     * @param mixed $value
-     *
      * @return $this
      */
     public function setDebug(string $key, mixed $value): static
@@ -176,9 +168,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
         return $this->debug;
     }
 
-    /**
-     * @return static
-     */
     public function resetDebug(): static
     {
         $this->debug = [];
@@ -191,11 +180,10 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param string $namespace
      *
      * @return $this
-     * @throws DatabaseException
      *
+     * @throws DatabaseException
      */
     public function setNamespace(string $namespace): static
     {
@@ -208,9 +196,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Get Namespace.
      *
      * Get namespace of current set scope
-     *
-     * @return string
-     *
      */
     public function getNamespace(): string
     {
@@ -220,7 +205,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Set Hostname.
      *
-     * @param string $hostname
      * @return $this
      */
     public function setHostname(string $hostname): static
@@ -232,8 +216,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Get Hostname.
-     *
-     * @return string
      */
     public function getHostname(): string
     {
@@ -245,9 +227,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      *
      * Set database to use for current scope
      *
-     * @param string $name
      *
-     * @return bool
      * @throws DatabaseException
      */
     public function setDatabase(string $name): bool
@@ -261,9 +241,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Get Database.
      *
      * Get Database from current scope
-     *
-     * @return string
-     *
      */
     public function getDatabase(): string
     {
@@ -274,10 +251,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Set Shared Tables.
      *
      * Set whether to share tables between tenants
-     *
-     * @param bool $sharedTables
-     *
-     * @return bool
      */
     public function setSharedTables(bool $sharedTables): bool
     {
@@ -290,8 +263,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Get Share Tables.
      *
      * Get whether to share tables between tenants
-     *
-     * @return bool
      */
     public function getSharedTables(): bool
     {
@@ -302,10 +273,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Set Tenant.
      *
      * Set tenant to use if tables are shared
-     *
-     * @param ?int $tenant
-     *
-     * @return bool
      */
     public function setTenant(?int $tenant): bool
     {
@@ -318,8 +285,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Get Tenant.
      *
      * Get tenant to use for shared tables
-     *
-     * @return ?int
      */
     public function getTenant(): ?int
     {
@@ -330,10 +295,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Set Tenant Per Document.
      *
      * Set whether to use a different tenant for each document
-     *
-     * @param bool $tenantPerDocument
-     *
-     * @return bool
      */
     public function setTenantPerDocument(bool $tenantPerDocument): bool
     {
@@ -346,8 +307,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Get Tenant Per Document.
      *
      * Get whether to use a different tenant for each document
-     *
-     * @return bool
      */
     public function getTenantPerDocument(): bool
     {
@@ -357,8 +316,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Set metadata for query comments
      *
-     * @param string $key
-     * @param mixed $value
      * @return $this
      */
     public function setMetadata(string $key, mixed $value): static
@@ -371,7 +328,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
         }
 
         $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
-            return $output . $query;
+            return $output.$query;
         });
 
         return $this;
@@ -411,9 +368,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Clears a global timeout for database queries.
-     *
-     * @param string $event
-     * @return void
      */
     public function clearTimeout(string $event): void
     {
@@ -426,7 +380,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      *
      * If a transaction is already active, this will only increment the transaction count and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function startTransaction(): bool;
@@ -438,7 +391,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * If there is more than one active transaction, this decrement the transaction count and return true.
      * If the transaction count is 1, it will be commited, the transaction count will be reset to 0, and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function commitTransaction(): bool;
@@ -449,15 +401,12 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * If no transaction is active, this will be a no-op and will return false.
      * If 1 or more transactions are active, this will roll back all transactions, reset the count to 0, and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function rollbackTransaction(): bool;
 
     /**
      * Check if a transaction is active.
-     *
-     * @return bool
      */
     public function inTransaction(): bool
     {
@@ -466,8 +415,10 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
+     *
      * @throws Throwable
      */
     public function withTransaction(callable $callback): mixed
@@ -480,6 +431,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
                 $this->startTransaction();
                 $result = $callback();
                 $this->commitTransaction();
+
                 return $result;
             } catch (Throwable $action) {
                 try {
@@ -487,6 +439,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
                 } catch (Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
+
                         continue;
                     }
 
@@ -507,6 +460,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
                 if ($attempts < $retries) {
                     \usleep($sleep * ($attempts + 1));
+
                     continue;
                 }
 
@@ -519,15 +473,10 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Apply a transformation to a query before an event occurs
-     *
-     * @param string $event
-     * @param string $name
-     * @param ?callable $callback
-     * @return static
      */
     public function before(string $event, string $name = '', ?callable $callback = null): static
     {
-        if (!isset($this->transformations[$event])) {
+        if (! isset($this->transformations[$event])) {
             $this->transformations[$event] = [];
         }
 
@@ -554,16 +503,11 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Quote a string
-     *
-     * @param string $string
-     * @return string
      */
     abstract protected function quote(string $string): string;
 
     /**
      * Ping Database
-     *
-     * @return bool
      */
     abstract public function ping(): bool;
 
@@ -574,10 +518,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Create Database
-     *
-     * @param string $name
-     *
-     * @return bool
      */
     abstract public function create(string $name): bool;
 
@@ -585,10 +525,8 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string|null $collection (optional) collection name
-     *
-     * @return bool
+     * @param  string  $database  database name
+     * @param  string|null  $collection  (optional) collection name
      */
     abstract public function exists(string $database, ?string $collection = null): bool;
 
@@ -601,37 +539,24 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Delete Database
-     *
-     * @param string $name
-     *
-     * @return bool
      */
     abstract public function delete(string $name): bool;
 
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param array<Attribute> $attributes (optional)
-     * @param array<Index> $indexes (optional)
-     * @return bool
+     * @param  array<Attribute>  $attributes  (optional)
+     * @param  array<Index>  $indexes  (optional)
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete Collection
-     *
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteCollection(string $id): bool;
 
     /**
      * Analyze a collection updating its metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
      */
     abstract public function analyzeCollection(string $collection): bool;
 
@@ -644,9 +569,8 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Create Attributes
      *
-     * @param string $collection
-     * @param array<Attribute> $attributes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     *
      * @throws TimeoutException
      * @throws DuplicateException
      */
@@ -654,31 +578,16 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Update Attribute
-     *
-     * @param string $collection
-     * @param Attribute $attribute
-     * @param string|null $newKey
-     * @return bool
      */
     abstract public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
 
     /**
      * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
 
     /**
      * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
@@ -699,57 +608,36 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Rename Index
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      */
     abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
-     * @param array<string, string> $indexAttributeTypes
-     * @param array<string, mixed> $collation
+     * @param  array<string, string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
      */
     abstract public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool;
 
     /**
      * Delete Index
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteIndex(string $collection, string $id): bool;
 
     /**
      * Get Document
      *
-     * @param Document $collection
-     * @param string $id
-     * @param array<Query> $queries
-     * @param bool $forUpdate
-     * @return Document
+     * @param  array<Query>  $queries
      */
     abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
     /**
      * Create Document
-     *
-     * @param Document $collection
-     * @param Document $document
-     *
-     * @return Document
      */
     abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
      * Create Documents in batches
      *
-     * @param Document $collection
-     * @param array<Document> $documents
-     *
+     * @param  array<Document>  $documents
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -758,13 +646,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Update Document
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     *
-     * @return Document
      */
     abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
@@ -773,20 +654,14 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      *
      * Updates all documents which match the given query.
      *
-     * @param Document $collection
-     * @param Document $updates
-     * @param array<Document> $documents
-     *
-     * @return int
+     * @param  array<Document>  $documents
      *
      * @throws DatabaseException
      */
     abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Change> $changes
+     * @param  array<Change>  $changes
      * @return array<Document>
      */
     public function upsertDocuments(
@@ -798,30 +673,21 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     }
 
     /**
-     * @param string $collection
-     * @param array<Document> $documents
+     * @param  array<Document>  $documents
      * @return array<Document>
      */
     abstract public function getSequences(string $collection, array $documents): array;
 
     /**
      * Delete Document
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
 
     /**
      * Delete Documents
      *
-     * @param string $collection
-     * @param array<string> $sequences
-     * @param array<string> $permissionIds
-     *
-     * @return int
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
      */
     abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
@@ -830,15 +696,10 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<string>  $orderTypes
+     * @param  array<string, mixed>  $cursor
      * @return array<Document>
      */
     abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array;
@@ -846,31 +707,20 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Sum an attribute
      *
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Query> $queries
-     * @param int|null $max
-     *
-     * @return int|float
+     * @param  array<Query>  $queries
      */
     abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
 
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     *
-     * @return int
+     * @param  array<Query>  $queries
      */
     abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
 
     /**
      * Get Collection Size of the raw data
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
@@ -878,119 +728,83 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Get Collection Size on the disk
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get max STRING limit
-     *
-     * @return int
      */
     abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
-     *
-     * @return int
      */
     abstract public function getLimitForInt(): int;
 
     /**
      * Get maximum attributes limit.
-     *
-     * @return int
      */
     abstract public function getLimitForAttributes(): int;
 
     /**
      * Get maximum index limit.
-     *
-     * @return int
      */
     abstract public function getLimitForIndexes(): int;
 
-    /**
-     * @return int
-     */
     abstract public function getMaxIndexLength(): int;
 
     /**
      * Get the maximum VARCHAR length for this adapter
-     *
-     * @return int
      */
     abstract public function getMaxVarcharLength(): int;
 
     /**
      * Get the maximum UID length for this adapter
-     *
-     * @return int
      */
     abstract public function getMaxUIDLength(): int;
 
     /**
      * Get the minimum supported DateTime value
-     *
-     * @return DateTime
      */
     abstract public function getMinDateTime(): DateTime;
 
     /**
      * Get the primitive type of the primary key type for this adapter
-     *
-     * @return string
      */
     abstract public function getIdAttributeType(): string;
 
     /**
      * Get the maximum supported DateTime value
-     *
-     * @return DateTime
      */
     public function getMaxDateTime(): DateTime
     {
         return new DateTime('9999-12-31 23:59:59');
     }
 
-
     /**
      * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
      */
     abstract public function getCountOfAttributes(Document $collection): int;
 
     /**
      * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
      */
     abstract public function getCountOfIndexes(Document $collection): int;
 
     /**
      * Returns number of attributes used by default.
-     *
-     * @return int
      */
     abstract public function getCountOfDefaultAttributes(): int;
 
     /**
      * Returns number of indexes used by default.
-     *
-     * @return int
      */
     abstract public function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
      * Return 0 when no restrictions apply
-     *
-     * @return int
      */
     abstract public function getDocumentSizeLimit(): int;
 
@@ -999,9 +813,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     *
-     * @param Document $collection
-     * @return int
      */
     abstract public function getAttributeWidth(Document $collection): int;
 
@@ -1015,16 +826,14 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Get an attribute projection given a list of selected attributes
      *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param  array<string>  $selections
      */
     abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
 
     /**
      * Get all selected attributes from queries
      *
-     * @param array<Query> $queries
+     * @param  array<Query>  $queries
      * @return array<string>
      */
     protected function getAttributeSelections(array $queries): array
@@ -1045,8 +854,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Filter Keys
      *
-     * @param string $value
-     * @return string
      * @throws DatabaseException
      */
     public function filter(string $value): string
@@ -1077,7 +884,7 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
             ')',
             '{',
             '}',
-            '|'
+            '|',
         ];
 
         foreach ($wildcards as $wildcard) {
@@ -1090,14 +897,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Increase or decrease attribute value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param string $updatedAt
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(
@@ -1123,7 +922,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     abstract public function getInternalIndexesKeys(): array;
 
     /**
-     * @param string $collection
      * @return array<Document>
      */
     public function getSchemaAttributes(string $collection): array
@@ -1138,12 +936,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
      * that would be used when creating a column for the given attribute parameters.
      * Returns an empty string if the adapter does not support this operation.
      *
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param bool $required
-     * @return string
      * @throws DatabaseException For unknown types on adapters that support column-type resolution.
      */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
@@ -1154,16 +946,11 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     /**
      * Get the query to check for tenant when in shared tables mode
      *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
-     * @return string
+     * @param  string  $collection  The collection being queried
+     * @param  string  $alias  The alias of the parent collection if in a subquery
      */
     abstract public function getTenantQuery(string $collection, string $alias = ''): string;
 
-    /**
-     * @param mixed $stmt
-     * @return bool
-     */
     abstract protected function execute(mixed $stmt): bool;
 
     public function castingBefore(Document $collection, Document $document): Document
@@ -1182,16 +969,11 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
     }
 
     /**
-    * Set support for attributes
-    *
-    * @param bool $support
-    * @return bool
-    */
+     * Set support for attributes
+     */
     abstract public function setSupportForAttributes(bool $support): bool;
 
     /**
-     * @param bool $enable
-     *
      * @return $this
      */
     public function enableAlterLocks(bool $enable): self
@@ -1203,8 +985,6 @@ abstract class Adapter implements Feature\Documents, Feature\Indexes, Feature\At
 
     /**
      * Handle non utf characters supported?
-     *
-     * @return bool
      */
     public function getSupportNonUtfCharacters(): bool
     {

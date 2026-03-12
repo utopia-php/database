@@ -13,26 +13,23 @@ use Utopia\Database\PDO;
 class MariaDBTest extends Base
 {
     protected static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
     // Remove once all methods are implemented
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mariadb";
+        return 'mariadb';
     }
 
-    /**
-     * @return Database
-     */
     public function getDatabase(bool $fresh = false): Database
     {
-        if (!is_null(self::$database) && !$fresh) {
+        if (! is_null(self::$database) && ! $fresh) {
             return self::$database;
         }
 
@@ -42,7 +39,7 @@ class MariaDBTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
-        $redis = new Redis();
+        $redis = new Redis;
         $redis->connect('redis', 6379);
         $redis->select(7);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
@@ -53,9 +50,8 @@ class MariaDBTest extends Base
             ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = 'st_' . static::getTestToken())
-            ->enableLocks(true)
-        ;
+            ->setNamespace(static::$namespace = 'st_'.static::getTestToken())
+            ->enableLocks(true);
 
         if ($database->exists()) {
             $database->delete();
@@ -64,12 +60,13 @@ class MariaDBTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
@@ -79,7 +76,7 @@ class MariaDBTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pdo->exec($sql);

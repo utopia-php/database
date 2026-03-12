@@ -9,8 +9,11 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 class DateTimeTest extends TestCase
 {
     private \DateTime $minAllowed;
+
     private \DateTime $maxAllowed;
+
     private string $minString = '0000-01-01 00:00:00';
+
     private string $maxString = '9999-12-31 23:59:59';
 
     public function __construct()
@@ -21,23 +24,19 @@ class DateTimeTest extends TestCase
         $this->maxAllowed = new \DateTime($this->maxString);
     }
 
-    public function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
-    public function testCreateDatetime(): void
+    public function test_create_datetime(): void
     {
         $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
 
-        $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-1-4 11:31"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04 11:31:52"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-1-4 11:31:52.123456789"));
+        $this->assertGreaterThan(DateTime::addSeconds(new \DateTime, -3), DateTime::now());
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-1-4 11:31'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04 11:31:52'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-1-4 11:31:52.123456789'));
         $this->assertGreaterThan('2022-7-2', '2022-7-2 11:31:52.680');
         $now = DateTime::now();
         $this->assertEquals(23, strlen($now));
@@ -55,21 +54,21 @@ class DateTimeTest extends TestCase
         $this->assertEquals('52', $dateObject->format('s'));
         $this->assertEquals('680', $dateObject->format('v'));
 
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04 11:31:52.680+02:00"));
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04 11:31:52.680+02:00'));
         $this->assertEquals('UTC', date_default_timezone_get());
-        $this->assertEquals("2022-12-04 09:31:52.680", DateTime::setTimezone("2022-12-04 11:31:52.680+02:00"));
-        $this->assertEquals("2022-12-04T09:31:52.681+00:00", DateTime::formatTz("2022-12-04 09:31:52.681"));
+        $this->assertEquals('2022-12-04 09:31:52.680', DateTime::setTimezone('2022-12-04 11:31:52.680+02:00'));
+        $this->assertEquals('2022-12-04T09:31:52.681+00:00', DateTime::formatTz('2022-12-04 09:31:52.681'));
 
         /**
          * Test for Failure
          */
-        $this->assertEquals(false, $dateValidator->isValid("2022-13-04 11:31:52.680"));
-        $this->assertEquals(false, $dateValidator->isValid("-0001-13-04 00:00:00"));
-        $this->assertEquals(false, $dateValidator->isValid("0000-00-00 00:00:00"));
-        $this->assertEquals(false, $dateValidator->isValid("10000-01-01 00:00:00"));
+        $this->assertEquals(false, $dateValidator->isValid('2022-13-04 11:31:52.680'));
+        $this->assertEquals(false, $dateValidator->isValid('-0001-13-04 00:00:00'));
+        $this->assertEquals(false, $dateValidator->isValid('0000-00-00 00:00:00'));
+        $this->assertEquals(false, $dateValidator->isValid('10000-01-01 00:00:00'));
     }
 
-    public function testPastDateValidation(): void
+    public function test_past_date_validation(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -77,8 +76,8 @@ class DateTimeTest extends TestCase
             requireDateInFuture: true,
         );
 
-        $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, 5)));
         $this->assertEquals("Value must be valid date in the future and between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
 
         $dateValidator = new DatetimeValidator(
@@ -87,12 +86,12 @@ class DateTimeTest extends TestCase
             requireDateInFuture: false
         );
 
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
-        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime, 5)));
         $this->assertEquals("Value must be valid date between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
     }
 
-    public function testDatePrecision(): void
+    public function test_date_precision(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -151,7 +150,7 @@ class DateTimeTest extends TestCase
         $this->assertEquals("Value must be valid date with minutes precision between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
     }
 
-    public function testOffset(): void
+    public function test_offset(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -159,7 +158,7 @@ class DateTimeTest extends TestCase
             offset: 60
         );
 
-        $time = (new \DateTime());
+        $time = (new \DateTime);
         $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
         $time = $time->add(new \DateInterval('PT50S'));
         $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
@@ -174,7 +173,7 @@ class DateTimeTest extends TestCase
             offset: 60
         );
 
-        $time = (new \DateTime());
+        $time = (new \DateTime);
         $time = $time->add(new \DateInterval('PT50S'));
         $time = $time->add(new \DateInterval('PT20S'));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));

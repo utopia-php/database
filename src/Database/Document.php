@@ -5,47 +5,46 @@ namespace Utopia\Database;
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\PermissionType;
-use Utopia\Database\SetType;
 
 /**
  * @extends ArrayObject<string, mixed>
  */
 class Document extends ArrayObject
 {
-
     /**
      * Construct.
      *
      * Construct a new fields object
      *
-     * @param array<string, mixed> $input
-     * @throws DatabaseException
-     * @see ArrayObject::__construct
+     * @param  array<string, mixed>  $input
      *
+     * @throws DatabaseException
+     *
+     * @see ArrayObject::__construct
      */
     public function __construct(array $input = [])
     {
-        if (array_key_exists('$id', $input) && !\is_string($input['$id'])) {
+        if (array_key_exists('$id', $input) && ! \is_string($input['$id'])) {
             throw new StructureException('$id must be of type string');
         }
 
-        if (array_key_exists('$permissions', $input) && !is_array($input['$permissions'])) {
+        if (array_key_exists('$permissions', $input) && ! is_array($input['$permissions'])) {
             throw new StructureException('$permissions must be of type array');
         }
 
         foreach ($input as $key => $value) {
-            if (!\is_array($value)) {
+            if (! \is_array($value)) {
                 continue;
             }
 
             if (isset($value['$id']) || isset($value['$collection'])) {
                 $input[$key] = new self($value);
+
                 continue;
             }
 
             foreach ($value as $childKey => $child) {
-                if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+                if ((isset($child['$id']) || isset($child['$collection'])) && (! $child instanceof self)) {
                     $value[$childKey] = new self($child);
                 }
             }
@@ -56,17 +55,11 @@ class Document extends ArrayObject
         parent::__construct($input);
     }
 
-    /**
-     * @return string
-     */
     public function getId(): string
     {
         return $this->getAttribute('$id', '');
     }
 
-    /**
-     * @return string|null
-     */
     public function getSequence(): ?string
     {
         $sequence = $this->getAttribute('$sequence');
@@ -78,9 +71,6 @@ class Document extends ArrayObject
         return $sequence;
     }
 
-    /**
-     * @return string
-     */
     public function getCollection(): string
     {
         return $this->getAttribute('$collection', '');
@@ -146,34 +136,25 @@ class Document extends ArrayObject
         $typePermissions = [];
 
         foreach ($this->getPermissions() as $permission) {
-            if (!\str_starts_with($permission, $type)) {
+            if (! \str_starts_with($permission, $type)) {
                 continue;
             }
-            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+            $typePermissions[] = \str_replace([$type.'(', ')', '"', ' '], '', $permission);
         }
 
         return \array_unique($typePermissions);
     }
 
-    /**
-     * @return string|null
-     */
     public function getCreatedAt(): ?string
     {
         return $this->getAttribute('$createdAt');
     }
 
-    /**
-     * @return string|null
-     */
     public function getUpdatedAt(): ?string
     {
         return $this->getAttribute('$updatedAt');
     }
 
-    /**
-     * @return int|null
-     */
     public function getTenant(): ?int
     {
         $tenant = $this->getAttribute('$tenant');
@@ -214,11 +195,6 @@ class Document extends ArrayObject
      * Get Attribute.
      *
      * Method for getting a specific fields attribute. If $name is not found $default value will be returned.
-     *
-     * @param string $name
-     * @param mixed $default
-     *
-     * @return mixed
      */
     public function getAttribute(string $name, mixed $default = null): mixed
     {
@@ -234,11 +210,7 @@ class Document extends ArrayObject
      *
      * Method for setting a specific field attribute
      *
-     * @param string $key
-     * @param mixed $value
-     * @param string $type
-     *
-     * @return static
+     * @param  string  $type
      */
     public function setAttribute(string $key, mixed $value, SetType $type = SetType::Assign): static
     {
@@ -247,11 +219,11 @@ class Document extends ArrayObject
                 $this[$key] = $value;
                 break;
             case SetType::Append:
-                $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
+                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
                 \array_push($this[$key], $value);
                 break;
             case SetType::Prepend:
-                $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
+                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
                 \array_unshift($this[$key], $value);
                 break;
         }
@@ -262,8 +234,7 @@ class Document extends ArrayObject
     /**
      * Set Attributes.
      *
-     * @param array<string, mixed> $attributes
-     * @return static
+     * @param  array<string, mixed>  $attributes
      */
     public function setAttributes(array $attributes): static
     {
@@ -278,10 +249,6 @@ class Document extends ArrayObject
      * Remove Attribute.
      *
      * Method for removing a specific field attribute
-     *
-     * @param string $key
-     *
-     * @return static
      */
     public function removeAttribute(string $key): static
     {
@@ -294,11 +261,7 @@ class Document extends ArrayObject
     /**
      * Find.
      *
-     * @param string $key
-     * @param mixed $find
-     * @param string $subject
-     *
-     * @return mixed
+     * @param  mixed  $find
      */
     public function find(string $key, $find, string $subject = ''): mixed
     {
@@ -311,12 +274,14 @@ class Document extends ArrayObject
                     return $value;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             return $subject;
         }
+
         return false;
     }
 
@@ -325,12 +290,8 @@ class Document extends ArrayObject
      *
      * Get array child by key and value match
      *
-     * @param string $key
-     * @param mixed $find
-     * @param mixed $replace
-     * @param string $subject
-     *
-     * @return bool
+     * @param  mixed  $find
+     * @param  mixed  $replace
      */
     public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
     {
@@ -341,16 +302,20 @@ class Document extends ArrayObject
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
+
                     return true;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             $subject[$key] = $replace;
+
             return true;
         }
+
         return false;
     }
 
@@ -359,11 +324,7 @@ class Document extends ArrayObject
      *
      * Get array child by key and value match
      *
-     * @param string $key
-     * @param mixed $find
-     * @param string $subject
-     *
-     * @return bool
+     * @param  mixed  $find
      */
     public function findAndRemove(string $key, $find, string $subject = ''): bool
     {
@@ -374,35 +335,33 @@ class Document extends ArrayObject
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     unset($subject[$i]);
+
                     return true;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             unset($subject[$key]);
+
             return true;
         }
+
         return false;
     }
 
     /**
      * Checks if document has data.
-     *
-     * @return bool
      */
     public function isEmpty(): bool
     {
-        return !\count($this);
+        return ! \count($this);
     }
 
     /**
      * Checks if a document key is set.
-     *
-     * @param string $key
-     *
-     * @return bool
      */
     public function isSet(string $key): bool
     {
@@ -414,9 +373,8 @@ class Document extends ArrayObject
      *
      * Outputs entity as a PHP array
      *
-     * @param array<string> $allow
-     * @param array<string> $disallow
-     *
+     * @param  array<string>  $allow
+     * @param  array<string>  $disallow
      * @return array<string, mixed>
      */
     public function getArrayCopy(array $allow = [], array $disallow = []): array
@@ -426,11 +384,11 @@ class Document extends ArrayObject
         $output = [];
 
         foreach ($array as $key => &$value) {
-            if (!empty($allow) && !\in_array($key, $allow)) { // Export only allow fields
+            if (! empty($allow) && ! \in_array($key, $allow)) { // Export only allow fields
                 continue;
             }
 
-            if (!empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
+            if (! empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
                 continue;
             }
 

@@ -4,7 +4,6 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\OrderDirection;
@@ -15,18 +14,14 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     /**
      * @throws Exception
      */
-    public function testAttributeNotFound(): void
+    public function test_attribute_not_found(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -42,7 +37,7 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             'indexes' => [
                 new Document([
@@ -64,7 +59,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testFulltextWithNonString(): void
+    public function test_fulltext_with_non_string(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -113,7 +108,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testIndexLength(): void
+    public function test_index_length(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -151,7 +146,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testMultipleIndexLength(): void
+    public function test_multiple_index_length(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -207,7 +202,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testEmptyAttributes(): void
+    public function test_empty_attributes(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -245,7 +240,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testObjectIndexValidation(): void
+    public function test_object_index_validation(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -272,13 +267,13 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
-            'indexes' => []
+            'indexes' => [],
         ]);
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes:true);
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes: true);
 
         // Valid: Object index on single VAR_OBJECT attribute
         $validIndex = new Document([
@@ -332,7 +327,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testNestedObjectPathIndexValidation(): void
+    public function test_nested_object_path_index_validation(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -370,13 +365,13 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
-            'indexes' => []
+            'indexes' => [],
         ]);
 
         // Validator with supportForObjectIndexes enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true, supportForObjects:true);
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true, true, true, true, supportForObjects: true);
 
         // InValid: INDEX_OBJECT on nested path (dot notation)
         $validNestedObjectIndex = new Document([
@@ -445,7 +440,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testDuplicatedAttributes(): void
+    public function test_duplicated_attributes(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -461,7 +456,7 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             'indexes' => [
                 new Document([
@@ -483,7 +478,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testDuplicatedAttributesDifferentOrder(): void
+    public function test_duplicated_attributes_different_order(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -499,7 +494,7 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             'indexes' => [
                 new Document([
@@ -520,7 +515,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testReservedIndexKey(): void
+    public function test_reserved_index_key(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -536,7 +531,7 @@ class IndexTest extends TestCase
                     'default' => null,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             'indexes' => [
                 new Document([
@@ -556,8 +551,8 @@ class IndexTest extends TestCase
 
     /**
      * @throws Exception
-    */
-    public function testIndexWithNoAttributeSupport(): void
+     */
+    public function test_index_with_no_attribute_support(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -598,7 +593,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testTrigramIndexValidation(): void
+    public function test_trigram_index_validation(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -638,7 +633,7 @@ class IndexTest extends TestCase
                     'filters' => [],
                 ]),
             ],
-            'indexes' => []
+            'indexes' => [],
         ]);
 
         // Validator with supportForTrigramIndexes enabled
@@ -717,7 +712,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testTTLIndexValidation(): void
+    public function test_ttl_index_validation(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -746,7 +741,7 @@ class IndexTest extends TestCase
                     'filters' => [],
                 ]),
             ],
-            'indexes' => []
+            'indexes' => [],
         ]);
 
         // Validator with supportForTTLIndexes enabled

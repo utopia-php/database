@@ -8,45 +8,34 @@ class Role
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
-    ) {
-    }
+    ) {}
 
     /**
      * Create a role string from this Role instance
-     *
-     * @return string
      */
     public function toString(): string
     {
         $str = $this->role;
         if ($this->identifier) {
-            $str .= ':' . $this->identifier;
+            $str .= ':'.$this->identifier;
         }
         if ($this->dimension) {
-            $str .= '/' . $this->dimension;
+            $str .= '/'.$this->dimension;
         }
+
         return $str;
     }
 
-    /**
-     * @return string
-     */
     public function getRole(): string
     {
         return $this->role;
     }
 
-    /**
-     * @return string
-     */
     public function getIdentifier(): string
     {
         return $this->identifier;
     }
 
-    /**
-     * @return string
-     */
     public function getDimension(): string
     {
         return $this->dimension;
@@ -55,8 +44,6 @@ class Role
     /**
      * Parse a role string into a Role object
      *
-     * @param string $role
-     * @return self
      * @throws \Exception
      */
     public static function parse(string $role): self
@@ -66,16 +53,17 @@ class Role
         $hasDimension = \str_contains($role, '/');
         $role = $roleParts[0];
 
-        if (!$hasIdentifier && !$hasDimension) {
+        if (! $hasIdentifier && ! $hasDimension) {
             return new self($role);
         }
 
-        if ($hasIdentifier && !$hasDimension) {
+        if ($hasIdentifier && ! $hasDimension) {
             $identifier = $roleParts[1];
+
             return new self($role, $identifier);
         }
 
-        if (!$hasIdentifier) {
+        if (! $hasIdentifier) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
                 throw new \Exception('Only one dimension can be provided');
@@ -87,6 +75,7 @@ class Role
             if (empty($dimension)) {
                 throw new \Exception('Dimension must not be empty');
             }
+
             return new self($role, '', $dimension);
         }
 
@@ -102,15 +91,12 @@ class Role
         if (empty($dimension)) {
             throw new \Exception('Dimension must not be empty');
         }
+
         return new self($role, $identifier, $dimension);
     }
 
     /**
      * Create a user role from the given ID
-     *
-     * @param string $identifier
-     * @param string $status
-     * @return self
      */
     public static function user(string $identifier, string $status = ''): Role
     {
@@ -119,9 +105,6 @@ class Role
 
     /**
      * Create a users role
-     *
-     * @param string $status
-     * @return self
      */
     public static function users(string $status = ''): self
     {
@@ -130,10 +113,6 @@ class Role
 
     /**
      * Create a team role from the given ID and dimension
-     *
-     * @param string $identifier
-     * @param string $dimension
-     * @return self
      */
     public static function team(string $identifier, string $dimension = ''): self
     {
@@ -142,9 +121,6 @@ class Role
 
     /**
      * Create a label role from the given ID
-     *
-     * @param string $identifier
-     * @return self
      */
     public static function label(string $identifier): self
     {
@@ -153,8 +129,6 @@ class Role
 
     /**
      * Create an any satisfy role
-     *
-     * @return self
      */
     public static function any(): Role
     {
@@ -163,8 +137,6 @@ class Role
 
     /**
      * Create a guests role
-     *
-     * @return self
      */
     public static function guests(): self
     {

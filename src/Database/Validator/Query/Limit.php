@@ -12,8 +12,6 @@ class Limit extends Base
 
     /**
      * Query constructor
-     *
-     * @param int $maxLimit
      */
     public function __construct(int $maxLimit = PHP_INT_MAX)
     {
@@ -25,31 +23,33 @@ class Limit extends Base
      *
      * Returns true if method is limit values are within range.
      *
-     * @param Query $value
-     * @return bool
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
         if ($value->getMethod() !== Query::TYPE_LIMIT) {
-            $this->message = 'Invalid query method: ' . $value->getMethod()->value;
+            $this->message = 'Invalid query method: '.$value->getMethod()->value;
+
             return false;
         }
 
         $limit = $value->getValue();
 
-        $validator = new Numeric();
-        if (!$validator->isValid($limit)) {
-            $this->message = 'Invalid limit: ' . $validator->getDescription();
+        $validator = new Numeric;
+        if (! $validator->isValid($limit)) {
+            $this->message = 'Invalid limit: '.$validator->getDescription();
+
             return false;
         }
 
         $validator = new Range(1, $this->maxLimit);
-        if (!$validator->isValid($limit)) {
-            $this->message = 'Invalid limit: ' . $validator->getDescription();
+        if (! $validator->isValid($limit)) {
+            $this->message = 'Invalid limit: '.$validator->getDescription();
+
             return false;
         }
 

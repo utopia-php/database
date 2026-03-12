@@ -5,13 +5,14 @@ namespace Utopia\Database\Validator\Authorization;
 class Input
 {
     /**
-     * @var array<string> $permissions
+     * @var array<string>
      */
     protected array $permissions;
+
     protected string $action;
 
     /**
-     * @param string[] $permissions
+     * @param  string[]  $permissions
      */
     public function __construct(string $action, array $permissions)
     {
@@ -20,17 +21,19 @@ class Input
     }
 
     /**
-     * @param string[] $permissions
+     * @param  string[]  $permissions
      */
     public function setPermissions(array $permissions): self
     {
         $this->permissions = $permissions;
+
         return $this;
     }
 
     public function setAction(string $action): self
     {
         $this->action = $action;
+
         return $this;
     }
 

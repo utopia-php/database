@@ -10,14 +10,11 @@ class Connection
      * @var array<string>
      */
     protected static array $errors = [
-        'Max connect timeout reached'
+        'Max connect timeout reached',
     ];
 
     /**
      * Check if the given throwable was caused by a database connection error.
-     *
-     * @param \Throwable $e
-     * @return bool
      */
     public static function hasError(\Throwable $e): bool
     {

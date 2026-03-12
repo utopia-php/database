@@ -15,13 +15,9 @@ use Utopia\Query\Schema\ColumnType;
 class Documents extends IndexedQueries
 {
     /**
-     * @param array<mixed> $attributes
-     * @param array<mixed> $indexes
-     * @param string $idAttributeType
-     * @param int $maxValuesCount
-     * @param \DateTime $minAllowedDate
-     * @param \DateTime $maxAllowedDate
-     * @param bool $supportForAttributes
+     * @param  array<mixed>  $attributes
+     * @param  array<mixed>  $indexes
+     *
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
@@ -60,8 +56,8 @@ class Documents extends IndexedQueries
         ]);
 
         $validators = [
-            new Limit(),
-            new Offset(),
+            new Limit,
+            new Offset,
             new Cursor($maxUIDLength),
             new Filter(
                 $attributes,

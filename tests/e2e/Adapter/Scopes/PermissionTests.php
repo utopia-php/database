@@ -3,31 +3,34 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
-use Utopia\Database\RelationType;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Capability;
-use Utopia\Database\Attribute;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait PermissionTests
 {
     private static bool $collPermFixtureInit = false;
+
     /** @var array{collectionId: string, docId: string}|null */
     private static ?array $collPermFixtureData = null;
 
     private static bool $relPermFixtureInit = false;
+
     /** @var array{collectionId: string, oneToOneId: string, oneToManyId: string, docId: string}|null */
     private static ?array $relPermFixtureData = null;
 
     private static bool $collUpdateFixtureInit = false;
+
     /** @var array{collectionId: string}|null */
     private static ?array $collUpdateFixtureData = null;
 
@@ -57,7 +60,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: false);
 
         $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
@@ -70,9 +73,9 @@ trait PermissionTests
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random'))
+                Permission::delete(Role::user('random')),
             ],
-            'test' => 'lorem'
+            'test' => 'lorem',
         ]));
 
         self::$collPermFixtureInit = true;
@@ -80,6 +83,7 @@ trait PermissionTests
             'collectionId' => $collection->getId(),
             'docId' => $document->getId(),
         ];
+
         return self::$collPermFixtureData;
     }
 
@@ -111,7 +115,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
@@ -120,7 +124,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $database->createAttribute($collectionOneToOne->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
@@ -131,7 +135,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $database->createAttribute($collectionOneToMany->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
@@ -146,7 +150,7 @@ trait PermissionTests
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random'))
+                Permission::delete(Role::user('random')),
             ],
             'test' => 'lorem',
             RelationType::OneToOne->value => [
@@ -154,9 +158,9 @@ trait PermissionTests
                 '$permissions' => [
                     Permission::read(Role::user('random')),
                     Permission::update(Role::user('random')),
-                    Permission::delete(Role::user('random'))
+                    Permission::delete(Role::user('random')),
                 ],
-                'test' => 'lorem ipsum'
+                'test' => 'lorem ipsum',
             ],
             RelationType::OneToMany->value => [
                 [
@@ -164,18 +168,18 @@ trait PermissionTests
                     '$permissions' => [
                         Permission::read(Role::user('random')),
                         Permission::update(Role::user('random')),
-                        Permission::delete(Role::user('random'))
+                        Permission::delete(Role::user('random')),
                     ],
-                    'test' => 'lorem ipsum'
+                    'test' => 'lorem ipsum',
                 ], [
                     '$id' => ID::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('torsten')),
                         Permission::update(Role::user('random')),
-                        Permission::delete(Role::user('random'))
+                        Permission::delete(Role::user('random')),
                     ],
-                    'test' => 'dolor'
-                ]
+                    'test' => 'dolor',
+                ],
             ],
         ]));
 
@@ -186,6 +190,7 @@ trait PermissionTests
             'oneToManyId' => $collectionOneToMany->getId(),
             'docId' => $document->getId(),
         ];
+
         return self::$relPermFixtureData;
     }
 
@@ -215,7 +220,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: false);
 
         $database->updateCollection('collectionUpdate', [], true);
@@ -224,6 +229,7 @@ trait PermissionTests
         self::$collUpdateFixtureData = [
             'collectionId' => $collection->getId(),
         ];
+
         return self::$collUpdateFixtureData;
     }
 
@@ -247,7 +253,7 @@ trait PermissionTests
         for ($i = 0; $i < 3; $i++) {
             $documents[] = new Document([
                 '$permissions' => $permissions,
-                'president' => 'Donald Trump'
+                'president' => 'Donald Trump',
             ]);
         }
 
@@ -267,7 +273,7 @@ trait PermissionTests
          * No permissions passed, Check old is preserved
          */
         $updates = new Document([
-            'president' => 'George Washington'
+            'president' => 'George Washington',
         ]);
 
         $results = [];
@@ -306,7 +312,7 @@ trait PermissionTests
 
         $updates = new Document([
             '$permissions' => $permissions,
-            'president' => 'Joe biden'
+            'president' => 'Joe biden',
         ]);
 
         $results = [];
@@ -340,7 +346,7 @@ trait PermissionTests
          */
         $updates = new Document([
             '$permissions' => [],
-            'president' => 'Richard Nixon'
+            'president' => 'Richard Nixon',
         ]);
 
         $results = [];
@@ -385,8 +391,7 @@ trait PermissionTests
         /**
          * Validate the decode function does not add $permissions null entry when no permissions are provided
          */
-
-        $document = $database->createDocument(__FUNCTION__, new Document());
+        $document = $database->createDocument(__FUNCTION__, new Document);
 
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertEquals([], $document->getAttribute('$permissions'));
@@ -394,7 +399,7 @@ trait PermissionTests
         $documents = [];
 
         for ($i = 0; $i < 2; $i++) {
-            $documents[] = new Document();
+            $documents[] = new Document;
         }
 
         $results = [];
@@ -456,7 +461,7 @@ trait PermissionTests
         $document = $database->createDocument('documents', new Document([
             '$id' => ID::unique(),
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
             'string' => 'text📝',
             'integer_signed' => -Database::MAX_INT,
@@ -512,40 +517,41 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $collection = 'testUpdateDocumentsPerms';
 
         $database->createCollection($collection, attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true)
+            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
         ], permissions: [], documentSecurity: true);
 
         // Test we can bulk update permissions we have access to
         $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
             for ($i = 0; $i < 10; $i++) {
                 $database->createDocument($collection, new Document([
-                    '$id' => 'doc' . $i,
-                    'string' => 'text📝 ' . $i,
+                    '$id' => 'doc'.$i,
+                    'string' => 'text📝 '.$i,
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::create(Role::any()),
                         Permission::update(Role::any()),
-                        Permission::delete(Role::any())
+                        Permission::delete(Role::any()),
                     ],
                 ]));
             }
 
             $database->createDocument($collection, new Document([
-                '$id' => 'doc' . $i,
-                'string' => 'text📝 ' . $i,
+                '$id' => 'doc'.$i,
+                'string' => 'text📝 '.$i,
                 '$permissions' => [
                     Permission::read(Role::user('user1')),
                     Permission::create(Role::user('user1')),
                     Permission::update(Role::user('user1')),
-                    Permission::delete(Role::user('user1'))
+                    Permission::delete(Role::user('user1')),
                 ],
             ]));
         });
@@ -555,7 +561,7 @@ trait PermissionTests
                 Permission::read(Role::user('user2')),
                 Permission::create(Role::user('user2')),
                 Permission::update(Role::user('user2')),
-                Permission::delete(Role::user('user2'))
+                Permission::delete(Role::user('user2')),
             ],
         ]));
 
@@ -574,7 +580,7 @@ trait PermissionTests
                 Permission::read(Role::user('user2')),
                 Permission::create(Role::user('user2')),
                 Permission::update(Role::user('user2')),
-                Permission::delete(Role::user('user2'))
+                Permission::delete(Role::user('user2')),
             ];
         });
 
@@ -585,7 +591,7 @@ trait PermissionTests
                 Permission::read(Role::user('user1')),
                 Permission::create(Role::user('user1')),
                 Permission::update(Role::user('user1')),
-                Permission::delete(Role::user('user1'))
+                Permission::delete(Role::user('user1')),
             ];
         });
 
@@ -599,7 +605,7 @@ trait PermissionTests
                 Permission::read(Role::user('user3')),
                 Permission::create(Role::user('user3')),
                 Permission::update(Role::user('user3')),
-                Permission::delete(Role::user('user3'))
+                Permission::delete(Role::user('user3')),
             ],
             'string' => 'text📝 updated',
         ]));
@@ -617,7 +623,7 @@ trait PermissionTests
                 Permission::read(Role::user('user3')),
                 Permission::create(Role::user('user3')),
                 Permission::update(Role::user('user3')),
-                Permission::delete(Role::user('user3'))
+                Permission::delete(Role::user('user3')),
             ];
         });
 
@@ -635,7 +641,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: false);
 
         $this->assertInstanceOf(Document::class, $collection);
@@ -694,9 +700,9 @@ trait PermissionTests
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ],
-            'test' => 'lorem ipsum'
+            'test' => 'lorem ipsum',
         ]));
     }
 
@@ -715,9 +721,9 @@ trait PermissionTests
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random'))
+                Permission::delete(Role::user('random')),
             ],
-            'test' => 'lorem'
+            'test' => 'lorem',
         ]));
         $this->assertInstanceOf(Document::class, $document);
     }
@@ -767,7 +773,7 @@ trait PermissionTests
 
         $this->expectException(DatabaseException::class);
         $database->createCollection('collectionSecurity', permissions: [
-            'i dont work'
+            'i dont work',
         ]);
     }
 
@@ -854,7 +860,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collection);
@@ -865,7 +871,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collectionOneToOne);
@@ -878,7 +884,7 @@ trait PermissionTests
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
-            Permission::delete(Role::users())
+            Permission::delete(Role::users()),
         ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collectionOneToMany);
@@ -938,9 +944,9 @@ trait PermissionTests
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
             ],
-            'test' => 'lorem ipsum'
+            'test' => 'lorem ipsum',
         ]));
     }
 
@@ -977,7 +983,7 @@ trait PermissionTests
             '$permissions' => [
                 Permission::read(Role::user('random')),
                 Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random'))
+                Permission::delete(Role::user('random')),
             ],
             'test' => 'lorem',
             RelationType::OneToOne->value => [
@@ -985,9 +991,9 @@ trait PermissionTests
                 '$permissions' => [
                     Permission::read(Role::user('random')),
                     Permission::update(Role::user('random')),
-                    Permission::delete(Role::user('random'))
+                    Permission::delete(Role::user('random')),
                 ],
-                'test' => 'lorem ipsum'
+                'test' => 'lorem ipsum',
             ],
             RelationType::OneToMany->value => [
                 [
@@ -995,18 +1001,18 @@ trait PermissionTests
                     '$permissions' => [
                         Permission::read(Role::user('random')),
                         Permission::update(Role::user('random')),
-                        Permission::delete(Role::user('random'))
+                        Permission::delete(Role::user('random')),
                     ],
-                    'test' => 'lorem ipsum'
+                    'test' => 'lorem ipsum',
                 ], [
                     '$id' => ID::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('torsten')),
                         Permission::update(Role::user('random')),
-                        Permission::delete(Role::user('random'))
+                        Permission::delete(Role::user('random')),
                     ],
-                    'test' => 'dolor'
-                ]
+                    'test' => 'dolor',
+                ],
             ],
         ]));
         $this->assertInstanceOf(Document::class, $document);
@@ -1042,8 +1048,9 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1115,8 +1122,9 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1270,7 +1278,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->updateCollection($data['collectionId'], permissions: [
-            'i dont work'
+            'i dont work',
         ], documentSecurity: false);
     }
 
@@ -1290,7 +1298,7 @@ trait PermissionTests
             '$permissions' => [
                 Permission::delete(Role::any()),
             ],
-            'type' => 'Dog'
+            'type' => 'Dog',
         ]));
 
         $cat = $database->createDocument('animals', new Document([
@@ -1298,7 +1306,7 @@ trait PermissionTests
             '$permissions' => [
                 Permission::update(Role::any()),
             ],
-            'type' => 'Cat'
+            'type' => 'Cat',
         ]));
 
         // No read permissions:
@@ -1353,8 +1361,9 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (! $database->getAdapter()->supports(Capability::Relationships)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1365,7 +1374,7 @@ trait PermissionTests
             Permission::read(Role::user('a')),
             Permission::create(Role::user('a')),
             Permission::update(Role::user('a')),
-            Permission::delete(Role::user('a'))
+            Permission::delete(Role::user('a')),
         ]);
         $database->createCollection('childRelationTest', [], [], [
             Permission::create(Role::user('a')),
@@ -1400,5 +1409,4 @@ trait PermissionTests
         $database->deleteCollection('parentRelationTest');
         $database->deleteCollection('childRelationTest');
     }
-
 }

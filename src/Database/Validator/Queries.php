@@ -8,9 +8,6 @@ use Utopia\Validator;
 
 class Queries extends Validator
 {
-    /**
-     * @var string
-     */
     protected string $message = 'Invalid queries';
 
     /**
@@ -18,15 +15,12 @@ class Queries extends Validator
      */
     protected array $validators;
 
-    /**
-     * @var int
-     */
     protected int $length;
 
     /**
      * Queries constructor
      *
-     * @param array<Base> $validators
+     * @param  array<Base>  $validators
      */
     public function __construct(array $validators = [], int $length = 0)
     {
@@ -38,8 +32,6 @@ class Queries extends Validator
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -47,13 +39,13 @@ class Queries extends Validator
     }
 
     /**
-     * @param array<Query|string> $value
-     * @return bool
+     * @param  array<Query|string>  $value
      */
     public function isValid($value): bool
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             $this->message = 'Queries must be an array';
+
             return false;
         }
 
@@ -62,17 +54,18 @@ class Queries extends Validator
         }
 
         foreach ($value as $query) {
-            if (!$query instanceof Query) {
+            if (! $query instanceof Query) {
                 try {
                     $query = Query::parse($query);
                 } catch (\Throwable $e) {
-                    $this->message = 'Invalid query: ' . $e->getMessage();
+                    $this->message = 'Invalid query: '.$e->getMessage();
+
                     return false;
                 }
             }
 
             if ($query->isNested()) {
-                if (!self::isValid($query->getValues())) {
+                if (! self::isValid($query->getValues())) {
                     return false;
                 }
             }
@@ -140,16 +133,18 @@ class Queries extends Validator
                 if ($validator->getMethodType() !== $methodType) {
                     continue;
                 }
-                if (!$validator->isValid($query)) {
-                    $this->message = 'Invalid query: ' . $validator->getDescription();
+                if (! $validator->isValid($query)) {
+                    $this->message = 'Invalid query: '.$validator->getDescription();
+
                     return false;
                 }
 
                 $methodIsValid = true;
             }
 
-            if (!$methodIsValid) {
-                $this->message = 'Invalid query method: ' . $method->value;
+            if (! $methodIsValid) {
+                $this->message = 'Invalid query method: '.$method->value;
+
                 return false;
             }
         }
@@ -161,8 +156,6 @@ class Queries extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -173,8 +166,6 @@ class Queries extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

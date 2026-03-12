@@ -10,6 +10,7 @@ use Utopia\Validator\Range;
 class Sequence extends Validator
 {
     private string $idAttributeType;
+
     private bool $primary;
 
     public function getDescription(): string
@@ -42,7 +43,7 @@ class Sequence extends Validator
             return false;
         }
 
-        if (!\is_string($value)) {
+        if (! \is_string($value)) {
             return false;
         }
 

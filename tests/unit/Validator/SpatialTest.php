@@ -8,7 +8,7 @@ use Utopia\Query\Schema\ColumnType;
 
 class SpatialTest extends TestCase
 {
-    public function testValidPoint(): void
+    public function test_valid_point(): void
     {
         $validator = new Spatial(ColumnType::Point->value);
 
@@ -22,7 +22,7 @@ class SpatialTest extends TestCase
         $this->assertFalse($validator->isValid([[10, 20]])); // Nested array
     }
 
-    public function testValidLineString(): void
+    public function test_valid_line_string(): void
     {
         $validator = new Spatial(ColumnType::Linestring->value);
 
@@ -36,7 +36,7 @@ class SpatialTest extends TestCase
         $this->assertFalse($validator->isValid([[10, 10], ['x', 'y']])); // Non-numeric
     }
 
-    public function testValidPolygon(): void
+    public function test_valid_polygon(): void
     {
         $validator = new Spatial(ColumnType::Polygon->value);
 
@@ -46,33 +46,33 @@ class SpatialTest extends TestCase
             [0, 1],
             [1, 1],
             [1, 0],
-            [0, 0]
+            [0, 0],
         ]));
 
         // Multi-ring polygon
         $this->assertTrue($validator->isValid([
             [   // Outer ring
-                [0, 0], [0, 4], [4, 4], [4, 0], [0, 0]
+                [0, 0], [0, 4], [4, 4], [4, 0], [0, 0],
             ],
             [   // Hole
-                [1, 1], [1, 2], [2, 2], [2, 1], [1, 1]
-            ]
+                [1, 1], [1, 2], [2, 2], [2, 1], [1, 1],
+            ],
         ]));
 
         // Invalid polygons
         $this->assertFalse($validator->isValid([])); // Empty
         $this->assertFalse($validator->isValid([
-            [0, 0], [1, 1], [2, 2] // Not closed, less than 4 points
+            [0, 0], [1, 1], [2, 2], // Not closed, less than 4 points
         ]));
         $this->assertFalse($validator->isValid([
-            [[0, 0], [1, 1], [1, 0]] // Not closed
+            [[0, 0], [1, 1], [1, 0]], // Not closed
         ]));
         $this->assertFalse($validator->isValid([
-            [[0, 0], [1, 1], [1, 'a'], [0, 0]] // Non-numeric
+            [[0, 0], [1, 1], [1, 'a'], [0, 0]], // Non-numeric
         ]));
     }
 
-    public function testWKTStrings(): void
+    public function test_wkt_strings(): void
     {
         $this->assertTrue(Spatial::isWKTString('POINT(1 2)'));
         $this->assertTrue(Spatial::isWKTString('LINESTRING(0 0,1 1)'));
@@ -82,7 +82,7 @@ class SpatialTest extends TestCase
         $this->assertFalse(Spatial::isWKTString('POINT1(1 2)'));
     }
 
-    public function testInvalidCoordinate(): void
+    public function test_invalid_coordinate(): void
     {
         // Point with invalid longitude
         $validator = new Spatial(ColumnType::Point->value);
@@ -98,14 +98,14 @@ class SpatialTest extends TestCase
         $validator = new Spatial(ColumnType::Linestring->value);
         $this->assertFalse($validator->isValid([
             [0, 0],
-            [181, 45] // invalid longitude
+            [181, 45], // invalid longitude
         ]));
         $this->assertStringContainsString('Invalid coordinates', $validator->getDescription());
 
         // Polygon with invalid coordinates
         $validator = new Spatial(ColumnType::Polygon->value);
         $this->assertFalse($validator->isValid([
-            [[0, 0], [1, 1], [190, 5], [0, 0]] // invalid longitude in ring
+            [[0, 0], [1, 1], [190, 5], [0, 0]], // invalid longitude in ring
         ]));
         $this->assertStringContainsString('Invalid coordinates', $validator->getDescription());
     }

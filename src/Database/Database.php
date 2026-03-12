@@ -4,52 +4,23 @@ namespace Utopia\Database;
 
 use Exception;
 use Swoole\Coroutine;
-use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Conflict as ConflictException;
-use Utopia\Database\Exception\Dependency as DependencyException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Index as IndexException;
-use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
-use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\Hook\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
-use Utopia\Database\Validator\Index as IndexValidator;
-use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
-use Utopia\Database\Validator\PartialStructure;
-use Utopia\Database\Validator\Permissions;
-use Utopia\Database\Validator\Queries\Document as DocumentValidator;
-use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
-use Utopia\Database\Capability;
-use Utopia\Database\CursorDirection;
-use Utopia\Database\OrderDirection;
-use Utopia\Database\PermissionType;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Hook\Relationship;
-use Utopia\Database\Traits;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 class Database
 {
-
     use Traits\Attributes;
     use Traits\Collections;
     use Traits\Databases;
@@ -60,10 +31,15 @@ class Database
 
     // Max limits
     public const MAX_INT = 2147483647;
+
     public const MAX_BIG_INT = PHP_INT_MAX;
+
     public const MAX_DOUBLE = PHP_FLOAT_MAX;
+
     public const MAX_VECTOR_DIMENSIONS = 16000;
+
     public const MAX_ARRAY_INDEX_LENGTH = 255;
+
     public const MAX_UID_DEFAULT_LENGTH = 36;
 
     // Min limits
@@ -71,9 +47,11 @@ class Database
 
     // Global SRID for geographic coordinates (WGS84)
     public const DEFAULT_SRID = 4326;
+
     public const EARTH_RADIUS = 6371000;
 
     public const RELATION_MAX_DEPTH = 3;
+
     public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
     public const METADATA = '_metadata';
@@ -88,44 +66,71 @@ class Database
     public const EVENT_ALL = '*';
 
     public const EVENT_DATABASE_LIST = 'database_list';
+
     public const EVENT_DATABASE_CREATE = 'database_create';
+
     public const EVENT_DATABASE_DELETE = 'database_delete';
 
     public const EVENT_COLLECTION_LIST = 'collection_list';
+
     public const EVENT_COLLECTION_CREATE = 'collection_create';
+
     public const EVENT_COLLECTION_UPDATE = 'collection_update';
+
     public const EVENT_COLLECTION_READ = 'collection_read';
+
     public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
     public const EVENT_DOCUMENT_FIND = 'document_find';
+
     public const EVENT_DOCUMENT_PURGE = 'document_purge';
+
     public const EVENT_DOCUMENT_CREATE = 'document_create';
+
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
+
     public const EVENT_DOCUMENT_READ = 'document_read';
+
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
+
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
+
     public const EVENT_DOCUMENTS_UPSERT = 'documents_upsert';
+
     public const EVENT_DOCUMENT_DELETE = 'document_delete';
+
     public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
+
     public const EVENT_DOCUMENT_COUNT = 'document_count';
+
     public const EVENT_DOCUMENT_SUM = 'document_sum';
+
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
+
     public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
 
     public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+
     public const EVENT_PERMISSIONS_READ = 'permissions_read';
+
     public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
+
     public const EVENT_ATTRIBUTES_CREATE = 'attributes_create';
+
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
+
     public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
 
     public const EVENT_INDEX_RENAME = 'index_rename';
+
     public const EVENT_INDEX_CREATE = 'index_create';
+
     public const EVENT_INDEX_DELETE = 'index_delete';
 
     public const INSERT_BATCH_SIZE = 1_000;
+
     public const DELETE_BATCH_SIZE = 1_000;
 
     /**
@@ -180,7 +185,7 @@ class Database
             'required' => false,
             'default' => null,
             'array' => false,
-            'filters' => ['datetime']
+            'filters' => ['datetime'],
         ],
         [
             '$id' => '$updatedAt',
@@ -191,7 +196,7 @@ class Database
             'required' => false,
             'default' => null,
             'array' => false,
-            'filters' => ['datetime']
+            'filters' => ['datetime'],
         ],
         [
             '$id' => '$permissions',
@@ -201,7 +206,7 @@ class Database
             'required' => false,
             'default' => [],
             'array' => false,
-            'filters' => ['json']
+            'filters' => ['json'],
         ],
     ];
 
@@ -270,8 +275,8 @@ class Database
                 'required' => true,
                 'signed' => true,
                 'array' => false,
-                'filters' => []
-            ]
+                'filters' => [],
+            ],
         ],
         'indexes' => [],
     ];
@@ -336,22 +341,17 @@ class Database
      */
     protected array $globalCollections = [];
 
-
     /**
      * Type mapping for collections to custom document classes
+     *
      * @var array<string, class-string<Document>>
      */
     protected array $documentTypes = [];
 
-    /**
-     * @var Authorization
-     */
     private Authorization $authorization;
 
     /**
-     * @param Adapter $adapter
-     * @param Cache $cache
-     * @param array<string, array{encode: callable, decode: callable}> $filters
+     * @param  array<string, array{encode: callable, decode: callable}>  $filters
      */
     public function __construct(
         Adapter $adapter,
@@ -362,30 +362,29 @@ class Database
         $this->cache = $cache;
         $this->instanceFilters = $filters;
 
-        $this->setAuthorization(new Authorization());
+        $this->setAuthorization(new Authorization);
 
         self::addFilter(
             'json',
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
-                if (!is_array($value) && !$value instanceof \stdClass) {
+                if (! is_array($value) && ! $value instanceof \stdClass) {
                     return $value;
                 }
 
                 return json_encode($value);
             },
             /**
-             * @param mixed $value
              * @return mixed
+             *
              * @throws Exception
              */
             function (mixed $value) {
-                if (!is_string($value)) {
+                if (! is_string($value)) {
                     return $value;
                 }
 
@@ -398,6 +397,7 @@ class Database
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
+
                         return $item;
                     }, $value);
                 }
@@ -409,7 +409,6 @@ class Database
         self::addFilter(
             'datetime',
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
@@ -419,13 +418,13 @@ class Database
                 try {
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+
                     return DateTime::format($value);
                 } catch (\Throwable) {
                     return $value;
                 }
             },
             /**
-             * @param string|null $value
              * @return string|null
              */
             function (?string $value) {
@@ -436,11 +435,10 @@ class Database
         self::addFilter(
             ColumnType::Point->value,
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
-                if (!is_array($value)) {
+                if (! is_array($value)) {
                     return $value;
                 }
                 try {
@@ -450,7 +448,6 @@ class Database
                 }
             },
             /**
-             * @param string|null $value
              * @return array|null
              */
             function (?string $value) {
@@ -460,6 +457,7 @@ class Database
                 if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodePoint($value);
                 }
+
                 return null;
             }
         );
@@ -467,11 +465,10 @@ class Database
         self::addFilter(
             ColumnType::Linestring->value,
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
-                if (!is_array($value)) {
+                if (! is_array($value)) {
                     return $value;
                 }
                 try {
@@ -481,7 +478,6 @@ class Database
                 }
             },
             /**
-             * @param string|null $value
              * @return array|null
              */
             function (?string $value) {
@@ -491,6 +487,7 @@ class Database
                 if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodeLinestring($value);
                 }
+
                 return null;
             }
         );
@@ -498,11 +495,10 @@ class Database
         self::addFilter(
             ColumnType::Polygon->value,
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
-                if (!is_array($value)) {
+                if (! is_array($value)) {
                     return $value;
                 }
                 try {
@@ -512,7 +508,6 @@ class Database
                 }
             },
             /**
-             * @param string|null $value
              * @return array|null
              */
             function (?string $value) {
@@ -522,6 +517,7 @@ class Database
                 if ($this->adapter->supports(Capability::Spatial)) {
                     return $this->adapter->decodePolygon($value);
                 }
+
                 return null;
             }
         );
@@ -529,18 +525,17 @@ class Database
         self::addFilter(
             ColumnType::Vector->value,
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
-                if (!\is_array($value)) {
+                if (! \is_array($value)) {
                     return $value;
                 }
-                if (!\array_is_list($value)) {
+                if (! \array_is_list($value)) {
                     return $value;
                 }
                 foreach ($value as $item) {
-                    if (!\is_int($item) && !\is_float($item)) {
+                    if (! \is_int($item) && ! \is_float($item)) {
                         return $value;
                     }
                 }
@@ -548,17 +543,17 @@ class Database
                 return \json_encode(\array_map(\floatval(...), $value));
             },
             /**
-             * @param string|null $value
              * @return array|null
              */
             function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }
-                if (!is_string($value)) {
+                if (! is_string($value)) {
                     return $value;
                 }
                 $decoded = json_decode($value, true);
+
                 return is_array($decoded) ? $decoded : $value;
             }
         );
@@ -566,18 +561,16 @@ class Database
         self::addFilter(
             ColumnType::Object->value,
             /**
-             * @param mixed $value
              * @return mixed
              */
             function (mixed $value) {
-                if (!\is_array($value)) {
+                if (! \is_array($value)) {
                     return $value;
                 }
 
                 return \json_encode($value);
             },
             /**
-             * @param mixed $value
              * @return array|null
              */
             function (mixed $value) {
@@ -585,10 +578,11 @@ class Database
                     return;
                 }
                 // can be non string in case of mongodb as it stores the value as object
-                if (!is_string($value)) {
+                if (! is_string($value)) {
                     return $value;
                 }
                 $decoded = json_decode($value, true);
+
                 return is_array($decoded) ? $decoded : $value;
             }
         );
@@ -597,20 +591,16 @@ class Database
     /**
      * Add listener to events
      * Passing a null $callback will remove the listener
-     *
-     * @param string $event
-     * @param string $name
-     * @param ?callable $callback
-     * @return static
      */
     public function on(string $event, string $name, ?callable $callback): static
     {
         if (empty($callback)) {
             unset($this->listeners[$event][$name]);
+
             return $this;
         }
 
-        if (!isset($this->listeners[$event])) {
+        if (! isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
@@ -621,9 +611,6 @@ class Database
     /**
      * Add a transformation to be applied to a query string before an event occurs
      *
-     * @param string $event
-     * @param string $name
-     * @param callable $callback
      * @return $this
      */
     public function before(string $event, string $name, callable $callback): static
@@ -637,8 +624,9 @@ class Database
      * Silent event generation for calls inside the callback
      *
      * @template T
-     * @param callable(): T $callback
-     * @param array<string>|null $listeners List of listeners to silence; if null, all listeners will be silenced
+     *
+     * @param  callable(): T  $callback
+     * @param  array<string>|null  $listeners  List of listeners to silence; if null, all listeners will be silenced
      * @return T
      */
     public function silent(callable $callback, ?array $listeners = null): mixed
@@ -665,19 +653,15 @@ class Database
     /**
      * Get getConnection Id
      *
-     * @return string
      * @throws Exception
      */
     public function getConnectionId(): string
     {
         return $this->adapter->getConnectionId();
     }
+
     /**
      * Trigger callback for events
-     *
-     * @param string $event
-     * @param mixed $args
-     * @return void
      */
     protected function trigger(string $event, mixed $args = null): void
     {
@@ -703,8 +687,8 @@ class Database
      * Executes $callback with $timestamp set to $requestTimestamp
      *
      * @template T
-     * @param ?\DateTime $requestTimestamp
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
     public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
@@ -716,6 +700,7 @@ class Database
         } finally {
             $this->timestamp = $previous;
         }
+
         return $result;
     }
 
@@ -724,7 +709,6 @@ class Database
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param string $namespace
      *
      * @return $this
      *
@@ -741,8 +725,6 @@ class Database
      * Get Namespace.
      *
      * Get namespace of current set scope
-     *
-     * @return string
      */
     public function getNamespace(): string
     {
@@ -752,9 +734,7 @@ class Database
     /**
      * Set database to use for current scope
      *
-     * @param string $name
      *
-     * @return static
      * @throws DatabaseException
      */
     public function setDatabase(string $name): static
@@ -769,7 +749,6 @@ class Database
      *
      * Get Database from current scope
      *
-     * @return string
      * @throws DatabaseException
      */
     public function getDatabase(): string
@@ -780,20 +759,18 @@ class Database
     /**
      * Set the cache instance
      *
-     * @param Cache $cache
      *
      * @return $this
      */
     public function setCache(Cache $cache): static
     {
         $this->cache = $cache;
+
         return $this;
     }
 
     /**
      * Get the cache instance
-     *
-     * @return Cache
      */
     public function getCache(): Cache
     {
@@ -803,7 +780,6 @@ class Database
     /**
      * Set the name to use for cache
      *
-     * @param string $name
      * @return $this
      */
     public function setCacheName(string $name): static
@@ -815,8 +791,6 @@ class Database
 
     /**
      * Get the cache name
-     *
-     * @return string
      */
     public function getCacheName(): string
     {
@@ -825,10 +799,6 @@ class Database
 
     /**
      * Set a metadata value to be printed in the query comments
-     *
-     * @param string $key
-     * @param mixed $value
-     * @return static
      */
     public function setMetadata(string $key, mixed $value): static
     {
@@ -849,21 +819,17 @@ class Database
 
     /**
      * Sets instance of authorization for permission checks
-     *
-     * @param Authorization $authorization
-     * @return self
      */
     public function setAuthorization(Authorization $authorization): self
     {
         $this->adapter->setAuthorization($authorization);
         $this->authorization = $authorization;
+
         return $this;
     }
 
     /**
      * Get Authorization
-     *
-     * @return Authorization
      */
     public function getAuthorization(): Authorization
     {
@@ -873,6 +839,7 @@ class Database
     public function setRelationshipHook(?Relationship $hook): self
     {
         $this->relationshipHook = $hook;
+
         return $this;
     }
 
@@ -883,8 +850,6 @@ class Database
 
     /**
      * Clear metadata
-     *
-     * @return void
      */
     public function resetMetadata(): void
     {
@@ -894,9 +859,6 @@ class Database
     /**
      * Set maximum query execution time
      *
-     * @param int $milliseconds
-     * @param string $event
-     * @return static
      * @throws Exception
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): static
@@ -908,9 +870,6 @@ class Database
 
     /**
      * Clear maximum query execution time
-     *
-     * @param string $event
-     * @return void
      */
     public function clearTimeout(string $event = Database::EVENT_ALL): void
     {
@@ -925,6 +884,7 @@ class Database
     public function enableFilters(): static
     {
         $this->filter = true;
+
         return $this;
     }
 
@@ -936,6 +896,7 @@ class Database
     public function disableFilters(): static
     {
         $this->filter = false;
+
         return $this;
     }
 
@@ -945,8 +906,9 @@ class Database
      * Execute a callback without filters
      *
      * @template T
-     * @param callable(): T $callback
-     * @param array<string>|null $filters
+     *
+     * @param  callable(): T  $callback
+     * @param  array<string>|null  $filters
      * @return T
      */
     public function skipFilters(callable $callback, ?array $filters = null): mixed
@@ -1018,7 +980,8 @@ class Database
      * Execute a callback without validation
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
     public function skipValidation(callable $callback): mixed
@@ -1037,7 +1000,6 @@ class Database
      * Get shared tables
      *
      * Get whether to share tables between tenants
-     * @return bool
      */
     public function getSharedTables(): bool
     {
@@ -1048,9 +1010,6 @@ class Database
      * Set shard tables
      *
      * Set whether to share tables between tenants
-     *
-     * @param bool $sharedTables
-     * @return static
      */
     public function setSharedTables(bool $sharedTables): static
     {
@@ -1063,9 +1022,6 @@ class Database
      * Set Tenant
      *
      * Set tenant to use if tables are shared
-     *
-     * @param ?int $tenant
-     * @return static
      */
     public function setTenant(?int $tenant): static
     {
@@ -1078,8 +1034,6 @@ class Database
      * Get Tenant
      *
      * Get tenant to use if tables are shared
-     *
-     * @return ?int
      */
     public function getTenant(): ?int
     {
@@ -1090,10 +1044,6 @@ class Database
      * With Tenant
      *
      * Execute a callback with a specific tenant
-     *
-     * @param int|null $tenant
-     * @param callable $callback
-     * @return mixed
      */
     public function withTenant(?int $tenant, callable $callback): mixed
     {
@@ -1109,9 +1059,6 @@ class Database
 
     /**
      * Set whether to allow creating documents with tenant set per document.
-     *
-     * @param bool $enabled
-     * @return static
      */
     public function setTenantPerDocument(bool $enabled): static
     {
@@ -1122,8 +1069,6 @@ class Database
 
     /**
      * Get whether to allow creating documents with tenant set per document.
-     *
-     * @return bool
      */
     public function getTenantPerDocument(): bool
     {
@@ -1134,9 +1079,6 @@ class Database
      * Enable or disable LOCK=SHARED during ALTER TABLE operation
      *
      * Set lock mode when altering tables
-     *
-     * @param bool $enabled
-     * @return static
      */
     public function enableLocks(bool $enabled): static
     {
@@ -1150,19 +1092,19 @@ class Database
     /**
      * Set custom document class for a collection
      *
-     * @param string $collection Collection ID
-     * @param class-string<Document> $className Fully qualified class name that extends Document
-     * @return static
+     * @param  string  $collection  Collection ID
+     * @param  class-string<Document>  $className  Fully qualified class name that extends Document
+     *
      * @throws DatabaseException
      */
     public function setDocumentType(string $collection, string $className): static
     {
-        if (!\class_exists($className)) {
+        if (! \class_exists($className)) {
             throw new DatabaseException("Class {$className} does not exist");
         }
 
-        if (!\is_subclass_of($className, Document::class)) {
-            throw new DatabaseException("Class {$className} must extend " . Document::class);
+        if (! \is_subclass_of($className, Document::class)) {
+            throw new DatabaseException("Class {$className} must extend ".Document::class);
         }
 
         $this->documentTypes[$collection] = $className;
@@ -1173,7 +1115,7 @@ class Database
     /**
      * Get custom document class for a collection
      *
-     * @param string $collection Collection ID
+     * @param  string  $collection  Collection ID
      * @return class-string<Document>|null
      */
     public function getDocumentType(string $collection): ?string
@@ -1184,8 +1126,7 @@ class Database
     /**
      * Clear document type mapping for a collection
      *
-     * @param string $collection Collection ID
-     * @return static
+     * @param  string  $collection  Collection ID
      */
     public function clearDocumentType(string $collection): static
     {
@@ -1196,8 +1137,6 @@ class Database
 
     /**
      * Clear all document type mappings
-     *
-     * @return static
      */
     public function clearAllDocumentTypes(): static
     {
@@ -1209,9 +1148,8 @@ class Database
     /**
      * Create a document instance of the appropriate type
      *
-     * @param string $collection Collection ID
-     * @param array<string, mixed> $data Document data
-     * @return Document
+     * @param  string  $collection  Collection ID
+     * @param  array<string, mixed>  $data  Document data
      */
     protected function createDocumentInstance(string $collection, array $data): Document
     {
@@ -1295,7 +1233,7 @@ class Database
     /**
      * Set list of collections which are globally accessible
      *
-     * @param array<string> $collections
+     * @param  array<string>  $collections
      * @return $this
      */
     public function setGlobalCollections(array $collections): static
@@ -1319,8 +1257,6 @@ class Database
 
     /**
      * Clear global collections
-     *
-     * @return void
      */
     public function resetGlobalCollections(): void
     {
@@ -1339,17 +1275,14 @@ class Database
 
     /**
      * Get Database Adapter
-     *
-     * @return Adapter
      */
     public function getAdapter(): Adapter
     {
         return $this->adapter;
     }
+
     /**
      * Ping Database
-     *
-     * @return bool
      */
     public function ping(): bool
     {
@@ -1360,14 +1293,9 @@ class Database
     {
         $this->adapter->reconnect();
     }
+
     /**
      * Add Attribute Filter
-     *
-     * @param string $name
-     * @param callable $encode
-     * @param callable $decode
-     *
-     * @return void
      */
     public static function addFilter(string $name, callable $encode, callable $decode): void
     {
@@ -1380,11 +1308,8 @@ class Database
     /**
      * Encode Document
      *
-     * @param Document $collection
-     * @param Document $document
-     * @param bool $applyDefaults Whether to apply default values to null attributes
+     * @param  bool  $applyDefaults  Whether to apply default values to null attributes
      *
-     * @return Document
      * @throws DatabaseException
      */
     public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
@@ -1404,6 +1329,7 @@ class Database
 
             if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
                 $document->setAttribute($key, null);
+
                 continue;
             }
 
@@ -1424,9 +1350,9 @@ class Database
             // Assign default only if no value provided
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
-            if (is_null($value) && !is_null($default)) {
+            if (is_null($value) && ! is_null($default)) {
                 // Skip applying defaults during updates to avoid resetting unspecified attributes
-                if (!$applyDefaults) {
+                if (! $applyDefaults) {
                     continue;
                 }
                 $value = ($array) ? $default : [$default];
@@ -1443,7 +1369,7 @@ class Database
                 }
             }
 
-            if (!$array) {
+            if (! $array) {
                 $value = $value[0];
             }
             $document->setAttribute($key, $value);
@@ -1455,10 +1381,8 @@ class Database
     /**
      * Decode Document
      *
-     * @param Document $collection
-     * @param Document $document
-     * @param array<string> $selections
-     * @return Document
+     * @param  array<string>  $selections
+     *
      * @throws DatabaseException
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
@@ -1479,8 +1403,8 @@ class Database
             $key = $relationship['$id'] ?? '';
 
             if (
-                \array_key_exists($key, (array)$document)
-                || \array_key_exists($this->adapter->filter($key), (array)$document)
+                \array_key_exists($key, (array) $document)
+                || \array_key_exists($this->adapter->filter($key), (array) $document)
             ) {
                 $value = $document->getAttribute($key);
                 $value ??= $document->getAttribute($this->adapter->filter($key));
@@ -1507,7 +1431,7 @@ class Database
             if (\is_null($value)) {
                 $value = $document->getAttribute($this->adapter->filter($key));
 
-                if (!\is_null($value)) {
+                if (! \is_null($value)) {
                     $document->removeAttribute($this->adapter->filter($key));
                 }
             }
@@ -1539,7 +1463,7 @@ class Database
         }
 
         $hasRelationshipSelections = false;
-        if (!empty($selections)) {
+        if (! empty($selections)) {
             foreach ($selections as $selection) {
                 if (\str_contains($selection, '.')) {
                     $hasRelationshipSelections = true;
@@ -1548,7 +1472,7 @@ class Database
             }
         }
 
-        if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections)) {
+        if ($hasRelationshipSelections && ! empty($selections) && ! \in_array('*', $selections)) {
             foreach ($collection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute['$id'] ?? '';
 
@@ -1556,25 +1480,21 @@ class Database
                     continue;
                 }
 
-                if (!in_array($key, $selections) && isset($filteredValue[$key])) {
+                if (! in_array($key, $selections) && isset($filteredValue[$key])) {
                     $document->setAttribute($key, $filteredValue[$key]);
                 }
             }
         }
+
         return $document;
     }
 
     /**
      * Casting
-     *
-     * @param Document $collection
-     * @param Document $document
-     *
-     * @return Document
      */
     public function casting(Document $collection, Document $document): Document
     {
-        if (!$this->adapter->supports(Capability::Casting)) {
+        if (! $this->adapter->supports(Capability::Casting)) {
             return $document;
         }
 
@@ -1598,7 +1518,7 @@ class Database
             }
 
             if ($array) {
-                $value = !is_string($value)
+                $value = ! is_string($value)
                     ? $value
                     : json_decode($value, true);
             } else {
@@ -1607,10 +1527,10 @@ class Database
 
             foreach ($value as $index => $node) {
                 $node = match ($type) {
-                    ColumnType::Id->value => (string)$node,
-                    ColumnType::Boolean->value => (bool)$node,
-                    ColumnType::Integer->value => (int)$node,
-                    ColumnType::Double->value => (float)$node,
+                    ColumnType::Id->value => (string) $node,
+                    ColumnType::Boolean->value => (bool) $node,
+                    ColumnType::Integer->value => (int) $node,
+                    ColumnType::Double->value => (float) $node,
                     default => $node,
                 };
 
@@ -1629,16 +1549,12 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      * that allow you to manipulate the input format of the given attribute.
      *
-     * @param string $name
-     * @param mixed $value
-     * @param Document $document
      *
-     * @return mixed
      * @throws DatabaseException
      */
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
+        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
             throw new NotFoundException("Filter: {$name} not found");
         }
 
@@ -1661,24 +1577,19 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *
-     * @param string $filter
-     * @param mixed $value
-     * @param Document $document
-     * @param string $attribute
-     * @return mixed
      * @throws NotFoundException
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
-        if (!$this->filter) {
+        if (! $this->filter) {
             return $value;
         }
 
-        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
+        if (! \is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
             return $value;
         }
 
-        if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
+        if (! array_key_exists($filter, self::$filters) && ! array_key_exists($filter, $this->instanceFilters)) {
             throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
 
@@ -1690,11 +1601,10 @@ class Database
 
         return $value;
     }
+
     /**
      * Get adapter attribute limit, accounting for internal metadata
      * Returns 0 to indicate no limit
-     *
-     * @return int
      */
     public function getLimitForAttributes(): int
     {
@@ -1707,8 +1617,6 @@ class Database
 
     /**
      * Get adapter index limit
-     *
-     * @return int
      */
     public function getLimitForIndexes(): int
     {
@@ -1716,9 +1624,9 @@ class Database
     }
 
     /**
-     * @param Document $collection
-     * @param array<Query> $queries
+     * @param  array<Query>  $queries
      * @return array<Query>
+     *
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
@@ -1739,17 +1647,17 @@ class Database
     }
 
     /**
-     * @param Document $collection
-     * @param Query $query
+     * @param  Document  $collection
+     * @param  Query  $query
      * @return Query
+     *
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
     /**
      * Check if values are compatible with object attribute type (hashmap/multi-dimensional array)
      *
-     * @param array<mixed> $values
-     * @return bool
+     * @param  array<mixed>  $values
      */
     private function isCompatibleObjectValue(array $values): bool
     {
@@ -1758,7 +1666,7 @@ class Database
         }
 
         foreach ($values as $value) {
-            if (!\is_array($value)) {
+            if (! \is_array($value)) {
                 return false;
             }
 
@@ -1796,7 +1704,7 @@ class Database
         $queryAttribute = $query->getAttribute();
         $isNestedQueryAttribute = $this->getAdapter()->supports(Capability::DefinedAttributes) && $this->adapter->supports(Capability::Objects) && \str_contains($queryAttribute, '.');
 
-        $attribute = new Document();
+        $attribute = new Document;
 
         foreach ($attributes as $attr) {
             if ($attr->getId() === $query->getAttribute()) {
@@ -1810,7 +1718,7 @@ class Database
             }
         }
 
-        if (!$attribute->isEmpty()) {
+        if (! $attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
             $query->setAttributeType($attribute->getAttribute('type'));
 
@@ -1827,7 +1735,7 @@ class Database
                 }
                 $query->setValues($values);
             }
-        } elseif (!$this->adapter->supports(Capability::DefinedAttributes)) {
+        } elseif (! $this->adapter->supports(Capability::DefinedAttributes)) {
             $values = $query->getValues();
             // setting attribute type to properly apply filters in the adapter level
             if ($this->adapter->supports(Capability::Objects) && $this->isCompatibleObjectValue($values)) {
@@ -1839,13 +1747,13 @@ class Database
     }
 
     /**
-     * @return  array<array<string, mixed>>
+     * @return array<array<string, mixed>>
      */
     public function getInternalAttributes(): array
     {
         $attributes = self::INTERNAL_ATTRIBUTES;
 
-        if (!$this->adapter->getSharedTables()) {
+        if (! $this->adapter->getSharedTables()) {
             $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
                 return $attribute['$id'] !== '$tenant';
             });
@@ -1857,8 +1765,8 @@ class Database
     /**
      * Get Schema Attributes
      *
-     * @param string $collection
      * @return array<Document>
+     *
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
@@ -1867,9 +1775,7 @@ class Database
     }
 
     /**
-     * @param string $collectionId
-     * @param string|null $documentId
-     * @param array<string> $selects
+     * @param  array<string>  $selects
      * @return array{0: string, 1: string, 2: string}
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
@@ -1896,29 +1802,27 @@ class Database
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
-            if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
+            if (! empty($selects)) {
+                $documentHashKey = $documentKey.':'.\md5(\implode($selects));
             }
         }
 
         return [
             $collectionKey,
             $documentKey ?? '',
-            $documentHashKey ?? ''
+            $documentHashKey ?? '',
         ];
     }
+
     /**
      * Encode spatial data from array format to WKT (Well-Known Text) format
      *
-     * @param mixed $value
-     * @param string $type
-     * @return string
      * @throws DatabaseException
      */
     protected function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new SpatialValidator($type);
-        if (!$validator->isValid($value)) {
+        if (! $validator->isValid($value)) {
             throw new StructureException($validator->getDescription());
         }
 
@@ -1931,7 +1835,8 @@ class Database
                 foreach ($value as $point) {
                     $points[] = "{$point[0]} {$point[1]}";
                 }
-                return 'LINESTRING(' . implode(', ', $points) . ')';
+
+                return 'LINESTRING('.implode(', ', $points).')';
 
             case ColumnType::Polygon->value:
                 // Check if this is a single ring (flat array of points) or multiple rings
@@ -1949,23 +1854,25 @@ class Database
                     foreach ($ring as $point) {
                         $points[] = "{$point[0]} {$point[1]}";
                     }
-                    $rings[] = '(' . implode(', ', $points) . ')';
+                    $rings[] = '('.implode(', ', $points).')';
                 }
-                return 'POLYGON(' . implode(', ', $rings) . ')';
+
+                return 'POLYGON('.implode(', ', $rings).')';
 
             default:
-                throw new DatabaseException('Unknown spatial type: ' . $type);
+                throw new DatabaseException('Unknown spatial type: '.$type);
         }
     }
 
     /**
      * Retry a callable with exponential backoff
      *
-     * @param callable $operation The operation to retry
-     * @param int $maxAttempts Maximum number of retry attempts
-     * @param int $initialDelayMs Initial delay in milliseconds
-     * @param float $multiplier Backoff multiplier
+     * @param  callable  $operation  The operation to retry
+     * @param  int  $maxAttempts  Maximum number of retry attempts
+     * @param  int  $initialDelayMs  Initial delay in milliseconds
+     * @param  float  $multiplier  Backoff multiplier
      * @return void The result of the operation
+     *
      * @throws \Throwable The last exception if all retries fail
      */
     private function withRetries(
@@ -1981,6 +1888,7 @@ class Database
         while ($attempt < $maxAttempts) {
             try {
                 $operation();
+
                 return;
             } catch (\Throwable $e) {
                 $lastException = $e;
@@ -1996,7 +1904,7 @@ class Database
                     \usleep($delayMs * 1000);
                 }
 
-                $delayMs = (int)($delayMs * $multiplier);
+                $delayMs = (int) ($delayMs * $multiplier);
             }
         }
 
@@ -2006,11 +1914,11 @@ class Database
     /**
      * Generic cleanup operation with retry logic
      *
-     * @param callable $operation The cleanup operation to execute
-     * @param string $resourceType Type of resource being cleaned up (e.g., 'attribute', 'index')
-     * @param string $resourceId ID of the resource being cleaned up
-     * @param int $maxAttempts Maximum retry attempts
-     * @return void
+     * @param  callable  $operation  The cleanup operation to execute
+     * @param  string  $resourceType  Type of resource being cleaned up (e.g., 'attribute', 'index')
+     * @param  string  $resourceId  ID of the resource being cleaned up
+     * @param  int  $maxAttempts  Maximum retry attempts
+     *
      * @throws DatabaseException If cleanup fails after all retries
      */
     private function cleanup(
@@ -2022,10 +1930,11 @@ class Database
         try {
             $this->withRetries($operation, maxAttempts: $maxAttempts);
         } catch (\Throwable $e) {
-            Console::error("Failed to cleanup {$resourceType} '{$resourceId}' after {$maxAttempts} attempts: " . $e->getMessage());
+            Console::error("Failed to cleanup {$resourceType} '{$resourceId}' after {$maxAttempts} attempts: ".$e->getMessage());
             throw $e;
         }
     }
+
     /**
      * Persist metadata with automatic rollback on failure
      *
@@ -2034,13 +1943,13 @@ class Database
      * 2. Rolling back database operations if metadata persistence fails
      * 3. Providing detailed error messages for both success and failure scenarios
      *
-     * @param Document $collection The collection document to persist
-     * @param callable|null $rollbackOperation Cleanup operation to run if persistence fails (null if no cleanup needed)
-     * @param bool $shouldRollback Whether rollback should be attempted (e.g., false for duplicates in shared tables)
-     * @param string $operationDescription Description of the operation for error messages
-     * @param bool $rollbackReturnsErrors Whether rollback operation returns error array (true) or throws (false)
-     * @param bool $silentRollback Whether rollback errors should be silently caught (true) or thrown (false)
-     * @return void
+     * @param  Document  $collection  The collection document to persist
+     * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)
+     * @param  bool  $shouldRollback  Whether rollback should be attempted (e.g., false for duplicates in shared tables)
+     * @param  string  $operationDescription  Description of the operation for error messages
+     * @param  bool  $rollbackReturnsErrors  Whether rollback operation returns error array (true) or throws (false)
+     * @param  bool  $silentRollback  Whether rollback errors should be silently caught (true) or thrown (false)
+     *
      * @throws DatabaseException If metadata persistence fails after all retries
      */
     private function updateMetadata(
@@ -2063,9 +1972,9 @@ class Database
                 if ($rollbackReturnsErrors) {
                     // Batch mode: rollback returns array of errors
                     $cleanupErrors = $rollbackOperation();
-                    if (!empty($cleanupErrors)) {
+                    if (! empty($cleanupErrors)) {
                         throw new DatabaseException(
-                            "Failed to persist metadata after retries and cleanup encountered errors for {$operationDescription}: " . $e->getMessage() . ' | Cleanup errors: ' . implode(', ', $cleanupErrors),
+                            "Failed to persist metadata after retries and cleanup encountered errors for {$operationDescription}: ".$e->getMessage().' | Cleanup errors: '.implode(', ', $cleanupErrors),
                             previous: $e
                         );
                     }
@@ -2082,7 +1991,7 @@ class Database
                         $rollbackOperation();
                     } catch (\Throwable $ex) {
                         throw new DatabaseException(
-                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: " . $ex->getMessage() . ' | Cleanup error: ' . $e->getMessage(),
+                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$ex->getMessage().' | Cleanup error: '.$e->getMessage(),
                             previous: $e
                         );
                     }
@@ -2090,7 +1999,7 @@ class Database
             }
 
             throw new DatabaseException(
-                "Failed to persist metadata after retries for {$operationDescription}: " . $e->getMessage(),
+                "Failed to persist metadata after retries for {$operationDescription}: ".$e->getMessage(),
                 previous: $e
             );
         }

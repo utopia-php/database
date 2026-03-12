@@ -6,3 +6,7 @@ parameters:
     paths:
         - src
         - tests
+    ignoreErrors:
+        -
+          message: '#(PDOStatementProxy|DetectsLostConnections)#'
+          reportUnmatched: false

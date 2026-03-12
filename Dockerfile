@@ -2,15 +2,28 @@ FROM composer:2.8 AS composer
 
 WORKDIR /usr/local/src/
 
-COPY composer.lock /usr/local/src/
-COPY composer.json /usr/local/src/
+COPY database/composer.lock /usr/local/src/
+COPY database/composer.json /usr/local/src/
 
-RUN composer install \
+# Copy local query lib dependency (referenced as ../query in composer.json)
+COPY query /usr/local/query
+
+# Rewrite path repository to use copied location
+RUN sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.json \
+ && sed -i 's|"symlink": true|"symlink": false|' /usr/local/src/composer.json
+
+RUN COMPOSER_MIRROR_PATH_REPOS=1 composer install \
     --ignore-platform-reqs \
     --optimize-autoloader \
     --no-plugins \
     --no-scripts \
     --prefer-dist
+
+# Replace symlink with actual copy (composer path repos may still symlink)
+RUN if [ -L /usr/local/src/vendor/utopia-php/query ]; then \
+      rm /usr/local/src/vendor/utopia-php/query && \
+      cp -r /usr/local/query /usr/local/src/vendor/utopia-php/query; \
+    fi
 
 FROM php:8.4.18-cli-alpine3.22 AS compile
 
@@ -110,9 +123,9 @@ COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20240924/redis.
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20240924/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20240924/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 
-COPY ./bin /usr/src/code/bin
-COPY ./src /usr/src/code/src
-COPY ./dev /usr/src/code/dev
+COPY database/bin /usr/src/code/bin
+COPY database/src /usr/src/code/src
+COPY database/dev /usr/src/code/dev
 
 # Add Debug Configs
 RUN if [ "$DEBUG" = "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi

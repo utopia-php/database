@@ -3,7 +3,8 @@ services:
     container_name: tests
     image: databases-dev
     build:
-      context: .
+      context: ..
+      dockerfile: database/Dockerfile
       args:
         DEBUG: true
     networks:
@@ -17,6 +18,7 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
+      - ../query/src:/usr/src/code/vendor/utopia-php/query/src
     environment:
       PHP_IDE_CONFIG: serverName=tests
     depends_on:
@@ -50,8 +52,8 @@ services:
 
   postgres:
     build:
-      context: .
-      dockerfile: postgres.dockerfile
+      context: ..
+      dockerfile: database/postgres.dockerfile
       args:
         POSTGRES_VERSION: 16
     container_name: utopia-postgres
@@ -72,8 +74,8 @@ services:
 
   postgres-mirror:
     build:
-      context: .
-      dockerfile: postgres.dockerfile
+      context: ..
+      dockerfile: database/postgres.dockerfile
       args:
         POSTGRES_VERSION: 16
     container_name: utopia-postgres-mirror
@@ -220,6 +222,7 @@ services:
   redis:
     image: redis:8.2.1-alpine3.22
     container_name: utopia-redis
+    restart: always
     ports:
       - "8708:6379"
     networks:
@@ -234,6 +237,7 @@ services:
   redis-mirror:
     image: redis:8.2.1-alpine3.22
     container_name: utopia-redis-mirror
+    restart: always
     ports:
       - "8709:6379"
     networks:

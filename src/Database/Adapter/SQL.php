@@ -1752,10 +1752,9 @@ abstract class SQL extends Adapter
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
 
-        /** Replace reserved chars with space. */
-        $specialChars = '@,+,-,*,),(,<,>,~,"';
-        $value = str_replace(explode(',', $specialChars), ' ', $value);
-        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        /** Keep only unicode letters, numbers, underscores, and whitespace. */
+        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
+        $value = preg_replace('/\s+/', ' ', $value) ?? '';
         $value = trim($value);
 
         if (empty($value)) {

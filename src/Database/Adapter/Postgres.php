@@ -1796,11 +1796,19 @@ class Postgres extends SQL
                 return empty($conditions) ? '' : ' ' . $method . ' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+                $fulltextValue = $this->getFulltextValue($query->getValue());
+                if ($fulltextValue === '') {
+                    return '0 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
             case Query::TYPE_NOT_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+                $fulltextValue = $this->getFulltextValue($query->getValue());
+                if ($fulltextValue === '') {
+                    return '1 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
             case Query::TYPE_VECTOR_DOT:
@@ -1912,9 +1920,15 @@ class Postgres extends SQL
     protected function getFulltextValue(string $value): string
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
-        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+
+        /** Keep only unicode letters, numbers, underscores, and whitespace. */
+        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
+        $value = preg_replace('/\s+/', ' ', $value) ?? '';
         $value = trim($value);
+
+        if (empty($value)) {
+            return '';
+        }
 
         if (!$exact) {
             $value = str_replace(' ', ' or ', $value);

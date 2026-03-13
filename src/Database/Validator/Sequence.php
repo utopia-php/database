@@ -41,6 +41,10 @@ class Sequence extends Validator
             return false;
         }
 
+        if (\is_int($value)) {
+            $value = (string) $value;
+        }
+
         if (!\is_string($value)) {
             return false;
         }

@@ -340,8 +340,7 @@ class Structure extends Validator
 
             switch ($type) {
                 case Database::VAR_ID:
-                    $idType = ($attribute['$id'] === '$sequence') ? Database::VAR_INTEGER : $this->idAttributeType;
-                    $validators[] = new Sequence($idType, $attribute['$id'] === '$sequence');
+                    $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
                     break;
 
                 case Database::VAR_VARCHAR:

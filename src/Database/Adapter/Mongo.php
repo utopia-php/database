@@ -3601,13 +3601,13 @@ class Mongo extends Adapter
 
     /**
      * @param string $collection
-     * @param array<int> $tenants
-     * @return int|null|array<string, array<int>>
+     * @param array<int|string> $tenants
+     * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|string|null|array {
         $values = [];
         if (!$this->sharedTables) {
             return $values;

@@ -173,17 +173,17 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return int|null
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         $tenant = $this->getAttribute('$tenant');
 
-        if ($tenant === null) {
-            return null;
+        if (\is_numeric($tenant)) {
+            return (int) $tenant;
         }
 
-        return (int) $tenant;
+        return $tenant;
     }
 
     /**

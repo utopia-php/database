@@ -175,9 +175,11 @@ class Document extends ArrayObject
     /**
      * @return int|string|null
      */
-    public function getTenant(): int|string|null
+    public function getTenant(): string|null
     {
-        return $this->getAttribute('$tenant');
+        $tenant = $this->getAttribute('$tenant');
+
+        return $tenant !== null ? (string) $tenant : null;
     }
 
     /**

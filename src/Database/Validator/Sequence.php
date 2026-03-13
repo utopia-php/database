@@ -50,8 +50,12 @@ class Sequence extends Validator
         }
 
         switch ($this->idAttributeType) {
-            case Database::VAR_UUID7: //UUID7
-                return preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1;
+            case Database::VAR_UUID7:
+                if (preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1) {
+                    return true;
+                }
+                // Also accept integer IDs (e.g. $tenant may be an integer in any adapter)
+                // no break
             case Database::VAR_INTEGER:
                 $start = ($this->primary) ? 1 : 0;
                 $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);

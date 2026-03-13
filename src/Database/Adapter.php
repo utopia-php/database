@@ -23,7 +23,7 @@ abstract class Adapter
 
     protected bool $sharedTables = false;
 
-    protected int|string|null $tenant = null;
+    protected string|null $tenant = null;
 
     protected bool $tenantPerDocument = false;
 
@@ -225,7 +225,7 @@ abstract class Adapter
      */
     public function setTenant(int|string|null $tenant): bool
     {
-        $this->tenant = $tenant;
+        $this->tenant = $tenant !== null ? (string) $tenant : null;
 
         return true;
     }
@@ -235,9 +235,9 @@ abstract class Adapter
      *
      * Get tenant to use for shared tables
      *
-     * @return int|string|null
+     * @return string|null
      */
-    public function getTenant(): int|string|null
+    public function getTenant(): string|null
     {
         return $this->tenant;
     }

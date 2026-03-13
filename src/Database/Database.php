@@ -1250,9 +1250,9 @@ class Database
      *
      * Get tenant to use if tables are shared
      *
-     * @return int|string|null
+     * @return string|null
      */
-    public function getTenant(): int|string|null
+    public function getTenant(): string|null
     {
         return $this->adapter->getTenant();
     }
@@ -5503,11 +5503,15 @@ class Database
 
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
+                $tenant = $document->getTenant();
                 if (
                     $collection->getId() !== static::METADATA
-                    && $document->getTenant() === null
+                    && $tenant === null
                 ) {
                     throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
+                }
+                if ($tenant !== null) {
+                    $document->setAttribute('$tenant', (string) $tenant);
                 }
             } else {
                 $document->setAttribute('$tenant', $this->adapter->getTenant());
@@ -5621,9 +5625,11 @@ class Database
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
-                    if ($document->getTenant() === null) {
+                    $tenant = $document->getTenant();
+                    if ($tenant === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
+                    $document->setAttribute('$tenant', (string) $tenant);
                 } else {
                     $document->setAttribute('$tenant', $this->adapter->getTenant());
                 }
@@ -7198,9 +7204,11 @@ class Database
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
-                    if ($document->getTenant() === null) {
+                    $tenant = $document->getTenant();
+                    if ($tenant === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
+                    $document->setAttribute('$tenant', (string) $tenant);
                     if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }

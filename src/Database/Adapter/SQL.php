@@ -1545,6 +1545,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForGinIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForRelationships(): bool
     {
         return true;
@@ -2607,8 +2612,12 @@ abstract class SQL extends Adapter
             $spatialAttributes = $this->getSpatialAttributes($collection);
 
             $attributeDefaults = [];
+            $arrayAttributes = [];
             foreach ($collection->getAttribute('attributes', []) as $attr) {
                 $attributeDefaults[$attr['$id']] = $attr['default'] ?? null;
+                if ($attr['array'] ?? false) {
+                    $arrayAttributes[$attr['$id']] = true;
+                }
             }
 
             $collection = $collection->getId();
@@ -2678,6 +2687,11 @@ abstract class SQL extends Adapter
 
                     foreach ($allColumnNames as $attributeKey) {
                         $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                        // Array columns are NOT NULL DEFAULT '[]', so coerce null to empty array
+                        if ($attrValue === null && isset($arrayAttributes[$attributeKey])) {
+                            $attrValue = '[]';
+                        }
 
                         if (\is_array($attrValue)) {
                             $attrValue = \json_encode($attrValue);
@@ -2805,6 +2819,11 @@ abstract class SQL extends Adapter
 
                         foreach ($allColumnNames as $attributeKey) {
                             $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                            // Array columns are NOT NULL DEFAULT '[]', so coerce null to empty array
+                            if ($attrValue === null && isset($arrayAttributes[$attributeKey])) {
+                                $attrValue = '[]';
+                            }
 
                             if (\is_array($attrValue)) {
                                 $attrValue = \json_encode($attrValue);

@@ -79,6 +79,18 @@ class PoolTest extends Base
         return self::$database = $database;
     }
 
+    protected function getPDO(): mixed
+    {
+        $pdo = null;
+        self::$pool->use(function (Adapter $adapter) use (&$pdo) {
+            $class = new ReflectionClass($adapter);
+            $property = $class->getProperty('pdo');
+            $property->setAccessible(true);
+            $pdo = $property->getValue($adapter);
+        });
+        return $pdo;
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";

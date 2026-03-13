@@ -921,6 +921,18 @@ class Database
     }
 
     /**
+     * Get ID Attribute Type.
+     *
+     * Returns the type of the internal ID attribute (e.g. VAR_INTEGER for SQL, VAR_UUID7 for MongoDB)
+     *
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return $this->adapter->getIdAttributeType();
+    }
+
+    /**
      * Set database to use for current scope
      *
      * @param string $name
@@ -1224,10 +1236,10 @@ class Database
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      * @return static
      */
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
 
@@ -1239,9 +1251,9 @@ class Database
      *
      * Get tenant to use if tables are shared
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->adapter->getTenant();
     }
@@ -1251,11 +1263,11 @@ class Database
      *
      * Execute a callback with a specific tenant
      *
-     * @param int|null $tenant
+     * @param int|string|null $tenant
      * @param callable $callback
      * @return mixed
      */
-    public function withTenant(?int $tenant, callable $callback): mixed
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
         $previous = $this->adapter->getTenant();
         $this->adapter->setTenant($tenant);

@@ -6054,7 +6054,7 @@ class Database
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getAttribute('$tenant'); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
 

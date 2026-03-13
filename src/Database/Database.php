@@ -251,8 +251,7 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_INTEGER,
-            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
+            'type' => self::VAR_ID,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -6055,7 +6054,7 @@ class Database
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getAttribute('$tenant'); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
 

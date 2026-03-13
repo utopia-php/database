@@ -713,4 +713,14 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    public function getSupportForSubqueries(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getJunctionMapping(Document $collection, string $parentColumn, string $childColumn, array $parentIds): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

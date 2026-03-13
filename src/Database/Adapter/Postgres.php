@@ -1784,6 +1784,10 @@ class Postgres extends SQL
         }
 
         switch ($query->getMethod()) {
+            case Query::TYPE_IN_SUBQUERY:
+            case Query::TYPE_IN_SUBQUERY_ALL:
+                return $this->getSQLSubqueryCondition($query, $binds, $alias, $attribute, $placeholder);
+
             case Query::TYPE_OR:
             case Query::TYPE_AND:
                 $conditions = [];

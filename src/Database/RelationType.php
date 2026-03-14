@@ -2,6 +2,9 @@
 
 namespace Utopia\Database;
 
+/**
+ * Defines the cardinality types for relationships between collections.
+ */
 enum RelationType: string
 {
     case OneToOne = 'oneToOne';

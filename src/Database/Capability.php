@@ -2,6 +2,9 @@
 
 namespace Utopia\Database;
 
+/**
+ * Defines the set of optional capabilities that a database adapter may support.
+ */
 enum Capability
 {
     case AlterLock;
@@ -53,4 +56,6 @@ enum Capability
     case UpdateLock;
     case Upserts;
     case Vectors;
+    case Joins;
+    case Aggregations;
 }

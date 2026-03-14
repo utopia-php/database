@@ -36,6 +36,7 @@ class MariaDBTest extends Base
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new MariaDB($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
@@ -57,6 +58,7 @@ class MariaDBTest extends Base
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -67,6 +69,7 @@ class MariaDBTest extends Base
         $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

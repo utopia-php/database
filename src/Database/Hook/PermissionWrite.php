@@ -2,11 +2,19 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Database\Database;
+use PDOStatement;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\PermissionType;
 use Utopia\Query\Query;
 
+/**
+ * Write hook that manages permission rows in the side table during document CRUD operations.
+ *
+ * Handles inserting, updating, and deleting permission entries (create/read/update/delete)
+ * in the corresponding _perms table whenever documents are modified.
+ */
 class PermissionWrite implements Write
 {
     private const PERM_TYPES = [
@@ -16,27 +24,49 @@ class PermissionWrite implements Write
         PermissionType::Delete,
     ];
 
+    /**
+     * {@inheritDoc}
+     */
     public function decorateRow(array $row, array $metadata = []): array
     {
         return $row;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function afterCreate(string $table, array $metadata, mixed $context): void
     {
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function afterUpdate(string $table, array $metadata, mixed $context): void
     {
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void
     {
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function afterDelete(string $table, array $ids, mixed $context): void
     {
     }
 
+    /**
+     * Insert permission rows for all newly created documents.
+     *
+     * @param string $collection The collection name
+     * @param array<Document> $documents The created documents
+     * @param WriteContext $context The write context providing builder and execution closures
+     */
     public function afterDocumentCreate(string $collection, array $documents, WriteContext $context): void
     {
         $permBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
@@ -51,11 +81,19 @@ class PermissionWrite implements Write
 
         if ($hasPermissions) {
             $result = $permBuilder->insert();
-            $stmt = ($context->executeResult)($result, Database::EVENT_PERMISSIONS_CREATE);
+            $stmt = ($context->executeResult)($result, Event::PermissionsCreate);
             ($context->execute)($stmt);
         }
     }
 
+    /**
+     * Diff current vs. new permissions and apply additions/removals for a single document.
+     *
+     * @param string $collection The collection name
+     * @param Document $document The updated document with new permissions
+     * @param bool $skipPermissions Whether to skip permission syncing
+     * @param WriteContext $context The write context providing builder and execution closures
+     */
     public function afterDocumentUpdate(string $collection, Document $document, bool $skipPermissions, WriteContext $context): void
     {
         if ($skipPermissions) {
@@ -64,15 +102,17 @@ class PermissionWrite implements Write
 
         $permissions = $this->readCurrentPermissions($collection, $document, $context);
 
+        /** @var array<string, list<string>> $removals */
         $removals = [];
+        /** @var array<string, list<string>> $additions */
         $additions = [];
         foreach (self::PERM_TYPES as $type) {
-            $removed = \array_diff($permissions[$type->value], $document->getPermissionsByType($type->value));
+            $removed = \array_values(\array_diff($permissions[$type->value], $document->getPermissionsByType($type->value)));
             if (! empty($removed)) {
                 $removals[$type->value] = $removed;
             }
 
-            $added = \array_diff($document->getPermissionsByType($type->value), $permissions[$type->value]);
+            $added = \array_values(\array_diff($document->getPermissionsByType($type->value), $permissions[$type->value]));
             if (! empty($added)) {
                 $additions[$type->value] = $added;
             }
@@ -82,6 +122,14 @@ class PermissionWrite implements Write
         $this->insertPermissions($collection, $document, $additions, $context);
     }
 
+    /**
+     * Diff and sync permission rows for a batch of updated documents.
+     *
+     * @param string $collection The collection name
+     * @param Document $updates The update document containing new permission values
+     * @param array<Document> $documents The documents being updated
+     * @param WriteContext $context The write context providing builder and execution closures
+     */
     public function afterDocumentBatchUpdate(string $collection, Document $updates, array $documents, WriteContext $context): void
     {
         if (! $updates->offsetExists('$permissions')) {
@@ -131,17 +179,25 @@ class PermissionWrite implements Write
             $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
-            $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
+            /** @var PDOStatement $deleteStmt */
+            $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
             $deleteStmt->execute();
         }
 
         if ($hasAdditions) {
             $addResult = $addBuilder->insert();
-            $addStmt = ($context->executeResult)($addResult, Database::EVENT_PERMISSIONS_CREATE);
+            $addStmt = ($context->executeResult)($addResult, Event::PermissionsCreate);
             ($context->execute)($addStmt);
         }
     }
 
+    /**
+     * Diff old vs. new permissions from upsert change sets and apply additions/removals.
+     *
+     * @param string $collection The collection name
+     * @param array<\Utopia\Database\Change> $changes The upsert change objects containing old and new documents
+     * @param WriteContext $context The write context providing builder and execution closures
+     */
     public function afterDocumentUpsert(string $collection, array $changes, WriteContext $context): void
     {
         $removeConditions = [];
@@ -187,17 +243,26 @@ class PermissionWrite implements Write
             $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
-            $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
+            /** @var PDOStatement $deleteStmt */
+            $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
             $deleteStmt->execute();
         }
 
         if ($hasAdditions) {
             $addResult = $addBuilder->insert();
-            $addStmt = ($context->executeResult)($addResult, Database::EVENT_PERMISSIONS_CREATE);
+            $addStmt = ($context->executeResult)($addResult, Event::PermissionsCreate);
             ($context->execute)($addStmt);
         }
     }
 
+    /**
+     * Delete all permission rows for the given document IDs.
+     *
+     * @param string $collection The collection name
+     * @param list<string> $documentIds The IDs of deleted documents
+     * @param WriteContext $context The write context providing builder and execution closures
+     * @throws DatabaseException If the permission deletion fails
+     */
     public function afterDocumentDelete(string $collection, array $documentIds, WriteContext $context): void
     {
         if (empty($documentIds)) {
@@ -205,12 +270,13 @@ class PermissionWrite implements Write
         }
 
         $permsBuilder = ($context->newBuilder)($collection.'_perms');
-        $permsBuilder->filter([Query::equal('_document', \array_values($documentIds))]);
+        $permsBuilder->filter([Query::equal('_document', $documentIds)]);
         $permsResult = $permsBuilder->delete();
-        $stmtPermissions = ($context->executeResult)($permsResult, Database::EVENT_PERMISSIONS_DELETE);
+        /** @var PDOStatement $stmtPermissions */
+        $stmtPermissions = ($context->executeResult)($permsResult, Event::PermissionsDelete);
 
         if (! $stmtPermissions->execute()) {
-            throw new \Utopia\Database\Exception('Failed to delete permissions');
+            throw new DatabaseException('Failed to delete permissions');
         }
     }
 
@@ -224,21 +290,28 @@ class PermissionWrite implements Write
         $readBuilder->filter([Query::equal('_document', [$document->getId()])]);
 
         $readResult = $readBuilder->build();
-        $readStmt = ($context->executeResult)($readResult, Database::EVENT_PERMISSIONS_READ);
+        /** @var PDOStatement $readStmt */
+        $readStmt = ($context->executeResult)($readResult, Event::PermissionsRead);
         $readStmt->execute();
-        $rows = $readStmt->fetchAll();
+        /** @var array<array<string, string>> $rows */
+        $rows = (array) $readStmt->fetchAll();
         $readStmt->closeCursor();
 
+        /** @var array<string, list<string>> $initial */
         $initial = [];
         foreach (self::PERM_TYPES as $type) {
             $initial[$type->value] = [];
         }
 
-        return \array_reduce($rows, function (array $carry, array $item) {
+        /** @var array<string, list<string>> $result */
+        $result = \array_reduce($rows, function (array $carry, array $item) {
+            /** @var array<string, list<string>> $carry */
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;
         }, $initial);
+
+        return $result;
     }
 
     /**
@@ -255,14 +328,15 @@ class PermissionWrite implements Write
             $removeConditions[] = Query::and([
                 Query::equal('_document', [$document->getId()]),
                 Query::equal('_type', [$type]),
-                Query::equal('_permission', \array_values($perms)),
+                Query::equal('_permission', $perms),
             ]);
         }
 
         $removeBuilder = ($context->newBuilder)($collection.'_perms');
         $removeBuilder->filter([Query::or($removeConditions)]);
         $deleteResult = $removeBuilder->delete();
-        $deleteStmt = ($context->executeResult)($deleteResult, Database::EVENT_PERMISSIONS_DELETE);
+        /** @var PDOStatement $deleteStmt */
+        $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
         $deleteStmt->execute();
     }
 
@@ -290,7 +364,7 @@ class PermissionWrite implements Write
         }
 
         $addResult = $addBuilder->insert();
-        $addStmt = ($context->executeResult)($addResult, Database::EVENT_PERMISSIONS_CREATE);
+        $addStmt = ($context->executeResult)($addResult, Event::PermissionsCreate);
         ($context->execute)($addStmt);
     }
 

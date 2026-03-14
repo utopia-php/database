@@ -5,6 +5,9 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
 
+/**
+ * Validates authorization by checking if any of the current roles match the required permissions.
+ */
 class Authorization extends Validator
 {
     protected bool $status = true;
@@ -34,11 +37,12 @@ class Authorization extends Validator
         return $this->message;
     }
 
-    /*
-     * Validation
+    /**
+     * Validate that the given input has the required permissions for the current roles.
      *
-     * Returns true if valid or false if not.
-    */
+     * @param mixed $input Authorization\Input instance containing action and permissions
+     * @return bool
+     */
     public function isValid(mixed $input): bool
     {
         if (! ($input instanceof Input)) {
@@ -73,11 +77,23 @@ class Authorization extends Validator
         return false;
     }
 
+    /**
+     * Add a role to the authorized roles list.
+     *
+     * @param string $role Role identifier to add
+     * @return void
+     */
     public function addRole(string $role): void
     {
         $this->roles[$role] = true;
     }
 
+    /**
+     * Remove a role from the authorized roles list.
+     *
+     * @param string $role Role identifier to remove
+     * @return void
+     */
     public function removeRole(string $role): void
     {
         unset($this->roles[$role]);
@@ -91,11 +107,22 @@ class Authorization extends Validator
         return \array_keys($this->roles);
     }
 
+    /**
+     * Remove all roles from the authorized roles list.
+     *
+     * @return void
+     */
     public function cleanRoles(): void
     {
         $this->roles = [];
     }
 
+    /**
+     * Check whether a specific role exists in the authorized roles list.
+     *
+     * @param string $role Role identifier to check
+     * @return bool
+     */
     public function hasRole(string $role): bool
     {
         return \array_key_exists($role, $this->roles);

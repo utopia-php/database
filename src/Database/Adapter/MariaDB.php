@@ -2,12 +2,15 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
 use Exception;
 use PDOException;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -25,12 +28,26 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema as BaseSchema;
 use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\MySQL as MySQLSchema;
 
+/**
+ * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
+ */
 class MariaDB extends SQL implements Feature\Timeouts
 {
+    /**
+     * Get the list of capabilities supported by the MariaDB adapter.
+     *
+     * @return array<Capability>
+     */
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
@@ -44,6 +61,35 @@ class MariaDB extends SQL implements Feature\Timeouts
             Capability::OptionalSpatial,
             Capability::Timeouts,
         ]);
+    }
+
+    /**
+     * Check whether the adapter supports storing non-UTF characters.
+     *
+     * @return bool
+     */
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the current database connection ID.
+     *
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
+        $stmt = $this->getPDO()->query($result->query);
+
+        if ($stmt === false) {
+            return '';
+        }
+
+        $col = $stmt->fetchColumn();
+
+        return \is_scalar($col) ? (string) $col : '';
     }
 
     /**
@@ -61,7 +107,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         }
 
         $result = $this->createSchemaBuilder()->createDatabase($name);
-        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $result->query);
+        $sql = $result->query;
 
         return $this->getPDO()
             ->prepare($sql)
@@ -79,7 +125,7 @@ class MariaDB extends SQL implements Feature\Timeouts
         $name = $this->filter($name);
 
         $result = $this->createSchemaBuilder()->dropDatabase($name);
-        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $result->query);
+        $sql = $result->query;
 
         return $this->getPDO()
             ->prepare($sql)
@@ -139,7 +185,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 }
 
                 $attrType = $this->getSQLType(
-                    $attribute->type->value,
+                    $attribute->type,
                     $attribute->size,
                     $attribute->signed,
                     $attribute->array,
@@ -213,7 +259,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $table->index(['_updatedAt'], '_updated_at');
             }
         });
-        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionResult->query);
+        $collection = $collectionResult->query;
 
         // Build permissions table using schema builder
         $permsResult = $schema->create($this->getSQLTableRaw($id.'_perms'), function (Blueprint $table) use ($sharedTables) {
@@ -231,7 +277,7 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $table->index(['_permission', '_type'], '_permission');
             }
         });
-        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permsResult->query);
+        $permissions = $permsResult->query;
 
         try {
             $this->getPDO()->prepare($collection)->execute();
@@ -241,107 +287,6 @@ class MariaDB extends SQL implements Feature\Timeouts
         }
 
         return true;
-    }
-
-    /**
-     * Get collection size on disk
-     *
-     * @throws DatabaseException
-     */
-    public function getSizeOfCollectionOnDisk(string $collection): int
-    {
-        $collection = $this->filter($collection);
-        $collection = $this->getNamespace().'_'.$collection;
-        $database = $this->getDatabase();
-        $name = $database.'/'.$collection;
-        $permissions = $database.'/'.$collection.'_perms';
-
-        $builder = $this->createBuilder();
-
-        $collectionResult = $builder
-            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
-            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
-            ->filter([\Utopia\Query\Query::equal('NAME', [$name])])
-            ->build();
-
-        $permissionsResult = $builder->reset()
-            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
-            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
-            ->filter([\Utopia\Query\Query::equal('NAME', [$permissions])])
-            ->build();
-
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
-
-        foreach ($collectionResult->bindings as $i => $v) {
-            $collectionSize->bindValue($i + 1, $v);
-        }
-        foreach ($permissionsResult->bindings as $i => $v) {
-            $permissionsSize->bindValue($i + 1, $v);
-        }
-
-        try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
-        }
-
-        return $size;
-    }
-
-    /**
-     * Get Collection Size of the raw data
-     *
-     * @throws DatabaseException
-     */
-    public function getSizeOfCollection(string $collection): int
-    {
-        $collection = $this->filter($collection);
-        $collection = $this->getNamespace().'_'.$collection;
-        $database = $this->getDatabase();
-        $permissions = $collection.'_perms';
-
-        $builder = $this->createBuilder();
-
-        $collectionResult = $builder
-            ->from('INFORMATION_SCHEMA.TABLES')
-            ->selectRaw('SUM(data_length + index_length)')
-            ->filter([
-                \Utopia\Query\Query::equal('table_name', [$collection]),
-                \Utopia\Query\Query::equal('table_schema', [$database]),
-            ])
-            ->build();
-
-        $permissionsResult = $builder->reset()
-            ->from('INFORMATION_SCHEMA.TABLES')
-            ->selectRaw('SUM(data_length + index_length)')
-            ->filter([
-                \Utopia\Query\Query::equal('table_name', [$permissions]),
-                \Utopia\Query\Query::equal('table_schema', [$database]),
-            ])
-            ->build();
-
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
-
-        foreach ($collectionResult->bindings as $i => $v) {
-            $collectionSize->bindValue($i + 1, $v);
-        }
-        foreach ($permissionsResult->bindings as $i => $v) {
-            $permissionsSize->bindValue($i + 1, $v);
-        }
-
-        try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
-        }
-
-        return $size;
     }
 
     /**
@@ -359,7 +304,6 @@ class MariaDB extends SQL implements Feature\Timeouts
         $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
 
         $sql = $mainResult->query.'; '.$permsResult->query;
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         try {
             return $this->getPDO()
@@ -388,52 +332,139 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * Get Schema Attributes
-     *
-     * @return array<Document>
+     * Get collection size on disk
      *
      * @throws DatabaseException
      */
-    public function getSchemaAttributes(string $collection): array
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        $schema = $this->getDatabase();
-        $collection = $this->getNamespace().'_'.$this->filter($collection);
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace().'_'.$collection;
+        $database = $this->getDatabase();
+        $name = $database.'/'.$collection;
+        $permissions = $database.'/'.$collection.'_perms';
+
+        $builder = $this->createBuilder();
+
+        $collectionResult = $builder
+            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
+            ->filter([BaseQuery::equal('NAME', [$name])])
+            ->build();
+
+        $permissionsResult = $builder->reset()
+            ->from('INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES')
+            ->selectRaw('SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)')
+            ->filter([BaseQuery::equal('NAME', [$permissions])])
+            ->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
 
         try {
-            $stmt = $this->getPDO()->prepare('
-                SELECT
-                COLUMN_NAME as _id,
-                COLUMN_DEFAULT as columnDefault,
-                IS_NULLABLE as isNullable,
-                DATA_TYPE as dataType,
-                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
-                NUMERIC_PRECISION as numericPrecision,
-                NUMERIC_SCALE as numericScale,
-                DATETIME_PRECISION as datetimePrecision,
-                COLUMN_TYPE as columnType,
-                COLUMN_KEY as columnKey,
-                EXTRA as extra
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
-            ');
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $stmt->execute();
-            $results = $stmt->fetchAll();
-            $stmt->closeCursor();
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $collSizeVal = $collectionSize->fetchColumn();
+            $permSizeVal = $permissionsSize->fetchColumn();
+            $size = (int) (\is_numeric($collSizeVal) ? $collSizeVal : 0) + (int) (\is_numeric($permSizeVal) ? $permSizeVal : 0);
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
+        }
 
-            foreach ($results as $index => $document) {
-                $document['$id'] = $document['_id'];
-                unset($document['_id']);
+        return $size;
+    }
 
-                $results[$index] = new Document($document);
+    /**
+     * Get Collection Size of the raw data
+     *
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace().'_'.$collection;
+        $database = $this->getDatabase();
+        $permissions = $collection.'_perms';
+
+        $builder = $this->createBuilder();
+
+        $collectionResult = $builder
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('SUM(data_length + index_length)')
+            ->filter([
+                BaseQuery::equal('table_name', [$collection]),
+                BaseQuery::equal('table_schema', [$database]),
+            ])
+            ->build();
+
+        $permissionsResult = $builder->reset()
+            ->from('INFORMATION_SCHEMA.TABLES')
+            ->selectRaw('SUM(data_length + index_length)')
+            ->filter([
+                BaseQuery::equal('table_name', [$permissions]),
+                BaseQuery::equal('table_schema', [$database]),
+            ])
+            ->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int) (\is_numeric($collVal) ? $collVal : 0) + (int) (\is_numeric($permVal) ? $permVal : 0);
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Create a new attribute column, handling spatial types with MariaDB-specific syntax.
+     *
+     * @param string $collection The collection name
+     * @param Attribute $attribute The attribute definition
+     * @return bool
+     *
+     * @throws DatabaseException
+     */
+    public function createAttribute(string $collection, Attribute $attribute): bool
+    {
+        if (\in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])) {
+            $id = $this->filter($attribute->key);
+            $table = $this->getSQLTableRaw($collection);
+            $sqlType = $this->getSpatialSQLType($attribute->type->value, $attribute->required);
+            $sql = "ALTER TABLE {$table} ADD COLUMN {$this->quote($id)} {$sqlType}";
+            $lockType = $this->getLockType();
+            if (! empty($lockType)) {
+                $sql .= ' '.$lockType;
             }
 
-            return $results;
-
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
+            try {
+                return $this->getPDO()->prepare($sql)->execute();
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
         }
+
+        return parent::createAttribute($collection, $attribute);
     }
 
     /**
@@ -446,8 +477,8 @@ class MariaDB extends SQL implements Feature\Timeouts
         $name = $this->filter($collection);
         $id = $this->filter($attribute->key);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $sqlType = $this->getSQLType($attribute->type->value, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
-        /** @var \Utopia\Query\Schema\MySQL $schema */
+        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        /** @var MySQLSchema $schema */
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
@@ -457,7 +488,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $result = $schema->modifyColumn($tableRaw, $id, $sqlType);
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $result->query);
+        $sql = $result->query;
 
         try {
             return $this->getPDO()
@@ -500,8 +531,6 @@ class MariaDB extends SQL implements Feature\Timeouts
             return true;
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
-
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -525,10 +554,10 @@ class MariaDB extends SQL implements Feature\Timeouts
         $twoWay = $relationship->twoWay;
         $side = $relationship->side;
 
-        if (! \is_null($newKey)) {
+        if ($newKey !== null) {
             $newKey = $this->filter($newKey);
         }
-        if (! \is_null($newTwoWayKey)) {
+        if ($newTwoWayKey !== null) {
             $newTwoWayKey = $this->filter($newTwoWayKey);
         }
 
@@ -545,31 +574,31 @@ class MariaDB extends SQL implements Feature\Timeouts
 
         switch ($type) {
             case RelationType::OneToOne:
-                if ($key !== $newKey) {
+                if ($key !== $newKey && \is_string($newKey)) {
                     $sql = $renameCol($name, $key, $newKey).';';
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                     $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                         $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if ($key !== $newKey && \is_string($newKey)) {
                         $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Child) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                         $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if ($key !== $newKey && \is_string($newKey)) {
                         $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
@@ -581,10 +610,10 @@ class MariaDB extends SQL implements Feature\Timeouts
 
                 $junctionName = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
 
-                if (! \is_null($newKey)) {
+                if ($newKey !== null) {
                     $sql = $renameCol($junctionName, $key, $newKey).';';
                 }
-                if ($twoWay && ! \is_null($newTwoWayKey)) {
+                if ($twoWay && $newTwoWayKey !== null) {
                     $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
@@ -592,11 +621,9 @@ class MariaDB extends SQL implements Feature\Timeouts
                 throw new DatabaseException('Invalid relationship type');
         }
 
-        if (empty($sql)) {
+        if ($sql === '') {
             return true;
         }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -626,6 +653,8 @@ class MariaDB extends SQL implements Feature\Timeouts
 
             return $result->query;
         };
+
+        $sql = '';
 
         switch ($type) {
             case RelationType::OneToOne:
@@ -673,31 +702,6 @@ class MariaDB extends SQL implements Feature\Timeouts
                 throw new DatabaseException('Invalid relationship type');
         }
 
-        if (empty($sql)) {
-            return true;
-        }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
-
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
-    }
-
-    /**
-     * Rename Index
-     *
-     * @throws Exception
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
-        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $result->query);
-
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -720,7 +724,9 @@ class MariaDB extends SQL implements Feature\Timeouts
             throw new NotFoundException('Collection not found');
         }
 
-        $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
+        $rawAttrs = $collection->getAttribute('attributes', []);
+        /** @var array<int, array<string, mixed>> $collectionAttributes */
+        $collectionAttributes = \is_string($rawAttrs) ? (\json_decode($rawAttrs, true) ?? []) : [];
         $id = $this->filter($index->key);
         $type = $index->type;
         $attributes = $index->attributes;
@@ -739,7 +745,8 @@ class MariaDB extends SQL implements Feature\Timeouts
         foreach ($attributes as $i => $attr) {
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
-                if (\strtolower($collectionAttribute['$id']) === \strtolower($attr)) {
+                $collAttrId = $collectionAttribute['$id'] ?? '';
+                if (\strtolower(\is_string($collAttrId) ? $collAttrId : '') === \strtolower($attr)) {
                     $attribute = $collectionAttribute;
                     break;
                 }
@@ -784,7 +791,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             orders: $schemaOrders,
             rawColumns: $rawExpressions,
         );
-        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $result->query);
+        $sql = $result->query;
 
         try {
             return $this->getPDO()
@@ -809,19 +816,38 @@ class MariaDB extends SQL implements Feature\Timeouts
         $schema = $this->createSchemaBuilder();
         $result = $schema->dropIndex($this->getSQLTableRaw($name), $id);
 
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $result->query);
+        $sql = $result->query;
 
         try {
             return $this->getPDO()
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === '42000' && $e->errorInfo[1] === 1091) {
+            if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1091) {
                 return true;
             }
 
             throw $e;
         }
+    }
+
+    /**
+     * Rename Index
+     *
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
+        $sql = $result->query;
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -877,7 +903,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_CREATE);
+            $stmt = $this->executeResult($result, Event::DocumentCreate);
 
             $stmt->execute();
 
@@ -889,9 +915,7 @@ class MariaDB extends SQL implements Feature\Timeouts
 
             $ctx = $this->buildWriteContext($name);
             try {
-                foreach ($this->writeHooks as $hook) {
-                    $hook->afterDocumentCreate($name, [$document], $ctx);
-                }
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
             } catch (PDOException $e) {
                 $isOrphanedPermission = $e->getCode() === '23000'
                     && isset($e->errorInfo[1])
@@ -904,14 +928,12 @@ class MariaDB extends SQL implements Feature\Timeouts
 
                 // Clean up orphaned permissions from a previous failed delete, then retry
                 $cleanupBuilder = $this->newBuilder($name.'_perms');
-                $cleanupBuilder->filter([\Utopia\Query\Query::equal('_document', [$document->getId()])]);
+                $cleanupBuilder->filter([BaseQuery::equal('_document', [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
                 $cleanupStmt = $this->executeResult($cleanupResult);
                 $cleanupStmt->execute();
 
-                foreach ($this->writeHooks as $hook) {
-                    $hook->afterDocumentCreate($name, [$document], $ctx);
-                }
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -956,8 +978,11 @@ class MariaDB extends SQL implements Feature\Timeouts
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $opResult = $this->getOperatorBuilderExpression($column, $operators[$attribute]);
-                    $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                    $op = $operators[$attribute];
+                    if ($op instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                    }
                 } elseif (\in_array($attribute, $spatialAttributes, true)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
@@ -974,21 +999,157 @@ class MariaDB extends SQL implements Feature\Timeouts
             }
 
             $builder->set($regularRow);
-            $builder->filter([\Utopia\Query\Query::equal('_id', [$document->getSequence()])]);
+            $builder->filter([BaseQuery::equal('_id', [$document->getSequence()])]);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
+            $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
             $stmt->execute();
 
             $ctx = $this->buildWriteContext($name);
-            foreach ($this->writeHooks as $hook) {
-                $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx);
-            }
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
         return $document;
+    }
+
+    /**
+     * Increase or decrease an attribute value
+     *
+     * @throws DatabaseException
+     */
+    public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool {
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+
+        $builder = $this->newBuilder($name);
+        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
+        $builder->set(['_updatedAt' => $updatedAt]);
+
+        $filters = [BaseQuery::equal('_uid', [$id])];
+        if ($max !== null) {
+            $filters[] = BaseQuery::lessThanEqual($attribute, $max);
+        }
+        if ($min !== null) {
+            $filters[] = BaseQuery::greaterThanEqual($attribute, $min);
+        }
+        $builder->filter($filters);
+
+        $result = $builder->update();
+        $stmt = $this->executeResult($result, Event::DocumentUpdate);
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
+     * Delete Document
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        try {
+            $this->syncWriteHooks();
+
+            $name = $this->filter($collection);
+
+            $builder = $this->newBuilder($name);
+            $builder->filter([BaseQuery::equal('_uid', [$id])]);
+            $result = $builder->delete();
+            $stmt = $this->executeResult($result, Event::DocumentDelete);
+
+            if (! $stmt->execute()) {
+                throw new DatabaseException('Failed to delete document');
+            }
+
+            $deleted = $stmt->rowCount();
+
+            $ctx = $this->buildWriteContext($name);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
+        } catch (\Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $deleted > 0;
+    }
+
+    /**
+     * Set max execution time
+     *
+     * @throws DatabaseException
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    /**
+     * Size of POINT spatial type
+     */
+    protected function getMaxPointSize(): int
+    {
+        // https://dev.mysql.com/doc/refman/8.4/en/gis-data-formats.html#gis-internal-format
+        return 25;
+    }
+
+    /**
+     * Get the minimum supported datetime value for MariaDB.
+     *
+     * @return DateTime
+     */
+    public function getMinDateTime(): DateTime
+    {
+        return new DateTime('1000-01-01 00:00:00');
+    }
+
+    /**
+     * Get the maximum supported datetime value for MariaDB.
+     *
+     * @return DateTime
+     */
+    public function getMaxDateTime(): DateTime
+    {
+        return new DateTime('9999-12-31 23:59:59');
+    }
+
+    /**
+     * Get the keys of internally managed indexes for MariaDB.
+     *
+     * @return array<string>
+     */
+    public function getInternalIndexesKeys(): array
+    {
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+    }
+
+    protected function execute(mixed $stmt): bool
+    {
+        if ($this->timeout > 0) {
+            $seconds = $this->timeout / 1000;
+            $this->getPDO()->exec("SET max_statement_time = {$seconds}");
+        }
+        /** @var \PDOStatement|PDOStatementProxy $stmt */
+        return $stmt->execute();
     }
 
     /**
@@ -1030,101 +1191,27 @@ class MariaDB extends SQL implements Feature\Timeouts
     }
 
     /**
-     * Increase or decrease an attribute value
-     *
-     * @throws DatabaseException
-     */
-    public function increaseDocumentAttribute(
-        string $collection,
-        string $id,
-        string $attribute,
-        int|float $value,
-        string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
-    ): bool {
-        $name = $this->filter($collection);
-        $attribute = $this->filter($attribute);
-
-        $builder = $this->newBuilder($name);
-        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
-        $builder->set(['_updatedAt' => $updatedAt]);
-
-        $filters = [\Utopia\Query\Query::equal('_uid', [$id])];
-        if ($max !== null) {
-            $filters[] = \Utopia\Query\Query::lessThanEqual($attribute, $max);
-        }
-        if ($min !== null) {
-            $filters[] = \Utopia\Query\Query::greaterThanEqual($attribute, $min);
-        }
-        $builder->filter($filters);
-
-        $result = $builder->update();
-        $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
-
-        try {
-            $stmt->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        return true;
-    }
-
-    /**
-     * Delete Document
-     *
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function deleteDocument(string $collection, string $id): bool
-    {
-        try {
-            $this->syncWriteHooks();
-
-            $name = $this->filter($collection);
-
-            $builder = $this->newBuilder($name);
-            $builder->filter([\Utopia\Query\Query::equal('_uid', [$id])]);
-            $result = $builder->delete();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_DELETE);
-
-            if (! $stmt->execute()) {
-                throw new DatabaseException('Failed to delete document');
-            }
-
-            $deleted = $stmt->rowCount();
-
-            $ctx = $this->buildWriteContext($name);
-            foreach ($this->writeHooks as $hook) {
-                $hook->afterDocumentDelete($name, [$id], $ctx);
-            }
-        } catch (\Throwable $e) {
-            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        return $deleted;
-    }
-
-    /**
      * Handle distance spatial queries
      *
      * @param  array<string, mixed>  $binds
      */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
+        /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
-        $wkt = $this->convertArrayToWKT($distanceParams[0]);
+        /** @var array<mixed> $geomArray */
+        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
+        $wkt = $this->convertArrayToWKT($geomArray);
         $binds[":{$placeholder}_0"] = $wkt;
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
         $operator = match ($query->getMethod()) {
-            Query::TYPE_DISTANCE_EQUAL => '=',
-            Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
-            Query::TYPE_DISTANCE_GREATER_THAN => '>',
-            Query::TYPE_DISTANCE_LESS_THAN => '<',
+            Method::DistanceEqual => '=',
+            Method::DistanceNotEqual => '!=',
+            Method::DistanceGreaterThan => '>',
+            Method::DistanceLessThan => '<',
             default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
 
@@ -1148,26 +1235,28 @@ class MariaDB extends SQL implements Feature\Timeouts
      */
     protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+        /** @var array<mixed> $spatialGeomArr */
+        $spatialGeomArr = \is_array($query->getValues()[0]) ? $query->getValues()[0] : [];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($spatialGeomArr);
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
 
         return match ($query->getMethod()) {
-            Query::TYPE_CROSSES => "ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_CROSSES => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_DISTANCE_EQUAL,
-            Query::TYPE_DISTANCE_NOT_EQUAL,
-            Query::TYPE_DISTANCE_GREATER_THAN,
-            Query::TYPE_DISTANCE_LESS_THAN => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
-            Query::TYPE_INTERSECTS => "ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_INTERSECTS => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_OVERLAPS => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_OVERLAPS => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_TOUCHES => "ST_Touches({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_TOUCHES => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_EQUAL => "ST_Equals({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_EQUAL => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_CONTAINS => "ST_Contains({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_CONTAINS => "NOT ST_Contains({$alias}.{$attribute}, {$geom})",
+            Method::Crosses => "ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::NotCrosses => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::DistanceEqual,
+            Method::DistanceNotEqual,
+            Method::DistanceGreaterThan,
+            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
+            Method::Intersects => "ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::NotIntersects => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::Overlaps => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::NotOverlaps => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::Touches => "ST_Touches({$alias}.{$attribute}, {$geom})",
+            Method::NotTouches => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
+            Method::Equal => "ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::NotEqual => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::Contains => "ST_Contains({$alias}.{$attribute}, {$geom})",
+            Method::NotContains => "NOT ST_Contains({$alias}.{$attribute}, {$geom})",
             default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
     }
@@ -1194,11 +1283,12 @@ class MariaDB extends SQL implements Feature\Timeouts
         }
 
         switch ($query->getMethod()) {
-            case Query::TYPE_OR:
-            case Query::TYPE_AND:
+            case Method::Or:
+            case Method::And:
                 $conditions = [];
-                /* @var $q Query */
-                foreach ($query->getValue() as $q) {
+                /** @var iterable<Query> $nestedQueries */
+                $nestedQueries = $query->getValue();
+                foreach ($nestedQueries as $q) {
                     $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
@@ -1206,45 +1296,47 @@ class MariaDB extends SQL implements Feature\Timeouts
 
                 return empty($conditions) ? '' : ' '.$method.' ('.implode(' AND ', $conditions).')';
 
-            case Query::TYPE_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+            case Method::Search:
+                $searchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
 
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
-            case Query::TYPE_NOT_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+            case Method::NotSearch:
+                $notSearchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
 
                 return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
 
-            case Query::TYPE_BETWEEN:
+            case Method::Between:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
 
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::NotBetween:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
 
                 return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNull:
+            case Method::IsNotNull:
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 if ($query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
 
                     return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
                 // no break
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::NotContains:
                 if ($this->supports(Capability::JSONOverlaps) && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                    $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                    $isNot = $query->getMethod() === Method::NotContains;
 
                     return $isNot
                         ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
@@ -1254,19 +1346,20 @@ class MariaDB extends SQL implements Feature\Timeouts
             default:
                 $conditions = [];
                 $isNotQuery = in_array($query->getMethod(), [
-                    Query::TYPE_NOT_STARTS_WITH,
-                    Query::TYPE_NOT_ENDS_WITH,
-                    Query::TYPE_NOT_CONTAINS,
+                    Method::NotStartsWith,
+                    Method::NotEndsWith,
+                    Method::NotContains,
                 ]);
 
                 foreach ($query->getValues() as $key => $value) {
+                    $strValue = \is_string($value) ? $value : '';
                     $value = match ($query->getMethod()) {
-                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value).'%',
-                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value).'%',
-                        Query::TYPE_ENDS_WITH => '%'.$this->escapeWildcards($value),
-                        Query::TYPE_NOT_ENDS_WITH => '%'.$this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
+                        Method::StartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::NotStartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::EndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::NotEndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
+                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
                         default => $value
                     };
 
@@ -1287,117 +1380,100 @@ class MariaDB extends SQL implements Feature\Timeouts
     /**
      * Get SQL Type
      */
-    protected function createBuilder(): \Utopia\Query\Builder\SQL
+    protected function createBuilder(): SQLBuilder
     {
-        return new \Utopia\Query\Builder\MariaDB();
+        return new MariaDBBuilder();
     }
 
-    /**
-     * Override to handle spatial types with MariaDB-specific syntax.
-     * MariaDB uses POINT(srid) instead of MySQL's POINT SRID srid.
-     */
-    public function createAttribute(string $collection, Attribute $attribute): bool
+    protected function createSchemaBuilder(): BaseSchema
     {
-        if (\in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])) {
-            $id = $this->filter($attribute->key);
-            $table = $this->getSQLTableRaw($collection);
-            $sqlType = $this->getSpatialSQLType($attribute->type->value, $attribute->required);
-            $sql = "ALTER TABLE {$table} ADD COLUMN {$this->quote($id)} {$sqlType}";
-            $lockType = $this->getLockType();
-            if (! empty($lockType)) {
-                $sql .= ' '.$lockType;
-            }
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
-
-            try {
-                return $this->getPDO()->prepare($sql)->execute();
-            } catch (\PDOException $e) {
-                throw $this->processException($e);
-            }
-        }
-
-        return parent::createAttribute($collection, $attribute);
+        return new MySQLSchema();
     }
 
-    protected function createSchemaBuilder(): \Utopia\Query\Schema
+    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
-        return new \Utopia\Query\Schema\MySQL();
-    }
-
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        if (in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
-            return $this->getSpatialSQLType($type, $required);
+        if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            return $this->getSpatialSQLType($type->value, $required);
         }
         if ($array === true) {
             return 'JSON';
         }
 
-        switch ($type) {
-            case ColumnType::Id->value:
-                return 'BIGINT UNSIGNED';
-
-            case ColumnType::String->value:
-                // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
-                    return 'LONGTEXT';
-                }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
-                if ($size > $this->getMaxVarcharLength()) {
-                    return 'TEXT';
-                }
-
-                return "VARCHAR({$size})";
-
-            case ColumnType::Varchar->value:
-                if ($size <= 0) {
-                    throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-                }
-                if ($size > $this->getMaxVarcharLength()) {
-                    throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-                }
-
-                return "VARCHAR({$size})";
-
-            case ColumnType::Text->value:
-                return 'TEXT';
-
-            case ColumnType::MediumText->value:
-                return 'MEDIUMTEXT';
-
-            case ColumnType::LongText->value:
+        if ($type === ColumnType::String) {
+            // $size = $size * 4; // Convert utf8mb4 size to bytes
+            if ($size > 16777215) {
                 return 'LONGTEXT';
+            }
+            if ($size > 65535) {
+                return 'MEDIUMTEXT';
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                return 'TEXT';
+            }
 
-            case ColumnType::Integer->value:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
-                $signed = ($signed) ? '' : ' UNSIGNED';
-
-                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
-                    return 'BIGINT'.$signed;
-                }
-
-                return 'INT'.$signed;
-
-            case ColumnType::Double->value:
-                $signed = ($signed) ? '' : ' UNSIGNED';
-
-                return 'DOUBLE'.$signed;
-
-            case ColumnType::Boolean->value:
-                return 'TINYINT(1)';
-
-            case ColumnType::Relationship->value:
-                return 'VARCHAR(255)';
-
-            case ColumnType::Datetime->value:
-                return 'DATETIME(3)';
-
-            default:
-                throw new DatabaseException('Unknown type: '.$type.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value);
+            return "VARCHAR({$size})";
         }
+
+        if ($type === ColumnType::Varchar) {
+            if ($size <= 0) {
+                throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Integer) {
+            // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
+            $suffix = $signed ? '' : ' UNSIGNED';
+
+            return ($size >= 8 ? 'BIGINT' : 'INT').$suffix; // INT = 4 bytes, BIGINT = 8 bytes
+        }
+
+        if ($type === ColumnType::Double) {
+            return 'DOUBLE'.($signed ? '' : ' UNSIGNED');
+        }
+
+        return match ($type) {
+            ColumnType::Id => 'BIGINT UNSIGNED',
+            ColumnType::Text => 'TEXT',
+            ColumnType::MediumText => 'MEDIUMTEXT',
+            ColumnType::LongText => 'LONGTEXT',
+            ColumnType::Boolean => 'TINYINT(1)',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'DATETIME(3)',
+            default => throw new DatabaseException('Unknown type: '.$type->value.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value),
+        };
+    }
+
+    /**
+     * Get the MariaDB SQL type definition for spatial column types.
+     *
+     * @param string $type The spatial type (point, linestring, polygon)
+     * @param bool $required Whether the column is NOT NULL
+     * @return string
+     */
+    public function getSpatialSQLType(string $type, bool $required): string
+    {
+        $srid = Database::DEFAULT_SRID;
+        $nullability = '';
+
+        if (! $this->supports(Capability::SpatialIndexNull)) {
+            if ($required) {
+                $nullability = ' NOT NULL';
+            } else {
+                $nullability = ' NULL';
+            }
+        }
+
+        return match ($type) {
+            ColumnType::Point->value => "POINT($srid)$nullability",
+            ColumnType::Linestring->value => "LINESTRING($srid)$nullability",
+            ColumnType::Polygon->value => "POLYGON($srid)$nullability",
+            default => '',
+        };
     }
 
     /**
@@ -1423,59 +1499,292 @@ class MariaDB extends SQL implements Feature\Timeouts
         return 'RAND()';
     }
 
-    /**
-     * Size of POINT spatial type
-     */
-    protected function getMaxPointSize(): int
+    protected function quote(string $string): string
     {
-        // https://dev.mysql.com/doc/refman/8.4/en/gis-data-formats.html#gis-internal-format
-        return 25;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('1000-01-01 00:00:00');
-    }
-
-    public function getMaxDateTime(): \DateTime
-    {
-        return new \DateTime('9999-12-31 23:59:59');
+        return "`{$string}`";
     }
 
     /**
-     * Set max execution time
+     * Get Schema Attributes
+     *
+     * @return array<Document>
      *
      * @throws DatabaseException
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function getSchemaAttributes(string $collection): array
     {
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
+
+        try {
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                COLUMN_NAME as _id,
+                COLUMN_DEFAULT as columnDefault,
+                IS_NULLABLE as isNullable,
+                DATA_TYPE as dataType,
+                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
+                NUMERIC_PRECISION as numericPrecision,
+                NUMERIC_SCALE as numericScale,
+                DATETIME_PRECISION as datetimePrecision,
+                COLUMN_TYPE as columnType,
+                COLUMN_KEY as columnKey,
+                EXTRA as extra
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            $docs = [];
+            foreach ($results as $document) {
+                /** @var array<string, mixed> $document */
+                $document['$id'] = $document['_id'];
+                unset($document['_id']);
+
+                $docs[] = new Document($document);
+            }
+            $results = $docs;
+
+            return $results;
+
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
         }
-
-        $this->timeout = $milliseconds;
-
-        $seconds = $milliseconds / 1000;
-
-        $this->before($event, 'timeout', function ($sql) use ($seconds) {
-            return "SET STATEMENT max_statement_time = {$seconds} FOR ".$sql;
-        });
     }
 
-    public function getConnectionId(): string
+    /**
+     * Get operator SQL
+     * Override to handle MariaDB/MySQL-specific operators
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
-        $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
-        $stmt = $this->getPDO()->query($result->query);
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
 
-        return $stmt->fetchColumn();
+        switch ($method) {
+            // Numeric operators
+            case OperatorType::Increment:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
+                }
+
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
+
+            case OperatorType::Decrement:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
+                }
+
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
+
+            case OperatorType::Multiply:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
+                }
+
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
+
+            case OperatorType::Divide:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
+                    return "{$quotedColumn} = CASE
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                    END";
+                }
+
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
+
+            case OperatorType::Modulo:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+            case OperatorType::Power:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
+                    END";
+                }
+
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+                // String operators
+            case OperatorType::StringConcat:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
+
+            case OperatorType::StringReplace:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
+
+                // Boolean operators
+            case OperatorType::Toggle:
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
+
+                // Array operators
+            case OperatorType::ArrayAppend:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
+
+            case OperatorType::ArrayPrepend:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
+
+            case OperatorType::ArrayInsert:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = JSON_ARRAY_INSERT(
+                    {$quotedColumn},
+                    CONCAT('$[', :$indexKey, ']'),
+                    JSON_EXTRACT(:$valueKey, '$')
+                )";
+
+            case OperatorType::ArrayRemove:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE value != :$bindKey
+                ), JSON_ARRAY())";
+
+            case OperatorType::ArrayUnique:
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                ), JSON_ARRAY())";
+
+            case OperatorType::ArrayIntersect:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value IN (
+                        SELECT value
+                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
+                    )
+                ), JSON_ARRAY())";
+
+            case OperatorType::ArrayDiff:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value NOT IN (
+                        SELECT value
+                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
+                    )
+                ), JSON_ARRAY())";
+
+            case OperatorType::ArrayFilter:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE CASE :$conditionKey
+                        WHEN 'equal' THEN value = JSON_UNQUOTE(:$valueKey)
+                        WHEN 'notEqual' THEN value != JSON_UNQUOTE(:$valueKey)
+                        WHEN 'greaterThan' THEN CAST(value AS DECIMAL(65,30)) > CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'greaterThanEqual' THEN CAST(value AS DECIMAL(65,30)) >= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'lessThan' THEN CAST(value AS DECIMAL(65,30)) < CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'lessThanEqual' THEN CAST(value AS DECIMAL(65,30)) <= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'isNull' THEN value IS NULL
+                        WHEN 'isNotNull' THEN value IS NOT NULL
+                        ELSE TRUE
+                    END
+                ), JSON_ARRAY())";
+
+                // Date operators
+            case OperatorType::DateAddDays:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case OperatorType::DateSubDays:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case OperatorType::DateSetNow:
+                return "{$quotedColumn} = NOW()";
+
+            default:
+                throw new OperatorException('Invalid operator');
+        }
     }
 
-    public function getInternalIndexesKeys(): array
-    {
-        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
-    }
-
-    protected function processException(PDOException $e): \Exception
+    protected function processException(PDOException $e): Exception
     {
         if ($e->getCode() === '22007' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
             return new CharacterException('Invalid character', $e->getCode(), $e);
@@ -1553,264 +1862,5 @@ class MariaDB extends SQL implements Feature\Timeouts
         }
 
         return $e;
-    }
-
-    protected function quote(string $string): string
-    {
-        return "`{$string}`";
-    }
-
-    /**
-     * Get operator SQL
-     * Override to handle MariaDB/MySQL-specific operators
-     */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
-    {
-        $quotedColumn = $this->quote($column);
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            // Numeric operators
-            case OperatorType::Increment->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
-                    END";
-                }
-
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
-
-            case OperatorType::Decrement->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
-
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
-                    END";
-                }
-
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
-
-            case OperatorType::Multiply->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
-                    END";
-                }
-
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
-
-            case OperatorType::Divide->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
-
-                    return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
-                    END";
-                }
-
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
-
-            case OperatorType::Modulo->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
-
-            case OperatorType::Power->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
-                }
-
-                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
-
-                // String operators
-            case OperatorType::StringConcat->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
-
-            case OperatorType::StringReplace->value:
-                $searchKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
-
-                // Boolean operators
-            case OperatorType::Toggle->value:
-                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
-
-                // Array operators
-            case OperatorType::ArrayAppend->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
-
-            case OperatorType::ArrayPrepend->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
-
-            case OperatorType::ArrayInsert->value:
-                $indexKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = JSON_ARRAY_INSERT(
-                    {$quotedColumn}, 
-                    CONCAT('$[', :$indexKey, ']'), 
-                    JSON_EXTRACT(:$valueKey, '$')
-                )";
-
-            case OperatorType::ArrayRemove->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
-                    WHERE value != :$bindKey
-                ), JSON_ARRAY())";
-
-            case OperatorType::ArrayUnique->value:
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
-                ), JSON_ARRAY())";
-
-            case OperatorType::ArrayIntersect->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
-                    WHERE jt1.value IN (
-                        SELECT value
-                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
-                    )
-                ), JSON_ARRAY())";
-
-            case OperatorType::ArrayDiff->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
-                    WHERE jt1.value NOT IN (
-                        SELECT value
-                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
-                    )
-                ), JSON_ARRAY())";
-
-            case OperatorType::ArrayFilter->value:
-                $conditionKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
-                    WHERE CASE :$conditionKey
-                        WHEN 'equal' THEN value = JSON_UNQUOTE(:$valueKey)
-                        WHEN 'notEqual' THEN value != JSON_UNQUOTE(:$valueKey)
-                        WHEN 'greaterThan' THEN CAST(value AS DECIMAL(65,30)) > CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
-                        WHEN 'greaterThanEqual' THEN CAST(value AS DECIMAL(65,30)) >= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
-                        WHEN 'lessThan' THEN CAST(value AS DECIMAL(65,30)) < CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
-                        WHEN 'lessThanEqual' THEN CAST(value AS DECIMAL(65,30)) <= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
-                        WHEN 'isNull' THEN value IS NULL
-                        WHEN 'isNotNull' THEN value IS NOT NULL
-                        ELSE TRUE
-                    END
-                ), JSON_ARRAY())";
-
-                // Date operators
-            case OperatorType::DateAddDays->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
-
-            case OperatorType::DateSubDays->value:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
-
-            case OperatorType::DateSetNow->value:
-                return "{$quotedColumn} = NOW()";
-
-            default:
-                throw new OperatorException("Invalid operator: {$method}");
-        }
-    }
-
-    public function getSpatialSQLType(string $type, bool $required): string
-    {
-        $srid = Database::DEFAULT_SRID;
-        $nullability = '';
-
-        if (! $this->supports(Capability::SpatialIndexNull)) {
-            if ($required) {
-                $nullability = ' NOT NULL';
-            } else {
-                $nullability = ' NULL';
-            }
-        }
-
-        return match ($type) {
-            ColumnType::Point->value => "POINT($srid)$nullability",
-            ColumnType::Linestring->value => "LINESTRING($srid)$nullability",
-            ColumnType::Polygon->value => "POLYGON($srid)$nullability",
-            default => '',
-        };
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return true;
     }
 }

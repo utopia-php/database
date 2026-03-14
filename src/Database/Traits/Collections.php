@@ -3,11 +3,13 @@
 namespace Utopia\Database\Traits;
 
 use Exception;
+use Throwable;
 use Utopia\CLI\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -24,14 +26,20 @@ use Utopia\Database\Validator\Permissions;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
+/**
+ * Provides CRUD operations for database collections including creation, listing, sizing, and deletion.
+ */
 trait Collections
 {
     /**
      * Create Collection
      *
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
-     * @param  array<string>|null  $permissions
+     * @param  string  $id  The collection identifier
+     * @param  array<Attribute|Document>  $attributes  Initial attributes for the collection
+     * @param  array<Index|Document>  $indexes  Initial indexes for the collection
+     * @param  array<string>|null  $permissions  Permission strings, defaults to allow any create
+     * @param  bool  $documentSecurity  Whether to enable document-level security
+     * @return Document The created collection metadata document
      *
      * @throws DatabaseException
      * @throws DuplicateException
@@ -39,15 +47,12 @@ trait Collections
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
-        $attributes = array_map(fn ($attr) => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr), $attributes);
-        $indexes = array_map(fn ($idx) => $idx instanceof Index ? $idx : Index::fromDocument($idx), $indexes);
+        $attributes = array_map(fn ($attr): Attribute => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr), $attributes);
+        $indexes = array_map(fn ($idx): Index => $idx instanceof Index ? $idx : Index::fromDocument($idx), $indexes);
 
         foreach ($attributes as $attribute) {
             if (in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object], true)) {
                 $existingFilters = $attribute->filters;
-                if (! is_array($existingFilters)) {
-                    $existingFilters = [$existingFilters];
-                }
                 $attribute->filters = array_values(
                     array_unique(array_merge($existingFilters, [$attribute->type->value]))
                 );
@@ -130,7 +135,7 @@ trait Collections
 
         if ($this->validate) {
             $validator = new IndexValidator(
-                $attributeDocs,
+                $attributes,
                 [],
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
@@ -150,8 +155,8 @@ trait Collections
                 $this->adapter->supports(Capability::TTLIndexes),
                 $this->adapter->supports(Capability::Objects)
             );
-            foreach ($indexDocs as $indexDoc) {
-                if (! $validator->isValid($indexDoc)) {
+            foreach ($indexes as $index) {
+                if (! $validator->isValid($index)) {
                     throw new IndexException($validator->getDescription());
                 }
             }
@@ -192,27 +197,23 @@ trait Collections
         }
 
         if ($id === self::METADATA) {
-            return new Document(self::COLLECTION);
+            return new Document(self::collectionMeta());
         }
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if ($created) {
                 try {
                     $this->cleanupCollection($id);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     Console::error("Failed to rollback collection '{$id}': ".$e->getMessage());
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);
         }
 
-        try {
-            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::CollectionCreate, $createdCollection);
 
         return $createdCollection;
     }
@@ -220,7 +221,10 @@ trait Collections
     /**
      * Update Collections Permissions.
      *
-     * @param  array<string>  $permissions
+     * @param  string  $id  The collection identifier
+     * @param  array<string>  $permissions  New permission strings
+     * @param  bool  $documentSecurity  Whether to enable document-level security
+     * @return Document The updated collection metadata document
      *
      * @throws ConflictException
      * @throws DatabaseException
@@ -253,11 +257,7 @@ trait Collections
 
         $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        try {
-            $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::CollectionUpdate, $collection);
 
         return $collection;
     }
@@ -265,6 +265,8 @@ trait Collections
     /**
      * Get Collection
      *
+     * @param  string  $id  The collection identifier
+     * @return Document The collection metadata document, or an empty Document if not found
      *
      * @throws DatabaseException
      */
@@ -281,11 +283,7 @@ trait Collections
             return new Document();
         }
 
-        try {
-            $this->trigger(self::EVENT_COLLECTION_READ, $collection);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::CollectionRead, $collection);
 
         return $collection;
     }
@@ -293,7 +291,8 @@ trait Collections
     /**
      * List Collections
      *
-     *
+     * @param  int  $limit  Maximum number of collections to return
+     * @param  int  $offset  Number of collections to skip
      * @return array<Document>
      *
      * @throws Exception
@@ -305,11 +304,7 @@ trait Collections
             Query::offset($offset),
         ]));
 
-        try {
-            $this->trigger(self::EVENT_COLLECTION_LIST, $result);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::CollectionList, $result);
 
         return $result;
     }
@@ -317,6 +312,8 @@ trait Collections
     /**
      * Get Collection Size
      *
+     * @param  string  $collection  The collection identifier
+     * @return int The number of documents in the collection
      *
      * @throws Exception
      */
@@ -337,6 +334,12 @@ trait Collections
 
     /**
      * Get Collection Size on disk
+     *
+     * @param  string  $collection  The collection identifier
+     * @return int The collection size in bytes on disk
+     *
+     * @throws DatabaseException
+     * @throws NotFoundException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
@@ -358,7 +361,10 @@ trait Collections
     }
 
     /**
-     * Analyze a collection updating its metadata on the database engine
+     * Analyze a collection updating its metadata on the database engine.
+     *
+     * @param  string  $collection  The collection identifier
+     * @return bool True if the analysis completed successfully
      */
     public function analyzeCollection(string $collection): bool
     {
@@ -368,6 +374,8 @@ trait Collections
     /**
      * Delete Collection
      *
+     * @param  string  $id  The collection identifier
+     * @return bool True if the collection was successfully deleted
      *
      * @throws DatabaseException
      */
@@ -383,9 +391,11 @@ trait Collections
             throw new NotFoundException('Collection not found');
         }
 
+        /** @var array<Document> $allAttributes */
+        $allAttributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
-            $collection->getAttribute('attributes'),
-            fn ($attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
+            $allAttributes,
+            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
         );
 
         foreach ($relationships as $relationship) {
@@ -394,8 +404,12 @@ trait Collections
 
         // Re-fetch collection to get current state after relationship deletions
         $currentCollection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
-        $currentAttributes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('attributes', []);
-        $currentIndexes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
+        /** @var array<Document> $currentAttrDocs */
+        $currentAttrDocs = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('attributes', []);
+        /** @var array<Document> $currentIdxDocs */
+        $currentIdxDocs = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
+        $currentAttributes = array_map(fn (Document $d) => Attribute::fromDocument($d), $currentAttrDocs);
+        $currentIndexes = array_map(fn (Document $d) => Index::fromDocument($d), $currentIdxDocs);
 
         $schemaDeleted = false;
         try {
@@ -410,11 +424,11 @@ trait Collections
         } else {
             try {
                 $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 if ($schemaDeleted) {
                     try {
                         $this->adapter->createCollection($id, $currentAttributes, $currentIndexes);
-                    } catch (\Throwable) {
+                    } catch (Throwable) {
                         // Silent rollback — best effort to restore consistency
                     }
                 }
@@ -426,11 +440,7 @@ trait Collections
         }
 
         if ($deleted) {
-            try {
-                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-            } catch (\Throwable $e) {
-                // Ignore
-            }
+            $this->trigger(Event::CollectionDelete, $collection);
         }
 
         $this->purgeCachedCollection($id);

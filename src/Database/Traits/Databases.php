@@ -4,12 +4,19 @@ namespace Utopia\Database\Traits;
 
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 
+/**
+ * Provides database-level operations including creation, existence checks, listing, and deletion.
+ */
 trait Databases
 {
     /**
      * Create Database
+     *
+     * @param  string|null  $database  Database name, defaults to the adapter's configured database
+     * @return bool True if the database was created successfully
      */
     public function create(?string $database = null): bool
     {
@@ -17,28 +24,26 @@ trait Databases
 
         $this->adapter->create($database);
 
-        /** @var array<Attribute> $attributes */
-        $attributes = \array_map(function ($attribute) {
-            return Attribute::fromArray($attribute);
-        }, self::COLLECTION['attributes']);
+        /** @var array<Document> $metaAttributes */
+        $metaAttributes = self::collectionMeta()['attributes'];
+        $attributes = [];
+        foreach ($metaAttributes as $attribute) {
+            $attributes[] = Attribute::fromDocument($attribute);
+        }
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
-        try {
-            $this->trigger(self::EVENT_DATABASE_CREATE, $database);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::DatabaseCreate, $database);
 
         return true;
     }
 
     /**
-     * Check if database exists
-     * Optionally check if collection exists in database
+     * Check if database exists, and optionally check if a collection exists in the database.
      *
-     * @param  string|null  $database  (optional) database name
-     * @param  string|null  $collection  (optional) collection name
+     * @param  string|null  $database  Database name, defaults to the adapter's configured database
+     * @param  string|null  $collection  Collection name to check for within the database
+     * @return bool True if the database (and optionally the collection) exists
      */
     public function exists(?string $database = null, ?string $collection = null): bool
     {
@@ -56,17 +61,16 @@ trait Databases
     {
         $databases = $this->adapter->list();
 
-        try {
-            $this->trigger(self::EVENT_DATABASE_LIST, $databases);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::DatabaseList, $databases);
 
         return $databases;
     }
 
     /**
      * Delete Database
+     *
+     * @param  string|null  $database  Database name, defaults to the adapter's configured database
+     * @return bool True if the database was deleted successfully
      *
      * @throws DatabaseException
      */
@@ -76,14 +80,10 @@ trait Databases
 
         $deleted = $this->adapter->delete($database);
 
-        try {
-            $this->trigger(self::EVENT_DATABASE_DELETE, [
-                'name' => $database,
-                'deleted' => $deleted,
-            ]);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::DatabaseDelete, [
+            'name' => $database,
+            'deleted' => $deleted,
+        ]);
 
         $this->cache->flush();
 

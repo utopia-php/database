@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Validator;
 
+use Throwable;
+use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator as DatabaseOperator;
@@ -11,12 +13,15 @@ use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
+/**
+ * Validates update operators (increment, append, toggle, etc.) against collection attribute types and constraints.
+ */
 class Operator extends Validator
 {
     protected Document $collection;
 
     /**
-     * @var array<string, Document|array<string, mixed>>
+     * @var array<string, AttributeVO>
      */
     protected array $attributes = [];
 
@@ -34,8 +39,11 @@ class Operator extends Validator
         $this->collection = $collection;
         $this->currentDocument = $currentDocument;
 
-        foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            $this->attributes[$attribute->getAttribute('key', $attribute->getId())] = $attribute;
+        /** @var array<Document> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        foreach ($collectionAttributes as $attribute) {
+            $typed = AttributeVO::fromDocument($attribute);
+            $this->attributes[$typed->key] = $typed;
         }
     }
 
@@ -49,30 +57,35 @@ class Operator extends Validator
 
     /**
      * Check if a relationship attribute represents a "many" side (returns array of documents)
-     *
-     * @param  Document|array<string, mixed>  $attribute
      */
-    private function isRelationshipArray(Document|array $attribute): bool
+    private function isRelationshipArray(AttributeVO $attribute): bool
     {
-        $options = $attribute instanceof Document
-            ? $attribute->getAttribute('options', [])
-            : ($attribute['options'] ?? []);
+        $options = $attribute->options ?? [];
 
-        $relationType = $options['relationType'] ?? '';
-        $side = $options['side'] ?? '';
+        /** @var array<string, mixed> $options */
+
+        $relationTypeRaw = $options['relationType'] ?? '';
+        $sideRaw = $options['side'] ?? '';
+
+        $relationType = $relationTypeRaw instanceof RelationType
+            ? $relationTypeRaw
+            : (\is_string($relationTypeRaw) && $relationTypeRaw !== '' ? RelationType::from($relationTypeRaw) : null);
+        $side = $sideRaw instanceof RelationSide
+            ? $sideRaw
+            : (\is_string($sideRaw) && $sideRaw !== '' ? RelationSide::from($sideRaw) : null);
 
         // Many-to-many is always an array on both sides
-        if ($relationType === RelationType::ManyToMany->value) {
+        if ($relationType === RelationType::ManyToMany) {
             return true;
         }
 
         // One-to-many: array on parent side, single on child side
-        if ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value) {
+        if ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) {
             return true;
         }
 
         // Many-to-one: array on child side, single on parent side
-        if ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value) {
+        if ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) {
             return true;
         }
 
@@ -98,8 +111,10 @@ class Operator extends Validator
     {
         if (! $value instanceof DatabaseOperator) {
             try {
-                $value = DatabaseOperator::parse($value);
-            } catch (\Throwable $e) {
+                /** @var string $valueStr */
+                $valueStr = $value;
+                $value = DatabaseOperator::parse($valueStr);
+            } catch (Throwable $e) {
                 $this->message = 'Invalid operator: '.$e->getMessage();
 
                 return false;
@@ -108,13 +123,6 @@ class Operator extends Validator
 
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
-
-        // Check if method is valid
-        if (! DatabaseOperator::isMethod($method)) {
-            $this->message = "Invalid operator method: {$method}";
-
-            return false;
-        }
 
         // Check if attribute exists in collection
         $attributeConfig = $this->attributes[$attribute] ?? null;
@@ -130,110 +138,110 @@ class Operator extends Validator
 
     /**
      * Validate operator against attribute configuration
-     *
-     * @param  Document|array<string, mixed>  $attribute
      */
     private function validateOperatorForAttribute(
         DatabaseOperator $operator,
-        Document|array $attribute
+        AttributeVO $attribute
     ): bool {
         $method = $operator->getMethod();
+        $methodName = $method->value;
         $values = $operator->getValues();
 
-        // Handle both Document objects and arrays
-        $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
-        $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
+        $type = $attribute->type;
+        $isArray = $attribute->array;
 
         switch ($method) {
-            case OperatorType::Increment->value:
-            case OperatorType::Decrement->value:
-            case OperatorType::Multiply->value:
-            case OperatorType::Divide->value:
-            case OperatorType::Modulo->value:
-            case OperatorType::Power->value:
+            case OperatorType::Increment:
+            case OperatorType::Decrement:
+            case OperatorType::Multiply:
+            case OperatorType::Divide:
+            case OperatorType::Modulo:
+            case OperatorType::Power:
                 // Numeric operations only work on numeric types
-                if (! \in_array($type, [ColumnType::Integer->value, ColumnType::Double->value])) {
-                    $this->message = "Cannot apply {$method} operator to non-numeric field '{$operator->getAttribute()}'";
+                if (! \in_array($type, [ColumnType::Integer, ColumnType::Double])) {
+                    $this->message = "Cannot apply {$methodName} operator to non-numeric field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 // Validate the numeric value and optional max/min
                 if (! isset($values[0]) || ! \is_numeric($values[0])) {
-                    $this->message = "Cannot apply {$method} operator: value must be numeric, got ".gettype($operator->getValue());
+                    $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".gettype($operator->getValue());
 
                     return false;
                 }
 
                 // Special validation for divide/modulo by zero
-                if (($method === OperatorType::Divide->value || $method === OperatorType::Modulo->value) && (float) $values[0] === 0.0) {
-                    $this->message = "Cannot apply {$method} operator: ".($method === OperatorType::Divide->value ? 'division' : 'modulo').' by zero';
+                if (($method === OperatorType::Divide || $method === OperatorType::Modulo) && (float) $values[0] === 0.0) {
+                    $this->message = "Cannot apply {$methodName} operator: ".($method === OperatorType::Divide ? 'division' : 'modulo').' by zero';
 
                     return false;
                 }
 
                 // Validate max/min if provided
                 if (\count($values) > 1 && $values[1] !== null && ! \is_numeric($values[1])) {
-                    $this->message = "Cannot apply {$method} operator: max/min limit must be numeric, got ".\gettype($values[1]);
+                    $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($values[1]);
 
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === ColumnType::Integer->value && ! isset($values[1])) {
+                if ($this->currentDocument !== null && $type === ColumnType::Integer && ! isset($values[1])) {
+                    /** @var int|float $currentValue */
                     $currentValue = $this->currentDocument->getAttribute($operator->getAttribute()) ?? 0;
+                    /** @var int|float $operatorValue */
                     $operatorValue = $values[0];
 
                     // Compute predicted result
                     $predictedResult = match ($method) {
-                        OperatorType::Increment->value => $currentValue + $operatorValue,
-                        OperatorType::Decrement->value => $currentValue - $operatorValue,
-                        OperatorType::Multiply->value => $currentValue * $operatorValue,
-                        OperatorType::Divide->value => $currentValue / $operatorValue,
-                        OperatorType::Modulo->value => $currentValue % $operatorValue,
-                        OperatorType::Power->value => $currentValue ** $operatorValue,
+                        OperatorType::Increment => $currentValue + $operatorValue,
+                        OperatorType::Decrement => $currentValue - $operatorValue,
+                        OperatorType::Multiply => $currentValue * $operatorValue,
+                        OperatorType::Divide => $currentValue / $operatorValue,
+                        OperatorType::Modulo => (int) $currentValue % (int) $operatorValue,
+                        OperatorType::Power => $currentValue ** $operatorValue,
                     };
 
                     if ($predictedResult > Database::MAX_INT) {
-                        $this->message = "Cannot apply {$method} operator: would overflow maximum value of ".Database::MAX_INT;
+                        $this->message = "Cannot apply {$methodName} operator: would overflow maximum value of ".Database::MAX_INT;
 
                         return false;
                     }
 
                     if ($predictedResult < Database::MIN_INT) {
-                        $this->message = "Cannot apply {$method} operator: would underflow minimum value of ".Database::MIN_INT;
+                        $this->message = "Cannot apply {$methodName} operator: would underflow minimum value of ".Database::MIN_INT;
 
                         return false;
                     }
                 }
 
                 break;
-            case OperatorType::ArrayAppend->value:
-            case OperatorType::ArrayPrepend->value:
+            case OperatorType::ArrayAppend:
+            case OperatorType::ArrayPrepend:
                 // For relationships, check if it's a "many" side
-                if ($type === ColumnType::Relationship->value) {
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                     foreach ($values as $item) {
                         if (! $this->isValidRelationshipValue($item)) {
-                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            $this->message = "Cannot apply {$methodName} operator: relationship values must be document IDs (strings) or Document objects";
 
                             return false;
                         }
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$methodName} operator to non-array field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
-                if (! empty($values) && $type === ColumnType::Integer->value) {
+                if (! empty($values) && $type === ColumnType::Integer) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
                         if (\is_numeric($item) && ($item > Database::MAX_INT || $item < Database::MIN_INT)) {
-                            $this->message = "Cannot apply {$method} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
+                            $this->message = "Cannot apply {$methodName} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
 
                             return false;
                         }
@@ -241,59 +249,59 @@ class Operator extends Validator
                 }
 
                 break;
-            case OperatorType::ArrayUnique->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayUnique:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$methodName} operator to non-array field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::ArrayInsert->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayInsert:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$methodName} operator to non-array field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (\count($values) !== 2) {
-                    $this->message = "Cannot apply {$method} operator: requires exactly 2 values (index and value)";
+                    $this->message = "Cannot apply {$methodName} operator: requires exactly 2 values (index and value)";
 
                     return false;
                 }
 
                 $index = $values[0];
                 if (! \is_int($index) || $index < 0) {
-                    $this->message = "Cannot apply {$method} operator: index must be a non-negative integer";
+                    $this->message = "Cannot apply {$methodName} operator: index must be a non-negative integer";
 
                     return false;
                 }
 
                 $insertValue = $values[1];
 
-                if ($type === ColumnType::Relationship->value) {
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isValidRelationshipValue($insertValue)) {
-                        $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                        $this->message = "Cannot apply {$methodName} operator: relationship values must be document IDs (strings) or Document objects";
 
                         return false;
                     }
                 }
 
-                if ($type === ColumnType::Integer->value && \is_numeric($insertValue)) {
+                if ($type === ColumnType::Integer && \is_numeric($insertValue)) {
                     if ($insertValue > Database::MAX_INT || $insertValue < Database::MIN_INT) {
-                        $this->message = "Cannot apply {$method} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
+                        $this->message = "Cannot apply {$methodName} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
 
                         return false;
                     }
@@ -306,7 +314,7 @@ class Operator extends Validator
                         $arrayLength = \count($currentArray);
                         // Valid indices are 0 to length (inclusive, as we can append)
                         if ($index > $arrayLength) {
-                            $this->message = "Cannot apply {$method} operator: index {$index} is out of bounds for array of length {$arrayLength}";
+                            $this->message = "Cannot apply {$methodName} operator: index {$index} is out of bounds for array of length {$arrayLength}";
 
                             return false;
                         }
@@ -314,57 +322,57 @@ class Operator extends Validator
                 }
 
                 break;
-            case OperatorType::ArrayRemove->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayRemove:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                     $toValidate = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($toValidate as $item) {
                         if (! $this->isValidRelationshipValue($item)) {
-                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            $this->message = "Cannot apply {$methodName} operator: relationship values must be document IDs (strings) or Document objects";
 
                             return false;
                         }
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$methodName} operator to non-array field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (empty($values)) {
-                    $this->message = "Cannot apply {$method} operator: requires a value to remove";
+                    $this->message = "Cannot apply {$methodName} operator: requires a value to remove";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::ArrayIntersect->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayIntersect:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot use {$methodName} operator on non-array attribute '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (empty($values)) {
-                    $this->message = "{$method} operator requires a non-empty array value";
+                    $this->message = "{$methodName} operator requires a non-empty array value";
 
                     return false;
                 }
 
-                if ($type === ColumnType::Relationship->value) {
+                if ($type === ColumnType::Relationship) {
                     foreach ($values as $item) {
                         if (! $this->isValidRelationshipValue($item)) {
-                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            $this->message = "Cannot apply {$methodName} operator: relationship values must be document IDs (strings) or Document objects";
 
                             return false;
                         }
@@ -372,48 +380,48 @@ class Operator extends Validator
                 }
 
                 break;
-            case OperatorType::ArrayDiff->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayDiff:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                     foreach ($values as $item) {
                         if (! $this->isValidRelationshipValue($item)) {
-                            $this->message = "Cannot apply {$method} operator: relationship values must be document IDs (strings) or Document objects";
+                            $this->message = "Cannot apply {$methodName} operator: relationship values must be document IDs (strings) or Document objects";
 
                             return false;
                         }
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot use {$methodName} operator on non-array attribute '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::ArrayFilter->value:
-                if ($type === ColumnType::Relationship->value) {
+            case OperatorType::ArrayFilter:
+                if ($type === ColumnType::Relationship) {
                     if (! $this->isRelationshipArray($attribute)) {
-                        $this->message = "Cannot apply {$method} operator to single-value relationship '{$operator->getAttribute()}'";
+                        $this->message = "Cannot apply {$methodName} operator to single-value relationship '{$operator->getAttribute()}'";
 
                         return false;
                     }
                 } elseif (! $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$methodName} operator to non-array field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (\count($values) < 1 || \count($values) > 2) {
-                    $this->message = "Cannot apply {$method} operator: requires 1 or 2 values (condition and optional comparison value)";
+                    $this->message = "Cannot apply {$methodName} operator: requires 1 or 2 values (condition and optional comparison value)";
 
                     return false;
                 }
 
                 if (! \is_string($values[0])) {
-                    $this->message = "Cannot apply {$method} operator: condition must be a string";
+                    $this->message = "Cannot apply {$methodName} operator: condition must be a string";
 
                     return false;
                 }
@@ -430,87 +438,82 @@ class Operator extends Validator
                 }
 
                 break;
-            case OperatorType::StringConcat->value:
-                if ($type !== ColumnType::String->value || $isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
+            case OperatorType::StringConcat:
+                if ($type !== ColumnType::String || $isArray) {
+                    $this->message = "Cannot apply {$methodName} operator to non-string field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (empty($values) || ! \is_string($values[0])) {
-                    $this->message = "Cannot apply {$method} operator: requires a string value";
+                    $this->message = "Cannot apply {$methodName} operator: requires a string value";
 
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === ColumnType::String->value) {
+                if ($this->currentDocument !== null) {
+                    /** @var string $currentString */
                     $currentString = $this->currentDocument->getAttribute($operator->getAttribute()) ?? '';
                     $concatValue = $values[0];
-                    $predictedLength = strlen($currentString) + strlen($concatValue);
+                    $predictedLength = strlen($currentString) + strlen((string) $concatValue);
 
-                    $maxSize = $attribute instanceof Document
-                        ? $attribute->getAttribute('size', 0)
-                        : ($attribute['size'] ?? 0);
+                    $maxSize = $attribute->size;
 
                     if ($maxSize > 0 && $predictedLength > $maxSize) {
-                        $this->message = "Cannot apply {$method} operator: result would exceed maximum length of {$maxSize} characters";
+                        $this->message = "Cannot apply {$methodName} operator: result would exceed maximum length of {$maxSize} characters";
 
                         return false;
                     }
                 }
 
                 break;
-            case OperatorType::StringReplace->value:
+            case OperatorType::StringReplace:
                 // Replace only works on string types
-                if ($type !== ColumnType::String->value) {
-                    $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
+                if ($type !== ColumnType::String) {
+                    $this->message = "Cannot apply {$methodName} operator to non-string field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (\count($values) !== 2 || ! \is_string($values[0]) || ! \is_string($values[1])) {
-                    $this->message = "Cannot apply {$method} operator: requires exactly 2 string values (search and replace)";
+                    $this->message = "Cannot apply {$methodName} operator: requires exactly 2 string values (search and replace)";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::Toggle->value:
+            case OperatorType::Toggle:
                 // Toggle only works on boolean types
-                if ($type !== ColumnType::Boolean->value) {
-                    $this->message = "Cannot apply {$method} operator to non-boolean field '{$operator->getAttribute()}'";
+                if ($type !== ColumnType::Boolean) {
+                    $this->message = "Cannot apply {$methodName} operator to non-boolean field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::DateAddDays->value:
-            case OperatorType::DateSubDays->value:
-                if ($type !== ColumnType::Datetime->value) {
-                    $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
+            case OperatorType::DateAddDays:
+            case OperatorType::DateSubDays:
+                if ($type !== ColumnType::Datetime) {
+                    $this->message = "Cannot apply {$methodName} operator to non-datetime field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 if (empty($values) || ! \is_int($values[0])) {
-                    $this->message = "Cannot apply {$method} operator: requires an integer number of days";
+                    $this->message = "Cannot apply {$methodName} operator: requires an integer number of days";
 
                     return false;
                 }
 
                 break;
-            case OperatorType::DateSetNow->value:
-                if ($type !== ColumnType::Datetime->value) {
-                    $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
+            case OperatorType::DateSetNow:
+                if ($type !== ColumnType::Datetime) {
+                    $this->message = "Cannot apply {$methodName} operator to non-datetime field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 break;
-            default:
-                $this->message = "Cannot apply {$method} operator: unsupported operator method";
-
-                return false;
         }
 
         return true;

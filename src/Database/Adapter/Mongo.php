@@ -2,19 +2,22 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime as NativeDateTime;
+use DateTimeZone;
 use Exception;
+use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use stdClass;
+use Throwable;
 use Utopia\Database\Adapter;
-use Utopia\Database\Adapter\Mongo\RetryClient;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
-use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -25,7 +28,6 @@ use Utopia\Database\Hook\MongoTenantFilter;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Hook\TenantWrite;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -33,9 +35,15 @@ use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
+/**
+ * Database adapter for MongoDB, using the Utopia Mongo client for document-based storage.
+ */
 class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relationships, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
 {
     /**
@@ -63,7 +71,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         '$exists',
     ];
 
-    protected RetryClient $client;
+    protected Client $client;
 
     /**
      * @var list<Read>
@@ -78,7 +86,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     /**
      * Transaction/session state for MongoDB transactions
      *
-     * @var array<string, mixed>|null
+     * @var array<mixed>|null
      */
     private ?array $session = null; // Store session array from startSession
 
@@ -95,8 +103,71 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function __construct(Client $client)
     {
-        $this->client = new RetryClient($client);
+        $this->client = $client;
         $this->client->connect();
+    }
+
+    /**
+     * Get the list of capabilities supported by the MongoDB adapter.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Objects,
+            Capability::Fulltext,
+            Capability::TTLIndexes,
+            Capability::Regex,
+            Capability::BatchCreateAttributes,
+            Capability::Hostname,
+            Capability::PCRE,
+            Capability::Relationships,
+            Capability::Upserts,
+            Capability::Timeouts,
+            Capability::InternalCasting,
+            Capability::UTCCasting,
+        ]);
+    }
+
+    /**
+     * Set the maximum execution time for queries.
+     *
+     * @param int $milliseconds Timeout in milliseconds
+     * @param Event $event The event scope for the timeout
+     * @return void
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        if (! $this->supports(Capability::Timeouts)) {
+            return;
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    /**
+     * Clear the query execution timeout.
+     *
+     * @param Event $event The event scope to clear
+     * @return void
+     */
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->timeout = 0;
+    }
+
+    /**
+     * Set whether the adapter supports schema-based attribute definitions.
+     *
+     * @param bool $support Whether to enable attribute support
+     * @return bool
+     */
+    public function setSupportForAttributes(bool $support): bool
+    {
+        $this->supportForAttributes = $support;
+
+        return $this->supportForAttributes;
     }
 
     protected function syncWriteHooks(): void
@@ -133,91 +204,52 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return $filters;
     }
 
-    public function capabilities(): array
+    /**
+     * Ping Database
+     *
+     * @throws Exception
+     * @throws MongoException
+     */
+    public function ping(): bool
     {
-        return array_merge(parent::capabilities(), [
-            Capability::Objects,
-            Capability::Fulltext,
-            Capability::TTLIndexes,
-            Capability::Regex,
-            Capability::BatchCreateAttributes,
-            Capability::Hostname,
-            Capability::PCRE,
-            Capability::Relationships,
-            Capability::Upserts,
-            Capability::Timeouts,
-            Capability::InternalCasting,
-            Capability::UTCCasting,
+        /** @var \stdClass|array<string, mixed>|int $result */
+        $result = $this->getClient()->query([
+            'ping' => 1,
+            'skipReadConcern' => true,
         ]);
-    }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
-    {
-        if (! $this->supports(Capability::Timeouts)) {
-            return;
+        if ($result instanceof \stdClass && isset($result->ok)) {
+            return (bool) $result->ok;
         }
 
-        $this->timeout = $milliseconds;
-    }
-
-    public function clearTimeout(string $event): void
-    {
-        parent::clearTimeout($event);
-
-        $this->timeout = 0;
+        return false;
     }
 
     /**
-     * @template T
+     * Reconnect to the MongoDB server.
      *
-     * @param  callable(): T  $callback
-     * @return T
-     *
-     * @throws \Throwable
+     * @return void
      */
-    public function withTransaction(callable $callback): mixed
+    public function reconnect(): void
     {
-        // If the database is not a replica set, we can't use transactions
-        if (! $this->client->isReplicaSet()) {
-            return $callback();
-        }
-
-        // MongoDB doesn't support nested transactions/savepoints.
-        // If already in a transaction, just run the callback directly.
-        if ($this->inTransaction > 0) {
-            return $callback();
-        }
-
-        try {
-            $this->startTransaction();
-            $result = $callback();
-            $this->commitTransaction();
-
-            return $result;
-        } catch (\Throwable $action) {
-            try {
-                $this->rollbackTransaction();
-            } catch (\Throwable) {
-                // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail,
-                // and we want to throw the original exception.
-            } finally {
-                // Ensure state is cleaned up even if rollback fails
-                if ($this->session) {
-                    try {
-                        $this->client->endSessions([$this->session]);
-                    } catch (\Throwable $endSessionError) {
-                        // Ignore errors when ending session during error cleanup
-                    }
-                }
-                $this->inTransaction = 0;
-                $this->session = null;
-            }
-
-            throw $action;
-        }
+        $this->client->connect();
     }
 
+    /**
+     * @throws Exception
+     */
+    protected function getClient(): Client
+    {
+        return $this->client;
+    }
+
+    /**
+     * Start a new database transaction or increment the nesting counter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException If the transaction cannot be started.
+     */
     public function startTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
@@ -235,13 +267,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $this->inTransaction++;
 
             return true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->session = null;
             $this->inTransaction = 0;
             throw new DatabaseException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
     }
 
+    /**
+     * Commit the current database transaction or decrement the nesting counter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException If the transaction cannot be committed.
+     */
     public function commitTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
@@ -272,7 +311,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                         return true;
                     }
                     throw $e;
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 } finally {
                     if ($this->session) {
@@ -285,11 +324,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             return true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Ensure cleanup on any failure
             try {
-                $this->client->endSessions([$this->session]);
-            } catch (\Throwable $endSessionError) {
+                if ($this->session !== null) {
+                    $this->client->endSessions([$this->session]);
+                }
+            } catch (Throwable $endSessionError) {
                 // Ignore errors when ending session during error cleanup
             }
             $this->session = null;
@@ -298,6 +339,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
     }
 
+    /**
+     * Roll back the current database transaction or decrement the nesting counter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException If the rollback fails.
+     */
     public function rollbackTransaction(): bool
     {
         // If the database is not a replica set, we can't use transactions
@@ -317,7 +365,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 try {
                     $this->client->abortTransaction($this->session);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $e = $this->processException($e);
 
                     if ($e instanceof TransactionException) {
@@ -336,10 +384,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             return true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             try {
-                $this->client->endSessions([$this->session]);
-            } catch (\Throwable) {
+                if ($this->session !== null) {
+                    $this->client->endSessions([$this->session]);
+                }
+            } catch (Throwable) {
                 // Ignore errors when ending session during error cleanup
             }
             $this->session = null;
@@ -350,61 +400,56 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Helper to add transaction/session context to command options if in transaction
-     * Includes defensive check to ensure session is valid
+     * @template T
      *
-     * @param  array<string, mixed>  $options
-     * @return array<string, mixed>
+     * @param  callable(): T  $callback
+     * @return T
+     *
+     * @throws Throwable
      */
-    private function getTransactionOptions(array $options = []): array
+    public function withTransaction(callable $callback): mixed
     {
-        if ($this->inTransaction > 0 && $this->session !== null) {
-            // Pass the session array directly - the client will handle the transaction state internally
-            $options['session'] = $this->session;
+        // If the database is not a replica set, we can't use transactions
+        if (! $this->client->isReplicaSet()) {
+            return $callback();
         }
 
-        return $options;
-    }
-
-    /**
-     * Create a safe MongoDB regex pattern by escaping special characters
-     *
-     * @param  string  $value  The user input to escape
-     * @param  string  $pattern  The pattern template (e.g., ".*%s.*" for contains)
-     *
-     * @throws DatabaseException
-     */
-    private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
-    {
-        $escaped = preg_quote($value, '/');
-
-        // Validate that the pattern doesn't contain injection vectors
-        if (preg_match('/\$[a-z]+/i', $escaped)) {
-            throw new DatabaseException('Invalid regex pattern: potential injection detected');
+        // MongoDB doesn't support nested transactions/savepoints.
+        // If already in a transaction, just run the callback directly.
+        if ($this->inTransaction > 0) {
+            return $callback();
         }
 
-        $finalPattern = sprintf($pattern, $escaped);
+        try {
+            $this->startTransaction();
+            $result = $callback();
+            $this->commitTransaction();
 
-        return new Regex($finalPattern, $flags);
-    }
+            return $result;
+        } catch (Throwable $action) {
+            try {
+                $this->rollbackTransaction();
+            } catch (Throwable) {
+                // Throw the original exception, not the rollback one
+                // Since if it's a duplicate key error, the rollback will fail,
+                // and we want to throw the original exception.
+            } finally {
+                // Ensure state is cleaned up even if rollback fails
+                if ($this->session) {
+                    try {
+                        /** @var array<string, mixed> $session */
+                        $session = $this->session;
+                        $this->client->endSessions([$session]);
+                    } catch (Throwable $endSessionError) {
+                        // Ignore errors when ending session during error cleanup
+                    }
+                }
+                $this->inTransaction = 0;
+                $this->session = null;
+            }
 
-    /**
-     * Ping Database
-     *
-     * @throws Exception
-     * @throws MongoException
-     */
-    public function ping(): bool
-    {
-        return $this->getClient()->query([
-            'ping' => 1,
-            'skipReadConcern' => true,
-        ])->ok ?? false;
-    }
-
-    public function reconnect(): void
-    {
-        $this->client->connect();
+            throw $action;
+        }
     }
 
     /**
@@ -430,13 +475,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $collection = $this->getNamespace().'_'.$collection;
             try {
                 // Use listCollections command with filter for O(1) lookup
+                /** @var \stdClass $result */
                 $result = $this->getClient()->query([
                     'listCollections' => 1,
                     'filter' => ['name' => $collection],
                 ]);
 
-                return ! empty($result->cursor->firstBatch);
-            } catch (\Exception $e) {
+                /** @var \stdClass $cursor */
+                $cursor = $result->cursor;
+                /** @var array<mixed> $firstBatch */
+                $firstBatch = $cursor->firstBatch;
+                return ! empty($firstBatch);
+            } catch (Exception $e) {
                 return false;
             }
         }
@@ -453,9 +503,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function list(): array
     {
+        /** @var array<Document> $list */
         $list = [];
 
-        foreach ((array) $this->getClient()->listDatabaseNames() as $value) {
+        /** @var \stdClass $databaseNames */
+        $databaseNames = $this->getClient()->listDatabaseNames();
+        /** @var array<Document> $databaseNamesArray */
+        $databaseNamesArray = (array) $databaseNames;
+        foreach ($databaseNamesArray as $value) {
             $list[] = $value;
         }
 
@@ -510,7 +565,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $internalIndex = [
             [
-                'key' => ['_uid' => $this->getOrder(OrderDirection::ASC->value)],
+                'key' => ['_uid' => $this->getOrder(OrderDirection::Asc)],
                 'name' => '_uid',
                 'unique' => true,
                 'collation' => [
@@ -519,22 +574,22 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 ],
             ],
             [
-                'key' => ['_createdAt' => $this->getOrder(OrderDirection::ASC->value)],
+                'key' => ['_createdAt' => $this->getOrder(OrderDirection::Asc)],
                 'name' => '_createdAt',
             ],
             [
-                'key' => ['_updatedAt' => $this->getOrder(OrderDirection::ASC->value)],
+                'key' => ['_updatedAt' => $this->getOrder(OrderDirection::Asc)],
                 'name' => '_updatedAt',
             ],
             [
-                'key' => ['_permissions' => $this->getOrder(OrderDirection::ASC->value)],
+                'key' => ['_permissions' => $this->getOrder(OrderDirection::Asc)],
                 'name' => '_permissions',
             ],
         ];
 
         if ($this->sharedTables) {
             foreach ($internalIndex as &$index) {
-                $index['key'] = array_merge(['_tenant' => $this->getOrder(OrderDirection::ASC->value)], $index['key']);
+                $index['key'] = array_merge(['_tenant' => $this->getOrder(OrderDirection::Asc)], $index['key']);
             }
             unset($index);
         }
@@ -542,7 +597,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         try {
             $options = $this->getTransactionOptions();
             $indexesCreated = $this->client->createIndexes($id, $internalIndex, $options);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             throw $this->processException($e);
         }
 
@@ -571,26 +626,26 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 // If sharedTables, always add _tenant as the first key
                 if ($this->shouldAddTenantToIndex($index)) {
-                    $key['_tenant'] = $this->getOrder(OrderDirection::ASC->value);
+                    $key['_tenant'] = $this->getOrder(OrderDirection::Asc);
                 }
 
                 foreach ($attributes as $j => $attribute) {
-                    $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+                    $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
 
                     switch ($index->type) {
                         case IndexType::Key:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
+                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
                             // MongoDB fulltext index is just 'text'
                             $order = 'text';
                             break;
                         case IndexType::Unique:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
+                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
                             $unique = true;
                             break;
                         case IndexType::Ttl:
-                            $order = $this->getOrder($this->filter($orders[$j] ?? OrderDirection::ASC->value));
+                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
                             break;
                         default:
                             // index not supported
@@ -625,11 +680,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 ])) {
                     $partialFilter = [];
                     foreach ($attributes as $attr) {
+                        $attr = (string) $attr;
                         // Find the matching attribute in collectionAttributes to get its type
                         $attrType = 'string'; // Default fallback
                         foreach ($collectionAttributes as $collectionAttr) {
                             if ($collectionAttr->key === $attr) {
-                                $attrType = $this->getMongoTypeCode($collectionAttr->type->value);
+                                $attrType = $this->getMongoTypeCode($collectionAttr->type);
                                 break;
                             }
                         }
@@ -650,8 +706,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             try {
                 $options = $this->getTransactionOptions();
-                $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes, $options);
-            } catch (\Exception $e) {
+                $indexesCreated = $this->getClient()->createIndexes($id, \array_values($newIndexes), $options);
+            } catch (Exception $e) {
                 throw $this->processException($e);
             }
 
@@ -672,53 +728,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function listCollections(): array
     {
+        /** @var array<Document> $list */
         $list = [];
 
         // Note: listCollections is a metadata operation that should not run in transactions
         // to avoid transaction conflicts and readConcern issues
-        foreach ((array) $this->getClient()->listCollectionNames() as $value) {
+        /** @var \stdClass $collectionNames */
+        $collectionNames = $this->getClient()->listCollectionNames();
+        /** @var array<Document> $collectionNamesArray */
+        $collectionNamesArray = (array) $collectionNames;
+        foreach ($collectionNamesArray as $value) {
             $list[] = $value;
         }
 
         return $list;
-    }
-
-    /**
-     * Get Collection Size on disk
-     *
-     * @throws DatabaseException
-     */
-    public function getSizeOfCollectionOnDisk(string $collection): int
-    {
-        return $this->getSizeOfCollection($collection);
-    }
-
-    /**
-     * Get Collection Size of raw data
-     *
-     * @throws DatabaseException
-     */
-    public function getSizeOfCollection(string $collection): int
-    {
-        $namespace = $this->getNamespace();
-        $collection = $this->filter($collection);
-        $collection = $namespace.'_'.$collection;
-
-        $command = [
-            'collStats' => $collection,
-            'scale' => 1,
-        ];
-
-        try {
-            $result = $this->getClient()->query($command);
-            if (is_object($result)) {
-                return $result->totalSize;
-            } else {
-                throw new DatabaseException('No size found');
-            }
-        } catch (Exception $e) {
-            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
-        }
     }
 
     /**
@@ -758,6 +781,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function createAttributes(string $collection, array $attributes): bool
     {
+        return true;
+    }
+
+    /**
+     * Update Attribute.
+     */
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    {
+        if (! empty($newKey) && $newKey !== $attribute->key) {
+            return $this->renameAttribute($collection, $attribute->key, $newKey);
+        }
+
         return true;
     }
 
@@ -807,6 +842,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return true;
     }
 
+    /**
+     * Create a relationship between collections. No-op for MongoDB since relationships are virtual.
+     *
+     * @param Relationship $relationship The relationship definition
+     * @return bool
+     */
     public function createRelationship(Relationship $relationship): bool
     {
         return true;
@@ -965,16 +1006,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $attributes = $index->attributes;
         $orders = $index->orders;
         $ttl = $index->ttl;
+        /** @var array<string, mixed> $indexes */
         $indexes = [];
         $options = [];
         $indexes['name'] = $id;
 
+        /** @var array<string, int|string> $indexKey */
+        $indexKey = [];
+
         // If sharedTables, always add _tenant as the first key
         if ($this->shouldAddTenantToIndex($type)) {
-            $indexes['key']['_tenant'] = $this->getOrder(OrderDirection::ASC->value);
+            $indexKey['_tenant'] = $this->getOrder(OrderDirection::Asc);
         }
 
         foreach ($attributes as $i => $attribute) {
+            $attribute = (string) $attribute;
 
             if (isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value) {
                 $dottedAttributes = \explode('.', $attribute);
@@ -984,14 +1030,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder($this->filter($orders[$i] ?? OrderDirection::ASC->value));
-            $indexes['key'][$attributes[$i]] = $orderType;
+            $orderType = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$i] ?? '')) ?? OrderDirection::Asc);
+            $indexKey[$attributes[$i]] = $orderType;
 
             switch ($type) {
                 case IndexType::Key:
                     break;
                 case IndexType::Fulltext:
-                    $indexes['key'][$attributes[$i]] = 'text';
+                    $indexKey[$attributes[$i]] = 'text';
                     break;
                 case IndexType::Unique:
                     $indexes['unique'] = true;
@@ -1002,6 +1048,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     return false;
             }
         }
+
+        $indexes['key'] = $indexKey;
 
         /**
          * Collation
@@ -1035,7 +1083,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = $indexAttributeTypes[$i] ?? ColumnType::String->value; // Default to string if type not provided
+                $attrType = ColumnType::tryFrom($indexAttributeTypes[$i] ?? '') ?? ColumnType::String;
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
@@ -1049,7 +1097,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             // Wait for unique index to be fully built before returning
             // MongoDB builds indexes asynchronously, so we need to wait for completion
             // to ensure unique constraints are enforced immediately
-            if ($type === IndexType::Unique->value) {
+            if ($type === IndexType::Unique) {
                 $maxRetries = 10;
                 $retryCount = 0;
                 $baseDelay = 50000; // 50ms
@@ -1057,12 +1105,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 while ($retryCount < $maxRetries) {
                     try {
+                        /** @var \stdClass $indexList */
                         $indexList = $this->client->query([
                             'listIndexes' => $name,
                         ]);
 
-                        if (isset($indexList->cursor->firstBatch)) {
-                            foreach ($indexList->cursor->firstBatch as $existingIndex) {
+                        /** @var \stdClass $indexListCursor */
+                        $indexListCursor = $indexList->cursor;
+                        if (isset($indexListCursor->firstBatch)) {
+                            /** @var array<mixed> $firstBatch */
+                            $firstBatch = $indexListCursor->firstBatch;
+                            foreach ($firstBatch as $existingIndex) {
                                 $indexArray = $this->client->toArray($existingIndex);
 
                                 if (
@@ -1073,7 +1126,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                                 }
                             }
                         }
-                    } catch (\Exception $e) {
+                    } catch (Exception $e) {
                         if ($retryCount >= $maxRetries - 1) {
                             throw new DatabaseException(
                                 'Timeout waiting for index creation: '.$e->getMessage(),
@@ -1092,73 +1145,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             return $result;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             throw $this->processException($e);
         }
-    }
-
-    /**
-     * Rename Index.
-     *
-     *
-     * @throws Exception
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
-        $collectionDocument = $this->getDocument($metadataCollection, $collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-        $indexes = json_decode($collectionDocument['indexes'], true);
-        $index = null;
-
-        foreach ($indexes as $node) {
-            if (($node['$id'] ?? $node['key'] ?? '') === $old) {
-                $index = $node;
-                break;
-            }
-        }
-
-        // Extract attribute types from the collection document
-        $indexAttributeTypes = [];
-        if (isset($collectionDocument['attributes'])) {
-            $attributes = json_decode($collectionDocument['attributes'], true);
-            if ($attributes && $index) {
-                // Map index attributes to their types
-                foreach ($index['attributes'] as $attrName) {
-                    foreach ($attributes as $attr) {
-                        if ($attr['key'] === $attrName) {
-                            $indexAttributeTypes[$attrName] = $attr['type'];
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        try {
-            if (! $index) {
-                throw new DatabaseException('Index not found: '.$old);
-            }
-            $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, new Index(
-                key: $new,
-                type: IndexType::from($index['type']),
-                attributes: $index['attributes'],
-                lengths: $index['lengths'] ?? [],
-                orders: $index['orders'] ?? [],
-                ttl: $index['ttl'] ?? 0,
-            ), $indexAttributeTypes);
-        } catch (\Exception $e) {
-            throw $this->processException($e);
-        }
-
-        if ($deletedindex && $createdindex) {
-            return true;
-        }
-
-        return false;
     }
 
     /**
@@ -1174,6 +1163,94 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->getClient()->dropIndexes($name, [$id]);
 
         return true;
+    }
+
+    /**
+     * Rename Index.
+     *
+     *
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collectionDocument = $this->getDocument($metadataCollection, $collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $rawIndexes = $collectionDocument->getAttribute('indexes', '[]');
+        /** @var array<int, array<string, mixed>> $indexes */
+        $indexes = json_decode((string) (is_string($rawIndexes) ? $rawIndexes : '[]'), true) ?? [];
+        /** @var array<string, mixed>|null $index */
+        $index = null;
+
+        foreach ($indexes as $node) {
+            /** @var array<string, mixed> $node */
+            $nodeId = $node['$id'] ?? $node['key'] ?? '';
+            $nodeIdStr = \is_string($nodeId) ? $nodeId : (\is_scalar($nodeId) ? (string) $nodeId : '');
+            if ($nodeIdStr === $old) {
+                $index = $node;
+                break;
+            }
+        }
+
+        // Extract attribute types from the collection document
+        $indexAttributeTypes = [];
+        $rawAttributes = $collectionDocument->getAttribute('attributes');
+        if ($rawAttributes !== null) {
+            /** @var array<int, array<string, mixed>> $attributes */
+            $attributes = json_decode((string) (is_string($rawAttributes) ? $rawAttributes : '[]'), true) ?? [];
+            if ($attributes && $index) {
+                // Map index attributes to their types
+                /** @var array<string> $indexAttrs */
+                $indexAttrs = $index['attributes'] ?? [];
+                foreach ($indexAttrs as $attrName) {
+                    foreach ($attributes as $attr) {
+                        /** @var array<string, mixed> $attr */
+                        $attrKey = $attr['key'] ?? '';
+                        $attrKeyStr = \is_string($attrKey) ? $attrKey : (\is_scalar($attrKey) ? (string) $attrKey : '');
+                        if ($attrKeyStr === $attrName) {
+                            $attrType = $attr['type'] ?? '';
+                            $indexAttributeTypes[$attrName] = \is_string($attrType) ? $attrType : (\is_scalar($attrType) ? (string) $attrType : '');
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            if (! $index) {
+                throw new DatabaseException('Index not found: '.$old);
+            }
+            $deletedindex = $this->deleteIndex($collection, $old);
+            /** @var array<string> $indexAttributes */
+            $indexAttributes = $index['attributes'] ?? [];
+            /** @var array<int> $indexLengths */
+            $indexLengths = $index['lengths'] ?? [];
+            /** @var array<string> $indexOrders */
+            $indexOrders = $index['orders'] ?? [];
+            $rawIndexType = $index['type'] ?? 'key';
+            $indexTypeStr = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : 'key');
+            $rawIndexTtl = $index['ttl'] ?? 0;
+            $indexTtlInt = \is_int($rawIndexTtl) ? $rawIndexTtl : (\is_numeric($rawIndexTtl) ? (int) $rawIndexTtl : 0);
+            $createdindex = $this->createIndex($collection, new Index(
+                key: $new,
+                type: IndexType::from($indexTypeStr),
+                attributes: $indexAttributes,
+                lengths: $indexLengths,
+                orders: $indexOrders,
+                ttl: $indexTtlInt,
+            ), $indexAttributeTypes);
+        } catch (Exception $e) {
+            throw $this->processException($e);
+        }
+
+        if ($deletedindex && $createdindex) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -1202,7 +1279,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         try {
-            $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
+            $findResponse = $this->client->find($name, $filters, $options);
+            /** @var \stdClass $findCursor */
+            $findCursor = $findResponse->cursor;
+            /** @var array<mixed> $result */
+            $result = $findCursor->firstBatch;
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1211,8 +1292,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return new Document([]);
         }
 
+        /** @var array<string, mixed>|null $resultArray */
         $resultArray = $this->client->toArray($result[0]);
-        $result = $this->replaceChars('_', '$', $resultArray);
+        $result = $this->replaceChars('_', '$', $resultArray ?? []);
         $document = new Document($result);
         $document = $this->castingAfter($collection, $document);
 
@@ -1240,7 +1322,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $document->removeAttribute('$sequence');
 
-        $record = $this->replaceChars('$', '_', (array) $document);
+        /** @var array<string, mixed> $documentArray */
+        $documentArray = (array) $document;
+        $record = $this->replaceChars('$', '_', $documentArray);
         $record = $this->decorateRow($record, $this->documentMetadata($document));
 
         // Insert manual id if set
@@ -1253,176 +1337,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // in order to keep the original object refrence.
         foreach ($result as $key => $value) {
             $document->setAttribute($key, $value);
-        }
-
-        return $document;
-    }
-
-    /**
-     * Returns the document after casting from
-     */
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        if (! $this->supports(Capability::InternalCasting)) {
-            return $document;
-        }
-
-        if ($document->isEmpty()) {
-            return $document;
-        }
-
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key);
-            if (is_null($value)) {
-                continue;
-            }
-
-            if ($array) {
-                if (is_string($value)) {
-                    $decoded = json_decode($value, true);
-                    if (json_last_error() !== JSON_ERROR_NONE) {
-                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
-                    }
-                    $value = $decoded;
-                }
-            } else {
-                $value = [$value];
-            }
-
-            foreach ($value as &$node) {
-                switch ($type) {
-                    case ColumnType::Integer->value:
-                        $node = (int) $node;
-                        break;
-                    case ColumnType::Datetime->value:
-                        $node = $this->convertUTCDateToString($node);
-                        break;
-                    case ColumnType::Object->value:
-                        // Convert stdClass objects to arrays for object attributes
-                        if (is_object($node) && get_class($node) === stdClass::class) {
-                            $node = $this->convertStdClassToArray($node);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-            unset($node);
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
-        }
-
-        if (! $this->supports(Capability::DefinedAttributes)) {
-            foreach ($document->getArrayCopy() as $key => $value) {
-                // mongodb results out a stdclass for objects
-                if (is_object($value) && get_class($value) === stdClass::class) {
-                    $document->setAttribute($key, $this->convertStdClassToArray($value));
-                } elseif ($value instanceof UTCDateTime) {
-                    $document->setAttribute($key, $this->convertUTCDateToString($value));
-                }
-            }
-        }
-
-        return $document;
-    }
-
-    private function convertStdClassToArray(mixed $value): mixed
-    {
-        if (is_object($value) && get_class($value) === stdClass::class) {
-            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
-        }
-
-        if (is_array($value)) {
-            return array_map(
-                fn ($v) => $this->convertStdClassToArray($v),
-                $value
-            );
-        }
-
-        return $value;
-    }
-
-    /**
-     * Returns the document after casting to
-     *
-     * @throws Exception
-     */
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        if (! $this->supports(Capability::InternalCasting)) {
-            return $document;
-        }
-
-        if ($document->isEmpty()) {
-            return $document;
-        }
-
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-
-            $value = $document->getAttribute($key);
-            if (is_null($value)) {
-                continue;
-            }
-
-            if ($array) {
-                if (is_string($value)) {
-                    $decoded = json_decode($value, true);
-                    if (json_last_error() !== JSON_ERROR_NONE) {
-                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
-                    }
-                    $value = $decoded;
-                }
-            } else {
-                $value = [$value];
-            }
-
-            foreach ($value as &$node) {
-                switch ($type) {
-                    case ColumnType::Datetime->value:
-                        if (! ($node instanceof UTCDateTime)) {
-                            $node = new UTCDateTime(new \DateTime($node));
-                        }
-                        break;
-                    case ColumnType::Object->value:
-                        $node = json_decode($node);
-                        break;
-                    default:
-                        break;
-                }
-            }
-            unset($node);
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
-        }
-        $indexes = $collection->getAttribute('indexes');
-        $ttlIndexes = array_filter($indexes, fn ($index) => $index->getAttribute('type') === IndexType::Ttl->value);
-
-        if (! $this->supports(Capability::DefinedAttributes)) {
-            foreach ($document->getArrayCopy() as $key => $value) {
-                if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
-                    continue;
-                }
-                if (is_string($value) && (in_array($key, $ttlIndexes) || $this->isExtendedISODatetime($value))) {
-                    try {
-                        $newValue = new UTCDateTime(new \DateTime($value));
-                        $document->setAttribute($key, $newValue);
-                    } catch (\Throwable $th) {
-                        // skip -> a valid string
-                    }
-                }
-            }
         }
 
         return $document;
@@ -1457,7 +1371,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 throw new DatabaseException('All documents must have an sequence if one is set');
             }
 
-            $record = $this->replaceChars('$', '_', (array) $document);
+            /** @var array<string, mixed> $documentArr */
+            $documentArr = (array) $document;
+            $record = $this->replaceChars('$', '_', $documentArr);
             $record = $this->decorateRow($record, $this->documentMetadata($document));
 
             if (! empty($sequence)) {
@@ -1474,41 +1390,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         foreach ($documents as $index => $document) {
-            $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
+            /** @var array<string, mixed> $toArrayResult */
+            $toArrayResult = $this->client->toArray($document) ?? [];
+            $documents[$index] = $this->replaceChars('_', '$', $toArrayResult);
             $documents[$index] = new Document($documents[$index]);
         }
 
         return $documents;
-    }
-
-    /**
-     * @param  array<string, mixed>  $document
-     * @param  array<string, mixed>  $options
-     * @return array<string, mixed>
-     *
-     * @throws DuplicateException
-     * @throws Exception
-     */
-    private function insertDocument(string $name, array $document, array $options = []): array
-    {
-        try {
-            $result = $this->client->insert($name, $document, $options);
-            $filters = ['_uid' => $document['_uid']];
-
-            try {
-                $result = $this->client->find(
-                    $name,
-                    $filters,
-                    array_merge(['limit' => 1], $options)
-                )->cursor->firstBatch[0];
-            } catch (MongoException $e) {
-                throw $this->processException($e);
-            }
-
-            return $this->client->toArray($result);
-        } catch (MongoException $e) {
-            throw $this->processException($e);
-        }
     }
 
     /**
@@ -1560,6 +1448,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents)),
         ];
 
+        /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId());
 
@@ -1606,6 +1495,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $oldDocument = $change->getOld();
+                /** @var array<string, mixed> $attributes */
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document['$createdAt'];
@@ -1687,165 +1577,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Get fields to unset for schemaless upsert operations
-     *
-     * @param  array<string, mixed>  $record
-     * @return array<string, string>
-     */
-    private function getUpsertAttributeRemovals(Document $oldDocument, Document $newDocument, array $record): array
-    {
-        $unsetFields = [];
-
-        if ($this->supports(Capability::DefinedAttributes) || $oldDocument->isEmpty()) {
-            return $unsetFields;
-        }
-
-        $oldUserAttributes = $oldDocument->getAttributes();
-        $newUserAttributes = $newDocument->getAttributes();
-
-        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
-
-        foreach ($oldUserAttributes as $originalKey => $originalValue) {
-            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
-                continue;
-            }
-
-            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
-            $dbKey = array_key_first($transformed);
-
-            if ($dbKey && ! array_key_exists($dbKey, $record) && ! in_array($dbKey, $protectedFields)) {
-                $unsetFields[$dbKey] = '';
-            }
-        }
-
-        return $unsetFields;
-    }
-
-    /**
-     * Get sequences for documents that were created
-     *
-     * @param  array<Document>  $documents
-     * @return array<Document>
-     *
-     * @throws DatabaseException
-     * @throws MongoException
-     */
-    public function getSequences(string $collection, array $documents): array
-    {
-        $documentIds = [];
-        $documentTenants = [];
-        foreach ($documents as $document) {
-            if (empty($document->getSequence())) {
-                $documentIds[] = $document->getId();
-
-                if ($this->sharedTables) {
-                    $documentTenants[] = $document->getTenant();
-                }
-            }
-        }
-
-        if (empty($documentIds)) {
-            return $documents;
-        }
-
-        $sequences = [];
-        $name = $this->getNamespace().'_'.$this->filter($collection);
-
-        $filters = ['_uid' => ['$in' => $documentIds]];
-
-        if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
-        }
-        try {
-            // Use cursor paging for large result sets
-            $options = [
-                'projection' => ['_uid' => 1, '_id' => 1],
-                'batchSize' => self::DEFAULT_BATCH_SIZE,
-            ];
-
-            $options = $this->getTransactionOptions($options);
-            $response = $this->client->find($name, $filters, $options);
-            $results = $response->cursor->firstBatch ?? [];
-
-            // Process first batch
-            foreach ($results as $result) {
-                $sequences[$result->_uid] = (string) $result->_id;
-            }
-
-            // Get cursor ID for subsequent batches
-            $cursorId = $response->cursor->id ?? null;
-
-            // Continue fetching with getMore
-            while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore((int) $cursorId, $name, self::DEFAULT_BATCH_SIZE);
-                $moreResults = $moreResponse->cursor->nextBatch ?? [];
-
-                if (empty($moreResults)) {
-                    break;
-                }
-
-                foreach ($moreResults as $result) {
-                    $sequences[$result->_uid] = (string) $result->_id;
-                }
-
-                // Update cursor ID for next iteration
-                $cursorId = (int) ($moreResponse->cursor->id ?? 0);
-            }
-        } catch (MongoException $e) {
-            throw $this->processException($e);
-        }
-
-        foreach ($documents as $document) {
-            if (isset($sequences[$document->getId()])) {
-                $document['$sequence'] = $sequences[$document->getId()];
-            }
-        }
-
-        return $documents;
-    }
-
-    /**
-     * Increase or decrease an attribute value
-     *
-     * @throws DatabaseException
-     * @throws MongoException
-     * @throws Exception
-     */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
-    {
-        $attribute = $this->filter($attribute);
-        $filters = ['_uid' => $id];
-        $filters = $this->applyReadFilters($filters, $collection);
-
-        if ($max !== null || $min !== null) {
-            $filters[$attribute] = [];
-            if ($max !== null) {
-                $filters[$attribute]['$lte'] = $max;
-            }
-            if ($min !== null) {
-                $filters[$attribute]['$gte'] = $min;
-            }
-        }
-
-        $options = $this->getTransactionOptions();
-        try {
-            $this->client->update(
-                $this->getNamespace().'_'.$this->filter($collection),
-                $filters,
-                [
-                    '$inc' => [$attribute => $value],
-                    '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
-                ],
-                options: $options
-            );
-        } catch (MongoException $e) {
-            throw $this->processException($e);
-        }
-
-        return true;
-    }
-
-    /**
      * Delete Document
      *
      *
@@ -1880,7 +1611,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $sequences[$index] = $sequence;
         }
 
-        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
+        /** @var array<string, mixed> $filters */
+        $filters = $this->buildFilters([new Query(Method::Equal, '_id', $sequences)]);
         $filters = $this->applyReadFilters($filters, $collection);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
@@ -1900,32 +1632,46 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Update Attribute.
+     * Increase or decrease an attribute value
+     *
+     * @throws DatabaseException
+     * @throws MongoException
+     * @throws Exception
      */
-    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->key) {
-            return $this->renameAttribute($collection, $attribute->key, $newKey);
+        $attribute = $this->filter($attribute);
+        $filters = ['_uid' => $id];
+        $filters = $this->applyReadFilters($filters, $collection);
+
+        if ($max !== null || $min !== null) {
+            /** @var array<string, int|float> $attributeFilter */
+            $attributeFilter = [];
+            if ($max !== null) {
+                $attributeFilter['$lte'] = $max;
+            }
+            if ($min !== null) {
+                $attributeFilter['$gte'] = $min;
+            }
+            $filters[$attribute] = $attributeFilter;
+        }
+
+        $options = $this->getTransactionOptions();
+        try {
+            $this->client->update(
+                $this->getNamespace().'_'.$this->filter($collection),
+                $filters,
+                [
+                    '$inc' => [$attribute => $value],
+                    '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+                ],
+                options: $options
+            );
+        } catch (MongoException $e) {
+            throw $this->processException($e);
         }
 
         return true;
-    }
-
-    /**
-     * TODO Consider moving this to adapter.php
-     */
-    protected function getInternalKeyForAttribute(string $attribute): string
-    {
-        return match ($attribute) {
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$collection' => '_collection',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$permissions' => '_permissions',
-            default => $attribute
-        };
     }
 
     /**
@@ -1935,14 +1681,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @param  array<Query>  $queries
      * @param  array<string>  $orderAttributes
-     * @param  array<string>  $orderTypes
+     * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
      * @return array<Document>
      *
      * @throws Exception
      * @throws TimeoutException
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -1951,10 +1697,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // (to distinguish from nested object paths like profile.level1.value)
         $this->escapeQueryAttributes($collection, $queries);
 
+        /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
 
         $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId(), $forPermission);
+        $filters = $this->applyReadFilters($filters, $collection->getId(), $forPermission->value);
 
         $options = [];
 
@@ -1979,27 +1726,30 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $options = $this->getTransactionOptions($options);
 
         $orFilters = [];
+        /** @var array<string, int> $sortOptions */
+        $sortOptions = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? OrderDirection::ASC->value);
+            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
             $direction = $orderType;
 
             /** Get sort direction  ASC || DESC **/
-            if ($cursorDirection === CursorDirection::Before->value) {
-                $direction = ($direction === OrderDirection::ASC->value)
-                    ? OrderDirection::DESC->value
-                    : OrderDirection::ASC->value;
+            if ($cursorDirection === CursorDirection::Before) {
+                $direction = ($direction === OrderDirection::Asc)
+                    ? OrderDirection::Desc
+                    : OrderDirection::Asc;
             }
 
-            $options['sort'][$attribute] = $this->getOrder($direction);
+            $sortOptions[$attribute] = $this->getOrder($direction);
+            $options['sort'] = $sortOptions;
 
             /** Get operator sign  '$lt' ? '$gt' **/
-            $operator = $cursorDirection === CursorDirection::After->value
-                ? ($orderType === OrderDirection::DESC->value ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === OrderDirection::DESC->value ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+            $operator = $cursorDirection === CursorDirection::After
+                ? ($orderType === OrderDirection::Desc ? Method::LessThan : Method::GreaterThan)
+                : ($orderType === OrderDirection::Desc ? Method::GreaterThan : Method::LessThan);
 
             $operator = $this->getQueryOperator($operator);
 
@@ -2044,9 +1794,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         // Translate operators and handle time filters
+        /** @var array<string, mixed> $filters */
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
         $found = [];
+        /** @var int|null $cursorId */
         $cursorId = null;
 
         try {
@@ -2054,31 +1806,63 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $options['batchSize'] = self::DEFAULT_BATCH_SIZE;
 
             $response = $this->client->find($name, $filters, $options);
-            $results = $response->cursor->firstBatch ?? [];
+            /** @var \stdClass $responseCursorFind */
+            $responseCursorFind = $response->cursor;
+            /** @var array<mixed> $results */
+            $results = $responseCursorFind->firstBatch ?? [];
             // Process first batch
             foreach ($results as $result) {
-                $record = $this->replaceChars('_', '$', (array) $result);
-                $found[] = new Document($this->convertStdClassToArray($record));
+                /** @var array<string, mixed> $resultCast */
+                $resultCast = (array) $result;
+                $record = $this->replaceChars('_', '$', $resultCast);
+                /** @var array<string, mixed> $convertedRecord */
+                $convertedRecord = $this->convertStdClassToArray($record);
+                $found[] = new Document($convertedRecord);
             }
 
             // Get cursor ID for subsequent batches
-            $cursorId = $response->cursor->id ?? null;
+            if (isset($responseCursorFind->id)) {
+                /** @var mixed $responseCursorFindId */
+                $responseCursorFindId = $responseCursorFind->id;
+                $cursorId = \is_int($responseCursorFindId) ? $responseCursorFindId : (\is_scalar($responseCursorFindId) ? (int) $responseCursorFindId : null);
+                if ($cursorId === 0) {
+                    $cursorId = null;
+                }
+            } else {
+                $cursorId = null;
+            }
 
             // Continue fetching with getMore
-            while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore((int) $cursorId, $name, self::DEFAULT_BATCH_SIZE);
-                $moreResults = $moreResponse->cursor->nextBatch ?? [];
+            while ($cursorId !== null) {
+                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                /** @var \stdClass $moreCursorFind */
+                $moreCursorFind = $moreResponse->cursor;
+                /** @var array<mixed> $moreResults */
+                $moreResults = $moreCursorFind->nextBatch ?? [];
 
                 if (empty($moreResults)) {
                     break;
                 }
 
                 foreach ($moreResults as $result) {
-                    $record = $this->replaceChars('_', '$', (array) $result);
-                    $found[] = new Document($this->convertStdClassToArray($record));
+                    /** @var array<string, mixed> $resultCast */
+                    $resultCast = (array) $result;
+                    $record = $this->replaceChars('_', '$', $resultCast);
+                    /** @var array<string, mixed> $convertedRecord */
+                    $convertedRecord = $this->convertStdClassToArray($record);
+                    $found[] = new Document($convertedRecord);
                 }
 
-                $cursorId = (int) ($moreResponse->cursor->id ?? 0);
+                if (isset($moreCursorFind->id)) {
+                    /** @var mixed $moreCursorFindId */
+                    $moreCursorFindId = $moreCursorFind->id;
+                    $cursorId = \is_int($moreCursorFindId) ? $moreCursorFindId : (\is_scalar($moreCursorFindId) ? (int) $moreCursorFindId : null);
+                    if ($cursorId === 0) {
+                        $cursorId = null;
+                    }
+                } else {
+                    $cursorId = null;
+                }
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -2088,15 +1872,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 try {
                     $this->client->query([
                         'killCursors' => $name,
-                        'cursors' => [(int) $cursorId],
+                        'cursors' => [$cursorId],
                     ]);
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     // Ignore errors during cursor cleanup
                 }
             }
         }
 
-        if ($cursorDirection === CursorDirection::Before->value) {
+        if ($cursorDirection === CursorDirection::Before) {
             $found = array_reverse($found);
         }
 
@@ -2108,62 +1892,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $found;
-    }
-
-    /**
-     * Converts Appwrite database type to MongoDB BSON type code.
-     */
-    private function getMongoTypeCode(string $appwriteType): string
-    {
-        return match ($appwriteType) {
-            ColumnType::String->value => 'string',
-            ColumnType::Varchar->value => 'string',
-            ColumnType::Text->value => 'string',
-            ColumnType::MediumText->value => 'string',
-            ColumnType::LongText->value => 'string',
-            ColumnType::Integer->value => 'int',
-            ColumnType::Double->value => 'double',
-            ColumnType::Boolean->value => 'bool',
-            ColumnType::Datetime->value => 'date',
-            ColumnType::Id->value => 'string',
-            ColumnType::Uuid7->value => 'string',
-            default => 'string'
-        };
-    }
-
-    /**
-     * Converts timestamp to Mongo\BSON datetime format.
-     *
-     * @throws Exception
-     */
-    private function toMongoDatetime(string $dt): UTCDateTime
-    {
-        return new UTCDateTime(new \DateTime($dt));
-    }
-
-    /**
-     * Recursive function to replace chars in array keys, while
-     * skipping any that are explicitly excluded.
-     *
-     * @param  array<string, mixed>  $array
-     * @param  array<string>  $exclude
-     * @return array<string, mixed>
-     */
-    private function replaceInternalIdsKeys(array $array, string $from, string $to, array $exclude = []): array
-    {
-        $result = [];
-
-        foreach ($array as $key => $value) {
-            if (! in_array($key, $exclude)) {
-                $key = str_replace($from, $to, $key);
-            }
-
-            $result[$key] = is_array($value)
-                ? $this->replaceInternalIdsKeys($value, $from, $to, $exclude)
-                : $value;
-        }
-
-        return $result;
     }
 
     /**
@@ -2194,6 +1922,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         // Build filters from queries
+        /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
 
         $this->syncReadHooks();
@@ -2242,12 +1971,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $result = $this->client->aggregate($name, $pipeline, $options);
 
             // Aggregation returns stdClass with cursor property containing firstBatch
-            if (isset($result->cursor) && ! empty($result->cursor->firstBatch)) {
-                $firstResult = $result->cursor->firstBatch[0];
+            if (isset($result->cursor)) {
+                /** @var \stdClass $aggCursor */
+                $aggCursor = $result->cursor;
+                if (! empty($aggCursor->firstBatch)) {
+                    /** @var array<mixed> $aggFirstBatch */
+                    $aggFirstBatch = $aggCursor->firstBatch;
+                    /** @var \stdClass $firstResult */
+                    $firstResult = $aggFirstBatch[0];
 
-                // Handle both $count and $group response formats
-                if (isset($firstResult->total)) {
-                    return (int) $firstResult->total;
+                    // Handle both $count and $group response formats
+                    if (isset($firstResult->total)) {
+                        /** @var mixed $totalVal */
+                        $totalVal = $firstResult->total;
+                        return \is_int($totalVal) ? $totalVal : (\is_numeric($totalVal) ? (int) $totalVal : 0);
+                    }
                 }
             }
 
@@ -2270,6 +2008,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
+        /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
 
         $this->syncReadHooks();
@@ -2299,15 +2038,693 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $options = $this->getTransactionOptions();
 
-        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        $sumResult = $this->client->aggregate($name, $pipeline, $options);
+        /** @var \stdClass $sumCursor */
+        $sumCursor = $sumResult->cursor;
+        /** @var array<mixed> $sumFirstBatch */
+        $sumFirstBatch = $sumCursor->firstBatch;
+        if (empty($sumFirstBatch)) {
+            return 0;
+        }
+        /** @var \stdClass $sumFirstResult */
+        $sumFirstResult = $sumFirstBatch[0];
+        if (!isset($sumFirstResult->total)) {
+            return 0;
+        }
+        /** @var mixed $sumTotal */
+        $sumTotal = $sumFirstResult->total;
+        if (\is_int($sumTotal) || \is_float($sumTotal)) {
+            return $sumTotal;
+        }
+        return \is_numeric($sumTotal) ? (int) $sumTotal : 0;
     }
 
     /**
+     * Get sequences for documents that were created
+     *
+     * @param  array<Document>  $documents
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     * @throws MongoException
+     */
+    public function getSequences(string $collection, array $documents): array
+    {
+        $documentIds = [];
+        /** @var array<int> $documentTenants */
+        $documentTenants = [];
+        foreach ($documents as $document) {
+            if (empty($document->getSequence())) {
+                $documentIds[] = $document->getId();
+
+                if ($this->sharedTables) {
+                    $tenant = $document->getTenant();
+                    if ($tenant !== null) {
+                        $documentTenants[] = $tenant;
+                    }
+                }
+            }
+        }
+
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
+        $sequences = [];
+        $name = $this->getNamespace().'_'.$this->filter($collection);
+
+        $filters = ['_uid' => ['$in' => $documentIds]];
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
+        }
+        try {
+            // Use cursor paging for large result sets
+            $options = [
+                'projection' => ['_uid' => 1, '_id' => 1],
+                'batchSize' => self::DEFAULT_BATCH_SIZE,
+            ];
+
+            $options = $this->getTransactionOptions($options);
+            $response = $this->client->find($name, $filters, $options);
+            /** @var \stdClass $responseCursor */
+            $responseCursor = $response->cursor;
+            /** @var array<\stdClass> $results */
+            $results = $responseCursor->firstBatch ?? [];
+
+            // Process first batch
+            foreach ($results as $result) {
+                /** @var \stdClass $result */
+                /** @var mixed $uid */
+                $uid = $result->_uid;
+                /** @var mixed $oid */
+                $oid = $result->_id;
+                $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
+                $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
+                $sequences[$uidStr] = $oidStr;
+            }
+
+            // Get cursor ID for subsequent batches
+            /** @var int|null $cursorId */
+            $cursorId = null;
+            if (isset($responseCursor->id)) {
+                /** @var mixed $rcId */
+                $rcId = $responseCursor->id;
+                $cursorId = \is_int($rcId) ? $rcId : (\is_scalar($rcId) ? (int) $rcId : null);
+                if ($cursorId === 0) {
+                    $cursorId = null;
+                }
+            }
+
+            // Continue fetching with getMore
+            while ($cursorId !== null) {
+                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                /** @var \stdClass $moreCursor */
+                $moreCursor = $moreResponse->cursor;
+                /** @var array<\stdClass> $moreResults */
+                $moreResults = $moreCursor->nextBatch ?? [];
+
+                if (empty($moreResults)) {
+                    break;
+                }
+
+                foreach ($moreResults as $result) {
+                    /** @var \stdClass $result */
+                    /** @var mixed $uid */
+                    $uid = $result->_uid;
+                    /** @var mixed $oid */
+                    $oid = $result->_id;
+                    $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
+                    $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
+                    $sequences[$uidStr] = $oidStr;
+                }
+
+                // Update cursor ID for next iteration
+                if (isset($moreCursor->id)) {
+                    /** @var mixed $moreCursorIdVal */
+                    $moreCursorIdVal = $moreCursor->id;
+                    $cursorId = \is_int($moreCursorIdVal) ? $moreCursorIdVal : (\is_scalar($moreCursorIdVal) ? (int) $moreCursorIdVal : null);
+                    if ($cursorId === 0) {
+                        $cursorId = null;
+                    }
+                } else {
+                    $cursorId = null;
+                }
+            }
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+
+        foreach ($documents as $document) {
+            if (isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $sequences[$document->getId()];
+            }
+        }
+
+        return $documents;
+    }
+
+    /**
+     * Get max STRING limit
+     */
+    public function getLimitForString(): int
+    {
+        return 2147483647;
+    }
+
+    /**
+     * Get max INT limit
+     */
+    public function getLimitForInt(): int
+    {
+        // Mongo does not handle integers directly, so using MariaDB limit for now
+        return 4294967295;
+    }
+
+    /**
+     * Get maximum column limit.
+     * Returns 0 to indicate no limit
+     */
+    public function getLimitForAttributes(): int
+    {
+        return 0;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
+     */
+    public function getLimitForIndexes(): int
+    {
+        return 64;
+    }
+
+    /**
+     * Get the maximum combined index key length in bytes.
+     *
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 1024;
+    }
+
+    /**
+     * Get the maximum VARCHAR length. MongoDB has no distinction, so returns the same as string limit.
+     *
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 2147483647;
+    }
+
+    /**
+     * Get the maximum length for unique document IDs.
+     *
+     * @return int
+     */
+    public function getMaxUIDLength(): int
+    {
+        return 255;
+    }
+
+    /**
+     * Get the minimum supported datetime value for MongoDB.
+     *
+     * @return NativeDateTime
+     */
+    public function getMinDateTime(): NativeDateTime
+    {
+        return new NativeDateTime('-9999-01-01 00:00:00');
+    }
+
+    /**
+     * Get current attribute count from collection document
+     */
+    public function getCountOfAttributes(Document $collection): int
+    {
+        $rawAttrCount = $collection->getAttribute('attributes');
+        $attrArray = \is_array($rawAttrCount) ? $rawAttrCount : [];
+        $attributes = \count($attrArray);
+
+        return $attributes + static::getCountOfDefaultAttributes();
+    }
+
+    /**
+     * Get current index count from collection document
+     */
+    public function getCountOfIndexes(Document $collection): int
+    {
+        $rawIdxCount = $collection->getAttribute('indexes');
+        $idxArray = \is_array($rawIdxCount) ? $rawIdxCount : [];
+        $indexes = \count($idxArray);
+
+        return $indexes + static::getCountOfDefaultIndexes();
+    }
+
+    /**
+     * Returns number of attributes used by default.
+     *p
+     */
+    public function getCountOfDefaultAttributes(): int
+    {
+        return \count(Database::internalAttributes());
+    }
+
+    /**
+     * Returns number of indexes used by default.
+     */
+    public function getCountOfDefaultIndexes(): int
+    {
+        return \count(Database::INTERNAL_INDEXES);
+    }
+
+    /**
+     * Get maximum width, in bytes, allowed for a SQL row
+     * Return 0 when no restrictions apply
+     */
+    public function getDocumentSizeLimit(): int
+    {
+        return 0;
+    }
+
+    /**
+     * Estimate maximum number of bytes required to store a document in $collection.
+     * Byte requirement varies based on column type and size.
+     * Needed to satisfy MariaDB/MySQL row width limit.
+     * Return 0 when no restrictions apply to row width
+     */
+    public function getAttributeWidth(Document $collection): int
+    {
+        return 0;
+    }
+
+    /**
+     * Get reserved keywords that cannot be used as identifiers. MongoDB has none.
+     *
+     * @return array<string>
+     */
+    public function getKeywords(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the keys of internally managed indexes. MongoDB has none exposed.
+     *
+     * @return array<string>
+     */
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the internal ID attribute type used by MongoDB (UUID v7).
+     *
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return ColumnType::Uuid7->value;
+    }
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param  string  $collection  The collection being queried
+     * @param  string  $alias  The alias of the parent collection if in a subquery
+     */
+    public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+        return '';
+    }
+
+    /**
+     * Check whether the adapter supports storing non-UTF characters. MongoDB does not.
+     *
+     * @return bool
+     */
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Get Collection Size of raw data
+     *
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $namespace = $this->getNamespace();
+        $collection = $this->filter($collection);
+        $collection = $namespace.'_'.$collection;
+
+        $command = [
+            'collStats' => $collection,
+            'scale' => 1,
+        ];
+
+        try {
+            /** @var \stdClass $result */
+            $result = $this->getClient()->query($command);
+            if (isset($result->totalSize)) {
+                /** @var mixed $totalSizeVal */
+                $totalSizeVal = $result->totalSize;
+                return \is_int($totalSizeVal) ? $totalSizeVal : (\is_numeric($totalSizeVal) ? (int) $totalSizeVal : 0);
+            } else {
+                throw new DatabaseException('No size found');
+            }
+        } catch (Exception $e) {
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Get Collection Size on disk
+     *
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * @param  array<int>  $tenants
+     * @return int|null|array<string, array<int>>
+     */
+    public function getTenantFilters(
+        string $collection,
+        array $tenants = [],
+    ): int|null|array {
+        if (! $this->sharedTables) {
+            return null;
+        }
+
+        /** @var array<int> $values */
+        $values = [];
+
+        if (\count($tenants) === 0) {
+            $tenant = $this->getTenant();
+            if ($tenant !== null) {
+                $values[] = $tenant;
+            }
+        } else {
+            for ($index = 0; $index < \count($tenants); $index++) {
+                $values[] = $tenants[$index];
+            }
+        }
+
+        if ($collection === Database::METADATA && !empty($values)) {
+            // Include both tenant-specific and tenant-null documents for metadata collections
+            // by returning the $in filter which covers tenant documents
+            // (null tenant docs are accessible to all tenants for metadata)
+            return ['$in' => $values];
+        }
+
+        if (empty($values)) {
+            return null;
+        }
+
+        if (\count($values) === 1) {
+            return $values[0];
+        }
+
+        return ['$in' => $values];
+    }
+
+    /**
+     * Returns the document after casting to
+     *
      * @throws Exception
      */
-    protected function getClient(): RetryClient
+    public function castingBefore(Document $collection, Document $document): Document
     {
-        return $this->client;
+        if (! $this->supports(Capability::InternalCasting)) {
+            return $document;
+        }
+
+        if ($document->isEmpty()) {
+            return $document;
+        }
+
+        $rawCbAttributes = $collection->getAttribute('attributes', []);
+        /** @var array<int, array<string, mixed>> $cbAttributes */
+        $cbAttributes = \is_array($rawCbAttributes) ? $rawCbAttributes : [];
+
+        $internalCbAttributeArrays = \array_map(
+            fn (Attribute $a) => ['$id' => $a->key, 'type' => $a->type, 'array' => $a->array],
+            Database::internalAttributes()
+        );
+
+        /** @var array<int, array<string, mixed>> $attributes */
+        $attributes = \array_merge($cbAttributes, $internalCbAttributeArrays);
+
+        foreach ($attributes as $attribute) {
+            /** @var array<string, mixed> $attribute */
+            $rawCbId = $attribute['$id'] ?? null;
+            $key = \is_string($rawCbId) ? $rawCbId : '';
+            $rawCbType = $attribute['type'] ?? null;
+            $type = $rawCbType instanceof ColumnType
+                ? $rawCbType
+                : (\is_string($rawCbType) ? ColumnType::tryFrom($rawCbType) : null);
+            $array = (bool) ($attribute['array'] ?? false);
+
+            $value = $document->getAttribute($key);
+            if (is_null($value)) {
+                continue;
+            }
+
+            if ($array) {
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
+                if (!\is_array($value)) {
+                    $value = [$value];
+                }
+            } else {
+                $value = [$value];
+            }
+
+            /** @var array<mixed> $value */
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case ColumnType::Datetime:
+                        if (! ($node instanceof UTCDateTime)) {
+                            /** @var mixed $node */
+                            $nodeStr = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : '');
+                            $node = new UTCDateTime(new NativeDateTime($nodeStr));
+                        }
+                        break;
+                    case ColumnType::Object:
+                        /** @var mixed $node */
+                        $nodeStr = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : '');
+                        $node = json_decode($nodeStr);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            unset($node);
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
+        $rawIndexesAttr = $collection->getAttribute('indexes');
+        /** @var array<mixed> $indexes */
+        $indexes = \is_array($rawIndexesAttr) ? $rawIndexesAttr : [];
+        /** @var array<string> $ttlIndexes */
+        $ttlIndexes = array_filter($indexes, function ($index) {
+            if ($index instanceof Document) {
+                return $index->getAttribute('type') === IndexType::Ttl->value;
+            }
+            return false;
+        });
+
+        if (! $this->supports(Capability::DefinedAttributes)) {
+            foreach ($document->getArrayCopy() as $key => $value) {
+                $key = (string) $key;
+                if (in_array($this->getInternalKeyForAttribute($key), Database::INTERNAL_ATTRIBUTE_KEYS)) {
+                    continue;
+                }
+                if (is_string($value) && (in_array($key, $ttlIndexes) || $this->isExtendedISODatetime($value))) {
+                    try {
+                        $newValue = new UTCDateTime(new NativeDateTime($value));
+                        $document->setAttribute($key, $newValue);
+                    } catch (Throwable $th) {
+                        // skip -> a valid string
+                    }
+                }
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * Returns the document after casting from
+     */
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        if (! $this->supports(Capability::InternalCasting)) {
+            return $document;
+        }
+
+        if ($document->isEmpty()) {
+            return $document;
+        }
+
+        $rawCollectionAttributes = $collection->getAttribute('attributes', []);
+        /** @var array<int, array<string, mixed>> $collectionAttributes */
+        $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
+
+        $internalAttributeArrays = \array_map(
+            fn (Attribute $a) => ['$id' => $a->key, 'type' => $a->type, 'array' => $a->array],
+            Database::internalAttributes()
+        );
+
+        /** @var array<int, array<string, mixed>> $attributes */
+        $attributes = \array_merge($collectionAttributes, $internalAttributeArrays);
+
+        foreach ($attributes as $attribute) {
+            /** @var array<string, mixed> $attribute */
+            $rawId = $attribute['$id'] ?? null;
+            $key = \is_string($rawId) ? $rawId : '';
+            $rawType = $attribute['type'] ?? null;
+            $type = $rawType instanceof ColumnType
+                ? $rawType
+                : (\is_string($rawType) ? ColumnType::tryFrom($rawType) : null);
+            $array = (bool) ($attribute['array'] ?? false);
+            $value = $document->getAttribute($key);
+            if (is_null($value)) {
+                continue;
+            }
+
+            if ($array) {
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute '.$key.': '.json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
+                if (!\is_array($value)) {
+                    $value = [$value];
+                }
+            } else {
+                $value = [$value];
+            }
+
+            /** @var array<mixed> $value */
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case ColumnType::Integer:
+                        $node = \is_int($node)
+                            ? $node
+                            : ($node instanceof Int64
+                                ? (int) (string) $node
+                                : (\is_numeric($node) ? (int) $node : 0));
+                        break;
+                    case ColumnType::String:
+                    case ColumnType::Id:
+                        $node = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : $node);
+                        break;
+                    case ColumnType::Double:
+                        $node = \is_float($node) ? $node : (\is_numeric($node) ? (float) $node : 0.0);
+                        break;
+                    case ColumnType::Boolean:
+                        $node = \is_scalar($node) ? (bool) $node : $node;
+                        break;
+                    case ColumnType::Datetime:
+                        $node = $this->convertUTCDateToString($node);
+                        break;
+                    case ColumnType::Object:
+                        // Convert stdClass objects to arrays for object attributes
+                        if (is_object($node) && get_class($node) === stdClass::class) {
+                            $node = $this->convertStdClassToArray($node);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            unset($node);
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
+
+        if (! $this->supports(Capability::DefinedAttributes)) {
+            foreach ($document->getArrayCopy() as $key => $value) {
+                // mongodb results out a stdclass for objects
+                if (is_object($value) && get_class($value) === stdClass::class) {
+                    $document->setAttribute($key, $this->convertStdClassToArray($value));
+                } elseif ($value instanceof UTCDateTime) {
+                    $document->setAttribute($key, $this->convertUTCDateToString($value));
+                }
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * Convert a datetime string to a MongoDB UTCDateTime object.
+     *
+     * @param string $value The datetime string
+     * @return mixed
+     */
+    public function setUTCDatetime(string $value): mixed
+    {
+        return new UTCDateTime(new NativeDateTime($value));
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    public function decodePoint(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @return float[][] Array of points, each as [x, y]
+     */
+    public function decodeLinestring(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    public function decodePolygon(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * TODO Consider moving this to adapter.php
+     */
+    protected function getInternalKeyForAttribute(string $attribute): string
+    {
+        return match ($attribute) {
+            '$id' => '_uid',
+            '$sequence' => '_id',
+            '$collection' => '_collection',
+            '$tenant' => '_tenant',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            '$permissions' => '_permissions',
+            default => $attribute
+        };
     }
 
     /**
@@ -2335,10 +2752,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function escapeQueryAttributes(Document $collection, array $queries): void
     {
-        $attributes = $collection->getAttribute('attributes', []);
+        $rawAttrs = $collection->getAttribute('attributes', []);
+        /** @var array<array<string, mixed>> $attributes */
+        $attributes = \is_array($rawAttrs) ? $rawAttrs : [];
         $dotAttributes = [];
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            /** @var array<string, mixed> $attribute */
+            $rawKey = $attribute['$id'] ?? null;
+            $key = \is_string($rawKey) ? $rawKey : (\is_scalar($rawKey) ? (string) $rawKey : '');
             if (\str_contains($key, '.') || \str_starts_with($key, '$')) {
                 $dotAttributes[$key] = $this->escapeMongoFieldName($key);
             }
@@ -2362,15 +2783,24 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function ensureRelationshipDefaults(Document $collection, Document $document): void
     {
-        $attributes = $collection->getAttribute('attributes', []);
+        $rawEnsureAttrs = $collection->getAttribute('attributes', []);
+        /** @var array<array<string, mixed>> $attributes */
+        $attributes = \is_array($rawEnsureAttrs) ? $rawEnsureAttrs : [];
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
+            /** @var array<string, mixed> $attribute */
+            $rawEnsureKey = $attribute['$id'] ?? null;
+            $key = \is_string($rawEnsureKey) ? $rawEnsureKey : (\is_scalar($rawEnsureKey) ? (string) $rawEnsureKey : '');
+            $rawEnsureType = $attribute['type'] ?? null;
+            $type = \is_string($rawEnsureType) ? $rawEnsureType : (\is_scalar($rawEnsureType) ? (string) $rawEnsureType : '');
             if ($type === ColumnType::Relationship->value && ! $document->offsetExists($key)) {
-                $options = $attribute['options'] ?? [];
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? '';
-                $relationType = $options['relationType'] ?? '';
+                $rawOptions = $attribute['options'] ?? [];
+                /** @var array<string, mixed> $options */
+                $options = \is_array($rawOptions) ? $rawOptions : [];
+                $twoWay = (bool) ($options['twoWay'] ?? false);
+                $rawSide = $options['side'] ?? null;
+                $side = \is_string($rawSide) ? $rawSide : (\is_scalar($rawSide) ? (string) $rawSide : '');
+                $rawRelationType = $options['relationType'] ?? null;
+                $relationType = \is_string($rawRelationType) ? $rawRelationType : (\is_scalar($rawRelationType) ? (string) $rawRelationType : '');
 
                 // Determine if this relationship stores data on this collection's documents
                 // Only set null defaults for relationships that would have a column in SQL
@@ -2409,6 +2839,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $keysToRename = [];
         foreach ($array as $k => $v) {
             if (is_array($v)) {
+                /** @var array<string, mixed> $v */
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
@@ -2418,15 +2849,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $clean_key = str_replace($from, '', $k);
             if (in_array($clean_key, $filter)) {
                 $newKey = str_replace($from, $to, $k);
-            } elseif (\is_string($k) && \str_starts_with($k, $from) && ! in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
+            } elseif (\str_starts_with($k, $from) && ! in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
                 $newKey = $to.\substr($k, \strlen($from));
             }
 
             // Handle dot escaping in MongoDB field names
-            if ($from === '$' && \is_string($k) && \str_contains($newKey, '.')) {
+            if ($from === '$' && \str_contains($newKey, '.')) {
                 $newKey = \str_replace('.', '__dot__', $newKey);
-            } elseif ($from === '_' && \is_string($k) && \str_contains($k, '__dot__')) {
+            } elseif ($from === '_' && \str_contains($k, '__dot__')) {
                 $newKey = \str_replace('__dot__', '.', $newKey);
             }
 
@@ -2443,7 +2874,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // Handle special attribute mappings
         if ($from === '_') {
             if (isset($array['_id'])) {
-                $array['$sequence'] = (string) $array['_id'];
+                /** @var mixed $idVal */
+                $idVal = $array['_id'];
+                $array['$sequence'] = \is_string($idVal) ? $idVal : (\is_scalar($idVal) ? (string) $idVal : '');
                 unset($array['_id']);
             }
             if (isset($array['_uid'])) {
@@ -2486,10 +2919,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         foreach ($queries as $query) {
             /* @var $query Query */
             if ($query->isNested()) {
-                if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
+                if ($query->getMethod() === Method::ElemMatch) {
+                    /** @var array<Query> $elemMatchValues */
+                    $elemMatchValues = $query->getValues();
                     $filters[$separator][] = [
                         $query->getAttribute() => [
-                            '$elemMatch' => $this->buildFilters($query->getValues(), $separator),
+                            '$elemMatch' => $this->buildFilters($elemMatchValues, $separator),
                         ],
                     ];
 
@@ -2498,7 +2933,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $operator = $this->getQueryOperator($query->getMethod());
 
-                $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
+                /** @var array<Query> $nestedValues */
+                $nestedValues = $query->getValues();
+                $filters[$separator][] = $this->buildFilters($nestedValues, $operator);
             } else {
                 $filters[$separator][] = $this->buildFilter($query);
             }
@@ -2522,7 +2959,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 if (is_string($value) && $this->isExtendedISODatetime($value)) {
                     try {
                         $values[$k] = $this->toMongoDatetime($value);
-                    } catch (\Throwable $th) {
+                    } catch (Throwable $th) {
                         // Leave value as-is if it cannot be parsed as a datetime
                     }
                 }
@@ -2552,10 +2989,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $operator = $this->getQueryOperator($query->getMethod());
 
         $value = match ($query->getMethod()) {
-            Query::TYPE_IS_NULL,
-            Query::TYPE_IS_NOT_NULL => null,
-            Query::TYPE_EXISTS => true,
-            Query::TYPE_NOT_EXISTS => false,
+            Method::IsNull,
+            Method::IsNotNull => null,
+            Method::Exists => true,
+            Method::NotExists => false,
             default => $this->getQueryValue(
                 $query->getMethod(),
                 count($query->getValues()) > 1
@@ -2564,155 +3001,118 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ),
         };
 
+        /** @var array<string, mixed> $filter */
         $filter = [];
-        if ($query->isObjectAttribute() && ! \str_contains($attribute, '.') && in_array($query->getMethod(), [Query::TYPE_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL])) {
+        if ($query->isObjectAttribute() && ! \str_contains($attribute, '.') && in_array($query->getMethod(), [Method::Equal, Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains, Method::NotEqual])) {
             $this->handleObjectFilters($query, $filter);
 
             return $filter;
         }
 
         if ($operator == '$eq' && \is_array($value)) {
-            $filter[$attribute]['$in'] = $value;
+            /** @var array<string, mixed> $attrFilter1 */
+            $attrFilter1 = [];
+            $attrFilter1['$in'] = $value;
+            $filter[$attribute] = $attrFilter1;
         } elseif ($operator == '$ne' && \is_array($value)) {
-            $filter[$attribute]['$nin'] = $value;
+            /** @var array<string, mixed> $attrFilter2 */
+            $attrFilter2 = [];
+            $attrFilter2['$nin'] = $value;
+            $filter[$attribute] = $attrFilter2;
         } elseif ($operator == '$all') {
-            $filter[$attribute]['$all'] = $query->getValues();
+            /** @var array<string, mixed> $attrFilter3 */
+            $attrFilter3 = [];
+            $attrFilter3['$all'] = $query->getValues();
+            $filter[$attribute] = $attrFilter3;
         } elseif ($operator == '$in') {
-            if (in_array($query->getMethod(), [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY]) && ! $query->onArray()) {
+            if (in_array($query->getMethod(), [Method::Contains, Method::ContainsAny]) && ! $query->onArray()) {
                 // contains support array values
                 if (is_array($value)) {
-                    $filter['$or'] = array_map(function ($val) use ($attribute) {
-                        return [
-                            $attribute => [
-                                '$regex' => $this->createSafeRegex($val, '.*%s.*', 'i'),
-                            ],
-                        ];
-                    }, $value);
+                    $filter['$or'] = array_map(fn ($val) => [
+                        $attribute => [
+                            '$regex' => $this->createSafeRegex(
+                                \is_string($val) ? $val : (\is_scalar($val) ? (string) $val : ''),
+                                '.*%s.*',
+                                'i'
+                            ),
+                        ],
+                    ], $value);
                 } else {
-                    $filter[$attribute]['$regex'] = $this->createSafeRegex($value, '.*%s.*');
+                    $valueStr = \is_string($value) ? $value : (\is_scalar($value) ? (string) $value : '');
+                    /** @var array<string, mixed> $attrFilter4 */
+                    $attrFilter4 = [];
+                    $attrFilter4['$regex'] = $this->createSafeRegex($valueStr, '.*%s.*');
+                    $filter[$attribute] = $attrFilter4;
                 }
             } else {
-                $filter[$attribute]['$in'] = $query->getValues();
+                /** @var array<string, mixed> $attrFilter5 */
+                $attrFilter5 = [];
+                $attrFilter5['$in'] = $query->getValues();
+                $filter[$attribute] = $attrFilter5;
             }
         } elseif ($operator === 'notContains') {
             if (! $query->onArray()) {
-                $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
+                $valueStr = \is_string($value) ? $value : (\is_scalar($value) ? (string) $value : '');
+                $filter[$attribute] = ['$not' => $this->createSafeRegex($valueStr, '.*%s.*')];
             } else {
-                $filter[$attribute]['$nin'] = $query->getValues();
+                /** @var array<string, mixed> $attrFilter6 */
+                $attrFilter6 = [];
+                $attrFilter6['$nin'] = $query->getValues();
+                $filter[$attribute] = $attrFilter6;
             }
         } elseif ($operator == '$search') {
-            if ($query->getMethod() === Query::TYPE_NOT_SEARCH) {
+            if ($query->getMethod() === Method::NotSearch) {
                 // MongoDB doesn't support negating $text expressions directly
                 // Use regex as fallback for NOT search while keeping fulltext for positive search
                 if (empty($value)) {
                     // If value is not passed, don't add any filter - this will match all documents
                 } else {
-                    $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
+                    $valueStr = \is_string($value) ? $value : (\is_scalar($value) ? (string) $value : '');
+                    $filter[$attribute] = ['$not' => $this->createSafeRegex($valueStr, '.*%s.*')];
                 }
             } else {
-                $filter['$text'][$operator] = $value;
+                /** @var array<string, mixed> $textFilter */
+                $textFilter = \is_array($filter['$text'] ?? null) ? $filter['$text'] : [];
+                $textFilter[$operator] = $value;
+                $filter['$text'] = $textFilter;
             }
-        } elseif ($query->getMethod() === Query::TYPE_BETWEEN) {
-            $filter[$attribute]['$lte'] = $value[1];
-            $filter[$attribute]['$gte'] = $value[0];
-        } elseif ($query->getMethod() === Query::TYPE_NOT_BETWEEN) {
+        } elseif ($query->getMethod() === Method::Between) {
+            /** @var array<mixed> $valueArray */
+            $valueArray = \is_array($value) ? $value : [];
+            /** @var array<string, mixed> $attrFilter7 */
+            $attrFilter7 = [];
+            $attrFilter7['$lte'] = $valueArray[1] ?? null;
+            $attrFilter7['$gte'] = $valueArray[0] ?? null;
+            $filter[$attribute] = $attrFilter7;
+        } elseif ($query->getMethod() === Method::NotBetween) {
+            /** @var array<mixed> $valueArray2 */
+            $valueArray2 = \is_array($value) ? $value : [];
             $filter['$or'] = [
-                [$attribute => ['$lt' => $value[0]]],
-                [$attribute => ['$gt' => $value[1]]],
+                [$attribute => ['$lt' => $valueArray2[0] ?? null]],
+                [$attribute => ['$gt' => $valueArray2[1] ?? null]],
             ];
-        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
-            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '^%s')];
-        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
-            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '%s$')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Method::NotStartsWith) {
+            $valueStr = \is_string($value) ? $value : (\is_scalar($value) ? (string) $value : '');
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($valueStr, '^%s')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Method::NotEndsWith) {
+            $valueStr = \is_string($value) ? $value : (\is_scalar($value) ? (string) $value : '');
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($valueStr, '%s$')];
         } elseif ($operator === '$exists') {
-            foreach ($query->getValues() as $attribute) {
-                $filter['$or'][] = [$attribute => [$operator => $value]];
+            /** @var array<mixed> $existsOr */
+            $existsOr = \is_array($filter['$or'] ?? null) ? $filter['$or'] : [];
+            foreach ($query->getValues() as $existsAttribute) {
+                $existsAttrStr = \is_string($existsAttribute) ? $existsAttribute : (\is_scalar($existsAttribute) ? (string) $existsAttribute : '');
+                $existsOr[] = [$existsAttrStr => [$operator => $value]];
             }
+            $filter['$or'] = $existsOr;
         } else {
-            $filter[$attribute][$operator] = $value;
+            /** @var array<string, mixed> $attrFilterDefault */
+            $attrFilterDefault = \is_array($filter[$attribute] ?? null) ? $filter[$attribute] : [];
+            $attrFilterDefault[$operator] = $value;
+            $filter[$attribute] = $attrFilterDefault;
         }
 
         return $filter;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filter
-     */
-    private function handleObjectFilters(Query $query, array &$filter): void
-    {
-        $conditions = [];
-        $isNot = in_array($query->getMethod(), [Query::TYPE_NOT_CONTAINS, Query::TYPE_NOT_EQUAL]);
-        $values = $query->getValues();
-        foreach ($values as $attribute => $value) {
-            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
-            $flattenedObjectKey = array_key_first($flattendQuery);
-            $queryValue = $flattendQuery[$flattenedObjectKey];
-            $queryAttribute = $query->getAttribute();
-            $flattenedQueryField = array_key_first($flattendQuery);
-            $flattenedObjectKey = $flattenedQueryField === '' ? $queryAttribute : $queryAttribute.'.'.array_key_first($flattendQuery);
-            switch ($query->getMethod()) {
-
-                case Query::TYPE_CONTAINS:
-                case Query::TYPE_CONTAINS_ANY:
-                case Query::TYPE_CONTAINS_ALL:
-                case Query::TYPE_NOT_CONTAINS:
-                    $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
-                    $operator = $isNot ? '$nin' : '$in';
-                    $conditions[] = [$flattenedObjectKey => [$operator => $arrayValue]];
-                    break;
-
-                case Query::TYPE_EQUAL:
-                case Query::TYPE_NOT_EQUAL:
-                    if (\is_array($queryValue)) {
-                        $operator = $isNot ? '$nin' : '$in';
-                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
-                    } else {
-                        $operator = $isNot ? '$ne' : '$eq';
-                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
-                    }
-
-                    break;
-
-            }
-        }
-
-        $logicalOperator = $isNot ? '$and' : '$or';
-        if (count($conditions) && isset($filter[$logicalOperator])) {
-            $filter[$logicalOperator] = array_merge($filter[$logicalOperator], $conditions);
-        } else {
-            $filter[$logicalOperator] = $conditions;
-        }
-    }
-
-    /**
-     * Flatten a nested associative array into Mongo-style dot notation.
-     *
-     * @return array<string, mixed>
-     */
-    private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
-    {
-        /** @var array<string, mixed> $result */
-        $result = [];
-
-        $stack = [];
-
-        $initialKey = $prefix === '' ? $key : $prefix.'.'.$key;
-        $stack[] = [$initialKey, $value];
-        while (! empty($stack)) {
-            [$currentPath, $currentValue] = array_pop($stack);
-            if (is_array($currentValue) && ! array_is_list($currentValue)) {
-                foreach ($currentValue as $nextKey => $nextValue) {
-                    $nextKey = (string) $nextKey;
-                    $nextPath = $currentPath === '' ? $nextKey : $currentPath.'.'.$nextKey;
-                    $stack[] = [$nextPath,  $nextValue];
-                }
-            } else {
-                // leaf node
-                $result[$currentPath] = $currentValue;
-            }
-        }
-
-        return $result;
     }
 
     /**
@@ -2721,44 +3121,44 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    protected function getQueryOperator(\Utopia\Query\Method $operator): string
+    protected function getQueryOperator(Method $operator): string
     {
         return match ($operator) {
-            Query::TYPE_EQUAL,
-            Query::TYPE_IS_NULL => '$eq',
-            Query::TYPE_NOT_EQUAL,
-            Query::TYPE_IS_NOT_NULL => '$ne',
-            Query::TYPE_LESSER => '$lt',
-            Query::TYPE_LESSER_EQUAL => '$lte',
-            Query::TYPE_GREATER => '$gt',
-            Query::TYPE_GREATER_EQUAL => '$gte',
-            Query::TYPE_CONTAINS => '$in',
-            Query::TYPE_CONTAINS_ANY => '$in',
-            Query::TYPE_CONTAINS_ALL => '$all',
-            Query::TYPE_NOT_CONTAINS => 'notContains',
-            Query::TYPE_SEARCH => '$search',
-            Query::TYPE_NOT_SEARCH => '$search',
-            Query::TYPE_BETWEEN => 'between',
-            Query::TYPE_NOT_BETWEEN => 'notBetween',
-            Query::TYPE_STARTS_WITH,
-            Query::TYPE_NOT_STARTS_WITH,
-            Query::TYPE_ENDS_WITH,
-            Query::TYPE_NOT_ENDS_WITH,
-            Query::TYPE_REGEX => '$regex',
-            Query::TYPE_OR => '$or',
-            Query::TYPE_AND => '$and',
-            Query::TYPE_EXISTS,
-            Query::TYPE_NOT_EXISTS => '$exists',
-            Query::TYPE_ELEM_MATCH => '$elemMatch',
+            Method::Equal,
+            Method::IsNull => '$eq',
+            Method::NotEqual,
+            Method::IsNotNull => '$ne',
+            Method::LessThan => '$lt',
+            Method::LessThanEqual => '$lte',
+            Method::GreaterThan => '$gt',
+            Method::GreaterThanEqual => '$gte',
+            Method::Contains => '$in',
+            Method::ContainsAny => '$in',
+            Method::ContainsAll => '$all',
+            Method::NotContains => 'notContains',
+            Method::Search => '$search',
+            Method::NotSearch => '$search',
+            Method::Between => 'between',
+            Method::NotBetween => 'notBetween',
+            Method::StartsWith,
+            Method::NotStartsWith,
+            Method::EndsWith,
+            Method::NotEndsWith,
+            Method::Regex => '$regex',
+            Method::Or => '$or',
+            Method::And => '$and',
+            Method::Exists,
+            Method::NotExists => '$exists',
+            Method::ElemMatch => '$elemMatch',
             default => throw new DatabaseException('Unknown operator: '.$operator->value),
         };
     }
 
-    protected function getQueryValue(\Utopia\Query\Method $method, mixed $value): mixed
+    protected function getQueryValue(Method $method, mixed $value): mixed
     {
         return match ($method) {
-            Query::TYPE_STARTS_WITH => preg_quote($value, '/').'.*',
-            Query::TYPE_ENDS_WITH => '.*'.preg_quote($value, '/'),
+            Method::StartsWith => preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/').'.*',
+            Method::EndsWith => '.*'.preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/'),
             default => $value,
         };
     }
@@ -2769,12 +3169,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    protected function getOrder(string $order): int
+    protected function getOrder(OrderDirection $order): int
     {
         return match ($order) {
-            OrderDirection::ASC->value => 1,
-            OrderDirection::DESC->value => -1,
-            default => throw new DatabaseException('Unknown sort order:'.$order.'. Must be one of '.OrderDirection::ASC->value.', '.OrderDirection::DESC->value),
+            OrderDirection::Asc => 1,
+            OrderDirection::Desc => -1,
+            default => throw new DatabaseException('Unknown sort order:'.$order->value.'. Must be one of '.OrderDirection::Asc->value.', '.OrderDirection::Desc->value),
         };
     }
 
@@ -2792,7 +3192,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if ($indexOrType instanceof Index) {
             $indexType = $indexOrType->type;
         } elseif ($indexOrType instanceof Document) {
-            $indexType = IndexType::tryFrom($indexOrType->getAttribute('type')) ?? IndexType::Key;
+            $rawIndexType = $indexOrType->getAttribute('type');
+            $indexTypeVal = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : '');
+            $indexType = IndexType::tryFrom($indexTypeVal) ?? IndexType::Key;
         } elseif ($indexOrType instanceof IndexType) {
             $indexType = $indexOrType;
         } else {
@@ -2810,8 +3212,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $projection = [];
 
         $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
+            fn (Attribute $attr) => $attr->key,
+            Database::internalAttributes()
         );
 
         foreach ($selections as $selection) {
@@ -2830,124 +3232,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $projection['_permissions'] = 1;
 
         return $projection;
-    }
-
-    /**
-     * Get max STRING limit
-     */
-    public function getLimitForString(): int
-    {
-        return 2147483647;
-    }
-
-    /**
-     * Get max VARCHAR limit
-     * MongoDB doesn't distinguish between string types, so using same as string limit
-     */
-    public function getMaxVarcharLength(): int
-    {
-        return 2147483647;
-    }
-
-    /**
-     * Get max INT limit
-     */
-    public function getLimitForInt(): int
-    {
-        // Mongo does not handle integers directly, so using MariaDB limit for now
-        return 4294967295;
-    }
-
-    /**
-     * Get maximum column limit.
-     * Returns 0 to indicate no limit
-     */
-    public function getLimitForAttributes(): int
-    {
-        return 0;
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
-     */
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('-9999-01-01 00:00:00');
-    }
-
-    public function setUTCDatetime(string $value): mixed
-    {
-        return new UTCDateTime(new \DateTime($value));
-    }
-
-    public function setSupportForAttributes(bool $support): bool
-    {
-        $this->supportForAttributes = $support;
-
-        return $this->supportForAttributes;
-    }
-
-    /**
-     * Get current attribute count from collection document
-     */
-    public function getCountOfAttributes(Document $collection): int
-    {
-        $attributes = \count($collection->getAttribute('attributes') ?? []);
-
-        return $attributes + static::getCountOfDefaultAttributes();
-    }
-
-    /**
-     * Get current index count from collection document
-     */
-    public function getCountOfIndexes(Document $collection): int
-    {
-        $indexes = \count($collection->getAttribute('indexes') ?? []);
-
-        return $indexes + static::getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Returns number of attributes used by default.
-     *p
-     */
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::INTERNAL_ATTRIBUTES);
-    }
-
-    /**
-     * Returns number of indexes used by default.
-     */
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     */
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
-    }
-
-    /**
-     * Estimate maximum number of bytes required to store a document in $collection.
-     * Byte requirement varies based on column type and size.
-     * Needed to satisfy MariaDB/MySQL row width limit.
-     * Return 0 when no restrictions apply to row width
-     */
-    public function getAttributeWidth(Document $collection): int
-    {
-        return 0;
     }
 
     /**
@@ -2991,12 +3275,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return $cleaned;
     }
 
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    protected function processException(\Throwable $e): \Throwable
+    protected function processException(Throwable $e): Throwable
     {
         // Timeout
         if ($e->getCode() === 50 || $e->getCode() === 262) {
@@ -3049,99 +3328,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     protected function execute(mixed $stmt): bool
     {
         return true;
-    }
-
-    public function getIdAttributeType(): string
-    {
-        return ColumnType::Uuid7->value;
-    }
-
-    public function getMaxIndexLength(): int
-    {
-        return 1024;
-    }
-
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    /**
-     * @param  array<int>  $tenants
-     * @return int|null|array<string, array<int>>
-     */
-    public function getTenantFilters(
-        string $collection,
-        array $tenants = [],
-    ): int|null|array {
-        $values = [];
-        if (! $this->sharedTables) {
-            return $values;
-        }
-
-        if (\count($tenants) === 0) {
-            $values[] = $this->getTenant();
-        } else {
-            for ($index = 0; $index < \count($tenants); $index++) {
-                $values[] = $tenants[$index];
-            }
-        }
-
-        if ($collection === Database::METADATA) {
-            $values[] = null;
-        }
-
-        if (\count($values) === 1) {
-            return $values[0];
-        }
-
-        return ['$in' => $values];
-    }
-
-    public function decodePoint(string $wkb): array
-    {
-        return [];
-    }
-
-    /**
-     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
-     *
-     * @return float[][] Array of points, each as [x, y]
-     */
-    public function decodeLinestring(string $wkb): array
-    {
-        return [];
-    }
-
-    /**
-     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
-     *
-     * @return float[][][] Array of rings, each ring is an array of points [x, y]
-     */
-    public function decodePolygon(string $wkb): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param  string  $collection  The collection being queried
-     * @param  string  $alias  The alias of the parent collection if in a subquery
-     */
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     protected function isExtendedISODatetime(string $val): bool
@@ -3241,24 +3427,298 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             // Handle Extended JSON format from (array) cast
             // Format: {"$date":{"$numberLong":"1760405478290"}}
             if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
-                $milliseconds = (int) $node['$date']['$numberLong'];
+                /** @var mixed $numberLongVal */
+                $numberLongVal = $node['$date']['$numberLong'];
+                $milliseconds = \is_int($numberLongVal) ? $numberLongVal : (\is_numeric($numberLongVal) ? (int) $numberLongVal : 0);
                 $seconds = intdiv($milliseconds, 1000);
                 $microseconds = ($milliseconds % 1000) * 1000;
-                $dateTime = \DateTime::createFromFormat('U.u', $seconds.'.'.str_pad((string) $microseconds, 6, '0'));
+                $dateTime = NativeDateTime::createFromFormat('U.u', $seconds.'.'.str_pad((string) $microseconds, 6, '0'));
                 if ($dateTime) {
-                    $dateTime->setTimezone(new \DateTimeZone('UTC'));
+                    $dateTime->setTimezone(new DateTimeZone('UTC'));
                     $node = DateTime::format($dateTime);
                 }
             }
         } elseif (is_string($node)) {
             // Already a string, validate and pass through
             try {
-                new \DateTime($node);
-            } catch (\Exception $e) {
+                new NativeDateTime($node);
+            } catch (Exception $e) {
                 // Invalid date string, skip
             }
         }
 
         return $node;
+    }
+
+    /**
+     * Helper to add transaction/session context to command options if in transaction
+     * Includes defensive check to ensure session is valid
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    private function getTransactionOptions(array $options = []): array
+    {
+        if ($this->inTransaction > 0 && $this->session !== null) {
+            // Pass the session array directly - the client will handle the transaction state internally
+            $options['session'] = $this->session;
+        }
+
+        return $options;
+    }
+
+    /**
+     * Create a safe MongoDB regex pattern by escaping special characters
+     *
+     * @param  string  $value  The user input to escape
+     * @param  string  $pattern  The pattern template (e.g., ".*%s.*" for contains)
+     *
+     * @throws DatabaseException
+     */
+    private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
+    {
+        $escaped = preg_quote($value, '/');
+
+        // Validate that the pattern doesn't contain injection vectors
+        if (preg_match('/\$[a-z]+/i', $escaped)) {
+            throw new DatabaseException('Invalid regex pattern: potential injection detected');
+        }
+
+        $finalPattern = sprintf($pattern, $escaped);
+
+        return new Regex($finalPattern, $flags);
+    }
+
+    /**
+     * @param  array<string, mixed>  $document
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     *
+     * @throws DuplicateException
+     * @throws Exception
+     */
+    private function insertDocument(string $name, array $document, array $options = []): array
+    {
+        try {
+            $this->client->insert($name, $document, $options);
+            $filters = ['_uid' => $document['_uid']];
+
+            try {
+                $findResult = $this->client->find(
+                    $name,
+                    $filters,
+                    array_merge(['limit' => 1], $options)
+                );
+                /** @var \stdClass $findResultCursor */
+                $findResultCursor = $findResult->cursor;
+                /** @var array<mixed> $firstBatch */
+                $firstBatch = $findResultCursor->firstBatch;
+                $result = $firstBatch[0];
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            /** @var array<string, mixed> $toArrayResult */
+            $toArrayResult = $this->client->toArray($result) ?? [];
+            return $toArrayResult;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Converts Appwrite database type to MongoDB BSON type code.
+     */
+    private function getMongoTypeCode(ColumnType $type): string
+    {
+        return match ($type) {
+            ColumnType::String,
+            ColumnType::Varchar,
+            ColumnType::Text,
+            ColumnType::MediumText,
+            ColumnType::LongText,
+            ColumnType::Id,
+            ColumnType::Uuid7 => 'string',
+            ColumnType::Integer => 'int',
+            ColumnType::Double => 'double',
+            ColumnType::Boolean => 'bool',
+            ColumnType::Datetime => 'date',
+            default => 'string'
+        };
+    }
+
+    /**
+     * Converts timestamp to Mongo\BSON datetime format.
+     *
+     * @throws Exception
+     */
+    private function toMongoDatetime(string $dt): UTCDateTime
+    {
+        return new UTCDateTime(new NativeDateTime($dt));
+    }
+
+    /**
+     * Recursive function to replace chars in array keys, while
+     * skipping any that are explicitly excluded.
+     *
+     * @param  array<string, mixed>  $array
+     * @param  array<string>  $exclude
+     * @return array<string, mixed>
+     */
+    private function replaceInternalIdsKeys(array $array, string $from, string $to, array $exclude = []): array
+    {
+        $result = [];
+
+        foreach ($array as $key => $value) {
+            if (! in_array($key, $exclude)) {
+                $key = str_replace($from, $to, $key);
+            }
+
+            if (is_array($value)) {
+                /** @var array<string, mixed> $value */
+                $result[$key] = $this->replaceInternalIdsKeys($value, $from, $to, $exclude);
+            } else {
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filter
+     */
+    private function handleObjectFilters(Query $query, array &$filter): void
+    {
+        $conditions = [];
+        $isNot = in_array($query->getMethod(), [Method::NotContains, Method::NotEqual]);
+        $values = $query->getValues();
+        foreach ($values as $attribute => $value) {
+            $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
+            $flattenedObjectKey = array_key_first($flattendQuery);
+            $queryValue = $flattendQuery[$flattenedObjectKey];
+            $queryAttribute = $query->getAttribute();
+            $flattenedQueryField = array_key_first($flattendQuery);
+            $flattenedObjectKey = $flattenedQueryField === '' ? $queryAttribute : $queryAttribute.'.'.array_key_first($flattendQuery);
+            switch ($query->getMethod()) {
+
+                case Method::Contains:
+                case Method::ContainsAny:
+                case Method::ContainsAll:
+                case Method::NotContains:
+                    $arrayValue = \is_array($queryValue) ? $queryValue : [$queryValue];
+                    $operator = $isNot ? '$nin' : '$in';
+                    $conditions[] = [$flattenedObjectKey => [$operator => $arrayValue]];
+                    break;
+
+                case Method::Equal:
+                case Method::NotEqual:
+                    if (\is_array($queryValue)) {
+                        $operator = $isNot ? '$nin' : '$in';
+                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
+                    } else {
+                        $operator = $isNot ? '$ne' : '$eq';
+                        $conditions[] = [$flattenedObjectKey => [$operator => $queryValue]];
+                    }
+
+                    break;
+
+            }
+        }
+
+        $logicalOperator = $isNot ? '$and' : '$or';
+        if (count($conditions) && isset($filter[$logicalOperator])) {
+            $existingLogical = $filter[$logicalOperator];
+            /** @var array<mixed> $existingLogicalArr */
+            $existingLogicalArr = \is_array($existingLogical) ? $existingLogical : [];
+            $filter[$logicalOperator] = array_merge($existingLogicalArr, $conditions);
+        } else {
+            $filter[$logicalOperator] = $conditions;
+        }
+    }
+
+    /**
+     * Flatten a nested associative array into Mongo-style dot notation.
+     *
+     * @return array<string, mixed>
+     */
+    private function flattenWithDotNotation(string $key, mixed $value, string $prefix = ''): array
+    {
+        /** @var array<string, mixed> $result */
+        $result = [];
+
+        /** @var array<array{0: string, 1: mixed}> $stack */
+        $stack = [];
+
+        $initialKey = $prefix === '' ? $key : $prefix.'.'.$key;
+        $stack[] = [$initialKey, $value];
+        while (! empty($stack)) {
+            $item = array_pop($stack);
+            /** @var array{0: string, 1: mixed} $item */
+            [$currentPath, $currentValue] = $item;
+            if (is_array($currentValue) && ! array_is_list($currentValue)) {
+                foreach ($currentValue as $nextKey => $nextValue) {
+                    $nextKeyStr = (string) $nextKey;
+                    $nextPath = $currentPath === '' ? $nextKeyStr : $currentPath.'.'.$nextKeyStr;
+                    $stack[] = [$nextPath, $nextValue];
+                }
+            } else {
+                // leaf node
+                $result[$currentPath] = $currentValue;
+            }
+        }
+
+        return $result;
+    }
+
+    private function convertStdClassToArray(mixed $value): mixed
+    {
+        if (is_object($value) && get_class($value) === stdClass::class) {
+            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
+        }
+
+        if (is_array($value)) {
+            return array_map(
+                fn ($v) => $this->convertStdClassToArray($v),
+                $value
+            );
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get fields to unset for schemaless upsert operations
+     *
+     * @param  array<string, mixed>  $record
+     * @return array<string, string>
+     */
+    private function getUpsertAttributeRemovals(Document $oldDocument, Document $newDocument, array $record): array
+    {
+        $unsetFields = [];
+
+        if ($this->supports(Capability::DefinedAttributes) || $oldDocument->isEmpty()) {
+            return $unsetFields;
+        }
+
+        $oldUserAttributes = $oldDocument->getAttributes();
+        $newUserAttributes = $newDocument->getAttributes();
+
+        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
+
+        foreach ($oldUserAttributes as $originalKey => $originalValue) {
+            if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {
+                continue;
+            }
+
+            $transformed = $this->replaceChars('$', '_', [$originalKey => $originalValue]);
+            $dbKey = array_key_first($transformed);
+
+            if ($dbKey && ! array_key_exists($dbKey, $record) && ! in_array($dbKey, $protectedFields)) {
+                $unsetFields[$dbKey] = '';
+            }
+        }
+
+        return $unsetFields;
     }
 }

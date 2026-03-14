@@ -8,7 +8,6 @@ use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
-use Utopia\Database\CursorDirection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -24,9 +23,10 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\SetType;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -4366,7 +4366,7 @@ trait DocumentTests
                     'type' => IndexType::Unique->value,
                     'attributes' => ['email'],
                     'lengths' => [1024],
-                    'orders' => [OrderDirection::ASC->value],
+                    'orders' => [OrderDirection::Asc->value],
                 ],
             ],
         ]);
@@ -4973,7 +4973,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value])));
 
         try {
             $database->createDocument('movies', new Document([
@@ -5074,7 +5074,7 @@ trait DocumentTests
 
         // Ensure the unique index exists (created in testUniqueIndexDuplicate)
         try {
-            $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::ASC->value]));
+            $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
         } catch (\Throwable) {
             // Index may already exist
         }
@@ -5630,22 +5630,37 @@ trait DocumentTests
             return;
         }
 
-        $documents = $database->find(
-            'documents',
-            [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
-        );
+        $doc = $database->createDocument('documents', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'string' => 'tenant_test',
+            'integer_signed' => 1,
+            'integer_unsigned' => 1,
+            'bigint_signed' => 1,
+            'bigint_unsigned' => 1,
+            'float_signed' => 1.0,
+            'float_unsigned' => 1.0,
+            'boolean' => true,
+            'colors' => ['red'],
+            'empty' => [],
+            'with-dash' => 'test',
+        ]));
 
-        $document = $documents[0];
-        $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayNotHasKey('$tenant', $document);
+        $this->assertArrayHasKey('$id', $doc);
+        $this->assertArrayNotHasKey('$tenant', $doc);
 
-        $document = $database->getDocument('documents', $document->getId());
+        $document = $database->getDocument('documents', $doc->getId());
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
         $document = $database->updateDocument('documents', $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
+
+        $database->deleteDocument('documents', $document->getId());
     }
 
     public function testEmptyOperatorValues(): void

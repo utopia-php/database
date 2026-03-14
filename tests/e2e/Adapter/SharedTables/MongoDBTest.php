@@ -50,6 +50,7 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
@@ -72,7 +73,7 @@ class MongoDBTest extends Base
     public function test_create_exists_delete(): void
     {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull($this->getDatabase()->create());
+        $this->assertSame(true, $this->getDatabase()->create());
         $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
         $this->assertEquals(true, $this->getDatabase()->create());
         $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
@@ -80,22 +81,22 @@ class MongoDBTest extends Base
 
     public function test_rename_attribute(): void
     {
-        $this->assertTrue(true);
+        $this->markTestSkipped('Not supported by MongoDB adapter');
     }
 
     public function test_rename_attribute_existing(): void
     {
-        $this->assertTrue(true);
+        $this->markTestSkipped('Not supported by MongoDB adapter');
     }
 
     public function test_update_attribute_structure(): void
     {
-        $this->assertTrue(true);
+        $this->markTestSkipped('Not supported by MongoDB adapter');
     }
 
     public function test_keywords(): void
     {
-        $this->assertTrue(true);
+        $this->markTestSkipped('Not supported by MongoDB adapter');
     }
 
     protected function deleteColumn(string $collection, string $column): bool

@@ -47,6 +47,7 @@ class PostgresTest extends Base
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new Postgres($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
@@ -70,6 +71,7 @@ class PostgresTest extends Base
         $sqlTable = '"'.$this->getDatabase()->getDatabase().'"."'.$this->getDatabase()->getNamespace().'_'.$collection.'"';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN \"{$column}\"";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -81,6 +83,7 @@ class PostgresTest extends Base
 
         $sql = 'DROP INDEX "'.$this->getDatabase()->getDatabase()."\".{$key}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

@@ -50,6 +50,7 @@ class SQLiteTest extends Base
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new SQLite($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
@@ -73,6 +74,7 @@ class SQLiteTest extends Base
         $sqlTable = '`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -83,6 +85,7 @@ class SQLiteTest extends Base
         $index = '`'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}`";
         $sql = "DROP INDEX {$index}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

@@ -64,7 +64,7 @@ class PoolTest extends Base
         });
 
         $database = new Database(new Pool($pool), $cache);
-
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
             ->setDatabase($this->testDatabase)
@@ -92,6 +92,7 @@ class PoolTest extends Base
             $property = $class->getProperty('pdo');
             $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
+            assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
 
@@ -109,6 +110,7 @@ class PoolTest extends Base
             $property = $class->getProperty('pdo');
             $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
+            assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
 
@@ -127,6 +129,7 @@ class PoolTest extends Base
             $property = $class->getProperty('pdo');
             $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
+            assert($pdo instanceof PDO);
             $stmt = $pdo->prepare($sql);
             foreach ($binds as $key => $value) {
                 $stmt->bindValue($key, $value);

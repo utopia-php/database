@@ -345,7 +345,7 @@ trait GeneralTests
         $database->createCollection(__FUNCTION__, documentSecurity: false);
 
         $database
-            ->setTenant($this->getTenantId(1))
+            ->setTenant(1)
             ->updateDocument(Database::METADATA, __FUNCTION__, new Document([
                 '$id' => __FUNCTION__,
                 'name' => 'Scooby Doo',
@@ -475,14 +475,14 @@ trait GeneralTests
             ->setTenantPerDocument(true)
             ->createDocument(__FUNCTION__, new Document([
                 '$id' => $doc1Id,
-                '$tenant' => $this->getTenantId(1),
+                '$tenant' => 1,
                 'name' => 'Spiderman',
             ]));
 
         // Set to tenant 1 and read
         $doc = $database
             ->setTenantPerDocument(false)
-            ->setTenant($this->getTenantId(1))
+            ->setTenant(1)
             ->getDocument(__FUNCTION__, $doc1Id);
 
         $this->assertEquals('Spiderman', $doc['name']);
@@ -495,23 +495,23 @@ trait GeneralTests
             ->setTenantPerDocument(true)
             ->createDocument(__FUNCTION__, new Document([
                 '$id' => $doc2Id,
-                '$tenant' => $this->getTenantId(2),
+                '$tenant' => 2,
                 'name' => 'Batman',
             ]));
 
         // Set to tenant 2 and read
         $doc = $database
             ->setTenantPerDocument(false)
-            ->setTenant($this->getTenantId(2))
+            ->setTenant(2)
             ->getDocument(__FUNCTION__, $doc2Id);
 
         $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals($this->getTenantId(2), $doc->getTenant());
+        $this->assertEquals(2, $doc->getTenant());
 
         // Ensure no read cross-tenant
         $docs = $database
             ->setTenantPerDocument(false)
-            ->setTenant($this->getTenantId(1))
+            ->setTenant(1)
             ->find(__FUNCTION__);
 
         $this->assertEquals(1, \count($docs));
@@ -525,31 +525,31 @@ trait GeneralTests
                 ->setTenantPerDocument(true)
                 ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc3Id,
-                    '$tenant' => $this->getTenantId(3),
+                    '$tenant' => 3,
                     'name' => 'Superman3',
                 ])]);
 
             // Set to tenant 3 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(3))
+                ->setTenant(3)
                 ->getDocument(__FUNCTION__, $doc3Id);
 
             $this->assertEquals('Superman3', $doc['name']);
-            $this->assertEquals($this->getTenantId(3), $doc->getTenant());
+            $this->assertEquals(3, $doc->getTenant());
             $this->assertEquals($doc3Id, $doc->getId());
 
             // Test no read from other tenants
             $docs = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(1))
+                ->setTenant(1)
                 ->find(__FUNCTION__);
 
             $this->assertEquals(1, \count($docs));
 
             // Ensure no cross-tenant read from upsert
             $doc = $database
-                ->setTenant($this->getTenantId(1))
+                ->setTenant(1)
                 ->setTenantPerDocument(false)
                 ->getDocument(__FUNCTION__, $doc3Id);
 
@@ -563,31 +563,31 @@ trait GeneralTests
                 ->setTenantPerDocument(true)
                 ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
-                    '$tenant' => $this->getTenantId(4),
+                    '$tenant' => 4,
                     'name' => 'Superman4',
                 ]), new Document([
                     '$id' => $doc5Id,
-                    '$tenant' => $this->getTenantId(5),
+                    '$tenant' => 5,
                     'name' => 'Superman5',
                 ])]);
 
             // Set to tenant 4 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(4))
+                ->setTenant(4)
                 ->getDocument(__FUNCTION__, $doc4Id);
 
             $this->assertEquals('Superman4', $doc['name']);
-            $this->assertEquals($this->getTenantId(4), $doc->getTenant());
+            $this->assertEquals(4, $doc->getTenant());
 
             // Set to tenant 5 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(5))
+                ->setTenant(5)
                 ->getDocument(__FUNCTION__, $doc5Id);
 
             $this->assertEquals('Superman5', $doc['name']);
-            $this->assertEquals($this->getTenantId(5), $doc->getTenant());
+            $this->assertEquals(5, $doc->getTenant());
 
             // Update names via upsert
             $database
@@ -595,31 +595,31 @@ trait GeneralTests
                 ->setTenantPerDocument(true)
                 ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
-                    '$tenant' => $this->getTenantId(4),
+                    '$tenant' => 4,
                     'name' => 'Superman4 updated',
                 ]), new Document([
                     '$id' => $doc5Id,
-                    '$tenant' => $this->getTenantId(5),
+                    '$tenant' => 5,
                     'name' => 'Superman5 updated',
                 ])]);
 
             // Set to tenant 4 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(4))
+                ->setTenant(4)
                 ->getDocument(__FUNCTION__, $doc4Id);
 
             $this->assertEquals('Superman4 updated', $doc['name']);
-            $this->assertEquals($this->getTenantId(4), $doc->getTenant());
+            $this->assertEquals(4, $doc->getTenant());
 
             // Set to tenant 5 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant($this->getTenantId(5))
+                ->setTenant(5)
                 ->getDocument(__FUNCTION__, $doc5Id);
 
             $this->assertEquals('Superman5 updated', $doc['name']);
-            $this->assertEquals($this->getTenantId(5), $doc->getTenant());
+            $this->assertEquals(5, $doc->getTenant());
         }
 
         // Reset instance

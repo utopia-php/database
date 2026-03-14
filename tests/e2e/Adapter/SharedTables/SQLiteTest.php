@@ -57,7 +57,7 @@ class SQLiteTest extends Base
             ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
-            ->setTenant('999')
+            ->setTenant(999)
             ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {

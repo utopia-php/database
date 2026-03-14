@@ -14,11 +14,11 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -168,7 +168,7 @@ trait SpatialTests
             ];
 
             foreach ($pointQueries as $queryType => $query) {
-                $result = $database->find($collectionName, [$query], PermissionType::Read->value);
+                $result = $database->find($collectionName, [$query], PermissionType::Read);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on pointAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on pointAttr', $queryType));
             }
@@ -187,7 +187,7 @@ trait SpatialTests
                 if (! $database->getAdapter()->supports(Capability::BoundaryInclusive) && in_array($queryType, ['contains', 'notContains'])) {
                     continue;
                 }
-                $result = $database->find($collectionName, [$query], PermissionType::Read->value);
+                $result = $database->find($collectionName, [$query], PermissionType::Read);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
@@ -201,7 +201,7 @@ trait SpatialTests
             ];
 
             foreach ($lineDistanceQueries as $queryType => $query) {
-                $result = $database->find($collectionName, [$query], PermissionType::Read->value);
+                $result = $database->find($collectionName, [$query], PermissionType::Read);
                 $this->assertNotEmpty($result, sprintf('Failed distance query: %s on lineAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on lineAttr', $queryType));
             }
@@ -230,7 +230,7 @@ trait SpatialTests
                 if (! $database->getAdapter()->supports(Capability::BoundaryInclusive) && in_array($queryType, ['contains', 'notContains'])) {
                     continue;
                 }
-                $result = $database->find($collectionName, [$query], PermissionType::Read->value);
+                $result = $database->find($collectionName, [$query], PermissionType::Read);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
@@ -244,7 +244,7 @@ trait SpatialTests
             ];
 
             foreach ($polyDistanceQueries as $queryType => $query) {
-                $result = $database->find($collectionName, [$query], PermissionType::Read->value);
+                $result = $database->find($collectionName, [$query], PermissionType::Read);
                 $this->assertNotEmpty($result, sprintf('Failed distance query: %s on polyAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
             }
@@ -317,7 +317,7 @@ trait SpatialTests
         // Test spatial queries on related documents
         $nearbyLocations = $database->find('location', [
             Query::distanceLessThan('coordinates', [40.7128, -74.0060], 0.1),
-        ], PermissionType::Read->value);
+        ], PermissionType::Read);
 
         $this->assertNotEmpty($nearbyLocations);
         $this->assertEquals('location1', $nearbyLocations[0]->getId());
@@ -331,7 +331,7 @@ trait SpatialTests
         // Test spatial query after update
         $timesSquareLocations = $database->find('location', [
             Query::distanceLessThan('coordinates', [40.7589, -73.9851], 0.1),
-        ], PermissionType::Read->value);
+        ], PermissionType::Read);
 
         $this->assertNotEmpty($timesSquareLocations);
         $this->assertEquals('location1', $timesSquareLocations[0]->getId());
@@ -452,50 +452,50 @@ trait SpatialTests
             // Spatial query on child collection
             $near = $database->find($child, [
                 Query::distanceLessThan('coord', [10.0, 10.0], 1.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($near);
 
             // Test distanceGreaterThan: places far from center (should find p2 which is 0.141 units away)
             $far = $database->find($child, [
                 Query::distanceGreaterThan('coord', [10.0, 10.0], 0.05),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($far);
 
             // Test distanceLessThan: places very close to center (should find p1 which is exactly at center)
             $close = $database->find($child, [
                 Query::distanceLessThan('coord', [10.0, 10.0], 0.2),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($close);
 
             // Test distanceGreaterThan with various thresholds
             // Test: places more than 0.12 units from center (should find p2)
             $moderatelyFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [10.0, 10.0], 0.12),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($moderatelyFar);
 
             // Test: places more than 0.05 units from center (should find p2)
             $slightlyFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [10.0, 10.0], 0.05),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($slightlyFar);
 
             // Test: places more than 10 units from center (should find none)
             $extremelyFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [10.0, 10.0], 10.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($extremelyFar);
 
             // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($child, [
                 Query::distanceEqual('coord', [10.0, 10.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('p1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
                 Query::distanceNotEqual('coord', [10.0, 10.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('p2', $notEqualZero[0]->getId());
 
@@ -557,44 +557,44 @@ trait SpatialTests
 
             $near = $database->find($child, [
                 Query::distanceLessThan('coord', [20.0, 20.0], 1.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($near);
 
             // Test distanceLessThan: stops very close to center (should find s1 which is exactly at center)
             $close = $database->find($child, [
                 Query::distanceLessThan('coord', [20.0, 20.0], 0.1),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($close);
 
             // Test distanceGreaterThan with various thresholds
             // Test: stops more than 0.25 units from center (should find s2)
             $moderatelyFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [20.0, 20.0], 0.25),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($moderatelyFar);
 
             // Test: stops more than 0.05 units from center (should find s2)
             $slightlyFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [20.0, 20.0], 0.05),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($slightlyFar);
 
             // Test: stops more than 5 units from center (should find none)
             $veryFar = $database->find($child, [
                 Query::distanceGreaterThan('coord', [20.0, 20.0], 5.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($veryFar);
 
             // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($child, [
                 Query::distanceEqual('coord', [20.0, 20.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('s1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
                 Query::distanceNotEqual('coord', [20.0, 20.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('s2', $notEqualZero[0]->getId());
 
@@ -650,50 +650,50 @@ trait SpatialTests
             // Spatial query on "drivers" using point distanceEqual
             $near = $database->find($a, [
                 Query::distanceLessThan('home', [30.0, 30.0], 0.5),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($near);
 
             // Test distanceGreaterThan: drivers far from center (using large threshold to find the driver)
             $far = $database->find($a, [
                 Query::distanceGreaterThan('home', [30.0, 30.0], 100.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($far);
 
             // Test distanceLessThan: drivers very close to center (should find d1 which is exactly at center)
             $close = $database->find($a, [
                 Query::distanceLessThan('home', [30.0, 30.0], 0.1),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($close);
 
             // Test distanceGreaterThan with various thresholds
             // Test: drivers more than 0.05 units from center (should find none since d1 is exactly at center)
             $slightlyFar = $database->find($a, [
                 Query::distanceGreaterThan('home', [30.0, 30.0], 0.05),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($slightlyFar);
 
             // Test: drivers more than 0.001 units from center (should find none since d1 is exactly at center)
             $verySlightlyFar = $database->find($a, [
                 Query::distanceGreaterThan('home', [30.0, 30.0], 0.001),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($verySlightlyFar);
 
             // Test: drivers more than 0.5 units from center (should find none since d1 is at center)
             $moderatelyFar = $database->find($a, [
                 Query::distanceGreaterThan('home', [30.0, 30.0], 0.5),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($moderatelyFar);
 
             // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($a, [
                 Query::distanceEqual('home', [30.0, 30.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('d1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($a, [
                 Query::distanceNotEqual('home', [30.0, 30.0], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertEmpty($notEqualZero);
 
             // Ensure relationship present
@@ -756,7 +756,7 @@ trait SpatialTests
                 'type' => IndexType::Spatial->value,
                 'attributes' => ['loc'],
                 'lengths' => [],
-                'orders' => $orderSupported ? [OrderDirection::ASC->value] : ['ASC'],
+                'orders' => $orderSupported ? [OrderDirection::Asc->value] : ['ASC'],
             ])];
 
             if ($orderSupported) {
@@ -783,7 +783,7 @@ trait SpatialTests
             $database->createCollection($collOrderIndex);
             $database->createAttribute($collOrderIndex, new Attribute(key: 'loc', type: ColumnType::Point, size: 0, required: true));
             if ($orderSupported) {
-                $this->assertTrue($database->createIndex($collOrderIndex, new Index(key: 'idx_loc', type: IndexType::Spatial, attributes: ['loc'], lengths: [], orders: [OrderDirection::DESC->value])));
+                $this->assertTrue($database->createIndex($collOrderIndex, new Index(key: 'idx_loc', type: IndexType::Spatial, attributes: ['loc'], lengths: [], orders: [OrderDirection::Desc->value])));
             } else {
                 try {
                     $database->createIndex($collOrderIndex, new Index(key: 'idx_loc', type: IndexType::Spatial, attributes: ['loc'], lengths: [], orders: ['DESC']));
@@ -966,7 +966,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $insideRect1 = $database->find($collectionName, [
                     Query::covers('rectangle', [[5, 5]]), // Point inside first rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($insideRect1);
                 $this->assertEquals('rect1', $insideRect1[0]->getId());
             }
@@ -975,7 +975,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsideRect1 = $database->find($collectionName, [
                     Query::notCovers('rectangle', [[25, 25]]), // Point outside first rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($outsideRect1);
             }
 
@@ -983,7 +983,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $distantPoint = $database->find($collectionName, [
                     Query::covers('rectangle', [[100, 100]]), // Point far outside rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($distantPoint);
             }
 
@@ -991,7 +991,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsidePoint = $database->find($collectionName, [
                     Query::covers('rectangle', [[-1, -1]]), // Point clearly outside rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($outsidePoint);
             }
 
@@ -1001,14 +1001,14 @@ trait SpatialTests
                     Query::intersects('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]),
                     Query::notTouches('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]),
                 ]),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($overlappingRect);
 
             // Test square contains point
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $insideSquare1 = $database->find($collectionName, [
                     Query::covers('square', [[10, 10]]), // Point inside first square
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($insideSquare1);
                 $this->assertEquals('rect1', $insideSquare1[0]->getId());
             }
@@ -1017,7 +1017,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $rectContainsSquare = $database->find($collectionName, [
                     Query::covers('rectangle', [[[5, 2], [5, 8], [15, 8], [15, 2], [5, 2]]]), // Square geometry that fits within rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($rectContainsSquare);
                 $this->assertEquals('rect1', $rectContainsSquare[0]->getId());
             }
@@ -1026,7 +1026,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $rectContainsTriangle = $database->find($collectionName, [
                     Query::covers('rectangle', [[[10, 2], [18, 2], [14, 8], [10, 2]]]), // Triangle geometry that fits within rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($rectContainsTriangle);
                 $this->assertEquals('rect1', $rectContainsTriangle[0]->getId());
             }
@@ -1035,7 +1035,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $lShapeContainsRect = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[[5, 5], [5, 10], [10, 10], [10, 5], [5, 5]]]), // Small rectangle inside L-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($lShapeContainsRect);
                 $this->assertEquals('rect1', $lShapeContainsRect[0]->getId());
             }
@@ -1044,7 +1044,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $tShapeContainsSquare = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[[35, 5], [35, 10], [40, 10], [40, 5], [35, 5]]]), // Small square inside T-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($tShapeContainsSquare);
                 $this->assertEquals('rect2', $tShapeContainsSquare[0]->getId());
             }
@@ -1053,7 +1053,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $squareNotContainsRect = $database->find($collectionName, [
                     Query::notCovers('square', [[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]]]), // Larger rectangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($squareNotContainsRect);
             }
 
@@ -1061,7 +1061,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $triangleNotContainsRect = $database->find($collectionName, [
                     Query::notCovers('triangle', [[[20, 0], [20, 25], [30, 25], [30, 0], [20, 0]]]), // Rectangle that extends beyond triangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($triangleNotContainsRect);
             }
 
@@ -1069,7 +1069,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $lShapeNotContainsTShape = $database->find($collectionName, [
                     Query::notCovers('complex_polygon', [[[30, 0], [30, 20], [50, 20], [50, 0], [30, 0]]]), // T-shape geometry
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($lShapeNotContainsTShape);
             }
 
@@ -1077,7 +1077,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsideSquare1 = $database->find($collectionName, [
                     Query::notCovers('square', [[20, 20]]), // Point outside first square
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($outsideSquare1);
             }
 
@@ -1085,7 +1085,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $distantPointSquare = $database->find($collectionName, [
                     Query::covers('square', [[100, 100]]), // Point far outside square
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($distantPointSquare);
             }
 
@@ -1093,7 +1093,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $boundaryPointSquare = $database->find($collectionName, [
                     Query::covers('square', [[5, 5]]), // Point on square boundary (should be empty if boundary not inclusive)
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 // Note: This may or may not be empty depending on boundary inclusivity
             }
 
@@ -1101,11 +1101,11 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $exactSquare = $database->find($collectionName, [
                     Query::covers('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]]),
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
             } else {
                 $exactSquare = $database->find($collectionName, [
                     Query::intersects('square', [[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]),
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
             }
             $this->assertNotEmpty($exactSquare);
             $this->assertEquals('rect1', $exactSquare[0]->getId());
@@ -1113,14 +1113,14 @@ trait SpatialTests
             // Test square doesn't equal different square
             $differentSquare = $database->find($collectionName, [
                 query::notEqual('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]), // Different square
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($differentSquare);
 
             // Test triangle contains point
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $insideTriangle1 = $database->find($collectionName, [
                     Query::covers('triangle', [[25, 10]]), // Point inside first triangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($insideTriangle1);
                 $this->assertEquals('rect1', $insideTriangle1[0]->getId());
             }
@@ -1129,7 +1129,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsideTriangle1 = $database->find($collectionName, [
                     Query::notCovers('triangle', [[25, 25]]), // Point outside first triangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($outsideTriangle1);
             }
 
@@ -1137,7 +1137,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $distantPointTriangle = $database->find($collectionName, [
                     Query::covers('triangle', [[100, 100]]), // Point far outside triangle
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($distantPointTriangle);
             }
 
@@ -1145,27 +1145,27 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsideTriangleArea = $database->find($collectionName, [
                     Query::covers('triangle', [[35, 25]]), // Point outside triangle area
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($outsideTriangleArea);
             }
 
             // Test triangle intersects with point
             $intersectingTriangle = $database->find($collectionName, [
                 Query::intersects('triangle', [25, 10]), // Point inside triangle should intersect
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($intersectingTriangle);
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
                 Query::notIntersects('triangle', [10, 10]), // Distant point should not intersect
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($nonIntersectingTriangle);
 
             // Test L-shaped polygon contains point
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $insideLShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[10, 10]]), // Point inside L-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($insideLShape);
                 $this->assertEquals('rect1', $insideLShape[0]->getId());
             }
@@ -1174,7 +1174,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $inHole = $database->find($collectionName, [
                     Query::notCovers('complex_polygon', [[17, 10]]), // Point in the "hole" of L-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($inHole);
             }
 
@@ -1182,7 +1182,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $distantPointLShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[100, 100]]), // Point far outside L-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($distantPointLShape);
             }
 
@@ -1190,7 +1190,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $holePoint = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[17, 10]]), // Point in the "hole" of L-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($holePoint);
             }
 
@@ -1198,7 +1198,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $insideTShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[40, 5]]), // Point inside T-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($insideTShape);
                 $this->assertEquals('rect2', $insideTShape[0]->getId());
             }
@@ -1207,7 +1207,7 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $distantPointTShape = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[100, 100]]), // Point far outside T-shape
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($distantPointTShape);
             }
 
@@ -1215,21 +1215,21 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $outsideTShapeArea = $database->find($collectionName, [
                     Query::covers('complex_polygon', [[25, 25]]), // Point outside T-shape area
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertEmpty($outsideTShapeArea);
             }
 
             // Test complex polygon intersects with line
             $intersectingLine = $database->find($collectionName, [
                 Query::intersects('complex_polygon', [[0, 10], [20, 10]]), // Horizontal line through L-shape
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($intersectingLine);
 
             // Test linestring contains point
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $onLine1 = $database->find($collectionName, [
                     Query::covers('multi_linestring', [[5, 5]]), // Point on first line segment
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($onLine1);
             }
 
@@ -1237,47 +1237,47 @@ trait SpatialTests
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
                 $offLine1 = $database->find($collectionName, [
                     Query::notCovers('multi_linestring', [[5, 15]]), // Point not on any line
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($offLine1);
             }
 
             // Test linestring intersects with point
             $intersectingPoint = $database->find($collectionName, [
                 Query::intersects('multi_linestring', [10, 10]), // Point on diagonal line
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($intersectingPoint);
 
             // Test linestring intersects with a horizontal line coincident at y=20
             $touchingLine = $database->find($collectionName, [
                 Query::intersects('multi_linestring', [[0, 20], [20, 20]]),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($touchingLine);
 
             // Test distanceEqual queries between shapes
             $nearCenter = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [10, 5], 5.0), // Points within 5 units of first center
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($nearCenter);
             $this->assertEquals('rect1', $nearCenter[0]->getId());
 
             // Test distanceEqual queries to find nearby shapes
             $nearbyShapes = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [40, 4], 15.0), // Points within 15 units of second center
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($nearbyShapes);
             $this->assertEquals('rect2', $nearbyShapes[0]->getId());
 
             // Test distanceGreaterThan queries
             $farShapes = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [10, 5], 10.0), // Points more than 10 units from first center
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($farShapes);
             $this->assertEquals('rect2', $farShapes[0]->getId());
 
             // Test distanceLessThan queries
             $closeShapes = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [10, 5], 3.0), // Points less than 3 units from first center
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($closeShapes);
             $this->assertEquals('rect1', $closeShapes[0]->getId());
 
@@ -1285,47 +1285,47 @@ trait SpatialTests
             // Test: points more than 20 units from first center (should find rect2)
             $veryFarShapes = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [10, 5], 20.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($veryFarShapes);
             $this->assertEquals('rect2', $veryFarShapes[0]->getId());
 
             // Test: points more than 5 units from second center (should find rect1)
             $farFromSecondCenter = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [40, 4], 5.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($farFromSecondCenter);
             $this->assertEquals('rect1', $farFromSecondCenter[0]->getId());
 
             // Test: points more than 30 units from origin (should find only rect2)
             $farFromOrigin = $database->find($collectionName, [
                 Query::distanceGreaterThan('circle_center', [0, 0], 30.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(1, $farFromOrigin);
 
             // Equal-distanceEqual semantics for circle_center
             // rect1 is exactly at [10,5], so distanceEqual 0
             $equalZero = $database->find($collectionName, [
                 Query::distanceEqual('circle_center', [10, 5], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('rect1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($collectionName, [
                 Query::distanceNotEqual('circle_center', [10, 5], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('rect2', $notEqualZero[0]->getId());
 
             // Additional distance queries for complex shapes (polygon and linestring)
             $rectDistanceEqual = $database->find($collectionName, [
                 Query::distanceEqual('rectangle', [[[0, 0], [0, 10], [20, 10], [20, 0], [0, 0]]], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($rectDistanceEqual);
             $this->assertEquals('rect1', $rectDistanceEqual[0]->getId());
 
             $lineDistanceEqual = $database->find($collectionName, [
                 Query::distanceEqual('multi_linestring', [[0, 0], [10, 10], [20, 0], [0, 20], [20, 20]], 0.0),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($lineDistanceEqual);
             $this->assertEquals('rect1', $lineDistanceEqual[0]->getId());
 
@@ -1399,7 +1399,7 @@ trait SpatialTests
                         Query::distanceLessThan('location', [40.7829, -73.9654], 0.01), // Near Central Park
                         Query::covers('area', [[40.7829, -73.9654]]), // Location is within area
                     ]),
-                ], PermissionType::Read->value);
+                ], PermissionType::Read);
                 $this->assertNotEmpty($nearbyAndInArea);
                 $this->assertEquals('park1', $nearbyAndInArea[0]->getId());
             }
@@ -1410,45 +1410,45 @@ trait SpatialTests
                     Query::distanceLessThan('location', [40.7829, -73.9654], 0.01), // Near Central Park
                     Query::distanceLessThan('location', [40.6602, -73.9690], 0.01), // Near Prospect Park
                 ]),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(2, $nearEitherLocation);
 
             // Test distanceGreaterThan: parks far from Central Park
             $farFromCentral = $database->find($collectionName, [
                 Query::distanceGreaterThan('location', [40.7829, -73.9654], 0.1), // More than 0.1 degrees from Central Park
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($farFromCentral);
 
             // Test distanceLessThan: parks very close to Central Park
             $veryCloseToCentral = $database->find($collectionName, [
                 Query::distanceLessThan('location', [40.7829, -73.9654], 0.001), // Less than 0.001 degrees from Central Park
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($veryCloseToCentral);
 
             // Test distanceGreaterThan with various thresholds
             // Test: parks more than 0.3 degrees from Central Park (should find none since all parks are closer)
             $veryFarFromCentral = $database->find($collectionName, [
                 Query::distanceGreaterThan('location', [40.7829, -73.9654], 0.3),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(0, $veryFarFromCentral);
 
             // Test: parks more than 0.3 degrees from Prospect Park (should find other parks)
             $farFromProspect = $database->find($collectionName, [
                 Query::distanceGreaterThan('location', [40.6602, -73.9690], 0.1),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($farFromProspect);
 
             // Test: parks more than 0.3 degrees from Times Square (should find none since all parks are closer)
             $farFromTimesSquare = $database->find($collectionName, [
                 Query::distanceGreaterThan('location', [40.7589, -73.9851], 0.3),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(0, $farFromTimesSquare);
 
             // Test ordering by distanceEqual from a specific point
             $orderedByDistance = $database->find($collectionName, [
                 Query::distanceLessThan('location', [40.7829, -73.9654], 0.01), // Within ~1km
                 Query::limit(10),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
 
             $this->assertNotEmpty($orderedByDistance);
             // First result should be closest to the reference point
@@ -1458,7 +1458,7 @@ trait SpatialTests
             $limitedResults = $database->find($collectionName, [
                 Query::distanceLessThan('location', [40.7829, -73.9654], 1.0), // Within 1 degree
                 Query::limit(2),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
 
             $this->assertCount(2, $limitedResults);
         } finally {
@@ -1931,7 +1931,7 @@ trait SpatialTests
             // 3) Spatial index order support: providing orders should fail if not supported
             $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
             if ($orderSupported) {
-                $this->assertTrue($database->createIndex($collectionName, new Index(key: 'idx_geom_desc', type: IndexType::Spatial, attributes: ['geom'], lengths: [], orders: [OrderDirection::DESC->value])));
+                $this->assertTrue($database->createIndex($collectionName, new Index(key: 'idx_geom_desc', type: IndexType::Spatial, attributes: ['geom'], lengths: [], orders: [OrderDirection::Desc->value])));
                 // cleanup
                 $this->assertTrue($database->deleteIndex($collectionName, 'idx_geom_desc'));
             } else {
@@ -2194,14 +2194,14 @@ trait SpatialTests
             // distanceLessThan with meters=true: within 1500m should include both
             $within1_5km = $database->find($collectionName, [
                 Query::distanceLessThan('loc', [0.0000, 0.0000], 1500, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($within1_5km);
             $this->assertCount(2, $within1_5km);
 
             // Within 500m should include only p0 (exact point)
             $within500m = $database->find($collectionName, [
                 Query::distanceLessThan('loc', [0.0000, 0.0000], 500, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($within500m);
             $this->assertCount(1, $within500m);
             $this->assertEquals('p0', $within500m[0]->getId());
@@ -2209,7 +2209,7 @@ trait SpatialTests
             // distanceGreaterThan 500m should include only p1
             $greater500m = $database->find($collectionName, [
                 Query::distanceGreaterThan('loc', [0.0000, 0.0000], 500, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($greater500m);
             $this->assertCount(1, $greater500m);
             $this->assertEquals('p1', $greater500m[0]->getId());
@@ -2217,14 +2217,14 @@ trait SpatialTests
             // distanceEqual with 0m should return exact match p0
             $equalZero = $database->find($collectionName, [
                 Query::distanceEqual('loc', [0.0000, 0.0000], 0, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('p0', $equalZero[0]->getId());
 
             // distanceNotEqual with 0m should return p1
             $notEqualZero = $database->find($collectionName, [
                 Query::distanceNotEqual('loc', [0.0000, 0.0000], 0, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('p1', $notEqualZero[0]->getId());
         } finally {
@@ -2303,7 +2303,7 @@ trait SpatialTests
                     [0.0110, -0.0010],
                     [0.0080, -0.0010], // closed
                 ]], 3000, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(1, $polyPolyWithin3km);
             $this->assertEquals('near', $polyPolyWithin3km[0]->getId());
 
@@ -2315,7 +2315,7 @@ trait SpatialTests
                     [0.0110, -0.0010],
                     [0.0080, -0.0010], // closed
                 ]], 3000, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(1, $polyPolyGreater3km);
             $this->assertEquals('far', $polyPolyGreater3km[0]->getId());
 
@@ -2327,7 +2327,7 @@ trait SpatialTests
                     [0.0020,  0.0020],
                     [-0.0010, -0.0010],
                 ]], 500, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(1, $ptPolyWithin500);
             $this->assertEquals('near', $ptPolyWithin500[0]->getId());
 
@@ -2338,14 +2338,14 @@ trait SpatialTests
                     [0.0020,  0.0020],
                     [-0.0010, -0.0010],
                 ]], 500, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertCount(1, $ptPolyGreater500);
             $this->assertEquals('far', $ptPolyGreater500[0]->getId());
 
             // Zero-distance checks
             $lineEqualZero = $database->find($multiCollection, [
                 Query::distanceEqual('line', [[0.0000, 0.0000], [0.0010, 0.0000]], 0, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($lineEqualZero);
             $this->assertEquals('near', $lineEqualZero[0]->getId());
 
@@ -2357,7 +2357,7 @@ trait SpatialTests
                     [0.0010, -0.0010],
                     [-0.0010, -0.0010],
                 ]], 0, true),
-            ], PermissionType::Read->value);
+            ], PermissionType::Read);
             $this->assertNotEmpty($polyEqualZero);
             $this->assertEquals('near', $polyEqualZero[0]->getId());
 

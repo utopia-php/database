@@ -2,6 +2,9 @@
 
 namespace Utopia\Database\Traits;
 
+/**
+ * Provides transactional execution support, delegating to the underlying database adapter.
+ */
 trait Transactions
 {
     /**

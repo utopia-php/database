@@ -2,14 +2,18 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
+use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -26,8 +30,14 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 
 /**
  * Differences between MariaDB and Postgres
@@ -39,6 +49,13 @@ use Utopia\Query\Schema\IndexType;
  */
 class Postgres extends SQL implements Feature\Timeouts
 {
+    public const MAX_IDENTIFIER_NAME = 63;
+
+    /**
+     * Get the list of capabilities supported by the PostgreSQL adapter.
+     *
+     * @return array<Capability>
+     */
     public function capabilities(): array
     {
         $remove = [
@@ -60,36 +77,41 @@ class Postgres extends SQL implements Feature\Timeouts
         ));
     }
 
-    public const MAX_IDENTIFIER_NAME = 63;
+    /**
+     * Get the case-insensitive LIKE operator for PostgreSQL.
+     *
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'ILIKE';
+    }
 
     /**
-     * Override to use lowercase catalog names for Postgres case sensitivity.
+     * Get the POSIX regex matching operator for PostgreSQL.
+     *
+     * @return string
      */
-    public function exists(string $database, ?string $collection = null): bool
+    public function getRegexOperator(): string
     {
-        $database = $this->filter($database);
+        return '~';
+    }
 
-        if (! \is_null($collection)) {
-            $collection = $this->filter($collection);
-            $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
-            $stmt = $this->getPDO()->prepare($sql);
-            $stmt->bindValue(1, $database);
-            $stmt->bindValue(2, "{$this->getNamespace()}_{$collection}");
-        } else {
-            $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
-            $stmt = $this->getPDO()->prepare($sql);
-            $stmt->bindValue(1, $database);
+    /**
+     * Get the PostgreSQL backend process ID as the connection identifier.
+     *
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
+        $stmt = $this->getPDO()->query($result->query);
+        if ($stmt === false) {
+            return '';
         }
+        $col = $stmt->fetchColumn();
 
-        try {
-            $stmt->execute();
-            $document = $stmt->fetchAll();
-            $stmt->closeCursor();
-        } catch (\PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        return ! empty($document);
+        return \is_scalar($col) ? (string) $col : '';
     }
 
     /**
@@ -155,42 +177,6 @@ class Postgres extends SQL implements Feature\Timeouts
         return $result;
     }
 
-    protected function execute(mixed $stmt): bool
-    {
-        $pdo = $this->getPDO();
-
-        // Choose the right SET command based on transaction state
-        $sql = $this->inTransaction === 0
-            ? "SET statement_timeout = '{$this->timeout}ms'"
-            : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
-
-        // Apply timeout
-        $pdo->exec($sql);
-
-        try {
-            return $stmt->execute();
-        } finally {
-            // Only reset the global timeout when not in a transaction
-            if ($this->inTransaction === 0) {
-                $pdo->exec('RESET statement_timeout');
-            }
-        }
-    }
-
-    /**
-     * Returns Max Execution Time
-     *
-     * @throws DatabaseException
-     */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
-    {
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
-        $this->timeout = $milliseconds;
-    }
-
     /**
      * Create Database
      *
@@ -207,7 +193,6 @@ class Postgres extends SQL implements Feature\Timeouts
 
         $schema = $this->createSchemaBuilder();
         $sql = $schema->createDatabase($name)->query;
-        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
         $dbCreation = $this->getPDO()
             ->prepare($sql)
@@ -217,7 +202,7 @@ class Postgres extends SQL implements Feature\Timeouts
         foreach (['postgis', 'vector', 'pg_trgm'] as $ext) {
             try {
                 $this->getPDO()->prepare($schema->createExtension($ext)->query)->execute();
-            } catch (\PDOException) {
+            } catch (PDOException) {
                 // Extension may already exist due to concurrent worker
             }
         }
@@ -228,11 +213,41 @@ class Postgres extends SQL implements Feature\Timeouts
                 'locale' => 'und-u-ks-level1',
             ], deterministic: false);
             $this->getPDO()->prepare($collation->query)->execute();
-        } catch (\PDOException) {
+        } catch (PDOException) {
             // Collation may already exist due to concurrent worker
         }
 
         return $dbCreation;
+    }
+
+    /**
+     * Override to use lowercase catalog names for Postgres case sensitivity.
+     */
+    public function exists(string $database, ?string $collection = null): bool
+    {
+        $database = $this->filter($database);
+
+        if ($collection !== null) {
+            $collection = $this->filter($collection);
+            $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->bindValue(1, $database);
+            $stmt->bindValue(2, "{$this->getNamespace()}_{$collection}");
+        } else {
+            $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->bindValue(1, $database);
+        }
+
+        try {
+            $stmt->execute();
+            $document = $stmt->fetchAll();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return ! empty($document);
     }
 
     /**
@@ -247,7 +262,6 @@ class Postgres extends SQL implements Feature\Timeouts
 
         $schema = $this->createSchemaBuilder();
         $sql = $schema->dropDatabase($name)->query;
-        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
 
         return $this->getPDO()->prepare($sql)->execute();
     }
@@ -270,7 +284,7 @@ class Postgres extends SQL implements Feature\Timeouts
         $schema = $this->createSchemaBuilder();
 
         // Build main collection table using schema builder
-        $collectionResult = $schema->create($tableRaw, function (\Utopia\Query\Schema\Blueprint $table) use ($attributes) {
+        $collectionResult = $schema->create($tableRaw, function (Blueprint $table) use ($attributes) {
             $table->id('_id');
             $table->string('_uid', 255);
 
@@ -302,7 +316,7 @@ class Postgres extends SQL implements Feature\Timeouts
                 $this->addBlueprintColumn(
                     $table,
                     $attribute->key,
-                    $attribute->type->value,
+                    $attribute->type,
                     $attribute->size,
                     $attribute->signed,
                     $attribute->array,
@@ -335,10 +349,9 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
-        $collectionSql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionSql);
 
         // Build permissions table using schema builder
-        $permsResult = $schema->create($permsTableRaw, function (\Utopia\Query\Schema\Blueprint $table) {
+        $permsResult = $schema->create($permsTableRaw, function (Blueprint $table) {
             $table->id('_id');
             $table->integer('_tenant')->nullable()->default(null);
             $table->string('_type', 12);
@@ -362,7 +375,6 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
-        $permsSql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permsSql);
 
         try {
             $this->getPDO()->prepare($collectionSql)->execute();
@@ -376,7 +388,7 @@ class Postgres extends SQL implements Feature\Timeouts
                 foreach ($indexAttributes as $indexAttribute) {
                     foreach ($attributes as $attribute) {
                         if ($attribute->key === $indexAttribute) {
-                            $indexAttributesWithType[$indexAttribute] = $attribute->type;
+                            $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
                         }
                     }
                 }
@@ -397,6 +409,8 @@ class Postgres extends SQL implements Feature\Timeouts
                     $indexAttributesWithType,
                 );
             }
+        } catch (DuplicateException $e) {
+            throw $e;
         } catch (PDOException $e) {
             $e = $this->processException($e);
 
@@ -410,6 +424,30 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         return true;
+    }
+
+    /**
+     * Delete Collection
+     */
+    public function deleteCollection(string $id): bool
+    {
+        $id = $this->filter($id);
+
+        $schema = $this->createSchemaBuilder();
+        $mainResult = $schema->drop($this->getSQLTableRaw($id));
+        $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
+
+        $sql = $mainResult->query.'; '.$permsResult->query;
+
+        return $this->getPDO()->prepare($sql)->execute();
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -441,7 +479,9 @@ class Postgres extends SQL implements Feature\Timeouts
         try {
             $this->execute($collectionSize);
             $this->execute($permissionsSize);
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
@@ -478,37 +518,14 @@ class Postgres extends SQL implements Feature\Timeouts
         try {
             $this->execute($collectionSize);
             $this->execute($permissionsSize);
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
-    }
-
-    /**
-     * Delete Collection
-     */
-    public function deleteCollection(string $id): bool
-    {
-        $id = $this->filter($id);
-
-        $schema = $this->createSchemaBuilder();
-        $mainResult = $schema->drop($this->getSQLTableRaw($id));
-        $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
-
-        $sql = $mainResult->query.'; '.$permsResult->query;
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
-
-        return $this->getPDO()->prepare($sql)->execute();
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 
     /**
@@ -530,12 +547,12 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (\Utopia\Query\Schema\Blueprint $table) use ($attribute) {
-            $this->addBlueprintColumn($table, $attribute->key, $attribute->type->value, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($attribute) {
+            $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         });
 
         // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $result->query);
+        $sql = $result->query;
 
         try {
             return $this->execute($this->getPDO()
@@ -543,52 +560,6 @@ class Postgres extends SQL implements Feature\Timeouts
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-    }
-
-    /**
-     * Delete Attribute
-     *
-     *
-     * @throws DatabaseException
-     */
-    public function deleteAttribute(string $collection, string $id): bool
-    {
-        $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (\Utopia\Query\Schema\Blueprint $table) use ($id) {
-            $table->dropColumn($this->filter($id));
-        });
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $result->query);
-
-        try {
-            return $this->execute($this->getPDO()
-                ->prepare($sql));
-        } catch (PDOException $e) {
-            if ($e->getCode() === '42703' && $e->errorInfo[1] === 7) {
-                return true;
-            }
-
-            throw $e;
-        }
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (\Utopia\Query\Schema\Blueprint $table) use ($old, $new) {
-            $table->renameColumn($this->filter($old), $this->filter($new));
-        });
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $result->query);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
     }
 
     /**
@@ -618,11 +589,11 @@ class Postgres extends SQL implements Feature\Timeouts
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
 
-            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (\Utopia\Query\Schema\Blueprint $table) use ($id, $newKey) {
+            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id, $newKey) {
                 $table->renameColumn($id, $newKey);
             });
 
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $renameResult->query);
+            $sql = $renameResult->query;
 
             $result = $this->execute($this->getPDO()
                 ->prepare($sql));
@@ -635,7 +606,7 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         // Modify column type using schema builder's alterColumnType
-        $sqlType = $this->getSQLType($attribute->type->value, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         $tableRaw = $this->getSQLTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
@@ -644,7 +615,7 @@ class Postgres extends SQL implements Feature\Timeouts
             $result = $schema->alterColumnType($tableRaw, $id, $sqlType);
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $result->query);
+        $sql = $result->query;
 
         try {
             return $this->execute($this->getPDO()
@@ -652,6 +623,52 @@ class Postgres extends SQL implements Feature\Timeouts
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * Delete Attribute
+     *
+     *
+     * @throws DatabaseException
+     */
+    public function deleteAttribute(string $collection, string $id): bool
+    {
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id) {
+            $table->dropColumn($this->filter($id));
+        });
+
+        $sql = $result->query;
+
+        try {
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
+        } catch (PDOException $e) {
+            if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+                return true;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($old, $new) {
+            $table->renameColumn($this->filter($old), $this->filter($new));
+        });
+
+        $sql = $result->query;
+
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -668,7 +685,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
         $schema = $this->createSchemaBuilder();
         $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (\Utopia\Query\Schema\Blueprint $table) use ($columnId) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
                 $table->string($columnId, 255)->nullable()->default(null);
             });
 
@@ -686,7 +703,6 @@ class Postgres extends SQL implements Feature\Timeouts
             return true;
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -710,16 +726,16 @@ class Postgres extends SQL implements Feature\Timeouts
         $twoWay = $relationship->twoWay;
         $side = $relationship->side;
 
-        if (! \is_null($newKey)) {
+        if ($newKey !== null) {
             $newKey = $this->filter($newKey);
         }
-        if (! \is_null($newTwoWayKey)) {
+        if ($newTwoWayKey !== null) {
             $newTwoWayKey = $this->filter($newTwoWayKey);
         }
 
         $schema = $this->createSchemaBuilder();
         $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (\Utopia\Query\Schema\Blueprint $table) use ($from, $to) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
                 $table->renameColumn($from, $to);
             });
 
@@ -730,31 +746,31 @@ class Postgres extends SQL implements Feature\Timeouts
 
         switch ($type) {
             case RelationType::OneToOne:
-                if ($key !== $newKey) {
+                if ($key !== $newKey && \is_string($newKey)) {
                     $sql = $renameCol($name, $key, $newKey).';';
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                     $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
             case RelationType::OneToMany:
                 if ($side === RelationSide::Parent) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                         $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if ($key !== $newKey && \is_string($newKey)) {
                         $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Child) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
                         $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if ($key !== $newKey && \is_string($newKey)) {
                         $sql = $renameCol($name, $key, $newKey).';';
                     }
                 }
@@ -766,10 +782,10 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 $junctionName = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
 
-                if (! \is_null($newKey)) {
+                if ($newKey !== null) {
                     $sql = $renameCol($junctionName, $key, $newKey).';';
                 }
-                if ($twoWay && ! \is_null($newTwoWayKey)) {
+                if ($twoWay && $newTwoWayKey !== null) {
                     $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey).';';
                 }
                 break;
@@ -777,11 +793,10 @@ class Postgres extends SQL implements Feature\Timeouts
                 throw new DatabaseException('Invalid relationship type');
         }
 
-        if (empty($sql)) {
+        if ($sql === '') {
             return true;
         }
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -804,7 +819,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
         $schema = $this->createSchemaBuilder();
         $dropCol = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (\Utopia\Query\Schema\Blueprint $table) use ($columnId) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
                 $table->dropColumn($columnId);
             });
 
@@ -859,11 +874,6 @@ class Postgres extends SQL implements Feature\Timeouts
                 throw new DatabaseException('Invalid relationship type');
         }
 
-        if (empty($sql)) {
-            return true;
-        }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -961,7 +971,6 @@ class Postgres extends SQL implements Feature\Timeouts
             rawColumns: $rawExpressions,
         )->query;
 
-        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         try {
             return $this->getPDO()->prepare($sql)->execute();
@@ -988,7 +997,6 @@ class Postgres extends SQL implements Feature\Timeouts
         $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $schemaQualifiedName)->query;
         // Add IF EXISTS since the schema builder's dropIndex does not include it
         $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -1013,7 +1021,6 @@ class Postgres extends SQL implements Feature\Timeouts
         $schemaBuilder = $this->createSchemaBuilder();
         $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
-        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -1066,16 +1073,14 @@ class Postgres extends SQL implements Feature\Timeouts
             $row = $this->decorateRow($row, $this->documentMetadata($document));
             $builder->set($row);
             $result = $builder->insert();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_CREATE);
+            $stmt = $this->executeResult($result, Event::DocumentCreate);
 
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
             $document['$sequence'] ??= $lastInsertedId;
 
             $ctx = $this->buildWriteContext($name);
-            foreach ($this->writeHooks as $hook) {
-                $hook->afterDocumentCreate($name, [$document], $ctx);
-            }
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1118,8 +1123,11 @@ class Postgres extends SQL implements Feature\Timeouts
                 $column = $this->filter($attribute);
 
                 if (isset($operators[$attribute])) {
-                    $opResult = $this->getOperatorBuilderExpression($column, $operators[$attribute]);
-                    $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                    $op = $operators[$attribute];
+                    if ($op instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                    }
                 } elseif (\in_array($attribute, $spatialAttributes, true)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
@@ -1134,21 +1142,400 @@ class Postgres extends SQL implements Feature\Timeouts
             }
 
             $builder->set($row);
-            $builder->filter([\Utopia\Query\Query::equal('_id', [$document->getSequence()])]);
+            $builder->filter([BaseQuery::equal('_id', [$document->getSequence()])]);
             $result = $builder->update();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
+            $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
             $stmt->execute();
 
             $ctx = $this->buildWriteContext($name);
-            foreach ($this->writeHooks as $hook) {
-                $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx);
-            }
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
         return $document;
+    }
+
+    /**
+     * Delete Document
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        try {
+            $this->syncWriteHooks();
+
+            $name = $this->filter($collection);
+
+            $builder = $this->newBuilder($name);
+            $builder->filter([BaseQuery::equal('_uid', [$id])]);
+            $result = $builder->delete();
+            $stmt = $this->executeResult($result, Event::DocumentDelete);
+
+            if (! $stmt->execute()) {
+                throw new DatabaseException('Failed to delete document');
+            }
+
+            $deleted = $stmt->rowCount();
+
+            $ctx = $this->buildWriteContext($name);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
+        } catch (Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $deleted > 0;
+    }
+
+    /**
+     * Increase or decrease an attribute value
+     *
+     * @throws DatabaseException
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    {
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+
+        $builder = $this->newBuilder($name);
+        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
+        $builder->set(['_updatedAt' => $updatedAt]);
+
+        $filters = [BaseQuery::equal('_uid', [$id])];
+        if ($max !== null) {
+            $filters[] = BaseQuery::lessThanEqual($attribute, $max);
+        }
+        if ($min !== null) {
+            $filters[] = BaseQuery::greaterThanEqual($attribute, $min);
+        }
+        $builder->filter($filters);
+
+        $result = $builder->update();
+        $stmt = $this->executeResult($result, Event::DocumentUpdate);
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns Max Execution Time
+     *
+     * @throws DatabaseException
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    /**
+     * Get the minimum supported datetime value for PostgreSQL.
+     *
+     * @return DateTime
+     */
+    public function getMinDateTime(): DateTime
+    {
+        return new DateTime('-4713-01-01 00:00:00');
+    }
+
+    /**
+     * Decode a WKB or WKT POINT into a coordinate array [x, y].
+     *
+     * @param string $wkb The WKB hex or WKT string
+     * @return array<float>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodePoint(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+
+            return [(float) $coords[0], (float) $coords[1]];
+        }
+
+        $bin = hex2bin($wkb);
+        if ($bin === false) {
+            throw new DatabaseException('Invalid hex WKB string');
+        }
+
+        if (strlen($bin) < 13) { // 1 byte endian + 4 bytes type + 8 bytes for X
+            throw new DatabaseException('WKB too short');
+        }
+
+        $isLE = ord($bin[0]) === 1;
+
+        // Type (4 bytes)
+        $typeBytes = substr($bin, 1, 4);
+        if (strlen($typeBytes) !== 4) {
+            throw new DatabaseException('Failed to extract type bytes from WKB');
+        }
+
+        $typeArr = unpack($isLE ? 'V' : 'N', $typeBytes);
+        if ($typeArr === false || ! isset($typeArr[1])) {
+            throw new DatabaseException('Failed to unpack type from WKB');
+        }
+        $type = \is_numeric($typeArr[1]) ? (int) $typeArr[1] : 0;
+
+        // Offset to coordinates (skip SRID if present)
+        $offset = 5 + (($type & 0x20000000) ? 4 : 0);
+
+        if (strlen($bin) < $offset + 16) { // 16 bytes for X,Y
+            throw new DatabaseException('WKB too short for coordinates');
+        }
+
+        $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
+
+        // X coordinate
+        $xArr = unpack($fmt, substr($bin, $offset, 8));
+        if ($xArr === false || ! isset($xArr[1])) {
+            throw new DatabaseException('Failed to unpack X coordinate');
+        }
+        $x = \is_numeric($xArr[1]) ? (float) $xArr[1] : 0.0;
+
+        // Y coordinate
+        $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
+        if ($yArr === false || ! isset($yArr[1])) {
+            throw new DatabaseException('Failed to unpack Y coordinate');
+        }
+        $y = \is_numeric($yArr[1]) ? (float) $yArr[1] : 0.0;
+
+        return [$x, $y];
+    }
+
+    /**
+     * Decode a WKB or WKT LINESTRING into an array of coordinate pairs.
+     *
+     * @param mixed $wkb The WKB binary or WKT string
+     * @return array<array<float>>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodeLinestring(mixed $wkb): array
+    {
+        $wkb = \is_string($wkb) ? $wkb : '';
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, (int) $end - $start);
+
+            $points = explode(',', $inside);
+
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+
+                return [(float) $coords[0], (float) $coords[1]];
+            }, $points);
+        }
+
+        if (ctype_xdigit($wkb)) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Failed to convert hex WKB to binary.');
+            }
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new DatabaseException('WKB too short to be a valid geometry');
+        }
+
+        $byteOrder = ord($wkb[0]);
+        if ($byteOrder === 0) {
+            throw new DatabaseException('Big-endian WKB not supported');
+        } elseif ($byteOrder !== 1) {
+            throw new DatabaseException('Invalid byte order in WKB');
+        }
+
+        // Type + SRID flag
+        $typeField = unpack('V', substr($wkb, 1, 4));
+        if ($typeField === false) {
+            throw new DatabaseException('Failed to unpack the type field from WKB.');
+        }
+
+        $typeField = \is_numeric($typeField[1]) ? (int) $typeField[1] : 0;
+        $geomType = $typeField & 0xFF;
+        $hasSRID = ($typeField & 0x20000000) !== 0;
+
+        if ($geomType !== 2) { // 2 = LINESTRING
+            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSRID) {
+            $offset += 4;
+        }
+
+        $numPoints = unpack('V', substr($wkb, $offset, 4));
+        if ($numPoints === false) {
+            throw new DatabaseException("Failed to unpack number of points at offset {$offset}.");
+        }
+
+        $numPoints = \is_numeric($numPoints[1]) ? (int) $numPoints[1] : 0;
+        $offset += 4;
+
+        $points = [];
+        for ($i = 0; $i < $numPoints; $i++) {
+            $x = unpack('e', substr($wkb, $offset, 8));
+            if ($x === false) {
+                throw new DatabaseException("Failed to unpack X coordinate at offset {$offset}.");
+            }
+
+            $x = \is_numeric($x[1]) ? (float) $x[1] : 0.0;
+
+            $offset += 8;
+
+            $y = unpack('e', substr($wkb, $offset, 8));
+            if ($y === false) {
+                throw new DatabaseException("Failed to unpack Y coordinate at offset {$offset}.");
+            }
+
+            $y = \is_numeric($y[1]) ? (float) $y[1] : 0.0;
+
+            $offset += 8;
+            $points[] = [$x, $y];
+        }
+
+        return $points;
+    }
+
+    /**
+     * Decode a WKB or WKT POLYGON into an array of rings, each containing coordinate pairs.
+     *
+     * @param string $wkb The WKB hex or WKT string
+     * @return array<array<array<float>>>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+
+                    return [(float) $coords[0], (float) $coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        // Convert hex string to binary if needed
+        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Invalid hex WKB');
+            }
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new DatabaseException('WKB too short');
+        }
+
+        $uInt32 = 'V'; // little-endian 32-bit unsigned
+        $uDouble = 'd'; // little-endian double
+
+        $typeInt = unpack($uInt32, substr($wkb, 1, 4));
+        if ($typeInt === false) {
+            throw new DatabaseException('Failed to unpack type field from WKB.');
+        }
+
+        $typeInt = \is_numeric($typeInt[1]) ? (int) $typeInt[1] : 0;
+        $hasSrid = ($typeInt & 0x20000000) !== 0;
+        $geomType = $typeInt & 0xFF;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSrid) {
+            $offset += 4;
+        }
+
+        // Number of rings
+        $numRings = unpack($uInt32, substr($wkb, $offset, 4));
+        if ($numRings === false) {
+            throw new DatabaseException('Failed to unpack number of rings from WKB.');
+        }
+
+        $numRings = \is_numeric($numRings[1]) ? (int) $numRings[1] : 0;
+        $offset += 4;
+
+        $rings = [];
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
+            if ($numPoints === false) {
+                throw new DatabaseException('Failed to unpack number of points from WKB.');
+            }
+
+            $numPoints = \is_numeric($numPoints[1]) ? (int) $numPoints[1] : 0;
+            $offset += 4;
+            $points = [];
+            for ($i = 0; $i < $numPoints; $i++) {
+                $x = unpack($uDouble, substr($wkb, $offset, 8));
+                if ($x === false) {
+                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
+                }
+
+                $x = \is_numeric($x[1]) ? (float) $x[1] : 0.0;
+
+                $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
+                if ($y === false) {
+                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
+                }
+
+                $y = \is_numeric($y[1]) ? (float) $y[1] : 0.0;
+
+                $points[] = [$x, $y];
+                $offset += 16;
+            }
+            $rings[] = $points;
+        }
+
+        return $rings; // array of rings, each ring is array of [x,y]
+    }
+
+    protected function execute(mixed $stmt): bool
+    {
+        $pdo = $this->getPDO();
+
+        // Choose the right SET command based on transaction state
+        $sql = $this->inTransaction === 0
+            ? "SET statement_timeout = '{$this->timeout}ms'"
+            : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
+
+        // Apply timeout
+        $pdo->exec($sql);
+
+        /** @var PDOStatement|PDOStatementProxy $stmt */
+        try {
+            return $stmt->execute();
+        } finally {
+            // Only reset the global timeout when not in a transaction
+            if ($this->inTransaction === 0) {
+                $pdo->exec('RESET statement_timeout');
+            }
+        }
     }
 
     /**
@@ -1206,7 +1593,7 @@ class Postgres extends SQL implements Feature\Timeouts
         $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex, useTargetPrefix: true);
 
         if ($fullExpression === null) {
-            throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod());
+            throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
         }
 
         // Strip the "quotedColumn = " prefix to get just the RHS expression
@@ -1225,10 +1612,10 @@ class Postgres extends SQL implements Feature\Timeouts
         $idx = 0;
 
         switch ($method) {
-            case OperatorType::Increment->value:
-            case OperatorType::Decrement->value:
-            case OperatorType::Multiply->value:
-            case OperatorType::Divide->value:
+            case OperatorType::Increment:
+            case OperatorType::Decrement:
+            case OperatorType::Multiply:
+            case OperatorType::Divide:
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
@@ -1237,12 +1624,12 @@ class Postgres extends SQL implements Feature\Timeouts
                 }
                 break;
 
-            case OperatorType::Modulo->value:
+            case OperatorType::Modulo:
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 break;
 
-            case OperatorType::Power->value:
+            case OperatorType::Power:
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
@@ -1251,62 +1638,62 @@ class Postgres extends SQL implements Feature\Timeouts
                 }
                 break;
 
-            case OperatorType::StringConcat->value:
+            case OperatorType::StringConcat:
                 $namedBindings["op_{$idx}"] = $values[0] ?? '';
                 $idx++;
                 break;
 
-            case OperatorType::StringReplace->value:
+            case OperatorType::StringReplace:
                 $namedBindings["op_{$idx}"] = $values[0] ?? '';
                 $idx++;
                 $namedBindings["op_{$idx}"] = $values[1] ?? '';
                 $idx++;
                 break;
 
-            case OperatorType::Toggle->value:
+            case OperatorType::Toggle:
                 // No bindings
                 break;
 
-            case OperatorType::DateAddDays->value:
-            case OperatorType::DateSubDays->value:
+            case OperatorType::DateAddDays:
+            case OperatorType::DateSubDays:
                 $namedBindings["op_{$idx}"] = $values[0] ?? 0;
                 $idx++;
                 break;
 
-            case OperatorType::DateSetNow->value:
+            case OperatorType::DateSetNow:
                 // No bindings
                 break;
 
-            case OperatorType::ArrayAppend->value:
-            case OperatorType::ArrayPrepend->value:
+            case OperatorType::ArrayAppend:
+            case OperatorType::ArrayPrepend:
                 $namedBindings["op_{$idx}"] = json_encode($values);
                 $idx++;
                 break;
 
-            case OperatorType::ArrayRemove->value:
+            case OperatorType::ArrayRemove:
                 $value = $values[0] ?? null;
                 $namedBindings["op_{$idx}"] = json_encode($value);
                 $idx++;
                 break;
 
-            case OperatorType::ArrayUnique->value:
+            case OperatorType::ArrayUnique:
                 // No bindings
                 break;
 
-            case OperatorType::ArrayInsert->value:
+            case OperatorType::ArrayInsert:
                 $namedBindings["op_{$idx}"] = $values[0] ?? 0;
                 $idx++;
                 $namedBindings["op_{$idx}"] = json_encode($values[1] ?? null);
                 $idx++;
                 break;
 
-            case OperatorType::ArrayIntersect->value:
-            case OperatorType::ArrayDiff->value:
+            case OperatorType::ArrayIntersect:
+            case OperatorType::ArrayDiff:
                 $namedBindings["op_{$idx}"] = json_encode($values);
                 $idx++;
                 break;
 
-            case OperatorType::ArrayFilter->value:
+            case OperatorType::ArrayFilter:
                 $condition = $values[0] ?? 'equal';
                 $filterValue = $values[1] ?? null;
                 $namedBindings["op_{$idx}"] = $condition;
@@ -1347,98 +1734,25 @@ class Postgres extends SQL implements Feature\Timeouts
     }
 
     /**
-     * Increase or decrease an attribute value
-     *
-     * @throws DatabaseException
-     */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
-    {
-        $name = $this->filter($collection);
-        $attribute = $this->filter($attribute);
-
-        $builder = $this->newBuilder($name);
-        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
-        $builder->set(['_updatedAt' => $updatedAt]);
-
-        $filters = [\Utopia\Query\Query::equal('_uid', [$id])];
-        if ($max !== null) {
-            $filters[] = \Utopia\Query\Query::lessThanEqual($attribute, $max);
-        }
-        if ($min !== null) {
-            $filters[] = \Utopia\Query\Query::greaterThanEqual($attribute, $min);
-        }
-        $builder->filter($filters);
-
-        $result = $builder->update();
-        $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_UPDATE);
-
-        try {
-            $stmt->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        return true;
-    }
-
-    /**
-     * Delete Document
-     */
-    public function deleteDocument(string $collection, string $id): bool
-    {
-        try {
-            $this->syncWriteHooks();
-
-            $name = $this->filter($collection);
-
-            $builder = $this->newBuilder($name);
-            $builder->filter([\Utopia\Query\Query::equal('_uid', [$id])]);
-            $result = $builder->delete();
-            $stmt = $this->executeResult($result, Database::EVENT_DOCUMENT_DELETE);
-
-            if (! $stmt->execute()) {
-                throw new DatabaseException('Failed to delete document');
-            }
-
-            $deleted = $stmt->rowCount();
-
-            $ctx = $this->buildWriteContext($name);
-            foreach ($this->writeHooks as $hook) {
-                $hook->afterDocumentDelete($name, [$id], $ctx);
-            }
-        } catch (\Throwable $e) {
-            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        return $deleted;
-    }
-
-    public function getConnectionId(): string
-    {
-        $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
-        $stmt = $this->getPDO()->query($result->query);
-
-        return $stmt->fetchColumn();
-    }
-
-    /**
      * Handle distance spatial queries
      *
      * @param  array<string, mixed>  $binds
      */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
+        /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($geomArray);
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $meters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
         $operator = match ($query->getMethod()) {
-            Query::TYPE_DISTANCE_EQUAL => '=',
-            Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
-            Query::TYPE_DISTANCE_GREATER_THAN => '>',
-            Query::TYPE_DISTANCE_LESS_THAN => '<',
+            Method::DistanceEqual => '=',
+            Method::DistanceNotEqual => '!=',
+            Method::DistanceGreaterThan => '>',
+            Method::DistanceLessThan => '<',
             default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
 
@@ -1460,28 +1774,29 @@ class Postgres extends SQL implements Feature\Timeouts
      */
     protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+        $spatialGeomRaw = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT(\is_array($spatialGeomRaw) ? $spatialGeomRaw : []);
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0");
 
         return match ($query->getMethod()) {
-            Query::TYPE_CROSSES => "ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_CROSSES => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_DISTANCE_EQUAL,
-            Query::TYPE_DISTANCE_NOT_EQUAL,
-            Query::TYPE_DISTANCE_GREATER_THAN,
-            Query::TYPE_DISTANCE_LESS_THAN => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder),
-            Query::TYPE_EQUAL => "ST_Equals({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_EQUAL => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_INTERSECTS => "ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_INTERSECTS => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_OVERLAPS => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_OVERLAPS => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_TOUCHES => "ST_Touches({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_TOUCHES => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
+            Method::Crosses => "ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::NotCrosses => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::DistanceEqual,
+            Method::DistanceNotEqual,
+            Method::DistanceGreaterThan,
+            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder),
+            Method::Equal => "ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::NotEqual => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::Intersects => "ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::NotIntersects => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::Overlaps => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::NotOverlaps => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::Touches => "ST_Touches({$alias}.{$attribute}, {$geom})",
+            Method::NotTouches => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
             // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
             // postgis st_contains excludes matching the boundary
-            Query::TYPE_CONTAINS => "ST_Covers({$alias}.{$attribute}, {$geom})",
-            Query::TYPE_NOT_CONTAINS => "NOT ST_Covers({$alias}.{$attribute}, {$geom})",
+            Method::Contains => "ST_Covers({$alias}.{$attribute}, {$geom})",
+            Method::NotContains => "NOT ST_Covers({$alias}.{$attribute}, {$geom})",
             default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
     }
@@ -1494,9 +1809,9 @@ class Postgres extends SQL implements Feature\Timeouts
     protected function handleObjectQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
         switch ($query->getMethod()) {
-            case Query::TYPE_EQUAL:
-            case Query::TYPE_NOT_EQUAL:
-                $isNot = $query->getMethod() === Query::TYPE_NOT_EQUAL;
+            case Method::Equal:
+            case Method::NotEqual:
+                $isNot = $query->getMethod() === Method::NotEqual;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
                     $binds[":{$placeholder}_{$key}"] = json_encode($value);
@@ -1507,14 +1822,14 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_CONTAINS_ALL:
-            case Query::TYPE_NOT_CONTAINS:
-                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::ContainsAll:
+            case Method::NotContains:
+                $isNot = $query->getMethod() === Method::NotContains;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    if (count($value) === 1) {
+                    if (\is_array($value) && count($value) === 1) {
                         $jsonKey = array_key_first($value);
                         $jsonValue = $value[$jsonKey];
 
@@ -1571,11 +1886,12 @@ class Postgres extends SQL implements Feature\Timeouts
         }
 
         switch ($query->getMethod()) {
-            case Query::TYPE_OR:
-            case Query::TYPE_AND:
+            case Method::Or:
+            case Method::And:
                 $conditions = [];
-                /* @var $q Query */
-                foreach ($query->getValue() as $q) {
+                /** @var iterable<Query> $nestedQueries */
+                $nestedQueries = $query->getValue();
+                foreach ($nestedQueries as $q) {
                     $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
@@ -1583,38 +1899,40 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return empty($conditions) ? '' : ' '.$method.' ('.implode(' AND ', $conditions).')';
 
-            case Query::TYPE_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+            case Method::Search:
+                $searchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
 
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
-            case Query::TYPE_NOT_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+            case Method::NotSearch:
+                $notSearchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
 
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
-            case Query::TYPE_VECTOR_DOT:
-            case Query::TYPE_VECTOR_COSINE:
-            case Query::TYPE_VECTOR_EUCLIDEAN:
+            case Method::VectorDot:
+            case Method::VectorCosine:
+            case Method::VectorEuclidean:
                 return ''; // Handled in ORDER BY clause
 
-            case Query::TYPE_BETWEEN:
+            case Method::Between:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
 
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::NotBetween:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
 
                 return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNull:
+            case Method::IsNotNull:
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 if ($query->onArray()) {
                     // @> checks the array contains ALL specified values
                     $binds[":{$placeholder}_0"] = \json_encode($query->getValues());
@@ -1622,9 +1940,9 @@ class Postgres extends SQL implements Feature\Timeouts
                     return "{$alias}.{$attribute} @> :{$placeholder}_0::jsonb";
                 }
                 // no break
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::NotContains:
                 if ($query->onArray()) {
                     $operator = '@>';
                 }
@@ -1634,19 +1952,20 @@ class Postgres extends SQL implements Feature\Timeouts
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());
                 $isNotQuery = in_array($query->getMethod(), [
-                    Query::TYPE_NOT_STARTS_WITH,
-                    Query::TYPE_NOT_ENDS_WITH,
-                    Query::TYPE_NOT_CONTAINS,
+                    Method::NotStartsWith,
+                    Method::NotEndsWith,
+                    Method::NotContains,
                 ]);
 
                 foreach ($query->getValues() as $key => $value) {
+                    $strValue = \is_string($value) ? $value : '';
                     $value = match ($query->getMethod()) {
-                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value).'%',
-                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value).'%',
-                        Query::TYPE_ENDS_WITH => '%'.$this->escapeWildcards($value),
-                        Query::TYPE_NOT_ENDS_WITH => '%'.$this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($value).'%',
+                        Method::StartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::NotStartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::EndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::NotEndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
+                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
                         default => $value
                     };
 
@@ -1669,130 +1988,42 @@ class Postgres extends SQL implements Feature\Timeouts
     }
 
     /**
-     * Get vector distance calculation for ORDER BY clause
-     *
-     * @param  array<string, mixed>  $binds
-     *
-     * @throws DatabaseException
-     */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
-    {
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->filter($query->getAttribute());
-        $attribute = $this->quote($attribute);
-        $alias = $this->quote($alias);
-        $placeholder = ID::unique();
-
-        $values = $query->getValues();
-        $vectorArray = $values[0] ?? [];
-        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
-        $binds[":vector_{$placeholder}"] = $vector;
-
-        return match ($query->getMethod()) {
-            Query::TYPE_VECTOR_DOT => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
-            Query::TYPE_VECTOR_COSINE => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
-            Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
-            default => null,
-        };
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    protected function getVectorOrderRaw(Query $query, string $alias): ?array
-    {
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->filter($query->getAttribute());
-        $attribute = $this->quote($attribute);
-        $quotedAlias = $this->quote($alias);
-
-        $values = $query->getValues();
-        $vectorArray = $values[0] ?? [];
-        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
-
-        $expression = match ($query->getMethod()) {
-            \Utopia\Query\Method::VectorDot => "({$quotedAlias}.{$attribute} <#> ?::vector)",
-            \Utopia\Query\Method::VectorCosine => "({$quotedAlias}.{$attribute} <=> ?::vector)",
-            \Utopia\Query\Method::VectorEuclidean => "({$quotedAlias}.{$attribute} <-> ?::vector)",
-            default => null,
-        };
-
-        if ($expression === null) {
-            return null;
-        }
-
-        return ['expression' => $expression, 'bindings' => [$vector]];
-    }
-
-    protected function getFulltextValue(string $value): string
-    {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
-        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
-        $value = trim($value);
-
-        if (! $exact) {
-            $value = str_replace(' ', ' or ', $value);
-        }
-
-        return "'".$value."'";
-    }
-
-    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
-    {
-        if ($operator->getMethod() === OperatorType::ArrayRemove->value) {
-            $result = parent::getOperatorBuilderExpression($column, $operator);
-            $values = $operator->getValues();
-            $value = $values[0] ?? null;
-            if (! is_array($value)) {
-                $result['bindings'] = [json_encode($value)];
-            }
-
-            return $result;
-        }
-
-        return parent::getOperatorBuilderExpression($column, $operator);
-    }
-
-    /**
      * Get SQL Type
      */
-    protected function createBuilder(): \Utopia\Query\Builder\SQL
+    protected function createBuilder(): SQLBuilder
     {
-        return new \Utopia\Query\Builder\PostgreSQL();
+        return new PostgreSQLBuilder();
     }
 
-    protected function createSchemaBuilder(): \Utopia\Query\Schema
+    protected function createSchemaBuilder(): PostgreSQLSchema
     {
-        return new \Utopia\Query\Schema\PostgreSQL();
+        return new PostgreSQLSchema();
     }
 
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
             return 'JSONB';
         }
 
         return match ($type) {
-            ColumnType::Id->value => 'BIGINT',
-            ColumnType::String->value => $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
-            ColumnType::Varchar->value => "VARCHAR({$size})",
-            ColumnType::Text->value,
-            ColumnType::MediumText->value,
-            ColumnType::LongText->value => 'TEXT',
-            ColumnType::Integer->value => $size >= 8 ? 'BIGINT' : 'INTEGER',
-            ColumnType::Double->value => 'DOUBLE PRECISION',
-            ColumnType::Boolean->value => 'BOOLEAN',
-            ColumnType::Relationship->value => 'VARCHAR(255)',
-            ColumnType::Datetime->value => 'TIMESTAMP(3)',
-            ColumnType::Object->value => 'JSONB',
-            ColumnType::Point->value => 'GEOMETRY(POINT,'.Database::DEFAULT_SRID.')',
-            ColumnType::Linestring->value => 'GEOMETRY(LINESTRING,'.Database::DEFAULT_SRID.')',
-            ColumnType::Polygon->value => 'GEOMETRY(POLYGON,'.Database::DEFAULT_SRID.')',
-            ColumnType::Vector->value => "VECTOR({$size})",
-            default => throw new DatabaseException('Unknown Type: '.$type.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Object->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value),
+            ColumnType::Id => 'BIGINT',
+            ColumnType::String => $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
+            ColumnType::Varchar => "VARCHAR({$size})",
+            ColumnType::Text,
+            ColumnType::MediumText,
+            ColumnType::LongText => 'TEXT',
+            ColumnType::Integer => $size >= 8 ? 'BIGINT' : 'INTEGER',
+            ColumnType::Double => 'DOUBLE PRECISION',
+            ColumnType::Boolean => 'BOOLEAN',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'TIMESTAMP(3)',
+            ColumnType::Object => 'JSONB',
+            ColumnType::Point => 'GEOMETRY(POINT,'.Database::DEFAULT_SRID.')',
+            ColumnType::Linestring => 'GEOMETRY(LINESTRING,'.Database::DEFAULT_SRID.')',
+            ColumnType::Polygon => 'GEOMETRY(POLYGON,'.Database::DEFAULT_SRID.')',
+            ColumnType::Vector => "VECTOR({$size})",
+            default => throw new DatabaseException('Unknown Type: '.$type->value.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Object->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value),
         };
     }
 
@@ -1826,6 +2057,66 @@ class Postgres extends SQL implements Feature\Timeouts
     }
 
     /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param  array<string, mixed>  $binds
+     *
+     * @throws DatabaseException
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote($alias);
+        $placeholder = ID::unique();
+
+        $values = $query->getValues();
+        $vectorArrayRaw = $values[0] ?? [];
+        $vectorArray = \is_array($vectorArrayRaw) ? $vectorArrayRaw : [];
+        $vector = \json_encode(\array_map(fn (mixed $v): float => \is_numeric($v) ? (float) $v : 0.0, $vectorArray));
+        $binds[":vector_{$placeholder}"] = $vector;
+
+        return match ($query->getMethod()) {
+            Method::VectorDot => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
+            Method::VectorCosine => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
+            Method::VectorEuclidean => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
+            default => null,
+        };
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected function getVectorOrderRaw(Query $query, string $alias): ?array
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $quotedAlias = $this->quote($alias);
+
+        $values = $query->getValues();
+        $vectorArrayRaw2 = $values[0] ?? [];
+        $vectorArray2 = \is_array($vectorArrayRaw2) ? $vectorArrayRaw2 : [];
+        $vector = \json_encode(\array_map(fn (mixed $v): float => \is_numeric($v) ? (float) $v : 0.0, $vectorArray2));
+
+        $expression = match ($query->getMethod()) {
+            Method::VectorDot => "({$quotedAlias}.{$attribute} <#> ?::vector)",
+            Method::VectorCosine => "({$quotedAlias}.{$attribute} <=> ?::vector)",
+            Method::VectorEuclidean => "({$quotedAlias}.{$attribute} <-> ?::vector)",
+            default => null,
+        };
+
+        if ($expression === null) {
+            return null;
+        }
+
+        return ['expression' => $expression, 'bindings' => [$vector]];
+    }
+
+    /**
      * Get the SQL function for random ordering
      */
     protected function getRandomOrder(): string
@@ -1842,56 +2133,7 @@ class Postgres extends SQL implements Feature\Timeouts
         return 32;
     }
 
-    /**
-     * Encode array
-     *
-     *
-     * @return array<string>
-     */
-    protected function encodeArray(string $value): array
-    {
-        $string = substr($value, 1, -1);
-        if (empty($string)) {
-            return [];
-        } else {
-            return explode(',', $string);
-        }
-    }
-
-    /**
-     * Decode array
-     *
-     * @param  array<string>  $value
-     */
-    protected function decodeArray(array $value): string
-    {
-        if (empty($value)) {
-            return '{}';
-        }
-
-        foreach ($value as &$item) {
-            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
-        }
-
-        return '{'.implode(',', $value).'}';
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('-4713-01-01 00:00:00');
-    }
-
-    public function getLikeOperator(): string
-    {
-        return 'ILIKE';
-    }
-
-    public function getRegexOperator(): string
-    {
-        return '~';
-    }
-
-    protected function processException(PDOException $e): \Exception
+    protected function processException(PDOException $e): Exception
     {
         // Timeout
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
@@ -1951,250 +2193,6 @@ class Postgres extends SQL implements Feature\Timeouts
         return '"';
     }
 
-    public function decodePoint(string $wkb): array
-    {
-        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
-            $start = strpos($wkb, '(') + 1;
-            $end = strrpos($wkb, ')');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $coords = explode(' ', trim($inside));
-
-            return [(float) $coords[0], (float) $coords[1]];
-        }
-
-        $bin = hex2bin($wkb);
-        if ($bin === false) {
-            throw new DatabaseException('Invalid hex WKB string');
-        }
-
-        if (strlen($bin) < 13) { // 1 byte endian + 4 bytes type + 8 bytes for X
-            throw new DatabaseException('WKB too short');
-        }
-
-        $isLE = ord($bin[0]) === 1;
-
-        // Type (4 bytes)
-        $typeBytes = substr($bin, 1, 4);
-        if (strlen($typeBytes) !== 4) {
-            throw new DatabaseException('Failed to extract type bytes from WKB');
-        }
-
-        $typeArr = unpack($isLE ? 'V' : 'N', $typeBytes);
-        if ($typeArr === false || ! isset($typeArr[1])) {
-            throw new DatabaseException('Failed to unpack type from WKB');
-        }
-        $type = $typeArr[1];
-
-        // Offset to coordinates (skip SRID if present)
-        $offset = 5 + (($type & 0x20000000) ? 4 : 0);
-
-        if (strlen($bin) < $offset + 16) { // 16 bytes for X,Y
-            throw new DatabaseException('WKB too short for coordinates');
-        }
-
-        $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
-
-        // X coordinate
-        $xArr = unpack($fmt, substr($bin, $offset, 8));
-        if ($xArr === false || ! isset($xArr[1])) {
-            throw new DatabaseException('Failed to unpack X coordinate');
-        }
-        $x = (float) $xArr[1];
-
-        // Y coordinate
-        $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
-        if ($yArr === false || ! isset($yArr[1])) {
-            throw new DatabaseException('Failed to unpack Y coordinate');
-        }
-        $y = (float) $yArr[1];
-
-        return [$x, $y];
-    }
-
-    public function decodeLinestring(mixed $wkb): array
-    {
-        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
-            $start = strpos($wkb, '(') + 1;
-            $end = strrpos($wkb, ')');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $points = explode(',', $inside);
-
-            return array_map(function ($point) {
-                $coords = explode(' ', trim($point));
-
-                return [(float) $coords[0], (float) $coords[1]];
-            }, $points);
-        }
-
-        if (ctype_xdigit($wkb)) {
-            $wkb = hex2bin($wkb);
-            if ($wkb === false) {
-                throw new DatabaseException('Failed to convert hex WKB to binary.');
-            }
-        }
-
-        if (strlen($wkb) < 9) {
-            throw new DatabaseException('WKB too short to be a valid geometry');
-        }
-
-        $byteOrder = ord($wkb[0]);
-        if ($byteOrder === 0) {
-            throw new DatabaseException('Big-endian WKB not supported');
-        } elseif ($byteOrder !== 1) {
-            throw new DatabaseException('Invalid byte order in WKB');
-        }
-
-        // Type + SRID flag
-        $typeField = unpack('V', substr($wkb, 1, 4));
-        if ($typeField === false) {
-            throw new DatabaseException('Failed to unpack the type field from WKB.');
-        }
-
-        $typeField = $typeField[1];
-        $geomType = $typeField & 0xFF;
-        $hasSRID = ($typeField & 0x20000000) !== 0;
-
-        if ($geomType !== 2) { // 2 = LINESTRING
-            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
-        }
-
-        $offset = 5;
-        if ($hasSRID) {
-            $offset += 4;
-        }
-
-        $numPoints = unpack('V', substr($wkb, $offset, 4));
-        if ($numPoints === false) {
-            throw new DatabaseException("Failed to unpack number of points at offset {$offset}.");
-        }
-
-        $numPoints = $numPoints[1];
-        $offset += 4;
-
-        $points = [];
-        for ($i = 0; $i < $numPoints; $i++) {
-            $x = unpack('e', substr($wkb, $offset, 8));
-            if ($x === false) {
-                throw new DatabaseException("Failed to unpack X coordinate at offset {$offset}.");
-            }
-
-            $x = (float) $x[1];
-
-            $offset += 8;
-
-            $y = unpack('e', substr($wkb, $offset, 8));
-            if ($y === false) {
-                throw new DatabaseException("Failed to unpack Y coordinate at offset {$offset}.");
-            }
-
-            $y = (float) $y[1];
-
-            $offset += 8;
-            $points[] = [$x, $y];
-        }
-
-        return $points;
-    }
-
-    public function decodePolygon(string $wkb): array
-    {
-        // POLYGON((x1,y1),(x2,y2))
-        if (str_starts_with($wkb, 'POLYGON((')) {
-            $start = strpos($wkb, '((') + 2;
-            $end = strrpos($wkb, '))');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $rings = explode('),(', $inside);
-
-            return array_map(function ($ring) {
-                $points = explode(',', $ring);
-
-                return array_map(function ($point) {
-                    $coords = explode(' ', trim($point));
-
-                    return [(float) $coords[0], (float) $coords[1]];
-                }, $points);
-            }, $rings);
-        }
-
-        // Convert hex string to binary if needed
-        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
-            $wkb = hex2bin($wkb);
-            if ($wkb === false) {
-                throw new DatabaseException('Invalid hex WKB');
-            }
-        }
-
-        if (strlen($wkb) < 9) {
-            throw new DatabaseException('WKB too short');
-        }
-
-        $uInt32 = 'V'; // little-endian 32-bit unsigned
-        $uDouble = 'd'; // little-endian double
-
-        $typeInt = unpack($uInt32, substr($wkb, 1, 4));
-        if ($typeInt === false) {
-            throw new DatabaseException('Failed to unpack type field from WKB.');
-        }
-
-        $typeInt = (int) $typeInt[1];
-        $hasSrid = ($typeInt & 0x20000000) !== 0;
-        $geomType = $typeInt & 0xFF;
-
-        if ($geomType !== 3) { // 3 = POLYGON
-            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
-        }
-
-        $offset = 5;
-        if ($hasSrid) {
-            $offset += 4;
-        }
-
-        // Number of rings
-        $numRings = unpack($uInt32, substr($wkb, $offset, 4));
-        if ($numRings === false) {
-            throw new DatabaseException('Failed to unpack number of rings from WKB.');
-        }
-
-        $numRings = (int) $numRings[1];
-        $offset += 4;
-
-        $rings = [];
-        for ($r = 0; $r < $numRings; $r++) {
-            $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
-            if ($numPoints === false) {
-                throw new DatabaseException('Failed to unpack number of points from WKB.');
-            }
-
-            $numPoints = (int) $numPoints[1];
-            $offset += 4;
-            $points = [];
-            for ($i = 0; $i < $numPoints; $i++) {
-                $x = unpack($uDouble, substr($wkb, $offset, 8));
-                if ($x === false) {
-                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
-                }
-
-                $x = (float) $x[1];
-
-                $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
-                if ($y === false) {
-                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
-                }
-
-                $y = (float) $y[1];
-
-                $points[] = [$x, $y];
-                $offset += 16;
-            }
-            $rings[] = $points;
-        }
-
-        return $rings; // array of rings, each ring is array of [x,y]
-    }
-
     /**
      * Get SQL expression for operator
      */
@@ -2207,7 +2205,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
         switch ($method) {
             // Numeric operators
-            case OperatorType::Increment->value:
+            case OperatorType::Increment:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2223,7 +2221,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) + :$bindKey";
 
-            case OperatorType::Decrement->value:
+            case OperatorType::Decrement:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2239,7 +2237,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) - :$bindKey";
 
-            case OperatorType::Multiply->value:
+            case OperatorType::Multiply:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2256,7 +2254,7 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) * :$bindKey";
 
-            case OperatorType::Divide->value:
+            case OperatorType::Divide:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2271,13 +2269,13 @@ class Postgres extends SQL implements Feature\Timeouts
 
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) / :$bindKey";
 
-            case OperatorType::Modulo->value:
+            case OperatorType::Modulo:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
-            case OperatorType::Power->value:
+            case OperatorType::Power:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
@@ -2295,13 +2293,13 @@ class Postgres extends SQL implements Feature\Timeouts
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
                 // String operators
-            case OperatorType::StringConcat->value:
+            case OperatorType::StringConcat:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = CONCAT(COALESCE({$columnRef}, ''), :$bindKey)";
 
-            case OperatorType::StringReplace->value:
+            case OperatorType::StringReplace:
                 $searchKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
@@ -2310,29 +2308,29 @@ class Postgres extends SQL implements Feature\Timeouts
                 return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
 
                 // Boolean operators
-            case OperatorType::Toggle->value:
+            case OperatorType::Toggle:
                 return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
 
                 // Array operators
-            case OperatorType::ArrayAppend->value:
+            case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = COALESCE({$columnRef}, '[]'::jsonb) || :$bindKey::jsonb";
 
-            case OperatorType::ArrayPrepend->value:
+            case OperatorType::ArrayPrepend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
 
-            case OperatorType::ArrayUnique->value:
+            case OperatorType::ArrayUnique:
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(DISTINCT value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                 ), '[]'::jsonb)";
 
-            case OperatorType::ArrayRemove->value:
+            case OperatorType::ArrayRemove:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -2342,7 +2340,7 @@ class Postgres extends SQL implements Feature\Timeouts
                     WHERE value != :$bindKey::jsonb
                 ), '[]'::jsonb)";
 
-            case OperatorType::ArrayInsert->value:
+            case OperatorType::ArrayInsert:
                 $indexKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
@@ -2363,7 +2361,7 @@ class Postgres extends SQL implements Feature\Timeouts
                     ) AS combined
                 )";
 
-            case OperatorType::ArrayIntersect->value:
+            case OperatorType::ArrayIntersect:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -2373,7 +2371,7 @@ class Postgres extends SQL implements Feature\Timeouts
                     WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
                 ), '[]'::jsonb)";
 
-            case OperatorType::ArrayDiff->value:
+            case OperatorType::ArrayDiff:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -2383,7 +2381,7 @@ class Postgres extends SQL implements Feature\Timeouts
                     WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
                 ), '[]'::jsonb)";
 
-            case OperatorType::ArrayFilter->value:
+            case OperatorType::ArrayFilter:
                 $conditionKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
@@ -2406,23 +2404,23 @@ class Postgres extends SQL implements Feature\Timeouts
                 ), '[]'::jsonb)";
 
                 // Date operators
-            case OperatorType::DateAddDays->value:
+            case OperatorType::DateAddDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = {$columnRef} + (:$bindKey || ' days')::INTERVAL";
 
-            case OperatorType::DateSubDays->value:
+            case OperatorType::DateSubDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = {$columnRef} - (:$bindKey || ' days')::INTERVAL";
 
-            case OperatorType::DateSetNow->value:
+            case OperatorType::DateSetNow:
                 return "{$quotedColumn} = NOW()";
 
             default:
-                throw new OperatorException("Invalid operator: {$method}");
+                throw new OperatorException('Invalid operator');
         }
     }
 
@@ -2430,33 +2428,33 @@ class Postgres extends SQL implements Feature\Timeouts
      * Bind operator parameters to statement
      * Override to handle PostgreSQL-specific JSON binding
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();
 
         switch ($method) {
-            case OperatorType::ArrayAppend->value:
-            case OperatorType::ArrayPrepend->value:
+            case OperatorType::ArrayAppend:
+            case OperatorType::ArrayPrepend:
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
-            case OperatorType::ArrayRemove->value:
+            case OperatorType::ArrayRemove:
                 $value = $values[0] ?? null;
                 $bindKey = "op_{$bindIndex}";
                 // Always JSON encode for PostgreSQL jsonb comparison
-                $stmt->bindValue(':'.$bindKey, json_encode($value), \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, json_encode($value), PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
-            case OperatorType::ArrayIntersect->value:
-            case OperatorType::ArrayDiff->value:
+            case OperatorType::ArrayIntersect:
+            case OperatorType::ArrayDiff:
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$bindKey, $arrayValue, \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -2467,9 +2465,78 @@ class Postgres extends SQL implements Feature\Timeouts
         }
     }
 
+    protected function getFulltextValue(string $value): string
+    {
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value ?? '');
+
+        if (! $exact) {
+            $value = str_replace(' ', ' or ', $value);
+        }
+
+        return "'".$value."'";
+    }
+
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
+    {
+        if ($operator->getMethod() === OperatorType::ArrayRemove) {
+            $result = parent::getOperatorBuilderExpression($column, $operator);
+            $values = $operator->getValues();
+            $value = $values[0] ?? null;
+            if (! is_array($value)) {
+                $result['bindings'] = [json_encode($value)];
+            }
+
+            return $result;
+        }
+
+        return parent::getOperatorBuilderExpression($column, $operator);
+    }
+
+    /**
+     * Check whether the adapter supports storing non-UTF characters. PostgreSQL does not.
+     *
+     * @return bool
+     */
     public function getSupportNonUtfCharacters(): bool
     {
         return false;
+    }
+
+    /**
+     * Encode array
+     *
+     *
+     * @return array<string>
+     */
+    protected function encodeArray(string $value): array
+    {
+        $string = substr($value, 1, -1);
+        if (empty($string)) {
+            return [];
+        } else {
+            return explode(',', $string);
+        }
+    }
+
+    /**
+     * Decode array
+     *
+     * @param  array<string>  $value
+     */
+    protected function decodeArray(array $value): string
+    {
+        if (empty($value)) {
+            return '{}';
+        }
+
+        foreach ($value as &$item) {
+            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
+        }
+
+        return '{'.implode(',', $value).'}';
     }
 
     /**

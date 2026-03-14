@@ -7,7 +7,7 @@ use Utopia\Database\Validator\Key;
 
 class KeyTest extends TestCase
 {
-    protected ?Key $object = null;
+    protected Key $object;
 
     protected function setUp(): void
     {

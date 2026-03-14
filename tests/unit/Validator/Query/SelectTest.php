@@ -6,13 +6,12 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Schema\ColumnType;
 
 class SelectTest extends TestCase
 {
-    protected ?Base $validator = null;
+    protected Select $validator;
 
     /**
      * @throws Exception

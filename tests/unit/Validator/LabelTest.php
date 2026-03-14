@@ -7,7 +7,7 @@ use Utopia\Database\Validator\Label;
 
 class LabelTest extends TestCase
 {
-    protected ?Label $object = null;
+    protected Label $object;
 
     protected function setUp(): void
     {

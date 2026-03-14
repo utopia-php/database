@@ -2,8 +2,11 @@
 
 namespace Utopia\Database;
 
+use DateTime as NativeDateTime;
+use DateTimeZone;
 use Exception;
 use Swoole\Coroutine;
+use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -12,6 +15,8 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
@@ -19,6 +24,9 @@ use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 
+/**
+ * High-level database interface providing CRUD operations for documents, collections, attributes, indexes, and relationships with built-in caching, filtering, validation, and authorization.
+ */
 class Database
 {
     use Traits\Attributes;
@@ -61,73 +69,6 @@ class Database
 
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
-
-    // Events
-    public const EVENT_ALL = '*';
-
-    public const EVENT_DATABASE_LIST = 'database_list';
-
-    public const EVENT_DATABASE_CREATE = 'database_create';
-
-    public const EVENT_DATABASE_DELETE = 'database_delete';
-
-    public const EVENT_COLLECTION_LIST = 'collection_list';
-
-    public const EVENT_COLLECTION_CREATE = 'collection_create';
-
-    public const EVENT_COLLECTION_UPDATE = 'collection_update';
-
-    public const EVENT_COLLECTION_READ = 'collection_read';
-
-    public const EVENT_COLLECTION_DELETE = 'collection_delete';
-
-    public const EVENT_DOCUMENT_FIND = 'document_find';
-
-    public const EVENT_DOCUMENT_PURGE = 'document_purge';
-
-    public const EVENT_DOCUMENT_CREATE = 'document_create';
-
-    public const EVENT_DOCUMENTS_CREATE = 'documents_create';
-
-    public const EVENT_DOCUMENT_READ = 'document_read';
-
-    public const EVENT_DOCUMENT_UPDATE = 'document_update';
-
-    public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
-
-    public const EVENT_DOCUMENTS_UPSERT = 'documents_upsert';
-
-    public const EVENT_DOCUMENT_DELETE = 'document_delete';
-
-    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
-
-    public const EVENT_DOCUMENT_COUNT = 'document_count';
-
-    public const EVENT_DOCUMENT_SUM = 'document_sum';
-
-    public const EVENT_DOCUMENT_INCREASE = 'document_increase';
-
-    public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
-
-    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
-
-    public const EVENT_PERMISSIONS_READ = 'permissions_read';
-
-    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
-
-    public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
-
-    public const EVENT_ATTRIBUTES_CREATE = 'attributes_create';
-
-    public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
-
-    public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
-
-    public const EVENT_INDEX_RENAME = 'index_rename';
-
-    public const EVENT_INDEX_CREATE = 'index_create';
-
-    public const EVENT_INDEX_DELETE = 'index_delete';
 
     public const INSERT_BATCH_SIZE = 1_000;
 
@@ -298,22 +239,16 @@ class Database
     protected array $instanceFilters = [];
 
     /**
-     * @var array<string, array<string, callable>>
+     * @var array<Lifecycle>
      */
-    protected array $listeners = [
-        '*' => [],
-    ];
+    protected array $lifecycleHooks = [];
 
     /**
-     * Array in which the keys are the names of database listeners that
-     * should be skipped when dispatching events. null $silentListeners
-     * will skip all listeners.
-     *
-     * @var ?array<string, bool>
+     * When true, lifecycle hooks are not fired.
      */
-    protected ?array $silentListeners = [];
+    protected bool $eventsSilenced = false;
 
-    protected ?\DateTime $timestamp = null;
+    protected ?NativeDateTime $timestamp = null;
 
     protected ?Relationship $relationshipHook = null;
 
@@ -351,7 +286,11 @@ class Database
     private Authorization $authorization;
 
     /**
-     * @param  array<string, array{encode: callable, decode: callable}>  $filters
+     * Construct a new Database instance with the given adapter, cache, and optional instance-level filters.
+     *
+     * @param Adapter $adapter The database adapter to use for storage operations.
+     * @param Cache $cache The cache instance for document and collection caching.
+     * @param array<string, array{encode: callable, decode: callable}> $filters Instance-level encode/decode filters.
      */
     public function __construct(
         Adapter $adapter,
@@ -388,21 +327,26 @@ class Database
                     return $value;
                 }
 
-                $value = json_decode($value, true) ?? [];
+                $decoded = json_decode($value, true) ?? [];
+                if (! is_array($decoded)) {
+                    return $decoded;
+                }
 
-                if (array_key_exists('$id', $value)) {
-                    return new Document($value);
+                /** @var array<string, mixed> $decoded */
+                if (array_key_exists('$id', $decoded)) {
+                    return new Document($decoded);
                 } else {
-                    $value = array_map(function ($item) {
+                    $decoded = array_map(function ($item) {
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
+                            /** @var array<string, mixed> $item */
                             return new Document($item);
                         }
 
                         return $item;
-                    }, $value);
+                    }, $decoded);
                 }
 
-                return $value;
+                return $decoded;
             }
         );
 
@@ -415,12 +359,15 @@ class Database
                 if (is_null($value)) {
                     return;
                 }
+                if (! is_string($value)) {
+                    return $value;
+                }
                 try {
-                    $value = new \DateTime($value);
-                    $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+                    $value = new NativeDateTime($value);
+                    $value->setTimezone(new DateTimeZone(date_default_timezone_get()));
 
                     return DateTime::format($value);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     return $value;
                 }
             },
@@ -443,7 +390,7 @@ class Database
                 }
                 try {
                     return self::encodeSpatialData($value, ColumnType::Point->value);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     return $value;
                 }
             },
@@ -473,7 +420,7 @@ class Database
                 }
                 try {
                     return self::encodeSpatialData($value, ColumnType::Linestring->value);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     return $value;
                 }
             },
@@ -503,7 +450,7 @@ class Database
                 }
                 try {
                     return self::encodeSpatialData($value, ColumnType::Polygon->value);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     return $value;
                 }
             },
@@ -540,7 +487,8 @@ class Database
                     }
                 }
 
-                return \json_encode(\array_map(\floatval(...), $value));
+                /** @var array<int|float> $value */
+                return \json_encode(\array_map(fn (int|float $v): float => (float) $v, $value));
             },
             /**
              * @return array|null
@@ -548,9 +496,6 @@ class Database
             function (?string $value) {
                 if (is_null($value)) {
                     return null;
-                }
-                if (! is_string($value)) {
-                    return $value;
                 }
                 $decoded = json_decode($value, true);
 
@@ -589,119 +534,28 @@ class Database
     }
 
     /**
-     * Add listener to events
-     * Passing a null $callback will remove the listener
+     * Set database to use for current scope
+     *
+     *
+     * @throws DatabaseException
      */
-    public function on(string $event, string $name, ?callable $callback): static
+    public function setDatabase(string $name): static
     {
-        if (empty($callback)) {
-            unset($this->listeners[$event][$name]);
-
-            return $this;
-        }
-
-        if (! isset($this->listeners[$event])) {
-            $this->listeners[$event] = [];
-        }
-        $this->listeners[$event][$name] = $callback;
+        $this->adapter->setDatabase($name);
 
         return $this;
     }
 
     /**
-     * Add a transformation to be applied to a query string before an event occurs
+     * Get Database.
      *
-     * @return $this
+     * Get Database from current scope
+     *
+     * @throws DatabaseException
      */
-    public function before(string $event, string $name, callable $callback): static
+    public function getDatabase(): string
     {
-        $this->adapter->before($event, $name, $callback);
-
-        return $this;
-    }
-
-    /**
-     * Silent event generation for calls inside the callback
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @param  array<string>|null  $listeners  List of listeners to silence; if null, all listeners will be silenced
-     * @return T
-     */
-    public function silent(callable $callback, ?array $listeners = null): mixed
-    {
-        $previous = $this->silentListeners;
-
-        if (is_null($listeners)) {
-            $this->silentListeners = null;
-        } else {
-            $silentListeners = [];
-            foreach ($listeners as $listener) {
-                $silentListeners[$listener] = true;
-            }
-            $this->silentListeners = $silentListeners;
-        }
-
-        try {
-            return $callback();
-        } finally {
-            $this->silentListeners = $previous;
-        }
-    }
-
-    /**
-     * Get getConnection Id
-     *
-     * @throws Exception
-     */
-    public function getConnectionId(): string
-    {
-        return $this->adapter->getConnectionId();
-    }
-
-    /**
-     * Trigger callback for events
-     */
-    protected function trigger(string $event, mixed $args = null): void
-    {
-        if (\is_null($this->silentListeners)) {
-            return;
-        }
-        foreach ($this->listeners[self::EVENT_ALL] as $name => $callback) {
-            if (isset($this->silentListeners[$name])) {
-                continue;
-            }
-            $callback($event, $args);
-        }
-
-        foreach (($this->listeners[$event] ?? []) as $name => $callback) {
-            if (isset($this->silentListeners[$name])) {
-                continue;
-            }
-            $callback($event, $args);
-        }
-    }
-
-    /**
-     * Executes $callback with $timestamp set to $requestTimestamp
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
-    {
-        $previous = $this->timestamp;
-        $this->timestamp = $requestTimestamp;
-        try {
-            $result = $callback();
-        } finally {
-            $this->timestamp = $previous;
-        }
-
-        return $result;
+        return $this->adapter->getDatabase();
     }
 
     /**
@@ -732,28 +586,21 @@ class Database
     }
 
     /**
-     * Set database to use for current scope
-     *
-     *
-     * @throws DatabaseException
+     * Get Database Adapter
      */
-    public function setDatabase(string $name): static
+    public function getAdapter(): Adapter
     {
-        $this->adapter->setDatabase($name);
-
-        return $this;
+        return $this->adapter;
     }
 
     /**
-     * Get Database.
+     * Get list of keywords that cannot be used
      *
-     * Get Database from current scope
-     *
-     * @throws DatabaseException
+     * @return string[]
      */
-    public function getDatabase(): string
+    public function getKeywords(): array
     {
-        return $this->adapter->getDatabase();
+        return $this->adapter->getKeywords();
     }
 
     /**
@@ -798,23 +645,82 @@ class Database
     }
 
     /**
-     * Set a metadata value to be printed in the query comments
+     * Set shard tables
+     *
+     * Set whether to share tables between tenants
      */
-    public function setMetadata(string $key, mixed $value): static
+    public function setSharedTables(bool $sharedTables): static
     {
-        $this->adapter->setMetadata($key, $value);
+        $this->adapter->setSharedTables($sharedTables);
 
         return $this;
     }
 
     /**
-     * Get metadata
+     * Get shared tables
      *
-     * @return array<string, mixed>
+     * Get whether to share tables between tenants
      */
-    public function getMetadata(): array
+    public function getSharedTables(): bool
     {
-        return $this->adapter->getMetadata();
+        return $this->adapter->getSharedTables();
+    }
+
+    /**
+     * Set Tenant
+     *
+     * Set tenant to use if tables are shared
+     */
+    public function setTenant(?int $tenant): static
+    {
+        $this->adapter->setTenant($tenant);
+
+        return $this;
+    }
+
+    /**
+     * Get Tenant
+     *
+     * Get tenant to use if tables are shared
+     */
+    public function getTenant(): ?int
+    {
+        return $this->adapter->getTenant();
+    }
+
+    /**
+     * With Tenant
+     *
+     * Execute a callback with a specific tenant
+     */
+    public function withTenant(?int $tenant, callable $callback): mixed
+    {
+        $previous = $this->adapter->getTenant();
+        $this->adapter->setTenant($tenant);
+
+        try {
+            return $callback();
+        } finally {
+            $this->adapter->setTenant($previous);
+        }
+    }
+
+    /**
+     * Set whether to allow creating documents with tenant set per document.
+     */
+    public function setTenantPerDocument(bool $enabled): static
+    {
+        $this->adapter->setTenantPerDocument($enabled);
+
+        return $this;
+    }
+
+    /**
+     * Get whether to allow creating documents with tenant set per document.
+     */
+    public function getTenantPerDocument(): bool
+    {
+        return $this->adapter->getTenantPerDocument();
     }
 
     /**
@@ -836,32 +742,12 @@ class Database
         return $this->authorization;
     }
 
-    public function setRelationshipHook(?Relationship $hook): self
-    {
-        $this->relationshipHook = $hook;
-
-        return $this;
-    }
-
-    public function getRelationshipHook(): ?Relationship
-    {
-        return $this->relationshipHook;
-    }
-
-    /**
-     * Clear metadata
-     */
-    public function resetMetadata(): void
-    {
-        $this->adapter->resetMetadata();
-    }
-
     /**
      * Set maximum query execution time
      *
      * @throws Exception
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): static
+    public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
         $this->adapter->setTimeout($milliseconds, $event);
 
@@ -871,9 +757,374 @@ class Database
     /**
      * Clear maximum query execution time
      */
-    public function clearTimeout(string $event = Database::EVENT_ALL): void
+    public function clearTimeout(Event $event = Event::All): void
     {
         $this->adapter->clearTimeout($event);
+    }
+
+    /**
+     * Set the relationship hook used to resolve related documents during reads and writes.
+     *
+     * @param Relationship|null $hook The relationship hook, or null to disable.
+     * @return $this
+     */
+    public function setRelationshipHook(?Relationship $hook): self
+    {
+        $this->relationshipHook = $hook;
+
+        return $this;
+    }
+
+    /**
+     * Get the current relationship hook.
+     *
+     * @return Relationship|null The relationship hook, or null if not set.
+     */
+    public function getRelationshipHook(): ?Relationship
+    {
+        return $this->relationshipHook;
+    }
+
+    /**
+     * Set whether to preserve original date values instead of overwriting with current timestamps.
+     *
+     * @param bool $preserve True to preserve dates on write operations.
+     * @return $this
+     */
+    public function setPreserveDates(bool $preserve): static
+    {
+        $this->preserveDates = $preserve;
+
+        return $this;
+    }
+
+    /**
+     * Get whether date preservation is enabled.
+     *
+     * @return bool True if dates are being preserved.
+     */
+    public function getPreserveDates(): bool
+    {
+        return $this->preserveDates;
+    }
+
+    /**
+     * Execute a callback with date preservation enabled, restoring the previous state afterward.
+     *
+     * @param callable $callback The callback to execute.
+     * @return mixed The callback's return value.
+     */
+    public function withPreserveDates(callable $callback): mixed
+    {
+        $previous = $this->preserveDates;
+        $this->preserveDates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->preserveDates = $previous;
+        }
+    }
+
+    /**
+     * Set whether to preserve original sequence values instead of auto-generating them.
+     *
+     * @param bool $preserve True to preserve sequence values on write operations.
+     * @return $this
+     */
+    public function setPreserveSequence(bool $preserve): static
+    {
+        $this->preserveSequence = $preserve;
+
+        return $this;
+    }
+
+    /**
+     * Get whether sequence preservation is enabled.
+     *
+     * @return bool True if sequence values are being preserved.
+     */
+    public function getPreserveSequence(): bool
+    {
+        return $this->preserveSequence;
+    }
+
+    /**
+     * Execute a callback with sequence preservation enabled, restoring the previous state afterward.
+     *
+     * @param callable $callback The callback to execute.
+     * @return mixed The callback's return value.
+     */
+    public function withPreserveSequence(callable $callback): mixed
+    {
+        $previous = $this->preserveSequence;
+        $this->preserveSequence = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->preserveSequence = $previous;
+        }
+    }
+
+    /**
+     * Set the migration mode flag, which relaxes certain constraints during data migrations.
+     *
+     * @param bool $migrating True to enable migration mode.
+     * @return $this
+     */
+    public function setMigrating(bool $migrating): self
+    {
+        $this->migrating = $migrating;
+
+        return $this;
+    }
+
+    /**
+     * Check whether the database is currently in migration mode.
+     *
+     * @return bool True if migration mode is active.
+     */
+    public function isMigrating(): bool
+    {
+        return $this->migrating;
+    }
+
+    /**
+     * Set the maximum number of values allowed in a single query (e.g., IN clauses).
+     *
+     * @param int $max The maximum number of query values.
+     * @return $this
+     */
+    public function setMaxQueryValues(int $max): self
+    {
+        $this->maxQueryValues = $max;
+
+        return $this;
+    }
+
+    /**
+     * Get the maximum number of values allowed in a single query.
+     *
+     * @return int The current maximum query values limit.
+     */
+    public function getMaxQueryValues(): int
+    {
+        return $this->maxQueryValues;
+    }
+
+    /**
+     * Set list of collections which are globally accessible
+     *
+     * @param  array<string>  $collections
+     * @return $this
+     */
+    public function setGlobalCollections(array $collections): static
+    {
+        foreach ($collections as $collection) {
+            $this->globalCollections[$collection] = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get list of collections which are globally accessible
+     *
+     * @return array<string>
+     */
+    public function getGlobalCollections(): array
+    {
+        return \array_keys($this->globalCollections);
+    }
+
+    /**
+     * Clear global collections
+     */
+    public function resetGlobalCollections(): void
+    {
+        $this->globalCollections = [];
+    }
+
+    /**
+     * Set custom document class for a collection
+     *
+     * @param  string  $collection  Collection ID
+     * @param  string  $className  Fully qualified class name that extends Document
+     *
+     * @throws DatabaseException
+     */
+    public function setDocumentType(string $collection, string $className): static
+    {
+        if (! \class_exists($className)) {
+            throw new DatabaseException("Class {$className} does not exist");
+        }
+
+        if (! \is_subclass_of($className, Document::class)) {
+            throw new DatabaseException("Class {$className} must extend ".Document::class);
+        }
+
+        $this->documentTypes[$collection] = $className;
+
+        return $this;
+    }
+
+    /**
+     * Get custom document class for a collection
+     *
+     * @param  string  $collection  Collection ID
+     * @return class-string<Document>|null
+     */
+    public function getDocumentType(string $collection): ?string
+    {
+        return $this->documentTypes[$collection] ?? null;
+    }
+
+    /**
+     * Clear document type mapping for a collection
+     *
+     * @param  string  $collection  Collection ID
+     */
+    public function clearDocumentType(string $collection): static
+    {
+        unset($this->documentTypes[$collection]);
+
+        return $this;
+    }
+
+    /**
+     * Clear all document type mappings
+     */
+    public function clearAllDocumentTypes(): static
+    {
+        $this->documentTypes = [];
+
+        return $this;
+    }
+
+    /**
+     * Enable or disable LOCK=SHARED during ALTER TABLE operation
+     *
+     * Set lock mode when altering tables
+     */
+    public function enableLocks(bool $enabled): static
+    {
+        if ($this->adapter->supports(Capability::AlterLock)) {
+            $this->adapter->enableAlterLocks($enabled);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Enable validation
+     *
+     * @return $this
+     */
+    public function enableValidation(): static
+    {
+        $this->validate = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable validation
+     *
+     * @return $this
+     */
+    public function disableValidation(): static
+    {
+        $this->validate = false;
+
+        return $this;
+    }
+
+    /**
+     * Skip Validation
+     *
+     * Execute a callback without validation
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function skipValidation(callable $callback): mixed
+    {
+        $initial = $this->validate;
+        $this->disableValidation();
+
+        try {
+            return $callback();
+        } finally {
+            $this->validate = $initial;
+        }
+    }
+
+    /**
+     * Register a lifecycle hook to receive database events.
+     */
+    public function addLifecycleHook(Lifecycle $hook): static
+    {
+        $this->lifecycleHooks[] = $hook;
+
+        return $this;
+    }
+
+    /**
+     * Register a query transform hook on the adapter.
+     */
+    public function addQueryTransform(string $name, QueryTransform $transform): static
+    {
+        $this->adapter->addQueryTransform($name, $transform);
+
+        return $this;
+    }
+
+    /**
+     * Remove a query transform hook from the adapter.
+     */
+    public function removeQueryTransform(string $name): static
+    {
+        $this->adapter->removeQueryTransform($name);
+
+        return $this;
+    }
+
+    /**
+     * Silence lifecycle hooks for calls inside the callback.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function silent(callable $callback): mixed
+    {
+        $previous = $this->eventsSilenced;
+        $this->eventsSilenced = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->eventsSilenced = $previous;
+        }
+    }
+
+    /**
+     * Register a global attribute filter with encode and decode callbacks for data transformation.
+     *
+     * @param string $name The unique filter name.
+     * @param callable $encode Callback to transform the value before storage.
+     * @param callable $decode Callback to transform the value after retrieval.
+     */
+    public static function addFilter(string $name, callable $encode, callable $decode): void
+    {
+        self::$filters[$name] = [
+            'encode' => $encode,
+            'decode' => $decode,
+        ];
     }
 
     /**
@@ -951,361 +1202,6 @@ class Database
     }
 
     /**
-     * Enable validation
-     *
-     * @return $this
-     */
-    public function enableValidation(): static
-    {
-        $this->validate = true;
-
-        return $this;
-    }
-
-    /**
-     * Disable validation
-     *
-     * @return $this
-     */
-    public function disableValidation(): static
-    {
-        $this->validate = false;
-
-        return $this;
-    }
-
-    /**
-     * Skip Validation
-     *
-     * Execute a callback without validation
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-    public function skipValidation(callable $callback): mixed
-    {
-        $initial = $this->validate;
-        $this->disableValidation();
-
-        try {
-            return $callback();
-        } finally {
-            $this->validate = $initial;
-        }
-    }
-
-    /**
-     * Get shared tables
-     *
-     * Get whether to share tables between tenants
-     */
-    public function getSharedTables(): bool
-    {
-        return $this->adapter->getSharedTables();
-    }
-
-    /**
-     * Set shard tables
-     *
-     * Set whether to share tables between tenants
-     */
-    public function setSharedTables(bool $sharedTables): static
-    {
-        $this->adapter->setSharedTables($sharedTables);
-
-        return $this;
-    }
-
-    /**
-     * Set Tenant
-     *
-     * Set tenant to use if tables are shared
-     */
-    public function setTenant(?int $tenant): static
-    {
-        $this->adapter->setTenant($tenant);
-
-        return $this;
-    }
-
-    /**
-     * Get Tenant
-     *
-     * Get tenant to use if tables are shared
-     */
-    public function getTenant(): ?int
-    {
-        return $this->adapter->getTenant();
-    }
-
-    /**
-     * With Tenant
-     *
-     * Execute a callback with a specific tenant
-     */
-    public function withTenant(?int $tenant, callable $callback): mixed
-    {
-        $previous = $this->adapter->getTenant();
-        $this->adapter->setTenant($tenant);
-
-        try {
-            return $callback();
-        } finally {
-            $this->adapter->setTenant($previous);
-        }
-    }
-
-    /**
-     * Set whether to allow creating documents with tenant set per document.
-     */
-    public function setTenantPerDocument(bool $enabled): static
-    {
-        $this->adapter->setTenantPerDocument($enabled);
-
-        return $this;
-    }
-
-    /**
-     * Get whether to allow creating documents with tenant set per document.
-     */
-    public function getTenantPerDocument(): bool
-    {
-        return $this->adapter->getTenantPerDocument();
-    }
-
-    /**
-     * Enable or disable LOCK=SHARED during ALTER TABLE operation
-     *
-     * Set lock mode when altering tables
-     */
-    public function enableLocks(bool $enabled): static
-    {
-        if ($this->adapter->supports(Capability::AlterLock)) {
-            $this->adapter->enableAlterLocks($enabled);
-        }
-
-        return $this;
-    }
-
-    /**
-     * Set custom document class for a collection
-     *
-     * @param  string  $collection  Collection ID
-     * @param  class-string<Document>  $className  Fully qualified class name that extends Document
-     *
-     * @throws DatabaseException
-     */
-    public function setDocumentType(string $collection, string $className): static
-    {
-        if (! \class_exists($className)) {
-            throw new DatabaseException("Class {$className} does not exist");
-        }
-
-        if (! \is_subclass_of($className, Document::class)) {
-            throw new DatabaseException("Class {$className} must extend ".Document::class);
-        }
-
-        $this->documentTypes[$collection] = $className;
-
-        return $this;
-    }
-
-    /**
-     * Get custom document class for a collection
-     *
-     * @param  string  $collection  Collection ID
-     * @return class-string<Document>|null
-     */
-    public function getDocumentType(string $collection): ?string
-    {
-        return $this->documentTypes[$collection] ?? null;
-    }
-
-    /**
-     * Clear document type mapping for a collection
-     *
-     * @param  string  $collection  Collection ID
-     */
-    public function clearDocumentType(string $collection): static
-    {
-        unset($this->documentTypes[$collection]);
-
-        return $this;
-    }
-
-    /**
-     * Clear all document type mappings
-     */
-    public function clearAllDocumentTypes(): static
-    {
-        $this->documentTypes = [];
-
-        return $this;
-    }
-
-    /**
-     * Create a document instance of the appropriate type
-     *
-     * @param  string  $collection  Collection ID
-     * @param  array<string, mixed>  $data  Document data
-     */
-    protected function createDocumentInstance(string $collection, array $data): Document
-    {
-        $className = $this->documentTypes[$collection] ?? Document::class;
-
-        return new $className($data);
-    }
-
-    public function getPreserveDates(): bool
-    {
-        return $this->preserveDates;
-    }
-
-    public function setPreserveDates(bool $preserve): static
-    {
-        $this->preserveDates = $preserve;
-
-        return $this;
-    }
-
-    public function setMigrating(bool $migrating): self
-    {
-        $this->migrating = $migrating;
-
-        return $this;
-    }
-
-    public function isMigrating(): bool
-    {
-        return $this->migrating;
-    }
-
-    public function withPreserveDates(callable $callback): mixed
-    {
-        $previous = $this->preserveDates;
-        $this->preserveDates = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->preserveDates = $previous;
-        }
-    }
-
-    public function getPreserveSequence(): bool
-    {
-        return $this->preserveSequence;
-    }
-
-    public function setPreserveSequence(bool $preserve): static
-    {
-        $this->preserveSequence = $preserve;
-
-        return $this;
-    }
-
-    public function withPreserveSequence(callable $callback): mixed
-    {
-        $previous = $this->preserveSequence;
-        $this->preserveSequence = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->preserveSequence = $previous;
-        }
-    }
-
-    public function setMaxQueryValues(int $max): self
-    {
-        $this->maxQueryValues = $max;
-
-        return $this;
-    }
-
-    public function getMaxQueryValues(): int
-    {
-        return $this->maxQueryValues;
-    }
-
-    /**
-     * Set list of collections which are globally accessible
-     *
-     * @param  array<string>  $collections
-     * @return $this
-     */
-    public function setGlobalCollections(array $collections): static
-    {
-        foreach ($collections as $collection) {
-            $this->globalCollections[$collection] = true;
-        }
-
-        return $this;
-    }
-
-    /**
-     * Get list of collections which are globally accessible
-     *
-     * @return array<string>
-     */
-    public function getGlobalCollections(): array
-    {
-        return \array_keys($this->globalCollections);
-    }
-
-    /**
-     * Clear global collections
-     */
-    public function resetGlobalCollections(): void
-    {
-        $this->globalCollections = [];
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
-     * Get Database Adapter
-     */
-    public function getAdapter(): Adapter
-    {
-        return $this->adapter;
-    }
-
-    /**
-     * Ping Database
-     */
-    public function ping(): bool
-    {
-        return $this->adapter->ping();
-    }
-
-    public function reconnect(): void
-    {
-        $this->adapter->reconnect();
-    }
-
-    /**
-     * Add Attribute Filter
-     */
-    public static function addFilter(string $name, callable $encode, callable $decode): void
-    {
-        self::$filters[$name] = [
-            'encode' => $encode,
-            'decode' => $decode,
-        ];
-    }
-
-    /**
      * Encode Document
      *
      * @param  bool  $applyDefaults  Whether to apply default values to null attributes
@@ -1314,6 +1210,7 @@ class Database
      */
     public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
+        /** @var array<array<string, mixed>> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         $internalDateAttributes = ['$createdAt', '$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
@@ -1321,9 +1218,11 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
+            /** @var string $key */
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
+            /** @var array<string> $filters */
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
@@ -1360,6 +1259,7 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
+            /** @var array<int|string, mixed> $value */
             foreach ($value as $index => $node) {
                 if ($node !== null) {
                     foreach ($filters as $filter) {
@@ -1387,19 +1287,22 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
+        /** @var array<array<string, mixed>|Document> $allAttributes */
+        $allAttributes = $collection->getAttribute('attributes', []);
         $attributes = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) => $attribute['type'] !== ColumnType::Relationship->value
+            $allAttributes,
+            fn (array|Document $attribute) => $attribute['type'] !== ColumnType::Relationship->value
         );
 
         $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) => $attribute['type'] === ColumnType::Relationship->value
+            $allAttributes,
+            fn (array|Document $attribute) => $attribute['type'] === ColumnType::Relationship->value
         );
 
         $filteredValue = [];
 
         foreach ($relationships as $relationship) {
+            /** @var string $key */
             $key = $relationship['$id'] ?? '';
 
             if (
@@ -1418,9 +1321,11 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
+            /** @var string $key */
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
+            /** @var array<string> $filters */
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
@@ -1444,6 +1349,7 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
+            /** @var array<int|string, mixed> $value */
             foreach ($value as $index => $node) {
                 foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
@@ -1473,7 +1379,8 @@ class Database
         }
 
         if ($hasRelationshipSelections && ! empty($selections) && ! \in_array('*', $selections)) {
-            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            foreach ($allAttributes as $attribute) {
+                /** @var string $key */
                 $key = $attribute['$id'] ?? '';
 
                 if ($attribute['type'] === ColumnType::Relationship->value || $key === '$permissions') {
@@ -1490,7 +1397,11 @@ class Database
     }
 
     /**
-     * Casting
+     * Cast document attribute values to their proper PHP types based on the collection schema.
+     *
+     * @param Document $collection The collection definition containing attribute type information.
+     * @param Document $document The document whose attributes will be cast.
+     * @return Document The document with correctly typed attribute values.
      */
     public function casting(Document $collection, Document $document): Document
     {
@@ -1498,6 +1409,7 @@ class Database
             return $document;
         }
 
+        /** @var array<array<string, mixed>> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($this->getInternalAttributes() as $attribute) {
@@ -1505,6 +1417,7 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
+            /** @var string $key */
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1525,6 +1438,7 @@ class Database
                 $value = [$value];
             }
 
+            /** @var array<int|string, scalar|null> $value */
             foreach ($value as $index => $node) {
                 $node = match ($type) {
                     ColumnType::Id->value => (string) $node,
@@ -1544,62 +1458,78 @@ class Database
     }
 
     /**
-     * Encode Attribute
-     *
-     * Passes the attribute $value, and $document context to a predefined filter
-     * that allow you to manipulate the input format of the given attribute.
-     *
-     *
-     * @throws DatabaseException
+     * Set a metadata value to be printed in the query comments
      */
-    protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
+    public function setMetadata(string $key, mixed $value): static
     {
-        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
-            throw new NotFoundException("Filter: {$name} not found");
-        }
+        $this->adapter->setMetadata($key, $value);
 
-        try {
-            if (\array_key_exists($name, $this->instanceFilters)) {
-                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
-            } else {
-                $value = self::$filters[$name]['encode']($value, $document, $this);
-            }
-        } catch (\Throwable $th) {
-            throw new DatabaseException($th->getMessage(), $th->getCode(), $th);
-        }
-
-        return $value;
+        return $this;
     }
 
     /**
-     * Decode Attribute
+     * Get metadata
      *
-     * Passes the attribute $value, and $document context to a predefined filter
-     *  that allow you to manipulate the output format of the given attribute.
-     *
-     * @throws NotFoundException
+     * @return array<string, mixed>
      */
-    protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
+    public function getMetadata(): array
     {
-        if (! $this->filter) {
-            return $value;
+        return $this->adapter->getMetadata();
+    }
+
+    /**
+     * Clear metadata
+     */
+    public function resetMetadata(): void
+    {
+        $this->adapter->resetMetadata();
+    }
+
+    /**
+     * Executes $callback with $timestamp set to $requestTimestamp
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withRequestTimestamp(?NativeDateTime $requestTimestamp, callable $callback): mixed
+    {
+        $previous = $this->timestamp;
+        $this->timestamp = $requestTimestamp;
+        try {
+            $result = $callback();
+        } finally {
+            $this->timestamp = $previous;
         }
 
-        if (! \is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
-            return $value;
-        }
+        return $result;
+    }
 
-        if (! array_key_exists($filter, self::$filters) && ! array_key_exists($filter, $this->instanceFilters)) {
-            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
-        }
+    /**
+     * Get getConnection Id
+     *
+     * @throws Exception
+     */
+    public function getConnectionId(): string
+    {
+        return $this->adapter->getConnectionId();
+    }
 
-        if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
-        } else {
-            $value = self::$filters[$filter]['decode']($value, $document, $this);
-        }
+    /**
+     * Ping Database
+     */
+    public function ping(): bool
+    {
+        return $this->adapter->ping();
+    }
 
-        return $value;
+    /**
+     * Reconnect to the database, re-establishing any dropped connections.
+     */
+    public function reconnect(): void
+    {
+        $this->adapter->reconnect();
     }
 
     /**
@@ -1634,7 +1564,9 @@ class Database
     {
         foreach ($queries as $index => $query) {
             if ($query->isNested()) {
-                $values = $this->convertQueries($collection, $query->getValues());
+                /** @var array<Query> $nestedQueries */
+                $nestedQueries = $query->getValues();
+                $values = $this->convertQueries($collection, $nestedQueries);
                 $query->setValues($values);
             }
 
@@ -1654,42 +1586,6 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    /**
-     * Check if values are compatible with object attribute type (hashmap/multi-dimensional array)
-     *
-     * @param  array<mixed>  $values
-     */
-    private function isCompatibleObjectValue(array $values): bool
-    {
-        if (empty($values)) {
-            return false;
-        }
-
-        foreach ($values as $value) {
-            if (! \is_array($value)) {
-                return false;
-            }
-
-            // Check associative array (hashmap) or nested structure
-            if (empty($value)) {
-                continue;
-            }
-
-            // simple indexed array => not an object
-            if (\array_keys($value) === \range(0, \count($value) - 1)) {
-                return false;
-            }
-
-            foreach ($value as $nestedValue) {
-                if (\is_array($nestedValue)) {
-                    continue;
-                }
-            }
-        }
-
-        return true;
-    }
-
     public function convertQuery(Document $collection, Query $query): Query
     {
         /**
@@ -1719,17 +1615,22 @@ class Database
         }
 
         if (! $attribute->isEmpty()) {
-            $query->setOnArray($attribute->getAttribute('array', false));
-            $query->setAttributeType($attribute->getAttribute('type'));
+            /** @var bool $isArray */
+            $isArray = $attribute->getAttribute('array', false);
+            /** @var string $attrType */
+            $attrType = $attribute->getAttribute('type');
+            $query->setOnArray($isArray);
+            $query->setAttributeType($attrType);
 
-            if ($attribute->getAttribute('type') == ColumnType::Datetime->value) {
+            if ($attrType == ColumnType::Datetime->value) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {
+                        /** @var string $value */
                         $values[$valueIndex] = $this->adapter->supports(Capability::UTCCasting)
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
-                    } catch (\Throwable $e) {
+                    } catch (Throwable $e) {
                         throw new QueryException($e->getMessage(), $e->getCode(), $e);
                     }
                 }
@@ -1748,6 +1649,38 @@ class Database
 
     /**
      * @return array<array<string, mixed>>
+     */
+    /**
+     * @return array<string, mixed>
+     */
+    protected static function collectionMeta(): array
+    {
+        $collection = self::COLLECTION;
+        $collection['attributes'] = \array_map(
+            fn (array $attr) => new Document($attr),
+            $collection['attributes']
+        );
+
+        return $collection;
+    }
+
+    /**
+     * Get the list of internal attribute definitions (e.g., $id, $createdAt, $permissions) as typed Attribute objects.
+     *
+     * @return array<Attribute>
+     */
+    public static function internalAttributes(): array
+    {
+        return \array_map(
+            fn (array $attr): Attribute => Attribute::fromDocument(new Document($attr)),
+            self::INTERNAL_ATTRIBUTES
+        );
+    }
+
+    /**
+     * Get the internal attribute definitions for the current adapter, excluding tenant if shared tables are disabled.
+     *
+     * @return array<array<string, mixed>> The internal attribute configurations.
      */
     public function getInternalAttributes(): array
     {
@@ -1815,6 +1748,97 @@ class Database
     }
 
     /**
+     * Fire an event to all registered lifecycle hooks.
+     * Exceptions from hooks are silently caught.
+     */
+    protected function trigger(Event $event, mixed $data = null): void
+    {
+        if ($this->eventsSilenced) {
+            return;
+        }
+
+        foreach ($this->lifecycleHooks as $hook) {
+            try {
+                $hook->handle($event, $data);
+            } catch (Throwable) {
+                // Lifecycle hooks must not break business logic
+            }
+        }
+    }
+
+    /**
+     * Create a document instance of the appropriate type
+     *
+     * @param  string  $collection  Collection ID
+     * @param  array<string, mixed>  $data  Document data
+     */
+    protected function createDocumentInstance(string $collection, array $data): Document
+    {
+        $className = $this->documentTypes[$collection] ?? Document::class;
+
+        return new $className($data);
+    }
+
+    /**
+     * Encode Attribute
+     *
+     * Passes the attribute $value, and $document context to a predefined filter
+     * that allow you to manipulate the input format of the given attribute.
+     *
+     *
+     * @throws DatabaseException
+     */
+    protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
+    {
+        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
+            throw new NotFoundException("Filter: {$name} not found");
+        }
+
+        try {
+            if (\array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
+        } catch (Throwable $th) {
+            throw new DatabaseException($th->getMessage(), $th->getCode(), $th);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Decode Attribute
+     *
+     * Passes the attribute $value, and $document context to a predefined filter
+     *  that allow you to manipulate the output format of the given attribute.
+     *
+     * @throws NotFoundException
+     */
+    protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
+    {
+        if (! $this->filter) {
+            return $value;
+        }
+
+        if (! \is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
+            return $value;
+        }
+
+        if (! array_key_exists($filter, self::$filters) && ! array_key_exists($filter, $this->instanceFilters)) {
+            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
+        }
+
+        if (array_key_exists($filter, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
+        } else {
+            $value = self::$filters[$filter]['decode']($value, $document, $this);
+        }
+
+        return $value;
+    }
+
+    /**
      * Encode spatial data from array format to WKT (Well-Known Text) format
      *
      * @throws DatabaseException
@@ -1826,12 +1850,15 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        /** @var array<int, array<int, float|int>|array<int, array<int, float|int>>> $value */
         switch ($type) {
             case ColumnType::Point->value:
+                /** @var array{0: float|int, 1: float|int} $value */
                 return "POINT({$value[0]} {$value[1]})";
 
             case ColumnType::Linestring->value:
                 $points = [];
+                /** @var array<int, array{0: float|int, 1: float|int}> $value */
                 foreach ($value as $point) {
                     $points[] = "{$point[0]} {$point[1]}";
                 }
@@ -1839,6 +1866,7 @@ class Database
                 return 'LINESTRING('.implode(', ', $points).')';
 
             case ColumnType::Polygon->value:
+                /** @var array<int, mixed> $value */
                 // Check if this is a single ring (flat array of points) or multiple rings
                 $isSingleRing = count($value) > 0 && is_array($value[0]) &&
                     count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
@@ -1849,6 +1877,7 @@ class Database
                 }
 
                 $rings = [];
+                /** @var array<int, array<int, array{0: float|int, 1: float|int}>> $value */
                 foreach ($value as $ring) {
                     $points = [];
                     foreach ($ring as $point) {
@@ -1865,6 +1894,42 @@ class Database
     }
 
     /**
+     * Check if values are compatible with object attribute type (hashmap/multi-dimensional array)
+     *
+     * @param  array<mixed>  $values
+     */
+    private function isCompatibleObjectValue(array $values): bool
+    {
+        if (empty($values)) {
+            return false;
+        }
+
+        foreach ($values as $value) {
+            if (! \is_array($value)) {
+                return false;
+            }
+
+            // Check associative array (hashmap) or nested structure
+            if (empty($value)) {
+                continue;
+            }
+
+            // simple indexed array => not an object
+            if (\array_keys($value) === \range(0, \count($value) - 1)) {
+                return false;
+            }
+
+            foreach ($value as $nestedValue) {
+                if (\is_array($nestedValue)) {
+                    continue;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Retry a callable with exponential backoff
      *
      * @param  callable  $operation  The operation to retry
@@ -1873,7 +1938,7 @@ class Database
      * @param  float  $multiplier  Backoff multiplier
      * @return void The result of the operation
      *
-     * @throws \Throwable The last exception if all retries fail
+     * @throws Throwable The last exception if all retries fail
      */
     private function withRetries(
         callable $operation,
@@ -1883,14 +1948,14 @@ class Database
     ): void {
         $attempt = 0;
         $delayMs = $initialDelayMs;
-        $lastException = null;
+        $lastException = new DatabaseException('All retry attempts failed');
 
         while ($attempt < $maxAttempts) {
             try {
                 $operation();
 
                 return;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $lastException = $e;
                 $attempt++;
 
@@ -1929,7 +1994,7 @@ class Database
     ): void {
         try {
             $this->withRetries($operation, maxAttempts: $maxAttempts);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Console::error("Failed to cleanup {$resourceType} '{$resourceId}' after {$maxAttempts} attempts: ".$e->getMessage());
             throw $e;
         }
@@ -1966,11 +2031,11 @@ class Database
                     fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
                 );
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Attempt rollback only if conditions are met
             if ($shouldRollback && $rollbackOperation !== null) {
                 if ($rollbackReturnsErrors) {
-                    // Batch mode: rollback returns array of errors
+                    /** @var array<string> $cleanupErrors */
                     $cleanupErrors = $rollbackOperation();
                     if (! empty($cleanupErrors)) {
                         throw new DatabaseException(
@@ -1982,14 +2047,14 @@ class Database
                     // Silent mode: swallow rollback errors
                     try {
                         $rollbackOperation();
-                    } catch (\Throwable $e) {
+                    } catch (Throwable $e) {
                         // Silent rollback - errors are swallowed
                     }
                 } else {
                     // Regular mode: rollback throws on failure
                     try {
                         $rollbackOperation();
-                    } catch (\Throwable $ex) {
+                    } catch (Throwable $ex) {
                         throw new DatabaseException(
                             "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$ex->getMessage().' | Cleanup error: '.$e->getMessage(),
                             previous: $e

@@ -7,6 +7,8 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
 
 /**
+ * Represents a database document as an array-accessible object with support for nested documents and permissions.
+ *
  * @extends ArrayObject<string, mixed>
  */
 class Document extends ArrayObject
@@ -38,13 +40,15 @@ class Document extends ArrayObject
             }
 
             if (isset($value['$id']) || isset($value['$collection'])) {
+                /** @var array<string, mixed> $value */
                 $input[$key] = new self($value);
 
                 continue;
             }
 
             foreach ($value as $childKey => $child) {
-                if ((isset($child['$id']) || isset($child['$collection'])) && (! $child instanceof self)) {
+                if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
+                    /** @var array<string, mixed> $child */
                     $value[$childKey] = new self($child);
                 }
             }
@@ -55,11 +59,23 @@ class Document extends ArrayObject
         parent::__construct($input);
     }
 
+    /**
+     * Get the document's unique identifier.
+     *
+     * @return string The document ID, or empty string if not set.
+     */
     public function getId(): string
     {
-        return $this->getAttribute('$id', '');
+        /** @var string $id */
+        $id = $this->getAttribute('$id', '');
+        return $id;
     }
 
+    /**
+     * Get the document's auto-generated sequence identifier.
+     *
+     * @return string|null The sequence value, or null if not set.
+     */
     public function getSequence(): ?string
     {
         $sequence = $this->getAttribute('$sequence');
@@ -68,23 +84,37 @@ class Document extends ArrayObject
             return null;
         }
 
+        /** @var string $sequence */
         return $sequence;
     }
 
+    /**
+     * Get the collection ID this document belongs to.
+     *
+     * @return string The collection ID, or empty string if not set.
+     */
     public function getCollection(): string
     {
-        return $this->getAttribute('$collection', '');
+        /** @var string $collection */
+        $collection = $this->getAttribute('$collection', '');
+        return $collection;
     }
 
     /**
+     * Get all unique permissions assigned to this document.
+     *
      * @return array<string>
      */
     public function getPermissions(): array
     {
-        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
+        /** @var array<string> $permissions */
+        $permissions = $this->getAttribute('$permissions', []);
+        return \array_values(\array_unique($permissions));
     }
 
     /**
+     * Get roles with read permission on this document.
+     *
      * @return array<string>
      */
     public function getRead(): array
@@ -93,6 +123,8 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get roles with create permission on this document.
+     *
      * @return array<string>
      */
     public function getCreate(): array
@@ -101,6 +133,8 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get roles with update permission on this document.
+     *
      * @return array<string>
      */
     public function getUpdate(): array
@@ -109,6 +143,8 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get roles with delete permission on this document.
+     *
      * @return array<string>
      */
     public function getDelete(): array
@@ -117,6 +153,8 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get roles with full write permission (create, update, and delete) on this document.
+     *
      * @return array<string>
      */
     public function getWrite(): array
@@ -129,6 +167,9 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get roles for a specific permission type from this document's permissions.
+     *
+     * @param string $type The permission type (e.g., 'read', 'create', 'update', 'delete').
      * @return array<string>
      */
     public function getPermissionsByType(string $type): array
@@ -145,16 +186,35 @@ class Document extends ArrayObject
         return \array_unique($typePermissions);
     }
 
+    /**
+     * Get the document's creation timestamp.
+     *
+     * @return string|null The creation datetime string, or null if not set.
+     */
     public function getCreatedAt(): ?string
     {
-        return $this->getAttribute('$createdAt');
+        /** @var string|null $createdAt */
+        $createdAt = $this->getAttribute('$createdAt');
+        return $createdAt;
     }
 
+    /**
+     * Get the document's last update timestamp.
+     *
+     * @return string|null The update datetime string, or null if not set.
+     */
     public function getUpdatedAt(): ?string
     {
-        return $this->getAttribute('$updatedAt');
+        /** @var string|null $updatedAt */
+        $updatedAt = $this->getAttribute('$updatedAt');
+        return $updatedAt;
     }
 
+    /**
+     * Get the tenant ID associated with this document.
+     *
+     * @return int|null The tenant ID, or null if not set.
+     */
     public function getTenant(): ?int
     {
         $tenant = $this->getAttribute('$tenant');
@@ -163,7 +223,8 @@ class Document extends ArrayObject
             return null;
         }
 
-        return (int) $tenant;
+        /** @var int $tenant */
+        return $tenant;
     }
 
     /**
@@ -176,8 +237,8 @@ class Document extends ArrayObject
         $attributes = [];
 
         $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
+            fn (Attribute $attr) => $attr->key,
+            Database::internalAttributes()
         );
 
         foreach ($this as $attribute => $value) {
@@ -209,24 +270,18 @@ class Document extends ArrayObject
      * Set Attribute.
      *
      * Method for setting a specific field attribute
-     *
-     * @param  string  $type
      */
     public function setAttribute(string $key, mixed $value, SetType $type = SetType::Assign): static
     {
-        switch ($type) {
-            case SetType::Assign:
-                $this[$key] = $value;
-                break;
-            case SetType::Append:
-                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
-                \array_push($this[$key], $value);
-                break;
-            case SetType::Prepend:
-                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
-                \array_unshift($this[$key], $value);
-                break;
+        if ($type !== SetType::Assign) {
+            $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
         }
+
+        match ($type) {
+            SetType::Assign => $this[$key] = $value,
+            SetType::Append => $this[$key] = [...(array) $this[$key], $value],
+            SetType::Prepend => $this[$key] = [$value, ...(array) $this[$key]],
+        };
 
         return $this;
     }
@@ -252,9 +307,8 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): static
     {
-        unset($this[$key]);
+        $this->offsetUnset($key);
 
-        /* @phpstan-ignore-next-line */
         return $this;
     }
 
@@ -265,12 +319,16 @@ class Document extends ArrayObject
      */
     public function find(string $key, $find, string $subject = ''): mixed
     {
-        $subject = $this[$subject] ?? null;
-        $subject = (empty($subject)) ? $this : $subject;
+        $subjectData = !empty($subject) ? ($this[$subject] ?? null) : null;
+        /** @var array<mixed>|self $resolved */
+        $resolved = (empty($subjectData)) ? $this : $subjectData;
 
-        if (is_array($subject)) {
-            foreach ($subject as $i => $value) {
-                if (isset($value[$key]) && $value[$key] === $find) {
+        if (is_array($resolved)) {
+            foreach ($resolved as $i => $value) {
+                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
+                    return $value;
+                }
+                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
                     return $value;
                 }
             }
@@ -278,8 +336,8 @@ class Document extends ArrayObject
             return false;
         }
 
-        if (isset($subject[$key]) && $subject[$key] === $find) {
-            return $subject;
+        if (isset($resolved[$key]) && $resolved[$key] === $find) {
+            return $resolved;
         }
 
         return false;
@@ -295,24 +353,37 @@ class Document extends ArrayObject
      */
     public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
     {
-        $subject = &$this[$subject] ?? null;
-        $subject = (empty($subject)) ? $this : $subject;
-
-        if (is_array($subject)) {
-            foreach ($subject as $i => &$value) {
-                if (isset($value[$key]) && $value[$key] === $find) {
+        if (!empty($subject) && isset($this[$subject]) && \is_array($this[$subject])) {
+            /** @var array<mixed> $subjectArray */
+            $subjectArray = &$this[$subject];
+            foreach ($subjectArray as $i => &$value) {
+                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
-
+                    return true;
+                }
+                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
+                    $subjectArray[$i] = $replace;
                     return true;
                 }
             }
-
             return false;
         }
 
-        if (isset($subject[$key]) && $subject[$key] === $find) {
-            $subject[$key] = $replace;
+        /** @var self $resolved */
+        $resolved = $this;
+        foreach ($resolved as $i => $value) {
+            if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
+                $resolved[$i] = $replace;
+                return true;
+            }
+            if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
+                $resolved[$i] = $replace;
+                return true;
+            }
+        }
 
+        if (isset($resolved[$key]) && $resolved[$key] === $find) {
+            $resolved[$key] = $replace;
             return true;
         }
 
@@ -328,24 +399,37 @@ class Document extends ArrayObject
      */
     public function findAndRemove(string $key, $find, string $subject = ''): bool
     {
-        $subject = &$this[$subject] ?? null;
-        $subject = (empty($subject)) ? $this : $subject;
-
-        if (is_array($subject)) {
-            foreach ($subject as $i => &$value) {
-                if (isset($value[$key]) && $value[$key] === $find) {
-                    unset($subject[$i]);
-
+        if (!empty($subject) && isset($this[$subject]) && \is_array($this[$subject])) {
+            /** @var array<mixed> $subjectArray */
+            $subjectArray = &$this[$subject];
+            foreach ($subjectArray as $i => &$value) {
+                if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
+                    unset($subjectArray[$i]);
+                    return true;
+                }
+                if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
+                    unset($subjectArray[$i]);
                     return true;
                 }
             }
-
             return false;
         }
 
-        if (isset($subject[$key]) && $subject[$key] === $find) {
-            unset($subject[$key]);
+        /** @var self $resolved */
+        $resolved = $this;
+        foreach ($resolved as $i => $value) {
+            if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
+                unset($resolved[$i]);
+                return true;
+            }
+            if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
+                unset($resolved[$i]);
+                return true;
+            }
+        }
 
+        if (isset($resolved[$key]) && $resolved[$key] === $find) {
+            unset($resolved[$key]);
             return true;
         }
 
@@ -395,16 +479,18 @@ class Document extends ArrayObject
             if ($value instanceof self) {
                 $output[$key] = $value->getArrayCopy($allow, $disallow);
             } elseif (\is_array($value)) {
-                foreach ($value as $childKey => &$child) {
-                    if ($child instanceof self) {
-                        $output[$key][$childKey] = $child->getArrayCopy($allow, $disallow);
-                    } else {
-                        $output[$key][$childKey] = $child;
-                    }
-                }
-
                 if (empty($value)) {
                     $output[$key] = $value;
+                } else {
+                    $childOutput = [];
+                    foreach ($value as $childKey => $child) {
+                        if ($child instanceof self) {
+                            $childOutput[$childKey] = $child->getArrayCopy($allow, $disallow);
+                        } else {
+                            $childOutput[$childKey] = $child;
+                        }
+                    }
+                    $output[$key] = $childOutput;
                 }
             } else {
                 $output[$key] = $value;
@@ -414,6 +500,9 @@ class Document extends ArrayObject
         return $output;
     }
 
+    /**
+     * Deep clone the document including nested Document instances.
+     */
     public function __clone()
     {
         foreach ($this as $key => $value) {

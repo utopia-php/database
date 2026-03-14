@@ -3,7 +3,11 @@
 namespace Utopia\Database;
 
 use Swoole\Database\DetectsLostConnections;
+use Throwable;
 
+/**
+ * Provides utilities for detecting lost database connections.
+ */
 class Connection
 {
     /**
@@ -15,8 +19,11 @@ class Connection
 
     /**
      * Check if the given throwable was caused by a database connection error.
+     *
+     * @param Throwable $e The exception to inspect
+     * @return bool
      */
-    public static function hasError(\Throwable $e): bool
+    public static function hasError(Throwable $e): bool
     {
         if (DetectsLostConnections::causedByLostConnection($e)) {
             return true;

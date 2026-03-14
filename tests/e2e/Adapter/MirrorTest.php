@@ -89,14 +89,16 @@ class MirrorTest extends Base
         /**
          * Handle cases where the source and destination databases are not in sync because of previous tests
          */
+        assert(self::$authorization !== null);
         foreach ($schemas as $schema) {
             if ($database->getSource()->exists($schema)) {
                 $database->getSource()->setAuthorization(self::$authorization);
                 $database->getSource()->setDatabase($schema)->delete();
             }
-            if ($database->getDestination()->exists($schema)) {
-                $database->getDestination()->setAuthorization(self::$authorization);
-                $database->getDestination()->setDatabase($schema)->delete();
+            $destination = $database->getDestination();
+            if ($destination !== null && $destination->exists($schema)) {
+                $destination->setAuthorization(self::$authorization);
+                $destination->setDatabase($schema)->delete();
             }
         }
 
@@ -148,7 +150,9 @@ class MirrorTest extends Base
 
         // Assert collection exists in both databases
         $this->assertFalse($database->getSource()->getCollection('testCreateMirroredCollection')->isEmpty());
-        $this->assertFalse($database->getDestination()->getCollection('testCreateMirroredCollection')->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertFalse($destination->getCollection('testCreateMirroredCollection')->isEmpty());
     }
 
     /**
@@ -173,7 +177,7 @@ class MirrorTest extends Base
             [
                 Permission::read(Role::users()),
             ],
-            $collection->getAttribute('documentSecurity')
+            (bool) $collection->getAttribute('documentSecurity')
         );
 
         // Asset both databases have updated the collection
@@ -182,9 +186,11 @@ class MirrorTest extends Base
             $database->getSource()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             [Permission::read(Role::users())],
-            $database->getDestination()->getCollection('testUpdateMirroredCollection')->getPermissions()
+            $destination->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
     }
 
@@ -198,7 +204,9 @@ class MirrorTest extends Base
 
         // Assert collection is deleted in both databases
         $this->assertTrue($database->getSource()->getCollection('testDeleteMirroredCollection')->isEmpty());
-        $this->assertTrue($database->getDestination()->getCollection('testDeleteMirroredCollection')->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertTrue($destination->getCollection('testDeleteMirroredCollection')->isEmpty());
     }
 
     /**
@@ -231,9 +239,11 @@ class MirrorTest extends Base
             $database->getSource()->getDocument('testCreateMirroredDocument', $document->getId())
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             $document,
-            $database->getDestination()->getDocument('testCreateMirroredDocument', $document->getId())
+            $destination->getDocument('testCreateMirroredDocument', $document->getId())
         );
     }
 
@@ -275,9 +285,11 @@ class MirrorTest extends Base
             $database->getSource()->getDocument('testUpdateMirroredDocument', $document->getId())
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             $document,
-            $database->getDestination()->getDocument('testUpdateMirroredDocument', $document->getId())
+            $destination->getDocument('testUpdateMirroredDocument', $document->getId())
         );
     }
 
@@ -302,7 +314,9 @@ class MirrorTest extends Base
 
         // Assert document is deleted in both databases
         $this->assertTrue($database->getSource()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
-        $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertTrue($destination->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
     protected function deleteColumn(string $collection, string $column): bool
@@ -310,11 +324,13 @@ class MirrorTest extends Base
         $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$sourcePdo !== null);
         self::$sourcePdo->exec($sql);
 
         $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$destinationPdo !== null);
         self::$destinationPdo->exec($sql);
 
         return true;
@@ -325,11 +341,13 @@ class MirrorTest extends Base
         $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$sourcePdo !== null);
         self::$sourcePdo->exec($sql);
 
         $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$destinationPdo !== null);
         self::$destinationPdo->exec($sql);
 
         return true;

@@ -5,8 +5,16 @@ namespace Utopia\Database;
 use Utopia\Database\Helpers\ID;
 use Utopia\Query\Schema\IndexType;
 
+/**
+ * Represents a database index with its type, target attributes, and configuration.
+ */
 class Index
 {
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
     public function __construct(
         public string $key,
         public IndexType $type,
@@ -17,6 +25,11 @@ class Index
     ) {
     }
 
+    /**
+     * Convert this index to a Document representation.
+     *
+     * @return Document
+     */
     public function toDocument(): Document
     {
         return new Document([
@@ -30,15 +43,34 @@ class Index
         ]);
     }
 
+    /**
+     * Create an Index instance from a Document.
+     *
+     * @param Document $document The document to convert
+     * @return self
+     */
     public static function fromDocument(Document $document): self
     {
+        /** @var string $key */
+        $key = $document->getAttribute('key', $document->getId());
+        /** @var string $type */
+        $type = $document->getAttribute('type', 'index');
+        /** @var array<string> $attributes */
+        $attributes = $document->getAttribute('attributes', []);
+        /** @var array<int> $lengths */
+        $lengths = $document->getAttribute('lengths', []);
+        /** @var array<string> $orders */
+        $orders = $document->getAttribute('orders', []);
+        /** @var int $ttl */
+        $ttl = $document->getAttribute('ttl', 1);
+
         return new self(
-            key: $document->getAttribute('key', $document->getId()),
-            type: IndexType::from($document->getAttribute('type', 'index')),
-            attributes: $document->getAttribute('attributes', []),
-            lengths: $document->getAttribute('lengths', []),
-            orders: $document->getAttribute('orders', []),
-            ttl: $document->getAttribute('ttl', 1),
+            key: $key,
+            type: IndexType::from($type),
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
         );
     }
 }

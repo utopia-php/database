@@ -1856,7 +1856,7 @@ class Database
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -1892,7 +1892,7 @@ class Database
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
             && $collection->getTenant() !== null
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1947,7 +1947,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1973,7 +1973,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -2007,7 +2007,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -7201,7 +7201,7 @@ class Database
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                    if (!$old->isEmpty() && $old->getTenant() != $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {

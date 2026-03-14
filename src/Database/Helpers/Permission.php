@@ -6,6 +6,9 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\PermissionType;
 
+/**
+ * Represents a database permission binding a permission type to a role.
+ */
 class Permission
 {
     private Role $role;
@@ -21,6 +24,12 @@ class Permission
         ],
     ];
 
+    /**
+     * @param string $permission The permission type (e.g. read, create, update, delete, write)
+     * @param string $role The role name
+     * @param string $identifier The role identifier
+     * @param string $dimension The role dimension
+     */
     public function __construct(
         private string $permission,
         string $role,
@@ -31,37 +40,61 @@ class Permission
     }
 
     /**
-     * Create a permission string from this Permission instance
+     * Create a permission string from this Permission instance.
+     *
+     * @return string The formatted permission string (e.g. 'read("user:123")')
      */
     public function toString(): string
     {
         return $this->permission.'("'.$this->role->toString().'")';
     }
 
+    /**
+     * Get the permission type string.
+     *
+     * @return string
+     */
     public function getPermission(): string
     {
         return $this->permission;
     }
 
+    /**
+     * Get the role name associated with this permission.
+     *
+     * @return string
+     */
     public function getRole(): string
     {
         return $this->role->getRole();
     }
 
+    /**
+     * Get the role identifier associated with this permission.
+     *
+     * @return string
+     */
     public function getIdentifier(): string
     {
         return $this->role->getIdentifier();
     }
 
+    /**
+     * Get the role dimension associated with this permission.
+     *
+     * @return string
+     */
     public function getDimension(): string
     {
         return $this->role->getDimension();
     }
 
     /**
-     * Parse a permission string into a Permission object
+     * Parse a permission string into a Permission object.
      *
-     * @throws Exception
+     * @param string $permission The permission string to parse (e.g. 'read("user:123")')
+     * @return self
+     * @throws DatabaseException If the permission string format or type is invalid
      */
     public static function parse(string $permission): self
     {
@@ -166,7 +199,10 @@ class Permission
     }
 
     /**
-     * Create a read permission string from the given Role
+     * Create a read permission string from the given Role.
+     *
+     * @param Role $role The role to grant read permission to
+     * @return string The formatted permission string
      */
     public static function read(Role $role): string
     {
@@ -181,7 +217,10 @@ class Permission
     }
 
     /**
-     * Create a create permission string from the given Role
+     * Create a create permission string from the given Role.
+     *
+     * @param Role $role The role to grant create permission to
+     * @return string The formatted permission string
      */
     public static function create(Role $role): string
     {
@@ -196,7 +235,10 @@ class Permission
     }
 
     /**
-     * Create an update permission string from the given Role
+     * Create an update permission string from the given Role.
+     *
+     * @param Role $role The role to grant update permission to
+     * @return string The formatted permission string
      */
     public static function update(Role $role): string
     {
@@ -211,7 +253,10 @@ class Permission
     }
 
     /**
-     * Create a delete permission string from the given Role
+     * Create a delete permission string from the given Role.
+     *
+     * @param Role $role The role to grant delete permission to
+     * @return string The formatted permission string
      */
     public static function delete(Role $role): string
     {
@@ -226,7 +271,10 @@ class Permission
     }
 
     /**
-     * Create a write permission string from the given Role
+     * Create a write permission string from the given Role.
+     *
+     * @param Role $role The role to grant write permission to
+     * @return string The formatted permission string
      */
     public static function write(Role $role): string
     {

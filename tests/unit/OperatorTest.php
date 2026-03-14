@@ -12,17 +12,17 @@ class OperatorTest extends TestCase
     public function test_create(): void
     {
         // Test basic construction
-        $operator = new Operator(OperatorType::Increment->value, 'count', [1]);
+        $operator = new Operator(OperatorType::Increment, 'count', [1]);
 
-        $this->assertEquals(OperatorType::Increment->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operator->getMethod());
         $this->assertEquals('count', $operator->getAttribute());
         $this->assertEquals([1], $operator->getValues());
         $this->assertEquals(1, $operator->getValue());
 
         // Test with different types
-        $operator = new Operator(OperatorType::ArrayAppend->value, 'tags', ['php', 'database']);
+        $operator = new Operator(OperatorType::ArrayAppend, 'tags', ['php', 'database']);
 
-        $this->assertEquals(OperatorType::ArrayAppend->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayAppend, $operator->getMethod());
         $this->assertEquals('tags', $operator->getAttribute());
         $this->assertEquals(['php', 'database'], $operator->getValues());
         $this->assertEquals('php', $operator->getValue());
@@ -32,13 +32,13 @@ class OperatorTest extends TestCase
     {
         // Test increment helper
         $operator = Operator::increment(5);
-        $this->assertEquals(OperatorType::Increment->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute()); // Initially empty
         $this->assertEquals([5], $operator->getValues());
 
         // Test decrement helper
         $operator = Operator::decrement(1);
-        $this->assertEquals(OperatorType::Decrement->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Decrement, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute()); // Initially empty
         $this->assertEquals([1], $operator->getValues());
 
@@ -48,81 +48,81 @@ class OperatorTest extends TestCase
 
         // Test string helpers
         $operator = Operator::stringConcat(' - Updated');
-        $this->assertEquals(OperatorType::StringConcat->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([' - Updated'], $operator->getValues());
 
         $operator = Operator::stringReplace('old', 'new');
-        $this->assertEquals(OperatorType::StringReplace->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringReplace, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['old', 'new'], $operator->getValues());
 
         // Test math helpers
         $operator = Operator::multiply(2, 1000);
-        $this->assertEquals(OperatorType::Multiply->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Multiply, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([2, 1000], $operator->getValues());
 
         $operator = Operator::divide(2, 1);
-        $this->assertEquals(OperatorType::Divide->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Divide, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([2, 1], $operator->getValues());
 
         // Test boolean helper
         $operator = Operator::toggle();
-        $this->assertEquals(OperatorType::Toggle->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Toggle, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
 
         $operator = Operator::dateSetNow();
-        $this->assertEquals(OperatorType::DateSetNow->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateSetNow, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
 
         // Test concat helper
         $operator = Operator::stringConcat(' - Updated');
-        $this->assertEquals(OperatorType::StringConcat->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([' - Updated'], $operator->getValues());
 
         // Test modulo and power operators
         $operator = Operator::modulo(3);
-        $this->assertEquals(OperatorType::Modulo->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Modulo, $operator->getMethod());
         $this->assertEquals([3], $operator->getValues());
 
         $operator = Operator::power(2, 1000);
-        $this->assertEquals(OperatorType::Power->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Power, $operator->getMethod());
         $this->assertEquals([2, 1000], $operator->getValues());
 
         // Test new array helper methods
         $operator = Operator::arrayAppend(['new', 'values']);
-        $this->assertEquals(OperatorType::ArrayAppend->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayAppend, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['new', 'values'], $operator->getValues());
 
         $operator = Operator::arrayPrepend(['first', 'second']);
-        $this->assertEquals(OperatorType::ArrayPrepend->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayPrepend, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['first', 'second'], $operator->getValues());
 
         $operator = Operator::arrayInsert(2, 'inserted');
-        $this->assertEquals(OperatorType::ArrayInsert->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayInsert, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([2, 'inserted'], $operator->getValues());
 
         $operator = Operator::arrayRemove('unwanted');
-        $this->assertEquals(OperatorType::ArrayRemove->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayRemove, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['unwanted'], $operator->getValues());
     }
 
     public function test_setters(): void
     {
-        $operator = new Operator(OperatorType::Increment->value, 'test', [1]);
+        $operator = new Operator(OperatorType::Increment, 'test', [1]);
 
         // Test setMethod
-        $operator->setMethod(OperatorType::Decrement->value);
-        $this->assertEquals(OperatorType::Decrement->value, $operator->getMethod());
+        $operator->setMethod(OperatorType::Decrement);
+        $this->assertEquals(OperatorType::Decrement, $operator->getMethod());
 
         // Test setAttribute
         $operator->setAttribute('newAttribute');
@@ -291,7 +291,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::Increment->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operator->getMethod());
         $this->assertEquals('score', $operator->getAttribute());
         $this->assertEquals([5], $operator->getValues());
 
@@ -299,7 +299,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::Increment->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operator->getMethod());
         $this->assertEquals('score', $operator->getAttribute());
         $this->assertEquals([5], $operator->getValues());
     }
@@ -318,8 +318,8 @@ class OperatorTest extends TestCase
         $this->assertCount(2, $parsed);
         $this->assertInstanceOf(Operator::class, $parsed[0]);
         $this->assertInstanceOf(Operator::class, $parsed[1]);
-        $this->assertEquals(OperatorType::Increment->value, $parsed[0]->getMethod());
-        $this->assertEquals(OperatorType::ArrayAppend->value, $parsed[1]->getMethod());
+        $this->assertEquals(OperatorType::Increment, $parsed[0]->getMethod());
+        $this->assertEquals(OperatorType::ArrayAppend, $parsed[1]->getMethod());
     }
 
     public function test_clone(): void
@@ -332,9 +332,9 @@ class OperatorTest extends TestCase
         $this->assertEquals($operator1->getValues(), $operator2->getValues());
 
         // Ensure they are different objects
-        $operator2->setMethod(OperatorType::Decrement->value);
-        $this->assertEquals(OperatorType::Increment->value, $operator1->getMethod());
-        $this->assertEquals(OperatorType::Decrement->value, $operator2->getMethod());
+        $operator2->setMethod(OperatorType::Decrement);
+        $this->assertEquals(OperatorType::Increment, $operator1->getMethod());
+        $this->assertEquals(OperatorType::Decrement, $operator2->getMethod());
     }
 
     public function test_get_value_with_default(): void
@@ -343,7 +343,7 @@ class OperatorTest extends TestCase
         $this->assertEquals(5, $operator->getValue());
         $this->assertEquals(5, $operator->getValue('default'));
 
-        $emptyOperator = new Operator(OperatorType::Increment->value, 'count', []);
+        $emptyOperator = new Operator(OperatorType::Increment, 'count', []);
         $this->assertEquals('default', $emptyOperator->getValue('default'));
         $this->assertNull($emptyOperator->getValue());
     }
@@ -399,7 +399,7 @@ class OperatorTest extends TestCase
     public function test_to_string_invalid_json(): void
     {
         // Create an operator with values that can't be JSON encoded
-        $operator = new Operator(OperatorType::Increment->value, 'test', []);
+        $operator = new Operator(OperatorType::Increment, 'test', []);
         $operator->setValues([fopen('php://memory', 'r')]); // Resource can't be JSON encoded
 
         $this->expectException(OperatorException::class);
@@ -413,7 +413,7 @@ class OperatorTest extends TestCase
     {
         // Test increment with max limit
         $operator = Operator::increment(5, 10);
-        $this->assertEquals(OperatorType::Increment->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operator->getMethod());
         $this->assertEquals([5, 10], $operator->getValues());
 
         // Test increment without max (should be same as original behavior)
@@ -425,7 +425,7 @@ class OperatorTest extends TestCase
     {
         // Test decrement with min limit
         $operator = Operator::decrement(3, 0);
-        $this->assertEquals(OperatorType::Decrement->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Decrement, $operator->getMethod());
         $this->assertEquals([3, 0], $operator->getValues());
 
         // Test decrement without min (should be same as original behavior)
@@ -436,7 +436,7 @@ class OperatorTest extends TestCase
     public function test_array_remove(): void
     {
         $operator = Operator::arrayRemove('spam');
-        $this->assertEquals(OperatorType::ArrayRemove->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayRemove, $operator->getMethod());
         $this->assertEquals(['spam'], $operator->getValues());
         $this->assertEquals('spam', $operator->getValue());
     }
@@ -474,30 +474,30 @@ class OperatorTest extends TestCase
         // Check that array methods are properly extracted
         $this->assertInstanceOf(Operator::class, $operators['tags']);
         $this->assertEquals('tags', $operators['tags']->getAttribute());
-        $this->assertEquals(OperatorType::ArrayAppend->value, $operators['tags']->getMethod());
+        $this->assertEquals(OperatorType::ArrayAppend, $operators['tags']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['blacklist']);
         $this->assertEquals('blacklist', $operators['blacklist']->getAttribute());
-        $this->assertEquals(OperatorType::ArrayRemove->value, $operators['blacklist']->getMethod());
+        $this->assertEquals(OperatorType::ArrayRemove, $operators['blacklist']->getMethod());
 
         // Check string operators
-        $this->assertEquals(OperatorType::StringConcat->value, $operators['title']->getMethod());
-        $this->assertEquals(OperatorType::StringReplace->value, $operators['content']->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operators['title']->getMethod());
+        $this->assertEquals(OperatorType::StringReplace, $operators['content']->getMethod());
 
         // Check math operators
-        $this->assertEquals(OperatorType::Multiply->value, $operators['views']->getMethod());
-        $this->assertEquals(OperatorType::Divide->value, $operators['rating']->getMethod());
+        $this->assertEquals(OperatorType::Multiply, $operators['views']->getMethod());
+        $this->assertEquals(OperatorType::Divide, $operators['rating']->getMethod());
 
         // Check boolean operator
-        $this->assertEquals(OperatorType::Toggle->value, $operators['featured']->getMethod());
+        $this->assertEquals(OperatorType::Toggle, $operators['featured']->getMethod());
 
         // Check new operators
-        $this->assertEquals(OperatorType::StringConcat->value, $operators['title_prefix']->getMethod());
-        $this->assertEquals(OperatorType::Modulo->value, $operators['views_modulo']->getMethod());
-        $this->assertEquals(OperatorType::Power->value, $operators['score_power']->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operators['title_prefix']->getMethod());
+        $this->assertEquals(OperatorType::Modulo, $operators['views_modulo']->getMethod());
+        $this->assertEquals(OperatorType::Power, $operators['score_power']->getMethod());
 
         // Check date operator
-        $this->assertEquals(OperatorType::DateSetNow->value, $operators['last_modified']->getMethod());
+        $this->assertEquals(OperatorType::DateSetNow, $operators['last_modified']->getMethod());
 
         // Check that max/min values are preserved
         $this->assertEquals([5, 100], $operators['count']->getValues());
@@ -517,7 +517,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($arrayRemove);
-        $this->assertEquals(OperatorType::ArrayRemove->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayRemove, $operator->getMethod());
         $this->assertEquals('blacklist', $operator->getAttribute());
         $this->assertEquals(['spam'], $operator->getValues());
 
@@ -677,23 +677,23 @@ class OperatorTest extends TestCase
         $this->assertCount(12, $operators);
 
         // Verify each operator type
-        $this->assertEquals(OperatorType::ArrayAppend->value, $operators['arrayAppend']->getMethod());
-        $this->assertEquals(OperatorType::Increment->value, $operators['incrementWithMax']->getMethod());
+        $this->assertEquals(OperatorType::ArrayAppend, $operators['arrayAppend']->getMethod());
+        $this->assertEquals(OperatorType::Increment, $operators['incrementWithMax']->getMethod());
         $this->assertEquals([1, 10], $operators['incrementWithMax']->getValues());
-        $this->assertEquals(OperatorType::Decrement->value, $operators['decrementWithMin']->getMethod());
+        $this->assertEquals(OperatorType::Decrement, $operators['decrementWithMin']->getMethod());
         $this->assertEquals([2, 0], $operators['decrementWithMin']->getValues());
-        $this->assertEquals(OperatorType::Multiply->value, $operators['multiply']->getMethod());
+        $this->assertEquals(OperatorType::Multiply, $operators['multiply']->getMethod());
         $this->assertEquals([3, 100], $operators['multiply']->getValues());
-        $this->assertEquals(OperatorType::Divide->value, $operators['divide']->getMethod());
+        $this->assertEquals(OperatorType::Divide, $operators['divide']->getMethod());
         $this->assertEquals([2, 1], $operators['divide']->getValues());
-        $this->assertEquals(OperatorType::StringConcat->value, $operators['concat']->getMethod());
-        $this->assertEquals(OperatorType::StringReplace->value, $operators['replace']->getMethod());
-        $this->assertEquals(OperatorType::Toggle->value, $operators['toggle']->getMethod());
-        $this->assertEquals(OperatorType::DateSetNow->value, $operators['dateSetNow']->getMethod());
-        $this->assertEquals(OperatorType::StringConcat->value, $operators['concat']->getMethod());
-        $this->assertEquals(OperatorType::Modulo->value, $operators['modulo']->getMethod());
-        $this->assertEquals(OperatorType::Power->value, $operators['power']->getMethod());
-        $this->assertEquals(OperatorType::ArrayRemove->value, $operators['remove']->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operators['concat']->getMethod());
+        $this->assertEquals(OperatorType::StringReplace, $operators['replace']->getMethod());
+        $this->assertEquals(OperatorType::Toggle, $operators['toggle']->getMethod());
+        $this->assertEquals(OperatorType::DateSetNow, $operators['dateSetNow']->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operators['concat']->getMethod());
+        $this->assertEquals(OperatorType::Modulo, $operators['modulo']->getMethod());
+        $this->assertEquals(OperatorType::Power, $operators['power']->getMethod());
+        $this->assertEquals(OperatorType::ArrayRemove, $operators['remove']->getMethod());
     }
 
     public function test_type_validation_with_new_methods(): void
@@ -738,20 +738,20 @@ class OperatorTest extends TestCase
     {
         // Test concat operator
         $operator = Operator::stringConcat(' - Updated');
-        $this->assertEquals(OperatorType::StringConcat->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operator->getMethod());
         $this->assertEquals([' - Updated'], $operator->getValues());
         $this->assertEquals(' - Updated', $operator->getValue());
         $this->assertEquals('', $operator->getAttribute());
 
         // Test concat with different values
         $operator = Operator::stringConcat('prefix-');
-        $this->assertEquals(OperatorType::StringConcat->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringConcat, $operator->getMethod());
         $this->assertEquals(['prefix-'], $operator->getValues());
         $this->assertEquals('prefix-', $operator->getValue());
 
         // Test replace operator
         $operator = Operator::stringReplace('old', 'new');
-        $this->assertEquals(OperatorType::StringReplace->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::StringReplace, $operator->getMethod());
         $this->assertEquals(['old', 'new'], $operator->getValues());
         $this->assertEquals('old', $operator->getValue());
     }
@@ -760,7 +760,7 @@ class OperatorTest extends TestCase
     {
         // Test multiply operator
         $operator = Operator::multiply(2.5, 100);
-        $this->assertEquals(OperatorType::Multiply->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Multiply, $operator->getMethod());
         $this->assertEquals([2.5, 100], $operator->getValues());
         $this->assertEquals(2.5, $operator->getValue());
 
@@ -770,7 +770,7 @@ class OperatorTest extends TestCase
 
         // Test divide operator
         $operator = Operator::divide(2, 1);
-        $this->assertEquals(OperatorType::Divide->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Divide, $operator->getMethod());
         $this->assertEquals([2, 1], $operator->getValues());
         $this->assertEquals(2, $operator->getValue());
 
@@ -780,13 +780,13 @@ class OperatorTest extends TestCase
 
         // Test modulo operator
         $operator = Operator::modulo(3);
-        $this->assertEquals(OperatorType::Modulo->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Modulo, $operator->getMethod());
         $this->assertEquals([3], $operator->getValues());
         $this->assertEquals(3, $operator->getValue());
 
         // Test power operator
         $operator = Operator::power(2, 1000);
-        $this->assertEquals(OperatorType::Power->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Power, $operator->getMethod());
         $this->assertEquals([2, 1000], $operator->getValues());
         $this->assertEquals(2, $operator->getValue());
 
@@ -812,7 +812,7 @@ class OperatorTest extends TestCase
     public function test_boolean_operator(): void
     {
         $operator = Operator::toggle();
-        $this->assertEquals(OperatorType::Toggle->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Toggle, $operator->getMethod());
         $this->assertEquals([], $operator->getValues());
         $this->assertNull($operator->getValue());
     }
@@ -821,7 +821,7 @@ class OperatorTest extends TestCase
     {
         // Test dateSetNow
         $operator = Operator::dateSetNow();
-        $this->assertEquals(OperatorType::DateSetNow->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateSetNow, $operator->getMethod());
         $this->assertEquals([], $operator->getValues());
         $this->assertNull($operator->getValue());
     }
@@ -843,7 +843,7 @@ class OperatorTest extends TestCase
 
         foreach ($operators as $operatorData) {
             $operator = Operator::parseOperator($operatorData);
-            $this->assertEquals($operatorData['method'], $operator->getMethod());
+            $this->assertEquals($operatorData['method'], $operator->getMethod()->value);
             $this->assertEquals($operatorData['attribute'], $operator->getAttribute());
             $this->assertEquals($operatorData['values'], $operator->getValues());
 
@@ -915,7 +915,7 @@ class OperatorTest extends TestCase
     {
         // Test power with max limit
         $operator = Operator::power(2, 1000);
-        $this->assertEquals(OperatorType::Power->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::Power, $operator->getMethod());
         $this->assertEquals([2, 1000], $operator->getValues());
 
         // Test power without max
@@ -943,7 +943,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation
         $operator = Operator::arrayUnique();
-        $this->assertEquals(OperatorType::ArrayUnique->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayUnique, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
         $this->assertNull($operator->getValue());
@@ -987,7 +987,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::ArrayUnique->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayUnique, $operator->getMethod());
         $this->assertEquals('items', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
 
@@ -995,7 +995,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::ArrayUnique->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayUnique, $operator->getMethod());
         $this->assertEquals('items', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
     }
@@ -1021,7 +1021,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation
         $operator = Operator::arrayIntersect(['a', 'b', 'c']);
-        $this->assertEquals(OperatorType::ArrayIntersect->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayIntersect, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['a', 'b', 'c'], $operator->getValues());
         $this->assertEquals('a', $operator->getValue());
@@ -1087,7 +1087,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::ArrayIntersect->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayIntersect, $operator->getMethod());
         $this->assertEquals('allowed', $operator->getAttribute());
         $this->assertEquals(['admin', 'user'], $operator->getValues());
 
@@ -1095,7 +1095,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::ArrayIntersect->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayIntersect, $operator->getMethod());
         $this->assertEquals('allowed', $operator->getAttribute());
         $this->assertEquals(['admin', 'user'], $operator->getValues());
     }
@@ -1105,7 +1105,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation
         $operator = Operator::arrayDiff(['remove', 'these']);
-        $this->assertEquals(OperatorType::ArrayDiff->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayDiff, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['remove', 'these'], $operator->getValues());
         $this->assertEquals('remove', $operator->getValue());
@@ -1170,7 +1170,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::ArrayDiff->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayDiff, $operator->getMethod());
         $this->assertEquals('exclude', $operator->getAttribute());
         $this->assertEquals(['bad', 'invalid'], $operator->getValues());
 
@@ -1178,7 +1178,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::ArrayDiff->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayDiff, $operator->getMethod());
         $this->assertEquals('exclude', $operator->getAttribute());
         $this->assertEquals(['bad', 'invalid'], $operator->getValues());
     }
@@ -1188,7 +1188,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation with equals condition
         $operator = Operator::arrayFilter('equals', 'active');
-        $this->assertEquals(OperatorType::ArrayFilter->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayFilter, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['equals', 'active'], $operator->getValues());
         $this->assertEquals('equals', $operator->getValue());
@@ -1275,7 +1275,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::ArrayFilter->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayFilter, $operator->getMethod());
         $this->assertEquals('ratings', $operator->getAttribute());
         $this->assertEquals(['lessThan', 3], $operator->getValues());
 
@@ -1283,7 +1283,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::ArrayFilter->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::ArrayFilter, $operator->getMethod());
         $this->assertEquals('ratings', $operator->getAttribute());
         $this->assertEquals(['lessThan', 3], $operator->getValues());
     }
@@ -1293,7 +1293,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation
         $operator = Operator::dateAddDays(7);
-        $this->assertEquals(OperatorType::DateAddDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateAddDays, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([7], $operator->getValues());
         $this->assertEquals(7, $operator->getValue());
@@ -1360,7 +1360,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::DateAddDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateAddDays, $operator->getMethod());
         $this->assertEquals('scheduledFor', $operator->getAttribute());
         $this->assertEquals([14], $operator->getValues());
 
@@ -1368,7 +1368,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::DateAddDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateAddDays, $operator->getMethod());
         $this->assertEquals('scheduledFor', $operator->getAttribute());
         $this->assertEquals([14], $operator->getValues());
     }
@@ -1394,7 +1394,7 @@ class OperatorTest extends TestCase
     {
         // Test basic creation
         $operator = Operator::dateSubDays(3);
-        $this->assertEquals(OperatorType::DateSubDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateSubDays, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([3], $operator->getValues());
         $this->assertEquals(3, $operator->getValue());
@@ -1461,7 +1461,7 @@ class OperatorTest extends TestCase
         ];
 
         $operator = Operator::parseOperator($array);
-        $this->assertEquals(OperatorType::DateSubDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateSubDays, $operator->getMethod());
         $this->assertEquals('dueDate', $operator->getAttribute());
         $this->assertEquals([5], $operator->getValues());
 
@@ -1469,7 +1469,7 @@ class OperatorTest extends TestCase
         $json = json_encode($array);
         $this->assertIsString($json);
         $operator = Operator::parse($json);
-        $this->assertEquals(OperatorType::DateSubDays->value, $operator->getMethod());
+        $this->assertEquals(OperatorType::DateSubDays, $operator->getMethod());
         $this->assertEquals('dueDate', $operator->getAttribute());
         $this->assertEquals([5], $operator->getValues());
     }
@@ -1524,22 +1524,22 @@ class OperatorTest extends TestCase
 
         // Check each operator type
         $this->assertInstanceOf(Operator::class, $operators['uniqueTags']);
-        $this->assertEquals(OperatorType::ArrayUnique->value, $operators['uniqueTags']->getMethod());
+        $this->assertEquals(OperatorType::ArrayUnique, $operators['uniqueTags']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['commonItems']);
-        $this->assertEquals(OperatorType::ArrayIntersect->value, $operators['commonItems']->getMethod());
+        $this->assertEquals(OperatorType::ArrayIntersect, $operators['commonItems']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['filteredList']);
-        $this->assertEquals(OperatorType::ArrayDiff->value, $operators['filteredList']->getMethod());
+        $this->assertEquals(OperatorType::ArrayDiff, $operators['filteredList']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['activeUsers']);
-        $this->assertEquals(OperatorType::ArrayFilter->value, $operators['activeUsers']->getMethod());
+        $this->assertEquals(OperatorType::ArrayFilter, $operators['activeUsers']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['expiry']);
-        $this->assertEquals(OperatorType::DateAddDays->value, $operators['expiry']->getMethod());
+        $this->assertEquals(OperatorType::DateAddDays, $operators['expiry']->getMethod());
 
         $this->assertInstanceOf(Operator::class, $operators['reminder']);
-        $this->assertEquals(OperatorType::DateSubDays->value, $operators['reminder']->getMethod());
+        $this->assertEquals(OperatorType::DateSubDays, $operators['reminder']->getMethod());
 
         // Check updates
         $this->assertEquals(['name' => 'Regular value'], $updates);

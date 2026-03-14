@@ -2,6 +2,9 @@
 
 namespace Utopia\Database;
 
+/**
+ * Defines the types of atomic operations that can be performed on document attributes.
+ */
 enum OperatorType: string
 {
     // Numeric operations
@@ -34,6 +37,11 @@ enum OperatorType: string
     case DateSubDays = 'dateSubDays';
     case DateSetNow = 'dateSetNow';
 
+    /**
+     * Check if this operator type is a numeric operation.
+     *
+     * @return bool
+     */
     public function isNumeric(): bool
     {
         return match ($this) {
@@ -47,6 +55,11 @@ enum OperatorType: string
         };
     }
 
+    /**
+     * Check if this operator type is an array operation.
+     *
+     * @return bool
+     */
     public function isArray(): bool
     {
         return match ($this) {
@@ -62,6 +75,11 @@ enum OperatorType: string
         };
     }
 
+    /**
+     * Check if this operator type is a string operation.
+     *
+     * @return bool
+     */
     public function isString(): bool
     {
         return match ($this) {
@@ -71,6 +89,11 @@ enum OperatorType: string
         };
     }
 
+    /**
+     * Check if this operator type is a boolean operation.
+     *
+     * @return bool
+     */
     public function isBoolean(): bool
     {
         return match ($this) {
@@ -79,6 +102,11 @@ enum OperatorType: string
         };
     }
 
+    /**
+     * Check if this operator type is a date operation.
+     *
+     * @return bool
+     */
     public function isDate(): bool
     {
         return match ($this) {

@@ -4,6 +4,9 @@ namespace Utopia\Database;
 
 use Utopia\Query\Schema\ForeignKeyAction;
 
+/**
+ * Represents a relationship between two database collections, including its type, direction, and delete behavior.
+ */
 class Relationship
 {
     public function __construct(
@@ -18,6 +21,11 @@ class Relationship
     ) {
     }
 
+    /**
+     * Convert this relationship to a Document representation.
+     *
+     * @return Document
+     */
     public function toDocument(): Document
     {
         return new Document([
@@ -30,6 +38,13 @@ class Relationship
         ]);
     }
 
+    /**
+     * Create a Relationship instance from a collection ID and attribute Document.
+     *
+     * @param string $collection The parent collection ID
+     * @param Document $attribute The attribute document containing relationship options
+     * @return self
+     */
     public static function fromDocument(string $collection, Document $attribute): self
     {
         $options = $attribute->getAttribute('options', []);
@@ -38,15 +53,34 @@ class Relationship
             $options = $options->getArrayCopy();
         }
 
+        if (!\is_array($options)) {
+            $options = [];
+        }
+
+        /** @var string $relatedCollection */
+        $relatedCollection = $options['relatedCollection'] ?? '';
+        /** @var RelationType|string $relationType */
+        $relationType = $options['relationType'] ?? 'oneToOne';
+        /** @var bool $twoWay */
+        $twoWay = $options['twoWay'] ?? false;
+        /** @var string $key */
+        $key = $attribute->getAttribute('key', $attribute->getId());
+        /** @var string $twoWayKey */
+        $twoWayKey = $options['twoWayKey'] ?? '';
+        /** @var ForeignKeyAction|string $onDelete */
+        $onDelete = $options['onDelete'] ?? ForeignKeyAction::Restrict;
+        /** @var RelationSide|string $side */
+        $side = $options['side'] ?? RelationSide::Parent;
+
         return new self(
             collection: $collection,
-            relatedCollection: $options['relatedCollection'] ?? '',
-            type: RelationType::from($options['relationType'] ?? 'oneToOne'),
-            twoWay: $options['twoWay'] ?? false,
-            key: $attribute->getAttribute('key', $attribute->getId()),
-            twoWayKey: $options['twoWayKey'] ?? '',
-            onDelete: ForeignKeyAction::from($options['onDelete'] ?? ForeignKeyAction::Restrict->value),
-            side: RelationSide::from($options['side'] ?? RelationSide::Parent->value),
+            relatedCollection: $relatedCollection,
+            type: $relationType instanceof RelationType ? $relationType : RelationType::from($relationType),
+            twoWay: $twoWay,
+            key: $key,
+            twoWayKey: $twoWayKey,
+            onDelete: $onDelete instanceof ForeignKeyAction ? $onDelete : ForeignKeyAction::from($onDelete),
+            side: $side instanceof RelationSide ? $side : RelationSide::from($side),
         );
     }
 }

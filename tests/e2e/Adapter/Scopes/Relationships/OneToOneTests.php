@@ -47,6 +47,7 @@ trait OneToOneTests
         $collection = $database->getCollection('person');
         $attributes = $collection->getAttribute('attributes', []);
 
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'library') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -128,7 +129,9 @@ trait OneToOneTests
                 'area' => 'Area 10 Updated',
             ],
         ]));
-        $this->assertEquals('Library 10 Updated', $person10->getAttribute('library')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_library_131 */
+        $_doc_library_131 = $person10->getAttribute('library');
+        $this->assertEquals('Library 10 Updated', $_doc_library_131->getAttribute('name'));
         $library10 = $database->getDocument('library', $library10->getId());
         $this->assertEquals('Library 10 Updated', $library10->getAttribute('name'));
 
@@ -189,15 +192,23 @@ trait OneToOneTests
             throw new Exception('Person not found');
         }
 
-        $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
-        $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
+        /** @var \Utopia\Database\Document $_doc_library_192 */
+        $_doc_library_192 = $person->getAttribute('library');
+        $this->assertEquals('Library 1', $_doc_library_192->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_library_193 */
+        $_arr_library_193 = $person->getAttribute('library');
+        $this->assertArrayNotHasKey('area', $_arr_library_193);
 
         $person = $database->getDocument('person', 'person1', [
             Query::select(['*', 'library.name', '$id']),
         ]);
 
-        $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
-        $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
+        /** @var \Utopia\Database\Document $_doc_library_199 */
+        $_doc_library_199 = $person->getAttribute('library');
+        $this->assertEquals('Library 1', $_doc_library_199->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_library_200 */
+        $_arr_library_200 = $person->getAttribute('library');
+        $this->assertArrayNotHasKey('area', $_arr_library_200);
 
         $document = $database->getDocument('person', $person->getId(), [
             Query::select(['name']),
@@ -239,9 +250,13 @@ trait OneToOneTests
             )
         );
 
-        $this->assertEquals('Library 1 Updated', $person1->getAttribute('library')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_library_242 */
+        $_doc_library_242 = $person1->getAttribute('library');
+        $this->assertEquals('Library 1 Updated', $_doc_library_242->getAttribute('name'));
         $person1 = $database->getDocument('person', 'person1');
-        $this->assertEquals('Library 1 Updated', $person1->getAttribute('library')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_library_244 */
+        $_doc_library_244 = $person1->getAttribute('library');
+        $this->assertEquals('Library 1 Updated', $_doc_library_244->getAttribute('name'));
 
         // Create new document with no relationship
         $person3 = $database->createDocument('person', new Document([
@@ -465,6 +480,7 @@ trait OneToOneTests
 
         $collection = $database->getCollection('country');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'city') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -479,6 +495,7 @@ trait OneToOneTests
 
         $collection = $database->getCollection('city');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'country') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -514,7 +531,9 @@ trait OneToOneTests
 
         $database->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = $database->getDocument('country', 'country1');
-        $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_city_517 */
+        $_doc_city_517 = $country1->getAttribute('city');
+        $this->assertEquals('London', $_doc_city_517->getAttribute('name'));
 
         // Update a document with non existing related document. It should not get added to the list.
         $database->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'no-city'));
@@ -542,7 +561,9 @@ trait OneToOneTests
 
         $database->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = $database->getDocument('country', 'country1');
-        $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_city_545 */
+        $_doc_city_545 = $country1->getAttribute('city');
+        $this->assertEquals('London', $_doc_city_545->getAttribute('name'));
 
         // Create document with relationship with related ID
         $database->createDocument('city', new Document([
@@ -662,15 +683,23 @@ trait OneToOneTests
             throw new Exception('Country not found');
         }
 
-        $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
-        $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
+        /** @var \Utopia\Database\Document $_doc_city_665 */
+        $_doc_city_665 = $country->getAttribute('city');
+        $this->assertEquals('London', $_doc_city_665->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_city_666 */
+        $_arr_city_666 = $country->getAttribute('city');
+        $this->assertArrayNotHasKey('code', $_arr_city_666);
 
         $country = $database->getDocument('country', 'country1', [
             Query::select(['*', 'city.name']),
         ]);
 
-        $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
-        $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
+        /** @var \Utopia\Database\Document $_doc_city_672 */
+        $_doc_city_672 = $country->getAttribute('city');
+        $this->assertEquals('London', $_doc_city_672->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_city_673 */
+        $_arr_city_673 = $country->getAttribute('city');
+        $this->assertArrayNotHasKey('code', $_arr_city_673);
 
         $country1 = $database->getDocument('country', 'country1');
 
@@ -710,9 +739,13 @@ trait OneToOneTests
             )
         );
 
-        $this->assertEquals('City 1 Updated', $country1->getAttribute('city')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_city_713 */
+        $_doc_city_713 = $country1->getAttribute('city');
+        $this->assertEquals('City 1 Updated', $_doc_city_713->getAttribute('name'));
         $country1 = $database->getDocument('country', 'country1');
-        $this->assertEquals('City 1 Updated', $country1->getAttribute('city')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_city_715 */
+        $_doc_city_715 = $country1->getAttribute('city');
+        $this->assertEquals('City 1 Updated', $_doc_city_715->getAttribute('name'));
 
         // Update inverse nested document attribute
         $city2 = $database->updateDocument(
@@ -726,9 +759,13 @@ trait OneToOneTests
             )
         );
 
-        $this->assertEquals('Country 2 Updated', $city2->getAttribute('country')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_country_729 */
+        $_doc_country_729 = $city2->getAttribute('country');
+        $this->assertEquals('Country 2 Updated', $_doc_country_729->getAttribute('name'));
         $city2 = $database->getDocument('city', 'city2');
-        $this->assertEquals('Country 2 Updated', $city2->getAttribute('country')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_country_731 */
+        $_doc_country_731 = $city2->getAttribute('country');
+        $this->assertEquals('Country 2 Updated', $_doc_country_731->getAttribute('name'));
 
         // Create new document with no relationship
         $country5 = $database->createDocument('country', new Document([
@@ -1027,6 +1064,7 @@ trait OneToOneTests
 
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'child1') {
                 $this->assertEquals('parent', $attribute['options']['twoWayKey']);
@@ -1060,7 +1098,9 @@ trait OneToOneTests
         $this->assertArrayHasKey('child1', $document);
         $this->assertEquals('foo', $document->getAttribute('child1')->getId());
         $this->assertArrayHasKey('children', $document);
-        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
+        /** @var array<Document> $_arr_children_1063 */
+        $_arr_children_1063 = $document->getAttribute('children');
+        $this->assertEquals('bar', $_arr_children_1063[0]->getId());
 
         try {
             $database->updateRelationship(
@@ -1966,60 +2006,108 @@ trait OneToOneTests
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(1, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_1969 */
+        $_cnt_attributes_1969 = $drivers->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_1969));
+        /** @var array<mixed> $_cnt_indexes_1970 */
+        $_cnt_indexes_1970 = $drivers->getAttribute('indexes');
+        $this->assertEquals(1, \count($_cnt_indexes_1970));
+        /** @var array<mixed> $_cnt_attributes_1971 */
+        $_cnt_attributes_1971 = $licenses->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_1971));
+        /** @var array<mixed> $_cnt_indexes_1972 */
+        $_cnt_indexes_1972 = $licenses->getAttribute('indexes');
+        $this->assertEquals(1, \count($_cnt_indexes_1972));
 
         $database->deleteRelationship('licenses', 'driver');
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_1979 */
+        $_cnt_attributes_1979 = $drivers->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_1979));
+        /** @var array<mixed> $_cnt_indexes_1980 */
+        $_cnt_indexes_1980 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_1980));
+        /** @var array<mixed> $_cnt_attributes_1981 */
+        $_cnt_attributes_1981 = $licenses->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_1981));
+        /** @var array<mixed> $_cnt_indexes_1982 */
+        $_cnt_indexes_1982 = $licenses->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_1982));
 
         $database->createRelationship(new Relationship(collection: 'drivers', relatedCollection: 'licenses', type: RelationType::OneToMany, twoWay: true, key: 'licenses', twoWayKey: 'driver'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_1989 */
+        $_cnt_attributes_1989 = $drivers->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_1989));
+        /** @var array<mixed> $_cnt_indexes_1990 */
+        $_cnt_indexes_1990 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_1990));
+        /** @var array<mixed> $_cnt_attributes_1991 */
+        $_cnt_attributes_1991 = $licenses->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_1991));
+        /** @var array<mixed> $_cnt_indexes_1992 */
+        $_cnt_indexes_1992 = $licenses->getAttribute('indexes');
+        $this->assertEquals(1, \count($_cnt_indexes_1992));
 
         $database->deleteRelationship('licenses', 'driver');
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_1999 */
+        $_cnt_attributes_1999 = $drivers->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_1999));
+        /** @var array<mixed> $_cnt_indexes_2000 */
+        $_cnt_indexes_2000 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2000));
+        /** @var array<mixed> $_cnt_attributes_2001 */
+        $_cnt_attributes_2001 = $licenses->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_2001));
+        /** @var array<mixed> $_cnt_indexes_2002 */
+        $_cnt_indexes_2002 = $licenses->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2002));
 
         $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToOne, twoWay: true, key: 'driver', twoWayKey: 'licenses'));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_2009 */
+        $_cnt_attributes_2009 = $drivers->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_2009));
+        /** @var array<mixed> $_cnt_indexes_2010 */
+        $_cnt_indexes_2010 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2010));
+        /** @var array<mixed> $_cnt_attributes_2011 */
+        $_cnt_attributes_2011 = $licenses->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_2011));
+        /** @var array<mixed> $_cnt_indexes_2012 */
+        $_cnt_indexes_2012 = $licenses->getAttribute('indexes');
+        $this->assertEquals(1, \count($_cnt_indexes_2012));
 
         $database->deleteRelationship('drivers', 'licenses');
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
 
-        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_2019 */
+        $_cnt_attributes_2019 = $drivers->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_2019));
+        /** @var array<mixed> $_cnt_indexes_2020 */
+        $_cnt_indexes_2020 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2020));
+        /** @var array<mixed> $_cnt_attributes_2021 */
+        $_cnt_attributes_2021 = $licenses->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_2021));
+        /** @var array<mixed> $_cnt_indexes_2022 */
+        $_cnt_indexes_2022 = $licenses->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2022));
 
         $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToMany, twoWay: true, key: 'drivers', twoWayKey: 'licenses'));
 
@@ -2027,12 +2115,24 @@ trait OneToOneTests
         $licenses = $database->getCollection('licenses');
         $junction = $database->getCollection('_'.$licenses->getSequence().'_'.$drivers->getSequence());
 
-        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
-        $this->assertEquals(2, \count($junction->getAttribute('attributes')));
-        $this->assertEquals(2, \count($junction->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_2030 */
+        $_cnt_attributes_2030 = $drivers->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_2030));
+        /** @var array<mixed> $_cnt_indexes_2031 */
+        $_cnt_indexes_2031 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2031));
+        /** @var array<mixed> $_cnt_attributes_2032 */
+        $_cnt_attributes_2032 = $licenses->getAttribute('attributes');
+        $this->assertEquals(1, \count($_cnt_attributes_2032));
+        /** @var array<mixed> $_cnt_indexes_2033 */
+        $_cnt_indexes_2033 = $licenses->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2033));
+        /** @var array<mixed> $_cnt_attributes_2034 */
+        $_cnt_attributes_2034 = $junction->getAttribute('attributes');
+        $this->assertEquals(2, \count($_cnt_attributes_2034));
+        /** @var array<mixed> $_cnt_indexes_2035 */
+        $_cnt_indexes_2035 = $junction->getAttribute('indexes');
+        $this->assertEquals(2, \count($_cnt_indexes_2035));
 
         $database->deleteRelationship('drivers', 'licenses');
 
@@ -2040,10 +2140,18 @@ trait OneToOneTests
         $licenses = $database->getCollection('licenses');
         $junction = $database->getCollection('_licenses_drivers');
 
-        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
-        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
-        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+        /** @var array<mixed> $_cnt_attributes_2043 */
+        $_cnt_attributes_2043 = $drivers->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_2043));
+        /** @var array<mixed> $_cnt_indexes_2044 */
+        $_cnt_indexes_2044 = $drivers->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2044));
+        /** @var array<mixed> $_cnt_attributes_2045 */
+        $_cnt_attributes_2045 = $licenses->getAttribute('attributes');
+        $this->assertEquals(0, \count($_cnt_attributes_2045));
+        /** @var array<mixed> $_cnt_indexes_2046 */
+        $_cnt_indexes_2046 = $licenses->getAttribute('indexes');
+        $this->assertEquals(0, \count($_cnt_indexes_2046));
 
         $this->assertEquals(true, $junction->isEmpty());
     }

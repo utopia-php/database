@@ -44,6 +44,7 @@ trait ManyToOneTests
         // Check metadata for collection
         $collection = $database->getCollection('review');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'movie') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -59,6 +60,7 @@ trait ManyToOneTests
         // Check metadata for related collection
         $collection = $database->getCollection('movie');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'reviews') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -155,7 +157,9 @@ trait ManyToOneTests
         $document = $documents[0];
         $this->assertArrayHasKey('date', $document);
         $this->assertArrayHasKey('movie', $document);
-        $this->assertArrayHasKey('date', $document->getAttribute('movie'));
+        /** @var array<string, mixed> $_arr_movie_158 */
+        $_arr_movie_158 = $document->getAttribute('movie');
+        $this->assertArrayHasKey('date', $_arr_movie_158);
         $this->assertArrayNotHasKey('name', $document);
         $this->assertEquals(29, strlen($document['date'])); // checks filter
         $this->assertEquals(29, strlen($document['movie']['date']));
@@ -185,15 +189,23 @@ trait ManyToOneTests
             throw new Exception('Review not found');
         }
 
-        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
-        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
+        /** @var \Utopia\Database\Document $_doc_movie_188 */
+        $_doc_movie_188 = $review->getAttribute('movie');
+        $this->assertEquals('Movie 1', $_doc_movie_188->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_movie_189 */
+        $_arr_movie_189 = $review->getAttribute('movie');
+        $this->assertArrayNotHasKey('length', $_arr_movie_189);
 
         $review = $database->getDocument('review', 'review1', [
             Query::select(['*', 'movie.name']),
         ]);
 
-        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
-        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
+        /** @var \Utopia\Database\Document $_doc_movie_195 */
+        $_doc_movie_195 = $review->getAttribute('movie');
+        $this->assertEquals('Movie 1', $_doc_movie_195->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_movie_196 */
+        $_arr_movie_196 = $review->getAttribute('movie');
+        $this->assertArrayNotHasKey('length', $_arr_movie_196);
 
         // Update root document attribute without altering relationship
         $review1 = $database->updateDocument(
@@ -216,9 +228,13 @@ trait ManyToOneTests
             $review1->setAttribute('movie', $movie)
         );
 
-        $this->assertEquals('Movie 1 Updated', $review1->getAttribute('movie')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_movie_219 */
+        $_doc_movie_219 = $review1->getAttribute('movie');
+        $this->assertEquals('Movie 1 Updated', $_doc_movie_219->getAttribute('name'));
         $review1 = $database->getDocument('review', 'review1');
-        $this->assertEquals('Movie 1 Updated', $review1->getAttribute('movie')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_movie_221 */
+        $_doc_movie_221 = $review1->getAttribute('movie');
+        $this->assertEquals('Movie 1 Updated', $_doc_movie_221->getAttribute('name'));
 
         // Create new document with no relationship
         $review5 = $database->createDocument('review', new Document([
@@ -247,9 +263,13 @@ trait ManyToOneTests
             ]))
         );
 
-        $this->assertEquals('Movie 5', $review5->getAttribute('movie')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_movie_250 */
+        $_doc_movie_250 = $review5->getAttribute('movie');
+        $this->assertEquals('Movie 5', $_doc_movie_250->getAttribute('name'));
         $review5 = $database->getDocument('review', 'review5');
-        $this->assertEquals('Movie 5', $review5->getAttribute('movie')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_movie_252 */
+        $_doc_movie_252 = $review5->getAttribute('movie');
+        $this->assertEquals('Movie 5', $_doc_movie_252->getAttribute('name'));
 
         // Update document with new related document
         $database->updateDocument(
@@ -373,6 +393,7 @@ trait ManyToOneTests
         // Check metadata for collection
         $collection = $database->getCollection('product');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'store') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -388,6 +409,7 @@ trait ManyToOneTests
         // Check metadata for related collection
         $collection = $database->getCollection('store');
         $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<mixed> $attributes */
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'products') {
                 $this->assertEquals('relationship', $attribute['type']);
@@ -521,21 +543,25 @@ trait ManyToOneTests
 
         // Get related document
         $store = $database->getDocument('store', 'store1');
+        /** @var array<array<string, mixed>> $products */
         $products = $store->getAttribute('products');
         $this->assertEquals('product1', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store2');
+        /** @var array<array<string, mixed>> $products */
         $products = $store->getAttribute('products');
         $this->assertEquals('product2', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store3');
+        /** @var array<array<string, mixed>> $products */
         $products = $store->getAttribute('products');
         $this->assertEquals('product3', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store4');
+        /** @var array<array<string, mixed>> $products */
         $products = $store->getAttribute('products');
         $this->assertEquals('product4', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
@@ -553,15 +579,23 @@ trait ManyToOneTests
             throw new Exception('Product not found');
         }
 
-        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
-        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
+        /** @var \Utopia\Database\Document $_doc_store_556 */
+        $_doc_store_556 = $product->getAttribute('store');
+        $this->assertEquals('Store 1', $_doc_store_556->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_store_557 */
+        $_arr_store_557 = $product->getAttribute('store');
+        $this->assertArrayNotHasKey('opensAt', $_arr_store_557);
 
         $product = $database->getDocument('product', 'product1', [
             Query::select(['*', 'store.name']),
         ]);
 
-        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
-        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
+        /** @var \Utopia\Database\Document $_doc_store_563 */
+        $_doc_store_563 = $product->getAttribute('store');
+        $this->assertEquals('Store 1', $_doc_store_563->getAttribute('name'));
+        /** @var array<string, mixed> $_arr_store_564 */
+        $_arr_store_564 = $product->getAttribute('store');
+        $this->assertArrayNotHasKey('opensAt', $_arr_store_564);
 
         // Update root document attribute without altering relationship
         $product1 = $database->updateDocument(
@@ -596,9 +630,13 @@ trait ManyToOneTests
             $product1->setAttribute('store', $store)
         );
 
-        $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_store_599 */
+        $_doc_store_599 = $product1->getAttribute('store');
+        $this->assertEquals('Store 1 Updated', $_doc_store_599->getAttribute('name'));
         $product1 = $database->getDocument('product', 'product1');
-        $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_store_601 */
+        $_doc_store_601 = $product1->getAttribute('store');
+        $this->assertEquals('Store 1 Updated', $_doc_store_601->getAttribute('name'));
 
         // Update inverse nested document attribute
         $product = $store1->getAttribute('products')[0];
@@ -610,9 +648,13 @@ trait ManyToOneTests
             $store1->setAttribute('products', [$product])
         );
 
-        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
+        /** @var array<Document> $_rel_products_613 */
+        $_rel_products_613 = $store1->getAttribute('products');
+        $this->assertEquals('Product 1 Updated', $_rel_products_613[0]->getAttribute('name'));
         $store1 = $database->getDocument('store', 'store1');
-        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
+        /** @var array<Document> $_rel_products_615 */
+        $_rel_products_615 = $store1->getAttribute('products');
+        $this->assertEquals('Product 1 Updated', $_rel_products_615[0]->getAttribute('name'));
 
         // Create new document with no relationship
         $product5 = $database->createDocument('product', new Document([
@@ -641,9 +683,13 @@ trait ManyToOneTests
             ]))
         );
 
-        $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_store_644 */
+        $_doc_store_644 = $product5->getAttribute('store');
+        $this->assertEquals('Store 5', $_doc_store_644->getAttribute('name'));
         $product5 = $database->getDocument('product', 'product5');
-        $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
+        /** @var \Utopia\Database\Document $_doc_store_646 */
+        $_doc_store_646 = $product5->getAttribute('store');
+        $this->assertEquals('Store 5', $_doc_store_646->getAttribute('name'));
 
         // Create new child document with no relationship
         $store6 = $database->createDocument('store', new Document([
@@ -672,9 +718,13 @@ trait ManyToOneTests
             ])])
         );
 
-        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
+        /** @var array<Document> $_rel_products_675 */
+        $_rel_products_675 = $store6->getAttribute('products');
+        $this->assertEquals('Product 6', $_rel_products_675[0]->getAttribute('name'));
         $store6 = $database->getDocument('store', 'store6');
-        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
+        /** @var array<Document> $_rel_products_677 */
+        $_rel_products_677 = $store6->getAttribute('products');
+        $this->assertEquals('Product 6', $_rel_products_677[0]->getAttribute('name'));
 
         // Update document with new related document
         $database->updateDocument(
@@ -711,6 +761,7 @@ trait ManyToOneTests
 
         // Get document with new relationship key
         $store = $database->getDocument('store', 'store2');
+        /** @var array<array<string, mixed>> $products */
         $products = $store->getAttribute('newProducts');
         $this->assertEquals('product1', $products[0]['$id']);
 
@@ -1250,7 +1301,9 @@ trait ManyToOneTests
         $doc1 = $database->getDocument('$symbols_coll.ection6', $doc1->getId());
         $doc2 = $database->getDocument('$symbols_coll.ection5', $doc2->getId());
 
-        $this->assertEquals($doc2->getId(), $doc1->getAttribute('symbols_collection5')[0]->getId());
+        /** @var array<Document> $_arr_symbols_collection5_1253 */
+        $_arr_symbols_collection5_1253 = $doc1->getAttribute('symbols_collection5');
+        $this->assertEquals($doc2->getId(), $_arr_symbols_collection5_1253[0]->getId());
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('symbols_collection6')->getId());
     }
 

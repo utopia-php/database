@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -9,24 +10,28 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
+use ValueError;
 
+/**
+ * Validates database attribute definitions including type, size, format, and default values.
+ */
 class Attribute extends Validator
 {
     protected string $message = 'Invalid attribute';
 
     /**
-     * @var array<Document>
+     * @var array<string, AttributeVO>
      */
     protected array $attributes = [];
 
     /**
-     * @var array<Document>
+     * @var array<string, AttributeVO>
      */
     protected array $schemaAttributes = [];
 
     /**
-     * @param  array<Document>  $attributes
-     * @param  array<Document>  $schemaAttributes
+     * @param  array<AttributeVO|Document>  $attributes
+     * @param  array<AttributeVO|Document>  $schemaAttributes
      * @param  callable|null  $attributeCountCallback
      * @param  callable|null  $attributeWidthCallback
      * @param  callable|null  $filterCallback
@@ -50,12 +55,12 @@ class Attribute extends Validator
         protected bool $sharedTables = false,
     ) {
         foreach ($attributes as $attribute) {
-            $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
-            $this->attributes[$key] = $attribute;
+            $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
+            $this->attributes[\strtolower($typed->key)] = $typed;
         }
         foreach ($schemaAttributes as $attribute) {
-            $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
-            $this->schemaAttributes[$key] = $attribute;
+            $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
+            $this->schemaAttributes[\strtolower($typed->key)] = $typed;
         }
     }
 
@@ -92,7 +97,7 @@ class Attribute extends Validator
      *
      * Returns true if attribute is valid.
      *
-     * @param  Document  $value
+     * @param  AttributeVO|Document  $value
      *
      * @throws DatabaseException
      * @throws DuplicateException
@@ -100,25 +105,38 @@ class Attribute extends Validator
      */
     public function isValid($value): bool
     {
-        if (! $this->checkDuplicateId($value)) {
+        if ($value instanceof AttributeVO) {
+            $attr = $value;
+        } else {
+            try {
+                $attr = AttributeVO::fromDocument($value);
+            } catch (ValueError $e) {
+                /** @var string $rawType */
+                $rawType = $value->getAttribute('type', 'unknown');
+                $this->message = 'Unknown attribute type: '.$rawType;
+                throw new DatabaseException($this->message);
+            }
+        }
+
+        if (! $this->checkDuplicateId($attr)) {
             return false;
         }
-        if (! $this->checkDuplicateInSchema($value)) {
+        if (! $this->checkDuplicateInSchema($attr)) {
             return false;
         }
-        if (! $this->checkRequiredFilters($value)) {
+        if (! $this->checkRequiredFilters($attr)) {
             return false;
         }
-        if (! $this->checkFormat($value)) {
+        if (! $this->checkFormat($attr)) {
             return false;
         }
-        if (! $this->checkAttributeLimits($value)) {
+        if (! $this->checkAttributeLimits($attr)) {
             return false;
         }
-        if (! $this->checkType($value)) {
+        if (! $this->checkType($attr)) {
             return false;
         }
-        if (! $this->checkDefaultValue($value)) {
+        if (! $this->checkDefaultValue($attr)) {
             return false;
         }
 
@@ -130,12 +148,12 @@ class Attribute extends Validator
      *
      * @throws DuplicateException
      */
-    public function checkDuplicateId(Document $attribute): bool
+    public function checkDuplicateId(AttributeVO $attribute): bool
     {
-        $id = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+        $id = $attribute->key;
 
         foreach ($this->attributes as $existingAttribute) {
-            if (\strtolower($existingAttribute->getId()) === \strtolower($id)) {
+            if (\strtolower($existingAttribute->key) === \strtolower($id)) {
                 $this->message = 'Attribute already exists in metadata';
                 throw new DuplicateException($this->message);
             }
@@ -149,7 +167,7 @@ class Attribute extends Validator
      *
      * @throws DuplicateException
      */
-    public function checkDuplicateInSchema(Document $attribute): bool
+    public function checkDuplicateInSchema(AttributeVO $attribute): bool
     {
         if (! $this->supportForSchemaAttributes) {
             return true;
@@ -159,10 +177,11 @@ class Attribute extends Validator
             return true;
         }
 
-        $id = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+        $id = $attribute->key;
 
         foreach ($this->schemaAttributes as $schemaAttribute) {
-            $schemaId = $this->filterCallback ? ($this->filterCallback)($schemaAttribute->getId()) : $schemaAttribute->getId();
+            /** @var string $schemaId */
+            $schemaId = $this->filterCallback ? ($this->filterCallback)($schemaAttribute->key) : $schemaAttribute->key;
             if (\strtolower($schemaId) === \strtolower($id)) {
                 $this->message = 'Attribute already exists in schema';
                 throw new DuplicateException($this->message);
@@ -177,14 +196,11 @@ class Attribute extends Validator
      *
      * @throws DatabaseException
      */
-    public function checkRequiredFilters(Document $attribute): bool
+    public function checkRequiredFilters(AttributeVO $attribute): bool
     {
-        $type = $attribute->getAttribute('type');
-        $filters = $attribute->getAttribute('filters', []);
-
-        $requiredFilters = $this->getRequiredFilters($type);
-        if (! empty(\array_diff($requiredFilters, $filters))) {
-            $this->message = "Attribute of type: $type requires the following filters: ".implode(',', $requiredFilters);
+        $requiredFilters = $this->getRequiredFilters($attribute->type);
+        if (! empty(\array_diff($requiredFilters, $attribute->filters))) {
+            $this->message = "Attribute of type: {$attribute->type->value} requires the following filters: ".implode(',', $requiredFilters);
             throw new DatabaseException($this->message);
         }
 
@@ -194,13 +210,12 @@ class Attribute extends Validator
     /**
      * Get the list of required filters for each data type
      *
-     * @param  string|null  $type  Type of the attribute
      * @return array<string>
      */
-    protected function getRequiredFilters(?string $type): array
+    protected function getRequiredFilters(ColumnType $type): array
     {
         return match ($type) {
-            ColumnType::Datetime->value => ['datetime'],
+            ColumnType::Datetime => ['datetime'],
             default => [],
         };
     }
@@ -210,13 +225,10 @@ class Attribute extends Validator
      *
      * @throws DatabaseException
      */
-    public function checkFormat(Document $attribute): bool
+    public function checkFormat(AttributeVO $attribute): bool
     {
-        $format = $attribute->getAttribute('format');
-        $type = $attribute->getAttribute('type');
-
-        if ($format && ! Structure::hasFormat($format, $type)) {
-            $this->message = 'Format ("'.$format.'") not available for this attribute type ("'.$type.'")';
+        if ($attribute->format && ! Structure::hasFormat($attribute->format, $attribute->type->value)) {
+            $this->message = 'Format ("'.$attribute->format.'") not available for this attribute type ("'.$attribute->type->value.'")';
             throw new DatabaseException($this->message);
         }
 
@@ -228,14 +240,18 @@ class Attribute extends Validator
      *
      * @throws LimitException
      */
-    public function checkAttributeLimits(Document $attribute): bool
+    public function checkAttributeLimits(AttributeVO $attribute): bool
     {
         if ($this->attributeCountCallback === null || $this->attributeWidthCallback === null) {
             return true;
         }
 
-        $attributeCount = ($this->attributeCountCallback)($attribute);
-        $attributeWidth = ($this->attributeWidthCallback)($attribute);
+        $attributeDoc = $attribute->toDocument();
+
+        /** @var int $attributeCount */
+        $attributeCount = ($this->attributeCountCallback)($attributeDoc);
+        /** @var int $attributeWidth */
+        $attributeWidth = ($this->attributeWidthCallback)($attributeDoc);
 
         if ($this->maxAttributes > 0 && $attributeCount > $this->maxAttributes) {
             $this->message = 'Column limit reached. Cannot create new attribute. Current attribute count is '.$attributeCount.' but the maximum is '.$this->maxAttributes.'. Remove some attributes to free up space.';
@@ -255,54 +271,54 @@ class Attribute extends Validator
      *
      * @throws DatabaseException
      */
-    public function checkType(Document $attribute): bool
+    public function checkType(AttributeVO $attribute): bool
     {
-        $type = $attribute->getAttribute('type');
-        $size = $attribute->getAttribute('size', 0);
-        $signed = $attribute->getAttribute('signed', true);
-        $array = $attribute->getAttribute('array', false);
-        $default = $attribute->getAttribute('default');
+        $type = $attribute->type;
+        $size = $attribute->size;
+        $signed = $attribute->signed;
+        $array = $attribute->array;
+        $default = $attribute->default;
 
         switch ($type) {
-            case ColumnType::Id->value:
+            case ColumnType::Id:
                 break;
 
-            case ColumnType::String->value:
+            case ColumnType::String:
                 if ($size > $this->maxStringLength) {
                     $this->message = 'Max size allowed for string is: '.number_format($this->maxStringLength);
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case ColumnType::Varchar->value:
+            case ColumnType::Varchar:
                 if ($size > $this->maxVarcharLength) {
                     $this->message = 'Max size allowed for varchar is: '.number_format($this->maxVarcharLength);
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case ColumnType::Text->value:
+            case ColumnType::Text:
                 if ($size > 65535) {
                     $this->message = 'Max size allowed for text is: 65535';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case ColumnType::MediumText->value:
+            case ColumnType::MediumText:
                 if ($size > 16777215) {
                     $this->message = 'Max size allowed for mediumtext is: 16777215';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case ColumnType::LongText->value:
+            case ColumnType::LongText:
                 if ($size > 4294967295) {
                     $this->message = 'Max size allowed for longtext is: 4294967295';
                     throw new DatabaseException($this->message);
                 }
                 break;
 
-            case ColumnType::Integer->value:
+            case ColumnType::Integer:
                 $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: '.number_format($limit);
@@ -310,13 +326,13 @@ class Attribute extends Validator
                 }
                 break;
 
-            case ColumnType::Double->value:
-            case ColumnType::Boolean->value:
-            case ColumnType::Datetime->value:
-            case ColumnType::Relationship->value:
+            case ColumnType::Double:
+            case ColumnType::Boolean:
+            case ColumnType::Datetime:
+            case ColumnType::Relationship:
                 break;
 
-            case ColumnType::Object->value:
+            case ColumnType::Object:
                 if (! $this->supportForObject) {
                     $this->message = 'Object attributes are not supported';
                     throw new DatabaseException($this->message);
@@ -331,9 +347,9 @@ class Attribute extends Validator
                 }
                 break;
 
-            case ColumnType::Point->value:
-            case ColumnType::Linestring->value:
-            case ColumnType::Polygon->value:
+            case ColumnType::Point:
+            case ColumnType::Linestring:
+            case ColumnType::Polygon:
                 if (! $this->supportForSpatialAttributes) {
                     $this->message = 'Spatial attributes are not supported';
                     throw new DatabaseException($this->message);
@@ -348,7 +364,7 @@ class Attribute extends Validator
                 }
                 break;
 
-            case ColumnType::Vector->value:
+            case ColumnType::Vector:
                 if (! $this->supportForVectors) {
                     $this->message = 'Vector types are not supported by the current database';
                     throw new DatabaseException($this->message);
@@ -407,7 +423,7 @@ class Attribute extends Validator
                 if ($this->supportForObject) {
                     $supportedTypes[] = ColumnType::Object->value;
                 }
-                $this->message = 'Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes);
+                $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes);
                 throw new DatabaseException($this->message);
         }
 
@@ -419,24 +435,22 @@ class Attribute extends Validator
      *
      * @throws DatabaseException
      */
-    public function checkDefaultValue(Document $attribute): bool
+    public function checkDefaultValue(AttributeVO $attribute): bool
     {
-        $default = $attribute->getAttribute('default');
-        $required = $attribute->getAttribute('required', false);
-        $type = $attribute->getAttribute('type');
-        $array = $attribute->getAttribute('array', false);
+        $default = $attribute->default;
+        $type = $attribute->type;
 
         if (\is_null($default)) {
             return true;
         }
 
-        if ($required === true) {
+        if ($attribute->required === true) {
             $this->message = 'Cannot set a default value for a required attribute';
             throw new DatabaseException($this->message);
         }
 
         // Reject array defaults for non-array attributes (except vectors, spatial types, and objects which use arrays internally)
-        if (\is_array($default) && ! $array && ! \in_array($type, [ColumnType::Vector->value, ColumnType::Object->value, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
+        if (\is_array($default) && ! $attribute->array && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }
@@ -449,12 +463,12 @@ class Attribute extends Validator
     /**
      * Function to validate if the default value of an attribute matches its attribute type
      *
-     * @param  string  $type  Type of the attribute
+     * @param  ColumnType  $type  Type of the attribute
      * @param  mixed  $default  Default value of the attribute
      *
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(string $type, mixed $default): void
+    protected function validateDefaultTypes(ColumnType $type, mixed $default): void
     {
         $defaultType = \gettype($default);
 
@@ -465,7 +479,8 @@ class Attribute extends Validator
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (! in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]) && $type != ColumnType::Object->value) {
+            if (! in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon]) && $type !== ColumnType::Object) {
+                /** @var array<mixed> $default */
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -475,31 +490,31 @@ class Attribute extends Validator
         }
 
         switch ($type) {
-            case ColumnType::String->value:
-            case ColumnType::Varchar->value:
-            case ColumnType::Text->value:
-            case ColumnType::MediumText->value:
-            case ColumnType::LongText->value:
+            case ColumnType::String:
+            case ColumnType::Varchar:
+            case ColumnType::Text:
+            case ColumnType::MediumText:
+            case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    $this->message = 'Default value '.$default.' does not match given type '.$type;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case ColumnType::Integer->value:
-            case ColumnType::Double->value:
-            case ColumnType::Boolean->value:
-                if ($type !== $defaultType) {
-                    $this->message = 'Default value '.$default.' does not match given type '.$type;
+            case ColumnType::Integer:
+            case ColumnType::Double:
+            case ColumnType::Boolean:
+                if ($type->value !== $defaultType) {
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case ColumnType::Datetime->value:
-                if ($defaultType !== ColumnType::String->value) {
-                    $this->message = 'Default value '.$default.' does not match given type '.$type;
+            case ColumnType::Datetime:
+                if ($defaultType !== 'string') {
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case ColumnType::Vector->value:
+            case ColumnType::Vector:
                 // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {
                     $this->message = 'Vector components must be numeric values (float or integer)';
@@ -525,7 +540,7 @@ class Attribute extends Validator
                 if ($this->supportForSpatialAttributes) {
                     \array_push($supportedTypes, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value);
                 }
-                $this->message = 'Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes);
+                $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes);
                 throw new DatabaseException($this->message);
         }
     }

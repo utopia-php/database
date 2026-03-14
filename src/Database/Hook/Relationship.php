@@ -5,20 +5,58 @@ namespace Utopia\Database\Hook;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 
+/**
+ * Contract for handling document relationship operations including creation, updates, deletion, and population.
+ */
 interface Relationship
 {
+    /**
+     * Check whether relationship processing is enabled.
+     *
+     * @return bool True if relationship handling is active
+     */
     public function isEnabled(): bool;
 
+    /**
+     * Enable or disable relationship processing.
+     *
+     * @param bool $enabled Whether to enable relationship handling
+     */
     public function setEnabled(bool $enabled): void;
 
+    /**
+     * Check whether existence validation is enabled for related documents.
+     *
+     * @return bool True if related documents must exist before linking
+     */
     public function shouldCheckExist(): bool;
 
+    /**
+     * Enable or disable existence validation for related documents.
+     *
+     * @param bool $check Whether to validate that related documents exist
+     */
     public function setCheckExist(bool $check): void;
 
+    /**
+     * Get the number of documents currently in the write stack (recursion guard).
+     *
+     * @return int The current write stack depth
+     */
     public function getWriteStackCount(): int;
 
+    /**
+     * Get the current relationship fetch depth.
+     *
+     * @return int The fetch depth level
+     */
     public function getFetchDepth(): int;
 
+    /**
+     * Check whether documents are currently being populated in batch mode.
+     *
+     * @return bool True if batch population is in progress
+     */
     public function isInBatchPopulation(): bool;
 
     /**

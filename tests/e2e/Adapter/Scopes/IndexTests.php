@@ -16,9 +16,9 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -73,12 +73,12 @@ trait IndexTests
         $this->assertEquals(true, $database->createAttribute('indexes', new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true)));
 
         // Indexes
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index2', type: IndexType::Key, attributes: ['float', 'integer'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index3', type: IndexType::Key, attributes: ['integer', 'boolean'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value, OrderDirection::DESC->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index4', type: IndexType::Unique, attributes: ['string'], lengths: [128], orders: [OrderDirection::ASC->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index5', type: IndexType::Unique, attributes: ['$id', 'string'], lengths: [128], orders: [OrderDirection::ASC->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'order', type: IndexType::Unique, attributes: ['order'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index2', type: IndexType::Key, attributes: ['float', 'integer'], lengths: [], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index3', type: IndexType::Key, attributes: ['integer', 'boolean'], lengths: [], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value, OrderDirection::Desc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index4', type: IndexType::Unique, attributes: ['string'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index5', type: IndexType::Unique, attributes: ['$id', 'string'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'order', type: IndexType::Unique, attributes: ['order'], lengths: [128], orders: [OrderDirection::Asc->value])));
 
         $collection = $database->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
@@ -95,21 +95,21 @@ trait IndexTests
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // Test non-shared tables duplicates throw duplicate
-        $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::ASC->value]));
+        $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::Asc->value]));
         try {
-            $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::ASC->value]));
+            $database->createIndex('indexes', new Index(key: 'duplicate', type: IndexType::Key, attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::Asc->value]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
         // Test delete index when index does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
         $this->assertEquals(true, $this->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::ASC->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', new Index(key: 'index1', type: IndexType::Key, attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
         $this->assertEquals(true, $database->deleteAttribute('indexes', 'string'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
@@ -390,8 +390,8 @@ trait IndexTests
         $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
         $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
 
-        $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::ASC->value]));
-        $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::ASC->value]));
+        $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
 
         $index = $database->renameIndex('numbers', 'index1', 'index3');
 
@@ -421,8 +421,8 @@ trait IndexTests
             $database->createCollection('numbers');
             $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
-            $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::ASC->value]));
-            $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::ASC->value]));
+            $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
+            $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
             $database->renameIndex('numbers', 'index1', 'index3');
         }
 
@@ -638,13 +638,13 @@ trait IndexTests
             $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 256, required: false));
             $database->createAttribute($collectionId, new Attribute(key: 'age', type: ColumnType::Integer, size: 8, required: false));
 
-            $database->createIndex($collectionId, new Index(key: 'index1', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
+            $database->createIndex($collectionId, new Index(key: 'index1', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value]));
 
             $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
 
             // Try to add identical index (failure)
             try {
-                $database->createIndex($collectionId, new Index(key: 'index2', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index2', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value]));
                 if ($supportsIdenticalIndexes) {
                     $this->assertTrue(true, 'Identical indexes are supported and second index was created successfully');
                 } else {
@@ -662,7 +662,7 @@ trait IndexTests
 
             // Test with different attributes order - faliure
             try {
-                $database->createIndex($collectionId, new Index(key: 'index3', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::ASC->value, OrderDirection::DESC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index3', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 if (! $supportsIdenticalIndexes) {
@@ -674,7 +674,7 @@ trait IndexTests
 
             // Test with different orders  order - faliure
             try {
-                $database->createIndex($collectionId, new Index(key: 'index4', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::DESC->value, OrderDirection::ASC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index4', type: IndexType::Key, attributes: ['age', 'name'], lengths: [], orders: [OrderDirection::Desc->value, OrderDirection::Asc->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 if (! $supportsIdenticalIndexes) {
@@ -686,7 +686,7 @@ trait IndexTests
 
             // Test with different attributes - success
             try {
-                $database->createIndex($collectionId, new Index(key: 'index5', type: IndexType::Key, attributes: ['name'], lengths: [], orders: [OrderDirection::ASC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index5', type: IndexType::Key, attributes: ['name'], lengths: [], orders: [OrderDirection::Asc->value]));
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different attributes: '.$e->getMessage());
@@ -694,7 +694,7 @@ trait IndexTests
 
             // Test with different orders - success
             try {
-                $database->createIndex($collectionId, new Index(key: 'index6', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::ASC->value]));
+                $database->createIndex($collectionId, new Index(key: 'index6', type: IndexType::Key, attributes: ['name', 'age'], lengths: [], orders: [OrderDirection::Asc->value]));
                 $this->assertTrue(true, 'Index with different orders was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different orders: '.$e->getMessage());
@@ -809,7 +809,7 @@ trait IndexTests
 
             // Test: Trigram index with orders should fail
             try {
-                $database->createIndex($collectionId, new Index(key: 'trigram_order', type: IndexType::Trigram, attributes: ['name'], lengths: [], orders: [OrderDirection::ASC->value]));
+                $database->createIndex($collectionId, new Index(key: 'trigram_order', type: IndexType::Trigram, attributes: ['name'], lengths: [], orders: [OrderDirection::Asc->value]));
                 $this->fail('Expected exception when creating trigram index with orders');
             } catch (Exception $e) {
                 $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
@@ -853,7 +853,7 @@ trait IndexTests
         ];
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
+            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
@@ -890,7 +890,7 @@ trait IndexTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1))
+            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 1))
         );
 
         $col2 = uniqid('sl_ttl_collection');
@@ -911,7 +911,7 @@ trait IndexTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 7200, // 2 hours
         ]);
 
@@ -946,11 +946,11 @@ trait IndexTests
         $database->createAttribute($col, new Attribute(key: 'deletedAt', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']));
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600))
         );
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 7200));
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 7200));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -958,7 +958,7 @@ trait IndexTests
         }
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 86400));
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 86400));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -974,7 +974,7 @@ trait IndexTests
         $this->assertNotContains('idx_ttl_deleted', $indexIds);
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 172800));
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 172800));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -984,7 +984,7 @@ trait IndexTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1800))
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 1800))
         );
 
         $collection = $database->getCollection($col);
@@ -1013,7 +1013,7 @@ trait IndexTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 3600,
         ]);
 
@@ -1022,7 +1022,7 @@ trait IndexTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 7200,
         ]);
 

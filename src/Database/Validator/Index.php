@@ -11,6 +11,9 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Validator;
 
+/**
+ * Validates database index definitions including type support, attribute references, lengths, and constraints.
+ */
 class Index extends Validator
 {
     protected string $message = 'Invalid index';
@@ -23,18 +26,18 @@ class Index extends Validator
     /**
      * @var array<IndexVO>
      */
-    protected array $typedIndexes;
+    protected array $indexes;
 
     /**
-     * @param  array<Document>  $attributes
-     * @param  array<Document>  $indexes
+     * @param  array<AttributeVO|Document>  $attributes
+     * @param  array<IndexVO|Document>  $indexes
      * @param  array<string>  $reservedKeys
      *
      * @throws DatabaseException
      */
     public function __construct(
         array $attributes,
-        protected array $indexes,
+        array $indexes,
         protected int $maxLength,
         protected array $reservedKeys = [],
         protected bool $supportForArrayIndexes = false,
@@ -55,7 +58,7 @@ class Index extends Validator
     ) {
         $this->attributes = [];
         foreach ($attributes as $attribute) {
-            $typed = AttributeVO::fromDocument($attribute);
+            $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
             $this->attributes[\strtolower($typed->key)] = $typed;
         }
         foreach (Database::internalAttributes() as $attribute) {
@@ -63,10 +66,10 @@ class Index extends Validator
             $this->attributes[$key] = $attribute;
         }
 
-        $this->typedIndexes = \array_map(
-            fn (Document $doc) => IndexVO::fromDocument($doc),
-            $this->indexes
-        );
+        $this->indexes = [];
+        foreach ($indexes as $index) {
+            $this->indexes[] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
+        }
     }
 
     /**
@@ -102,13 +105,13 @@ class Index extends Validator
      *
      * Returns true index if valid.
      *
-     * @param  Document  $value
+     * @param  IndexVO|Document  $value
      *
      * @throws DatabaseException
      */
     public function isValid($value): bool
     {
-        $index = IndexVO::fromDocument($value);
+        $index = $value instanceof IndexVO ? $value : IndexVO::fromDocument($value);
 
         if (! $this->checkValidIndex($index)) {
             return false;
@@ -122,7 +125,7 @@ class Index extends Validator
         if (! $this->checkDuplicatedAttributes($index)) {
             return false;
         }
-        if (! $this->checkMultipleFulltextIndexes($index, $value)) {
+        if (! $this->checkMultipleFulltextIndexes($index)) {
             return false;
         }
         if (! $this->checkFulltextIndexNonString($index)) {
@@ -158,13 +161,19 @@ class Index extends Validator
         if (! $this->checkKeyUniqueFulltextSupport($index)) {
             return false;
         }
-        if (! $this->checkTTLIndexes($index, $value)) {
+        if (! $this->checkTTLIndexes($index)) {
             return false;
         }
 
         return true;
     }
 
+    /**
+     * Check that the index type is supported by the current adapter.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkValidIndex(IndexVO $index): bool
     {
         $type = $index->type;
@@ -267,6 +276,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that all index attributes exist in the collection schema.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkValidAttributes(IndexVO $index): bool
     {
         if (! $this->supportForAttributes) {
@@ -291,6 +306,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that the index has at least one attribute.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkEmptyIndexAttributes(IndexVO $index): bool
     {
         if (empty($index->attributes)) {
@@ -302,6 +323,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that the index does not contain duplicate attributes.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkDuplicatedAttributes(IndexVO $index): bool
     {
         $stack = [];
@@ -320,6 +347,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that fulltext indexes only reference string-type attributes.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkFulltextIndexNonString(IndexVO $index): bool
     {
         if (! $this->supportForAttributes) {
@@ -347,6 +380,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check constraints for indexes on array attributes including type, length, and count limits.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkArrayIndexes(IndexVO $index): bool
     {
         if (! $this->supportForAttributes) {
@@ -406,6 +445,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that index lengths are valid and do not exceed the maximum allowed total.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkIndexLengths(IndexVO $index): bool
     {
         if ($index->type === IndexType::Fulltext) {
@@ -471,6 +516,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that the index key name is not a reserved name.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkReservedNames(IndexVO $index): bool
     {
         $key = $index->key;
@@ -486,6 +537,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check spatial index constraints including attribute type and nullability.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkSpatialIndexes(IndexVO $index): bool
     {
         $type = $index->type;
@@ -532,6 +589,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that non-spatial index types are not applied to spatial attributes.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkNonSpatialIndexOnSpatialAttributes(IndexVO $index): bool
     {
         $type = $index->type;
@@ -641,6 +704,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that key and unique index types are supported by the current adapter.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkKeyUniqueFulltextSupport(IndexVO $index): bool
     {
         $type = $index->type;
@@ -660,15 +729,21 @@ class Index extends Validator
         return true;
     }
 
-    public function checkMultipleFulltextIndexes(IndexVO $index, Document $document): bool
+    /**
+     * Check that multiple fulltext indexes are not created when unsupported.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
+    public function checkMultipleFulltextIndexes(IndexVO $index): bool
     {
         if ($this->supportForMultipleFulltextIndexes) {
             return true;
         }
 
         if ($index->type === IndexType::Fulltext) {
-            foreach ($this->typedIndexes as $i => $existingIndex) {
-                if ($this->indexes[$i]->getId() === $document->getId()) {
+            foreach ($this->indexes as $existingIndex) {
+                if ($existingIndex->key === $index->key) {
                     continue;
                 }
                 if ($existingIndex->type === IndexType::Fulltext) {
@@ -682,13 +757,19 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check that identical indexes (same attributes and orders) are not created when unsupported.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkIdenticalIndexes(IndexVO $index): bool
     {
         if ($this->supportForIdenticalIndexes) {
             return true;
         }
 
-        foreach ($this->typedIndexes as $existingIndex) {
+        foreach ($this->indexes as $existingIndex) {
             $attributesMatch = false;
             if (empty(\array_diff($existingIndex->attributes, $index->attributes)) &&
                 empty(\array_diff($index->attributes, $existingIndex->attributes))) {
@@ -719,6 +800,12 @@ class Index extends Validator
         return true;
     }
 
+    /**
+     * Check object index constraints including single-attribute and top-level requirements.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
     public function checkObjectIndexes(IndexVO $index): bool
     {
         $type = $index->type;
@@ -767,7 +854,13 @@ class Index extends Validator
         return true;
     }
 
-    public function checkTTLIndexes(IndexVO $index, Document $document): bool
+    /**
+     * Check TTL index constraints including single-attribute, datetime type, and uniqueness requirements.
+     *
+     * @param IndexVO $index The index to validate
+     * @return bool
+     */
+    public function checkTTLIndexes(IndexVO $index): bool
     {
         $type = $index->type;
 
@@ -798,8 +891,8 @@ class Index extends Validator
         }
 
         // Check if there's already a TTL index in this collection
-        foreach ($this->typedIndexes as $i => $existingIndex) {
-            if ($this->indexes[$i]->getId() === $document->getId()) {
+        foreach ($this->indexes as $existingIndex) {
+            if ($existingIndex->key === $index->key) {
                 continue;
             }
 

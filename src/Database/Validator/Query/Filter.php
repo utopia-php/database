@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
@@ -15,6 +16,9 @@ use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
+/**
+ * Validates filter query methods by checking attribute existence, type compatibility, and value constraints.
+ */
 class Filter extends Base
 {
     /**
@@ -29,19 +33,30 @@ class Filter extends Base
         array $attributes,
         private readonly string $idAttributeType,
         private readonly int $maxValuesCount = 5000,
-        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
-        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
+        private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private bool $supportForAttributes = true
     ) {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getId())] = $attribute->getArrayCopy();
+            /** @var string $attrKey */
+            $attrKey = $attribute->getAttribute('key', $attribute->getId());
+            $copy = $attribute->getArrayCopy();
+            // Convert type string to ColumnType enum for typed comparisons
+            if (isset($copy['type']) && \is_string($copy['type'])) {
+                $copy['type'] = ColumnType::from($copy['type']);
+            }
+            $this->schema[$attrKey] = $copy;
         }
     }
 
     protected function isValidAttribute(string $attribute): bool
     {
+        /** @var array<string, mixed> $attributeSchema */
+        $attributeSchema = $this->schema[$attribute] ?? [];
+        /** @var array<string> $filters */
+        $filters = $attributeSchema['filters'] ?? [];
         if (
-            \in_array('encrypt', $this->schema[$attribute]['filters'] ?? [])
+            \in_array('encrypt', $filters)
         ) {
             $this->message = 'Cannot query encrypted attribute: '.$attribute;
 
@@ -88,7 +103,7 @@ class Filter extends Base
         }
 
         // exists and notExists queries don't require values, just attribute validation
-        if (in_array($method, [Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])) {
+        if (in_array($method, [Method::Exists, Method::NotExists])) {
             // Validate attribute (handles encrypted attributes, schemaless mode, etc.)
             return $this->isValidAttribute($attribute);
         }
@@ -103,11 +118,14 @@ class Filter extends Base
 
             return true;
         }
+        /** @var array<string, mixed> $attributeSchema */
         $attributeSchema = $this->schema[$attribute];
 
         // Skip value validation for nested relationship queries (e.g., author.age)
         // The values will be validated when querying the related collection
-        if ($attributeSchema['type'] === ColumnType::Relationship->value && $originalAttribute !== $attribute) {
+        /** @var ColumnType|null $schemaType */
+        $schemaType = $attributeSchema['type'] ?? null;
+        if ($schemaType === ColumnType::Relationship && $originalAttribute !== $attribute) {
             return true;
         }
 
@@ -120,15 +138,17 @@ class Filter extends Base
         if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
             return true;
         }
+        /** @var array<string, mixed> $attributeSchema */
         $attributeSchema = $this->schema[$attribute];
 
-        $attributeType = $attributeSchema['type'];
+        /** @var ColumnType|null $attributeType */
+        $attributeType = $attributeSchema['type'] ?? null;
 
-        $isDottedOnObject = \str_contains($originalAttribute, '.') && $attributeType === ColumnType::Object->value;
+        $isDottedOnObject = \str_contains($originalAttribute, '.') && $attributeType === ColumnType::Object;
 
         // If the query method is spatial-only, the attribute must be a spatial type
         $query = new Query($method);
-        if ($query->isSpatialQuery() && ! in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value], true)) {
+        if ($query->isSpatialQuery() && ! in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
             $this->message = 'Spatial query "'.$method->value.'" cannot be applied on non-spatial attribute: '.$attribute;
 
             return false;
@@ -138,20 +158,22 @@ class Filter extends Base
             $validator = null;
 
             switch ($attributeType) {
-                case ColumnType::Id->value:
+                case ColumnType::Id:
                     $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
                     break;
 
-                case ColumnType::String->value:
-                case ColumnType::Varchar->value:
-                case ColumnType::Text->value:
-                case ColumnType::MediumText->value:
-                case ColumnType::LongText->value:
+                case ColumnType::String:
+                case ColumnType::Varchar:
+                case ColumnType::Text:
+                case ColumnType::MediumText:
+                case ColumnType::LongText:
                     $validator = new Text(0, 0);
                     break;
 
-                case ColumnType::Integer->value:
+                case ColumnType::Integer:
+                    /** @var int $size */
                     $size = $attributeSchema['size'] ?? 4;
+                    /** @var bool $signed */
                     $signed = $attributeSchema['signed'] ?? true;
                     $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
@@ -159,26 +181,26 @@ class Filter extends Base
                     $validator = new Integer(false, $bits, $unsigned);
                     break;
 
-                case ColumnType::Double->value:
+                case ColumnType::Double:
                     $validator = new FloatValidator();
                     break;
 
-                case ColumnType::Boolean->value:
+                case ColumnType::Boolean:
                     $validator = new Boolean();
                     break;
 
-                case ColumnType::Datetime->value:
+                case ColumnType::Datetime:
                     $validator = new DatetimeValidator(
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate
                     );
                     break;
 
-                case ColumnType::Relationship->value:
+                case ColumnType::Relationship:
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
 
-                case ColumnType::Object->value:
+                case ColumnType::Object:
                     // For dotted attributes on objects, validate as string (path queries)
                     if ($isDottedOnObject) {
                         $validator = new Text(0, 0);
@@ -186,7 +208,7 @@ class Filter extends Base
                     }
 
                     // object containment queries on the base object attribute
-                    elseif (\in_array($method, [Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS], true)
+                    elseif (\in_array($method, [Method::Equal, Method::NotEqual, Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains], true)
                         && ! $this->isValidObjectQueryValues($value)) {
                         $this->message = 'Invalid object query structure for attribute "'.$attribute.'"';
 
@@ -194,9 +216,9 @@ class Filter extends Base
                     }
 
                     continue 2;
-                case ColumnType::Point->value:
-                case ColumnType::Linestring->value:
-                case ColumnType::Polygon->value:
+                case ColumnType::Point:
+                case ColumnType::Linestring:
+                case ColumnType::Polygon:
                     if (! is_array($value)) {
                         $this->message = 'Spatial data must be an array';
 
@@ -205,7 +227,7 @@ class Filter extends Base
 
                     continue 2;
 
-                case ColumnType::Vector->value:
+                case ColumnType::Vector:
                     // For vector queries, validate that the value is an array of floats
                     if (! is_array($value)) {
                         $this->message = 'Vector query value must be an array';
@@ -220,6 +242,7 @@ class Filter extends Base
                         }
                     }
                     // Check size match
+                    /** @var int $expectedSize */
                     $expectedSize = $attributeSchema['size'] ?? 0;
                     if (count($value) !== $expectedSize) {
                         $this->message = "Vector query value must have {$expectedSize} elements";
@@ -234,55 +257,72 @@ class Filter extends Base
                     return false;
             }
 
-            if (! $validator->isValid($value)) {
+            if ($validator !== null && ! $validator->isValid($value)) {
                 $this->message = 'Query value is invalid for attribute "'.$attribute.'"';
 
                 return false;
             }
         }
 
-        if ($attributeSchema['type'] === ColumnType::Relationship->value) {
+        if ($attributeType === ColumnType::Relationship) {
             /**
              * We can not disable relationship query since we have logic that use it,
              * so instead we validate against the relation type
              */
-            $options = $attributeSchema['options'];
+            $options = $attributeSchema['options'] ?? [];
 
-            if ($options['relationType'] === RelationType::OneToOne->value && $options['twoWay'] === false && $options['side'] === RelationSide::Child->value) {
+            if ($options instanceof Document) {
+                $options = $options->getArrayCopy();
+            }
+
+            /** @var array<string, mixed> $options */
+
+            /** @var string $relationTypeStr */
+            $relationTypeStr = $options['relationType'] ?? '';
+            /** @var bool $twoWay */
+            $twoWay = $options['twoWay'] ?? false;
+            /** @var string $sideStr */
+            $sideStr = $options['side'] ?? '';
+
+            $relationType = $relationTypeStr !== '' ? RelationType::from($relationTypeStr) : null;
+            $side = $sideStr !== '' ? RelationSide::from($sideStr) : null;
+
+            if ($relationType === RelationType::OneToOne && $twoWay === false && $side === RelationSide::Child) {
                 $this->message = 'Cannot query on virtual relationship attribute';
 
                 return false;
             }
 
-            if ($options['relationType'] === RelationType::OneToMany->value && $options['side'] === RelationSide::Parent->value) {
+            if ($relationType === RelationType::OneToMany && $side === RelationSide::Parent) {
                 $this->message = 'Cannot query on virtual relationship attribute';
 
                 return false;
             }
 
-            if ($options['relationType'] === RelationType::ManyToOne->value && $options['side'] === RelationSide::Child->value) {
+            if ($relationType === RelationType::ManyToOne && $side === RelationSide::Child) {
                 $this->message = 'Cannot query on virtual relationship attribute';
 
                 return false;
             }
 
-            if ($options['relationType'] === RelationType::ManyToMany->value) {
+            if ($relationType === RelationType::ManyToMany) {
                 $this->message = 'Cannot query on virtual relationship attribute';
 
                 return false;
             }
         }
 
+        /** @var bool $array */
         $array = $attributeSchema['array'] ?? false;
 
         if (
             ! $array &&
-            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS]) &&
-            $attributeSchema['type'] !== ColumnType::String->value &&
-            $attributeSchema['type'] !== ColumnType::Object->value &&
-            ! in_array($attributeSchema['type'], [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])
+            in_array($method, [Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains]) &&
+            $attributeType !== ColumnType::String &&
+            $attributeType !== ColumnType::Object &&
+            ! in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])
         ) {
-            $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
+            $queryType = $method === Method::NotContains ? 'notContains' : 'contains';
             $this->message = 'Cannot query '.$queryType.' on attribute "'.$attribute.'" because it is not an array, string, or object.';
 
             return false;
@@ -290,7 +330,7 @@ class Filter extends Base
 
         if (
             $array &&
-            ! in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_CONTAINS_ALL, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EXISTS, Query::TYPE_NOT_EXISTS])
+            ! in_array($method, [Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains, Method::IsNull, Method::IsNotNull, Method::Exists, Method::NotExists])
         ) {
             $this->message = 'Cannot query '.$method->value.' on attribute "'.$attribute.'" because it is an array.';
 
@@ -298,8 +338,8 @@ class Filter extends Base
         }
 
         // Vector queries can only be used on vector attributes (not arrays)
-        if (\in_array($method, Query::VECTOR_TYPES)) {
-            if ($attributeSchema['type'] !== ColumnType::Vector->value) {
+        if (\in_array($method, [Method::VectorDot, Method::VectorCosine, Method::VectorEuclidean])) {
+            if ($attributeType !== ColumnType::Vector) {
                 $this->message = 'Vector queries can only be used on vector attributes';
 
                 return false;
@@ -385,13 +425,13 @@ class Filter extends Base
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
         switch ($method) {
-            case Query::TYPE_EQUAL:
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_NOT_CONTAINS:
-            case Query::TYPE_CONTAINS_ALL:
-            case Query::TYPE_EXISTS:
-            case Query::TYPE_NOT_EXISTS:
+            case Method::Equal:
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::NotContains:
+            case Method::ContainsAll:
+            case Method::Exists:
+            case Method::NotExists:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method->value).' queries require at least one value.';
 
@@ -400,10 +440,10 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-            case Query::TYPE_DISTANCE_EQUAL:
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-            case Query::TYPE_DISTANCE_LESS_THAN:
+            case Method::DistanceEqual:
+            case Method::DistanceNotEqual:
+            case Method::DistanceGreaterThan:
+            case Method::DistanceLessThan:
                 if (count($value->getValues()) !== 1 || ! is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
                     $this->message = 'Distance query requires [[geometry, distance]] parameters';
 
@@ -412,18 +452,18 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-            case Query::TYPE_NOT_EQUAL:
-            case Query::TYPE_LESSER:
-            case Query::TYPE_LESSER_EQUAL:
-            case Query::TYPE_GREATER:
-            case Query::TYPE_GREATER_EQUAL:
-            case Query::TYPE_SEARCH:
-            case Query::TYPE_NOT_SEARCH:
-            case Query::TYPE_STARTS_WITH:
-            case Query::TYPE_NOT_STARTS_WITH:
-            case Query::TYPE_ENDS_WITH:
-            case Query::TYPE_NOT_ENDS_WITH:
-            case Query::TYPE_REGEX:
+            case Method::NotEqual:
+            case Method::LessThan:
+            case Method::LessThanEqual:
+            case Method::GreaterThan:
+            case Method::GreaterThanEqual:
+            case Method::Search:
+            case Method::NotSearch:
+            case Method::StartsWith:
+            case Method::NotStartsWith:
+            case Method::EndsWith:
+            case Method::NotEndsWith:
+            case Method::Regex:
                 if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method->value).' queries require exactly one value.';
 
@@ -432,8 +472,8 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-            case Query::TYPE_BETWEEN:
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::Between:
+            case Method::NotBetween:
                 if (count($value->getValues()) != 2) {
                     $this->message = \ucfirst($method->value).' queries require exactly two values.';
 
@@ -442,13 +482,13 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNull:
+            case Method::IsNotNull:
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-            case Query::TYPE_VECTOR_DOT:
-            case Query::TYPE_VECTOR_COSINE:
-            case Query::TYPE_VECTOR_EUCLIDEAN:
+            case Method::VectorDot:
+            case Method::VectorCosine:
+            case Method::VectorEuclidean:
                 // Validate that the attribute is a vector type
                 if (! $this->isValidAttribute($attribute)) {
                     return false;
@@ -460,8 +500,11 @@ class Filter extends Base
                     $attributeKey = \explode('.', $attributeKey)[0];
                 }
 
+                /** @var array<string, mixed> $attributeSchema */
                 $attributeSchema = $this->schema[$attributeKey];
-                if ($attributeSchema['type'] !== ColumnType::Vector->value) {
+                /** @var ColumnType|null $vectorAttrType */
+                $vectorAttrType = $attributeSchema['type'] ?? null;
+                if ($vectorAttrType !== ColumnType::Vector) {
                     $this->message = 'Vector queries can only be used on vector attributes';
 
                     return false;
@@ -474,9 +517,11 @@ class Filter extends Base
                 }
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
-            case Query::TYPE_OR:
-            case Query::TYPE_AND:
-                $filters = Query::groupForDatabase($value->getValues())['filters'];
+            case Method::Or:
+            case Method::And:
+                /** @var array<Query> $andOrValues */
+                $andOrValues = $value->getValues();
+                $filters = Query::groupForDatabase($andOrValues)['filters'];
 
                 if (count($value->getValues()) !== count($filters)) {
                     $this->message = \ucfirst($method->value).' queries can only contain filter queries';
@@ -492,7 +537,7 @@ class Filter extends Base
 
                 return true;
 
-            case Query::TYPE_ELEM_MATCH:
+            case Method::ElemMatch:
                 // elemMatch is not supported when adapter supports attributes (schema mode)
                 if ($this->supportForAttributes) {
                     $this->message = 'elemMatch is not supported by the database';
@@ -507,7 +552,9 @@ class Filter extends Base
 
                 // For schemaless mode, allow elemMatch on any attribute
                 // Validate nested queries are filter queries
-                $filters = Query::groupForDatabase($value->getValues())['filters'];
+                /** @var array<Query> $elemMatchValues */
+                $elemMatchValues = $value->getValues();
+                $filters = Query::groupForDatabase($elemMatchValues)['filters'];
                 if (count($value->getValues()) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
 
@@ -538,11 +585,21 @@ class Filter extends Base
         }
     }
 
+    /**
+     * Get the maximum number of values allowed in a single filter query.
+     *
+     * @return int
+     */
     public function getMaxValuesCount(): int
     {
         return $this->maxValuesCount;
     }
 
+    /**
+     * Get the method type this validator handles.
+     *
+     * @return string
+     */
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_FILTER;

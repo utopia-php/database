@@ -4,6 +4,9 @@ namespace Utopia\Database\Validator\Query;
 
 use Utopia\Validator;
 
+/**
+ * Abstract base class for query method validators, providing shared constants and common methods.
+ */
 abstract class Base extends Validator
 {
     public const METHOD_TYPE_LIMIT = 'limit';
@@ -17,6 +20,16 @@ abstract class Base extends Validator
     public const METHOD_TYPE_FILTER = 'filter';
 
     public const METHOD_TYPE_SELECT = 'select';
+
+    public const METHOD_TYPE_JOIN = 'join';
+
+    public const METHOD_TYPE_AGGREGATE = 'aggregate';
+
+    public const METHOD_TYPE_GROUP_BY = 'groupBy';
+
+    public const METHOD_TYPE_HAVING = 'having';
+
+    public const METHOD_TYPE_DISTINCT = 'distinct';
 
     protected string $message = 'Invalid query';
 

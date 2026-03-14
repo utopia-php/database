@@ -4,7 +4,11 @@ namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
+/**
+ * Validates order query methods ensuring referenced attributes exist in the schema.
+ */
 class Order extends Base
 {
     /**
@@ -18,7 +22,9 @@ class Order extends Base
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+            /** @var string $attrKey */
+            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+            $this->schema[$attrKey] = $attribute->getArrayCopy();
         }
     }
 
@@ -58,7 +64,7 @@ class Order extends Base
      *
      * Otherwise, returns false
      *
-     * @param  Query  $value
+     * @param  mixed  $value
      */
     public function isValid($value): bool
     {
@@ -69,17 +75,32 @@ class Order extends Base
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
 
-        if ($method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
+        if ($method === Method::OrderAsc || $method === Method::OrderDesc) {
             return $this->isValidAttribute($attribute);
         }
 
-        if ($method === Query::TYPE_ORDER_RANDOM) {
+        if ($method === Method::OrderRandom) {
             return true; // orderRandom doesn't need an attribute
         }
 
         return false;
     }
 
+    /**
+     * @param array<string> $aliases
+     */
+    public function addAggregationAliases(array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            $this->schema[$alias] = ['$id' => $alias, 'key' => $alias];
+        }
+    }
+
+    /**
+     * Get the method type this validator handles.
+     *
+     * @return string
+     */
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_ORDER;

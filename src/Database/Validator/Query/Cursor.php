@@ -6,9 +6,18 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\UID;
+use Utopia\Query\Method;
 
+/**
+ * Validates cursor-based pagination queries (cursorAfter and cursorBefore).
+ */
 class Cursor extends Base
 {
+    /**
+     * Create a new cursor query validator.
+     *
+     * @param int $maxLength Maximum allowed UID length for cursor values
+     */
     public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
     {
     }
@@ -20,7 +29,7 @@ class Cursor extends Base
      *
      * Otherwise, returns false
      *
-     * @param  Query  $value
+     * @param  mixed  $value
      */
     public function isValid($value): bool
     {
@@ -30,7 +39,7 @@ class Cursor extends Base
 
         $method = $value->getMethod();
 
-        if ($method === Query::TYPE_CURSOR_AFTER || $method === Query::TYPE_CURSOR_BEFORE) {
+        if ($method === Method::CursorAfter || $method === Method::CursorBefore) {
             $cursor = $value->getValue();
 
             if ($cursor instanceof Document) {
@@ -49,6 +58,11 @@ class Cursor extends Base
         return false;
     }
 
+    /**
+     * Get the method type this validator handles.
+     *
+     * @return string
+     */
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_CURSOR;

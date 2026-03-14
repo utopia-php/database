@@ -3,9 +3,13 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Range;
 
+/**
+ * Validates limit query methods ensuring the value is a positive integer within the allowed range.
+ */
 class Limit extends Base
 {
     protected int $maxLimit;
@@ -23,7 +27,7 @@ class Limit extends Base
      *
      * Returns true if method is limit values are within range.
      *
-     * @param  Query  $value
+     * @param  mixed  $value
      */
     public function isValid($value): bool
     {
@@ -31,7 +35,7 @@ class Limit extends Base
             return false;
         }
 
-        if ($value->getMethod() !== Query::TYPE_LIMIT) {
+        if ($value->getMethod() !== Method::Limit) {
             $this->message = 'Invalid query method: '.$value->getMethod()->value;
 
             return false;
@@ -56,6 +60,11 @@ class Limit extends Base
         return true;
     }
 
+    /**
+     * Get the method type this validator handles.
+     *
+     * @return string
+     */
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_LIMIT;

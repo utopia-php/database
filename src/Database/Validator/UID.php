@@ -4,6 +4,9 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 
+/**
+ * Validates unique identifier strings with alphanumeric chars, underscores, hyphens, and periods.
+ */
 class UID extends Key
 {
     /**

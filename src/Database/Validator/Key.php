@@ -5,6 +5,9 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Validator;
 
+/**
+ * Validates key strings ensuring they contain only alphanumeric chars, periods, hyphens, and underscores.
+ */
 class Key extends Validator
 {
     protected string $message;

@@ -4,8 +4,17 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 
+/**
+ * Validates label strings ensuring they contain only alphanumeric characters.
+ */
 class Label extends Key
 {
+    /**
+     * Create a new label validator.
+     *
+     * @param bool $allowInternal Whether to allow internal attribute names starting with $
+     * @param int $maxLength Maximum allowed string length
+     */
     public function __construct(
         bool $allowInternal = false,
         int $maxLength = Database::MAX_UID_DEFAULT_LENGTH
@@ -22,6 +31,10 @@ class Label extends Key
     public function isValid($value): bool
     {
         if (! parent::isValid($value)) {
+            return false;
+        }
+
+        if (! \is_string($value)) {
             return false;
         }
 

@@ -5,12 +5,20 @@ namespace Utopia\Database\Validator;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator;
 
+/**
+ * Validates spatial data (point, linestring, polygon) as arrays or WKT strings with coordinate range checking.
+ */
 class Spatial extends Validator
 {
     private string $spatialType;
 
     protected string $message = '';
 
+    /**
+     * Create a new spatial validator for the given type.
+     *
+     * @param string $spatialType The spatial type to validate (point, linestring, polygon)
+     */
     public function __construct(string $spatialType)
     {
         $this->spatialType = $spatialType;
@@ -141,7 +149,10 @@ class Spatial extends Validator
     }
 
     /**
-     * Check if a value is valid WKT string
+     * Check if a value is a valid WKT (Well-Known Text) string.
+     *
+     * @param string $value The string to check
+     * @return bool
      */
     public static function isWKTString(string $value): bool
     {
@@ -150,28 +161,51 @@ class Spatial extends Validator
         return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
     }
 
+    /**
+     * Get the validator description including the error message.
+     *
+     * @return string
+     */
     public function getDescription(): string
     {
         return 'Value must be a valid '.$this->spatialType.": {$this->message}";
     }
 
+    /**
+     * Is array.
+     *
+     * @return bool
+     */
     public function isArray(): bool
     {
         return false;
     }
 
+    /**
+     * Get the validator type.
+     *
+     * @return string
+     */
     public function getType(): string
     {
         return self::TYPE_ARRAY;
     }
 
+    /**
+     * Get the spatial type this validator handles.
+     *
+     * @return string
+     */
     public function getSpatialType(): string
     {
         return $this->spatialType;
     }
 
     /**
-     * Main validation entrypoint
+     * Validate a spatial value as an array of coordinates or a WKT string.
+     *
+     * @param mixed $value The spatial data to validate
+     * @return bool
      */
     public function isValid($value): bool
     {
@@ -184,14 +218,15 @@ class Spatial extends Validator
         }
 
         if (is_array($value)) {
-            switch ($this->spatialType) {
-                case ColumnType::Point->value:
+            $spatialColumnType = ColumnType::tryFrom($this->spatialType);
+            switch ($spatialColumnType) {
+                case ColumnType::Point:
                     return $this->validatePoint($value);
 
-                case ColumnType::Linestring->value:
+                case ColumnType::Linestring:
                     return $this->validateLineString($value);
 
-                case ColumnType::Polygon->value:
+                case ColumnType::Polygon:
                     return $this->validatePolygon($value);
 
                 default:

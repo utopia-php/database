@@ -2,9 +2,13 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Helpers\Role;
 use Utopia\Validator;
 
+/**
+ * Validates role strings ensuring they use valid role names, identifiers, and dimensions.
+ */
 class Roles extends Validator
 {
     // Roles
@@ -201,7 +205,7 @@ class Roles extends Validator
 
             try {
                 $role = Role::parse($role);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $this->message = $e->getMessage();
 
                 return false;
@@ -288,7 +292,9 @@ class Roles extends Validator
         }
 
         // Process dimension configuration
+        /** @var bool $allowed */
         $allowed = $config['dimension']['allowed'];
+        /** @var bool $required */
         $required = $config['dimension']['required'];
         $options = $config['dimension']['options'] ?? [$dimension];
 
@@ -299,9 +305,7 @@ class Roles extends Validator
             return false;
         }
 
-        // Required and has no dimension
-        // PHPStan complains because there are currently no dimensions that are required, but there might be in future
-        // @phpstan-ignore-next-line
+        // Required and has no dimension (no current dimensions are required, but this guards future additions)
         if ($allowed && $required && empty($dimension)) {
             $this->message = 'Role "'.$role.'"'.' must have a dimension value.';
 

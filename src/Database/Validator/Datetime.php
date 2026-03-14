@@ -2,8 +2,13 @@
 
 namespace Utopia\Database\Validator;
 
+use DateTime as PhpDateTime;
+use Exception;
 use Utopia\Validator;
 
+/**
+ * Validates datetime strings against configurable precision, range, and future-date constraints.
+ */
 class Datetime extends Validator
 {
     public const PRECISION_DAYS = 'days';
@@ -17,17 +22,17 @@ class Datetime extends Validator
     public const PRECISION_ANY = 'any';
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(
-        private readonly \DateTime $min = new \DateTime('0000-01-01'),
-        private readonly \DateTime $max = new \DateTime('9999-12-31'),
+        private readonly PhpDateTime $min = new PhpDateTime('0000-01-01'),
+        private readonly PhpDateTime $max = new PhpDateTime('9999-12-31'),
         private readonly bool $requireDateInFuture = false,
         private readonly string $precision = self::PRECISION_ANY,
         private readonly int $offset = 0,
     ) {
         if ($offset < 0) {
-            throw new \Exception('Offset must be a positive integer.');
+            throw new Exception('Offset must be a positive integer.');
         }
     }
 
@@ -69,8 +74,8 @@ class Datetime extends Validator
         }
 
         try {
-            $date = new \DateTime($value);
-            $now = new \DateTime();
+            $date = new PhpDateTime($value);
+            $now = new PhpDateTime();
 
             if ($this->requireDateInFuture === true && $date < $now) {
                 return false;
@@ -97,7 +102,7 @@ class Datetime extends Validator
                     return false;
                 }
             }
-        } catch (\Exception) {
+        } catch (Exception) {
             return false;
         }
 

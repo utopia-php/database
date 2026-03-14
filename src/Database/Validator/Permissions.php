@@ -2,9 +2,13 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\PermissionType;
 
+/**
+ * Validates permission strings ensuring they use valid permission types and role formats.
+ */
 class Permissions extends Roles
 {
     protected string $message = 'Permissions Error';
@@ -93,7 +97,7 @@ class Permissions extends Roles
 
             try {
                 $permission = Permission::parse($permission);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $this->message = $e->getMessage();
 
                 return false;

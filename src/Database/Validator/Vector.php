@@ -4,6 +4,9 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 
+/**
+ * Validates vector values ensuring they are numeric arrays of the expected dimension size.
+ */
 class Vector extends Validator
 {
     protected int $size;

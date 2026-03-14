@@ -148,15 +148,19 @@ class StructureTest extends TestCase
 
     protected function setUp(): void
     {
-        Structure::addFormat('email', function ($attribute) {
-            $size = $attribute['size'] ?? 0;
+        Structure::addFormat('email', function (mixed $attribute) {
+            /** @var array<string, mixed> $attribute */
+            $sizeRaw = $attribute['size'] ?? 0;
+            $size = is_numeric($sizeRaw) ? (int) $sizeRaw : 0;
 
             return new Format($size);
         }, ColumnType::String->value);
 
         // Cannot encode format when defining constants
         // So add feedback attribute on startup
-        $this->collection['attributes'][] = [
+        /** @var array<int, array<string, mixed>> $attrs */
+        $attrs = $this->collection['attributes'];
+        $attrs[] = [
             '$id' => ID::custom('feedback'),
             'type' => ColumnType::String->value,
             'format' => 'email',
@@ -166,6 +170,7 @@ class StructureTest extends TestCase
             'array' => false,
             'filters' => [],
         ];
+        $this->collection['attributes'] = $attrs;
     }
 
     protected function tearDown(): void

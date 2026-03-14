@@ -3,8 +3,11 @@
 namespace Utopia\Database\Traits;
 
 use Exception;
+use Throwable;
+use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -18,129 +21,18 @@ use Utopia\Database\Index;
 use Utopia\Database\SetType;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
+/**
+ * Provides CRUD operations for collection indexes including creation, renaming, and deletion.
+ */
 trait Indexes
 {
     /**
-     * Update index metadata. Utility method for update index methods.
-     *
-     * @param  callable(Document, Document, int|string): void  $updateCallback  method that receives document, and returns it with changes applied
-     *
-     * @throws ConflictException
-     * @throws DatabaseException
-     */
-    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata indexes');
-        }
-
-        $indexes = $collection->getAttribute('indexes', []);
-        $index = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
-
-        if ($index === false) {
-            throw new NotFoundException('Index not found');
-        }
-
-        // Execute update from callback
-        $updateCallback($indexes[$index], $collection, $index);
-
-        $collection->setAttribute('indexes', $indexes);
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: null,
-            shouldRollback: false,
-            operationDescription: "index metadata update '{$id}'"
-        );
-
-        return $indexes[$index];
-    }
-
-    /**
-     * Rename Index
-     *
-     *
-     * @throws AuthorizationException
-     * @throws ConflictException
-     * @throws DatabaseException
-     * @throws DuplicateException
-     * @throws StructureException
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        $indexes = $collection->getAttribute('indexes', []);
-
-        $index = \in_array($old, \array_map(fn ($index) => $index['$id'], $indexes));
-
-        if ($index === false) {
-            throw new NotFoundException('Index not found');
-        }
-
-        $indexNew = \in_array($new, \array_map(fn ($index) => $index['$id'], $indexes));
-
-        if ($indexNew !== false) {
-            throw new DuplicateException('Index name already used');
-        }
-
-        foreach ($indexes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $old) {
-                $indexes[$key]['key'] = $new;
-                $indexes[$key]['$id'] = $new;
-                $indexNew = $indexes[$key];
-                break;
-            }
-        }
-
-        $collection->setAttribute('indexes', $indexes);
-
-        $renamed = false;
-        try {
-            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            if (! $renamed) {
-                throw new DatabaseException('Failed to rename index');
-            }
-        } catch (\Throwable $e) {
-            // Check if the rename already happened in schema (orphan from prior
-            // partial failure where rename succeeded but metadata update and
-            // rollback both failed). Verify by attempting a reverse rename — if
-            // $new exists in schema, the reverse succeeds confirming a prior rename.
-            try {
-                $this->adapter->renameIndex($collection->getId(), $new, $old);
-                // Reverse succeeded — index was at $new. Re-rename to complete.
-                $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            } catch (\Throwable) {
-                // Reverse also failed — genuine error
-                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
-            }
-        }
-
-        $this->updateMetadata(
-            collection: $collection,
-            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
-            shouldRollback: $renamed,
-            operationDescription: "index rename '{$old}' to '{$new}'"
-        );
-
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-
-        try {
-            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
-
-        return true;
-    }
-
-    /**
      * Create Index
      *
+     * @param  string  $collection  The collection identifier
+     * @param  Index  $index  The index definition to create
+     * @return bool True if the index was created successfully
      *
      * @throws AuthorizationException
      * @throws ConflictException
@@ -180,32 +72,31 @@ trait Indexes
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
+        $typedCollectionAttributes = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $collectionAttributes);
         $indexAttributesWithTypes = [];
         foreach ($attributes as $i => $attr) {
             // Support nested paths on object attributes using dot notation:
             // attribute.key.nestedKey -> base attribute "attribute"
             $baseAttr = $attr;
             if (\str_contains($attr, '.')) {
-                $baseAttr = \explode('.', $attr, 2)[0] ?? $attr;
+                $baseAttr = \explode('.', $attr, 2)[0];
             }
 
-            foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getAttribute('key') === $baseAttr) {
+            foreach ($typedCollectionAttributes as $typedAttr) {
+                if ($typedAttr->key === $baseAttr) {
 
-                    $attributeType = $collectionAttribute->getAttribute('type');
-                    $indexAttributesWithTypes[$attr] = $attributeType;
+                    $indexAttributesWithTypes[$attr] = $typedAttr->type->value;
 
                     /**
                      * mysql does not save length in collection when length = attributes size
                      */
-                    if ($attributeType === ColumnType::String->value) {
-                        if (! empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
+                    if ($typedAttr->type === ColumnType::String) {
+                        if (! empty($lengths[$i]) && $lengths[$i] === $typedAttr->size && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }
                     }
 
-                    $isArray = $collectionAttribute->getAttribute('array', false);
-                    if ($isArray) {
+                    if ($typedAttr->array) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                         }
@@ -229,10 +120,17 @@ trait Indexes
         $indexDoc = $index->toDocument();
 
         if ($this->validate) {
+            /** @var array<Document> $collectionAttrsForValidation */
+            $collectionAttrsForValidation = $collection->getAttribute('attributes', []);
+            /** @var array<Document> $collectionIdxsForValidation */
+            $collectionIdxsForValidation = $collection->getAttribute('indexes', []);
+
+            $typedAttrsForValidation = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $collectionAttrsForValidation);
+            $typedIdxsForValidation = array_map(fn (Document $doc) => Index::fromDocument($doc), $collectionIdxsForValidation);
 
             $validator = new IndexValidator(
-                $collection->getAttribute('attributes', []),
-                $collection->getAttribute('indexes', []),
+                $typedAttrsForValidation,
+                $typedIdxsForValidation,
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->supports(Capability::IndexArray),
@@ -251,7 +149,7 @@ trait Indexes
                 $this->adapter->supports(Capability::TTLIndexes),
                 $this->adapter->supports(Capability::Objects)
             );
-            if (! $validator->isValid($indexDoc)) {
+            if (! $validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
             }
         }
@@ -280,7 +178,89 @@ trait Indexes
             operationDescription: "index creation '{$id}'"
         );
 
-        $this->trigger(self::EVENT_INDEX_CREATE, $indexDoc);
+        $this->trigger(Event::IndexCreate, $indexDoc);
+
+        return true;
+    }
+
+    /**
+     * Rename Index
+     *
+     * @param  string  $collection  The collection identifier
+     * @param  string  $old  Current index ID
+     * @param  string  $new  New index ID
+     * @return bool True if the index was renamed successfully
+     *
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws StructureException
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        /** @var array<Document> $indexes */
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $index = \in_array($old, \array_map(fn ($idx) => $idx['$id'], $indexes));
+
+        if ($index === false) {
+            throw new NotFoundException('Index not found');
+        }
+
+        $indexNewExists = \in_array($new, \array_map(fn ($idx) => $idx['$id'], $indexes));
+
+        if ($indexNewExists !== false) {
+            throw new DuplicateException('Index name already used');
+        }
+
+        /** @var Document|null $indexNew */
+        $indexNew = null;
+        foreach ($indexes as $key => $value) {
+            if ($value->getId() === $old) {
+                $value->setAttribute('key', $new);
+                $value->setAttribute('$id', $new);
+                $indexNew = $value;
+                $indexes[$key] = $value;
+                break;
+            }
+        }
+
+        $collection->setAttribute('indexes', $indexes);
+
+        $renamed = false;
+        try {
+            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+            if (! $renamed) {
+                throw new DatabaseException('Failed to rename index');
+            }
+        } catch (Throwable $e) {
+            // Check if the rename already happened in schema (orphan from prior
+            // partial failure where rename succeeded but metadata update and
+            // rollback both failed). Verify by attempting a reverse rename — if
+            // $new exists in schema, the reverse succeeds confirming a prior rename.
+            try {
+                $this->adapter->renameIndex($collection->getId(), $new, $old);
+                // Reverse succeeded — index was at $new. Re-rename to complete.
+                $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+            } catch (Throwable) {
+                // Reverse also failed — genuine error
+                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
+            }
+        }
+
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
+            shouldRollback: $renamed,
+            operationDescription: "index rename '{$old}' to '{$new}'"
+        );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+
+        $this->trigger(Event::IndexRename, $indexNew);
 
         return true;
     }
@@ -288,6 +268,9 @@ trait Indexes
     /**
      * Delete Index
      *
+     * @param  string  $collection  The collection identifier
+     * @param  string  $id  The index identifier to delete
+     * @return bool True if the index was deleted successfully
      *
      * @throws AuthorizationException
      * @throws ConflictException
@@ -298,11 +281,13 @@ trait Indexes
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        /** @var array<Document> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
 
+        /** @var Document|null $indexDeleted */
         $indexDeleted = null;
         foreach ($indexes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $id) {
+            if ($value->getId() === $id) {
                 $indexDeleted = $value;
                 unset($indexes[$key]);
             }
@@ -331,12 +316,15 @@ trait Indexes
         // Build indexAttributeTypes from collection attributes for rollback
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
+        $typedDeletedIndex = Index::fromDocument($indexDeleted);
+        /** @var array<string, string> $indexAttributeTypes */
         $indexAttributeTypes = [];
-        foreach ($indexDeleted->getAttribute('attributes', []) as $attr) {
+        foreach ($typedDeletedIndex->attributes as $attr) {
             $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
             foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->getAttribute('key') === $baseAttr) {
-                    $indexAttributeTypes[$attr] = $collectionAttribute->getAttribute('type');
+                $typedCollAttr = Attribute::fromDocument($collectionAttribute);
+                if ($typedCollAttr->key === $baseAttr) {
+                    $indexAttributeTypes[$attr] = $typedCollAttr->type->value;
                     break;
                 }
             }
@@ -344,11 +332,11 @@ trait Indexes
 
         $rollbackIndex = new Index(
             key: $id,
-            type: IndexType::from($indexDeleted->getAttribute('type')),
-            attributes: $indexDeleted->getAttribute('attributes', []),
-            lengths: $indexDeleted->getAttribute('lengths', []),
-            orders: $indexDeleted->getAttribute('orders', []),
-            ttl: $indexDeleted->getAttribute('ttl', 1)
+            type: $typedDeletedIndex->type,
+            attributes: $typedDeletedIndex->attributes,
+            lengths: $typedDeletedIndex->lengths,
+            orders: $typedDeletedIndex->orders,
+            ttl: $typedDeletedIndex->ttl
         );
         $this->updateMetadata(
             collection: $collection,
@@ -362,13 +350,52 @@ trait Indexes
             silentRollback: true
         );
 
-        try {
-            $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        $this->trigger(Event::IndexDelete, $indexDeleted);
 
         return $deleted;
+    }
+
+    /**
+     * Update index metadata. Utility method for update index methods.
+     *
+     * @param  callable(Document, Document, int|string): void  $updateCallback  method that receives document, and returns it with changes applied
+     *
+     * @throws ConflictException
+     * @throws DatabaseException
+     */
+    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    {
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->getId() === self::METADATA) {
+            throw new DatabaseException('Cannot update metadata indexes');
+        }
+
+        /** @var array<Document> $indexes */
+        $indexes = $collection->getAttribute('indexes', []);
+        $index = \array_search($id, \array_map(fn ($idx) => $idx['$id'], $indexes));
+
+        if ($index === false) {
+            throw new NotFoundException('Index not found');
+        }
+
+        /** @var Document $indexDoc */
+        $indexDoc = $indexes[$index];
+
+        // Execute update from callback
+        $updateCallback($indexDoc, $collection, $index);
+        $indexes[$index] = $indexDoc;
+
+        $collection->setAttribute('indexes', $indexes);
+
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: null,
+            shouldRollback: false,
+            operationDescription: "index metadata update '{$id}'"
+        );
+
+        return $indexDoc;
     }
 
     /**

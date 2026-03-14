@@ -6,6 +6,12 @@ use Utopia\Database\Change;
 use Utopia\Database\Document;
 use Utopia\Query\Hook\Write as BaseWrite;
 
+/**
+ * Write hook interface for intercepting document write operations.
+ *
+ * Implementations can decorate rows before insertion and perform side effects
+ * (e.g. permission or tenant management) after document CRUD operations.
+ */
 interface Write extends BaseWrite
 {
     /**

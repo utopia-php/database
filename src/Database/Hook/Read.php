@@ -4,6 +4,9 @@ namespace Utopia\Database\Hook;
 
 use Utopia\Query\Hook;
 
+/**
+ * Read hook interface for MongoDB adapters that apply filters to query filter arrays.
+ */
 interface Read extends Hook
 {
     /**

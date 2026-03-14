@@ -329,7 +329,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_an_integer does not match given type integer');
+        $this->expectExceptionMessage('Default value "not_an_integer" does not match given type integer');
         $validator->isValid($attribute);
     }
 
@@ -936,7 +936,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_a_float does not match given type double');
+        $this->expectExceptionMessage('Default value "not_a_float" does not match given type double');
         $validator->isValid($attribute);
     }
 
@@ -962,7 +962,7 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_a_boolean does not match given type boolean');
+        $this->expectExceptionMessage('Default value "not_a_boolean" does not match given type boolean');
         $validator->isValid($attribute);
     }
 

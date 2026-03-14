@@ -5,8 +5,16 @@ namespace Utopia\Database;
 use Utopia\Database\Helpers\ID;
 use Utopia\Query\Schema\ColumnType;
 
+/**
+ * Represents a database collection attribute with its type, constraints, and formatting options.
+ */
 class Attribute
 {
+    /**
+     * @param  array<string, mixed>  $formatOptions
+     * @param  array<string>  $filters
+     * @param  array<string, mixed>|null  $options
+     */
     public function __construct(
         public string $key = '',
         public ColumnType $type = ColumnType::String,
@@ -23,6 +31,11 @@ class Attribute
     ) {
     }
 
+    /**
+     * Convert this attribute to a Document representation.
+     *
+     * @return Document
+     */
     public function toDocument(): Document
     {
         $data = [
@@ -50,21 +63,50 @@ class Attribute
         return new Document($data);
     }
 
+    /**
+     * Create an Attribute instance from a Document.
+     *
+     * @param Document $document The document to convert
+     * @return self
+     */
     public static function fromDocument(Document $document): self
     {
+        /** @var string $key */
+        $key = $document->getAttribute('key', $document->getId());
+        /** @var ColumnType|string $type */
+        $type = $document->getAttribute('type', 'string');
+        /** @var int $size */
+        $size = $document->getAttribute('size', 0);
+        /** @var bool $required */
+        $required = $document->getAttribute('required', false);
+        /** @var bool $signed */
+        $signed = $document->getAttribute('signed', true);
+        /** @var bool $array */
+        $array = $document->getAttribute('array', false);
+        /** @var string|null $format */
+        $format = $document->getAttribute('format');
+        /** @var array<string, mixed> $formatOptions */
+        $formatOptions = $document->getAttribute('formatOptions', []);
+        /** @var array<string> $filters */
+        $filters = $document->getAttribute('filters', []);
+        /** @var string|null $status */
+        $status = $document->getAttribute('status');
+        /** @var array<string, mixed>|null $options */
+        $options = $document->getAttribute('options');
+
         return new self(
-            key: $document->getAttribute('key', $document->getId()),
-            type: ColumnType::from($document->getAttribute('type', 'string')),
-            size: $document->getAttribute('size', 0),
-            required: $document->getAttribute('required', false),
+            key: $key,
+            type: $type instanceof ColumnType ? $type : ColumnType::from($type),
+            size: $size,
+            required: $required,
             default: $document->getAttribute('default'),
-            signed: $document->getAttribute('signed', true),
-            array: $document->getAttribute('array', false),
-            format: $document->getAttribute('format'),
-            formatOptions: $document->getAttribute('formatOptions', []),
-            filters: $document->getAttribute('filters', []),
-            status: $document->getAttribute('status'),
-            options: $document->getAttribute('options'),
+            signed: $signed,
+            array: $array,
+            format: $format,
+            formatOptions: $formatOptions,
+            filters: $filters,
+            status: $status,
+            options: $options,
         );
     }
 
@@ -72,22 +114,41 @@ class Attribute
      * Create from an associative array (used by batch operations).
      *
      * @param  array<string, mixed>  $data
+     * @return self
      */
     public static function fromArray(array $data): self
     {
+        /** @var ColumnType|string $type */
         $type = $data['type'] ?? 'string';
 
+        /** @var string $key */
+        $key = $data['$id'] ?? $data['key'] ?? '';
+        /** @var int $size */
+        $size = $data['size'] ?? 0;
+        /** @var bool $required */
+        $required = $data['required'] ?? false;
+        /** @var bool $signed */
+        $signed = $data['signed'] ?? true;
+        /** @var bool $array */
+        $array = $data['array'] ?? false;
+        /** @var string|null $format */
+        $format = $data['format'] ?? null;
+        /** @var array<string, mixed> $formatOptions */
+        $formatOptions = $data['formatOptions'] ?? [];
+        /** @var array<string> $filters */
+        $filters = $data['filters'] ?? [];
+
         return new self(
-            key: $data['$id'] ?? $data['key'] ?? '',
-            type: $type instanceof ColumnType ? $type : ColumnType::from($type),
-            size: $data['size'] ?? 0,
-            required: $data['required'] ?? false,
+            key: $key,
+            type: $type instanceof ColumnType ? $type : ColumnType::from((string) $type),
+            size: $size,
+            required: $required,
             default: $data['default'] ?? null,
-            signed: $data['signed'] ?? true,
-            array: $data['array'] ?? false,
-            format: $data['format'] ?? null,
-            formatOptions: $data['formatOptions'] ?? [],
-            filters: $data['filters'] ?? [],
+            signed: $signed,
+            array: $array,
+            format: $format,
+            formatOptions: $formatOptions,
+            filters: $filters,
         );
     }
 }

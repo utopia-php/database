@@ -17,8 +17,8 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
@@ -722,8 +722,8 @@ trait SchemalessTests
             'rank' => 2,
         ]));
 
-        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_title_unique', type: IndexType::Unique, attributes: ['title'], lengths: [128], orders: [OrderDirection::ASC->value])));
-        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_rank_key', type: IndexType::Key, attributes: ['rank'], lengths: [0], orders: [OrderDirection::ASC->value])));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_title_unique', type: IndexType::Unique, attributes: ['title'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'idx_rank_key', type: IndexType::Key, attributes: ['rank'], lengths: [0], orders: [OrderDirection::Asc->value])));
 
         $collection = $database->getCollection($col);
         $indexes = $collection->getAttribute('indexes');
@@ -761,10 +761,10 @@ trait SchemalessTests
             'name' => 'x',
         ]));
 
-        $this->assertTrue($database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::ASC->value])));
+        $this->assertTrue($database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])));
 
         try {
-            $database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::ASC->value]));
+            $database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
@@ -794,12 +794,12 @@ trait SchemalessTests
 
         // Create regular key index on first object attribute
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_meta_key', type: IndexType::Key, attributes: ['meta'], lengths: [0], orders: [OrderDirection::ASC->value]))
+            $database->createIndex($col, new Index(key: 'idx_meta_key', type: IndexType::Key, attributes: ['meta'], lengths: [0], orders: [OrderDirection::Asc->value]))
         );
 
         // Create unique index on second object attribute
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_meta_unique', type: IndexType::Unique, attributes: ['meta2'], lengths: [0], orders: [OrderDirection::ASC->value]))
+            $database->createIndex($col, new Index(key: 'idx_meta_unique', type: IndexType::Unique, attributes: ['meta2'], lengths: [0], orders: [OrderDirection::Asc->value]))
         );
 
         // Verify index metadata is stored on the collection
@@ -2278,7 +2278,7 @@ trait SchemalessTests
         ];
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
+            $database->createIndex($col, new Index(key: 'idx_ttl_valid', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
@@ -2323,7 +2323,7 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1))
+            $database->createIndex($col, new Index(key: 'idx_ttl_min', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 1))
         );
 
         $col2 = uniqid('sl_ttl_collection');
@@ -2344,7 +2344,7 @@ trait SchemalessTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 7200, // 2 hours
         ]);
 
@@ -2376,11 +2376,11 @@ trait SchemalessTests
         $database->createCollection($col);
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 3600))
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600))
         );
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 7200));
+            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 7200));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2388,7 +2388,7 @@ trait SchemalessTests
         }
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 86400));
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 86400));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2404,7 +2404,7 @@ trait SchemalessTests
         $this->assertNotContains('idx_ttl_deleted', $indexIds);
 
         try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 172800));
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 172800));
             $this->fail('Expected exception for creating a second TTL index in a collection');
         } catch (Exception $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2414,7 +2414,7 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
 
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 1800))
+            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 1800))
         );
 
         $collection = $database->getCollection($col);
@@ -2443,7 +2443,7 @@ trait SchemalessTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 3600,
         ]);
 
@@ -2452,7 +2452,7 @@ trait SchemalessTests
             'type' => IndexType::Ttl->value,
             'attributes' => ['expiresAt'],
             'lengths' => [],
-            'orders' => [OrderDirection::ASC->value],
+            'orders' => [OrderDirection::Asc->value],
             'ttl' => 7200,
         ]);
 
@@ -2610,7 +2610,7 @@ trait SchemalessTests
 
         // Create TTL index with 60 seconds expiry
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2746,7 +2746,7 @@ trait SchemalessTests
 
         // Create TTL index with 10 seconds expiry (also used as cache TTL)
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2964,7 +2964,7 @@ trait SchemalessTests
 
         // Create TTL index on expiresAt field
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::ASC->value], ttl: 10))
+            $database->createIndex($col, new Index(key: 'idx_ttl_expiresAt', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -3142,12 +3142,12 @@ trait SchemalessTests
 
         // Create KEY index on nested path
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_profile_user_email_key', type: IndexType::Key, attributes: ['profile.user.email'], lengths: [0], orders: [OrderDirection::ASC->value]))
+            $database->createIndex($col, new Index(key: 'idx_profile_user_email_key', type: IndexType::Key, attributes: ['profile.user.email'], lengths: [0], orders: [OrderDirection::Asc->value]))
         );
 
         // Create UNIQUE index on nested path and verify enforcement
         $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_profile_user_id_unique', type: IndexType::Unique, attributes: ['profile.user.id'], lengths: [0], orders: [OrderDirection::ASC->value]))
+            $database->createIndex($col, new Index(key: 'idx_profile_user_id_unique', type: IndexType::Unique, attributes: ['profile.user.id'], lengths: [0], orders: [OrderDirection::Asc->value]))
         );
 
         try {

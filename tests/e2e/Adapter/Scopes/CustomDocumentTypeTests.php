@@ -17,12 +17,16 @@ class TestUser extends Document
 {
     public function getEmail(): string
     {
-        return $this->getAttribute('email', '');
+        /** @var string $value */
+        $value = $this->getAttribute('email', '');
+        return $value;
     }
 
     public function getName(): string
     {
-        return $this->getAttribute('name', '');
+        /** @var string $value */
+        $value = $this->getAttribute('name', '');
+        return $value;
     }
 
     public function isActive(): bool
@@ -35,12 +39,16 @@ class TestPost extends Document
 {
     public function getTitle(): string
     {
-        return $this->getAttribute('title', '');
+        /** @var string $value */
+        $value = $this->getAttribute('title', '');
+        return $value;
     }
 
     public function getContent(): string
     {
-        return $this->getAttribute('content', '');
+        /** @var string $value */
+        $value = $this->getAttribute('content', '');
+        return $value;
     }
 }
 

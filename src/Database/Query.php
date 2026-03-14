@@ -2,153 +2,22 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\CursorDirection as DatabaseCursorDirection;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\OrderDirection as DatabaseOrderDirection;
-use Utopia\Query\CursorDirection as QueryCursorDirection;
+use Utopia\Query\CursorDirection;
 use Utopia\Query\Exception as BaseQueryException;
 use Utopia\Query\Method;
-use Utopia\Query\OrderDirection as QueryOrderDirection;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 
-/** @phpstan-consistent-constructor */
+/**
+ * Extends the base query library with database-specific query construction, parsing, and grouping.
+ *
+ * @phpstan-consistent-constructor
+ */
 class Query extends BaseQuery
 {
     protected bool $isObjectAttribute = false;
-
-    // Backward compatibility constants mapping to Method enum values
-    public const TYPE_EQUAL = Method::Equal;
-
-    public const TYPE_NOT_EQUAL = Method::NotEqual;
-
-    public const TYPE_LESSER = Method::LessThan;
-
-    public const TYPE_LESSER_EQUAL = Method::LessThanEqual;
-
-    public const TYPE_GREATER = Method::GreaterThan;
-
-    public const TYPE_GREATER_EQUAL = Method::GreaterThanEqual;
-
-    public const TYPE_CONTAINS = Method::Contains;
-
-    public const TYPE_CONTAINS_ANY = Method::ContainsAny;
-
-    public const TYPE_CONTAINS_ALL = Method::ContainsAll;
-
-    public const TYPE_NOT_CONTAINS = Method::NotContains;
-
-    public const TYPE_SEARCH = Method::Search;
-
-    public const TYPE_NOT_SEARCH = Method::NotSearch;
-
-    public const TYPE_IS_NULL = Method::IsNull;
-
-    public const TYPE_IS_NOT_NULL = Method::IsNotNull;
-
-    public const TYPE_BETWEEN = Method::Between;
-
-    public const TYPE_NOT_BETWEEN = Method::NotBetween;
-
-    public const TYPE_STARTS_WITH = Method::StartsWith;
-
-    public const TYPE_NOT_STARTS_WITH = Method::NotStartsWith;
-
-    public const TYPE_ENDS_WITH = Method::EndsWith;
-
-    public const TYPE_NOT_ENDS_WITH = Method::NotEndsWith;
-
-    public const TYPE_REGEX = Method::Regex;
-
-    public const TYPE_EXISTS = Method::Exists;
-
-    public const TYPE_NOT_EXISTS = Method::NotExists;
-
-    // Spatial
-    public const TYPE_CROSSES = Method::Crosses;
-
-    public const TYPE_NOT_CROSSES = Method::NotCrosses;
-
-    public const TYPE_DISTANCE_EQUAL = Method::DistanceEqual;
-
-    public const TYPE_DISTANCE_NOT_EQUAL = Method::DistanceNotEqual;
-
-    public const TYPE_DISTANCE_GREATER_THAN = Method::DistanceGreaterThan;
-
-    public const TYPE_DISTANCE_LESS_THAN = Method::DistanceLessThan;
-
-    public const TYPE_INTERSECTS = Method::Intersects;
-
-    public const TYPE_NOT_INTERSECTS = Method::NotIntersects;
-
-    public const TYPE_OVERLAPS = Method::Overlaps;
-
-    public const TYPE_NOT_OVERLAPS = Method::NotOverlaps;
-
-    public const TYPE_TOUCHES = Method::Touches;
-
-    public const TYPE_NOT_TOUCHES = Method::NotTouches;
-
-    public const TYPE_COVERS = Method::Covers;
-
-    public const TYPE_NOT_COVERS = Method::NotCovers;
-
-    public const TYPE_SPATIAL_EQUALS = Method::SpatialEquals;
-
-    public const TYPE_NOT_SPATIAL_EQUALS = Method::NotSpatialEquals;
-
-    // Vector
-    public const TYPE_VECTOR_DOT = Method::VectorDot;
-
-    public const TYPE_VECTOR_COSINE = Method::VectorCosine;
-
-    public const TYPE_VECTOR_EUCLIDEAN = Method::VectorEuclidean;
-
-    // Structure
-    public const TYPE_SELECT = Method::Select;
-
-    public const TYPE_ORDER_ASC = Method::OrderAsc;
-
-    public const TYPE_ORDER_DESC = Method::OrderDesc;
-
-    public const TYPE_ORDER_RANDOM = Method::OrderRandom;
-
-    public const TYPE_LIMIT = Method::Limit;
-
-    public const TYPE_OFFSET = Method::Offset;
-
-    public const TYPE_CURSOR_AFTER = Method::CursorAfter;
-
-    public const TYPE_CURSOR_BEFORE = Method::CursorBefore;
-
-    // Logical
-    public const TYPE_AND = Method::And;
-
-    public const TYPE_OR = Method::Or;
-
-    public const TYPE_ELEM_MATCH = Method::ElemMatch;
-
-    /**
-     * Backward compat: array of vector method enums
-     *
-     * @var array<Method>
-     */
-    public const VECTOR_TYPES = [
-        Method::VectorDot,
-        Method::VectorCosine,
-        Method::VectorEuclidean,
-    ];
-
-    /**
-     * Backward compat: array of logical method enums
-     *
-     * @var array<Method>
-     */
-    public const LOGICAL_TYPES = [
-        Method::And,
-        Method::Or,
-        Method::ElemMatch,
-    ];
 
     /**
      * Default table alias used in queries
@@ -224,67 +93,6 @@ class Query extends BaseQuery
     }
 
     /**
-     * Backward compat: array of all supported method enum values
-     *
-     * @var array<Method>
-     */
-    public const TYPES = [
-        Method::Equal,
-        Method::NotEqual,
-        Method::LessThan,
-        Method::LessThanEqual,
-        Method::GreaterThan,
-        Method::GreaterThanEqual,
-        Method::Contains,
-        Method::ContainsAny,
-        Method::ContainsAll,
-        Method::NotContains,
-        Method::Search,
-        Method::NotSearch,
-        Method::IsNull,
-        Method::IsNotNull,
-        Method::Between,
-        Method::NotBetween,
-        Method::StartsWith,
-        Method::NotStartsWith,
-        Method::EndsWith,
-        Method::NotEndsWith,
-        Method::Regex,
-        Method::Exists,
-        Method::NotExists,
-        Method::Crosses,
-        Method::NotCrosses,
-        Method::DistanceEqual,
-        Method::DistanceNotEqual,
-        Method::DistanceGreaterThan,
-        Method::DistanceLessThan,
-        Method::Intersects,
-        Method::NotIntersects,
-        Method::Overlaps,
-        Method::NotOverlaps,
-        Method::Touches,
-        Method::NotTouches,
-        Method::Covers,
-        Method::NotCovers,
-        Method::SpatialEquals,
-        Method::NotSpatialEquals,
-        Method::VectorDot,
-        Method::VectorCosine,
-        Method::VectorEuclidean,
-        Method::Select,
-        Method::OrderAsc,
-        Method::OrderDesc,
-        Method::OrderRandom,
-        Method::Limit,
-        Method::Offset,
-        Method::CursorAfter,
-        Method::CursorBefore,
-        Method::And,
-        Method::Or,
-        Method::ElemMatch,
-    ];
-
-    /**
      * @return array<string, mixed>
      */
     public function toArray(): array
@@ -295,8 +103,9 @@ class Query extends BaseQuery
             $array['attribute'] = $this->attribute;
         }
 
-        if (\in_array($this->method, static::LOGICAL_TYPES)) {
+        if (\in_array($this->method, [Method::And, Method::Or, Method::ElemMatch])) {
             foreach ($this->values as $index => $value) {
+                /** @var Query $value */
                 $array['values'][$index] = $value->toArray();
             }
         } else {
@@ -321,61 +130,71 @@ class Query extends BaseQuery
      * @return array{
      *     filters: array<Query>,
      *     selections: array<Query>,
+     *     aggregations: array<Query>,
+     *     groupBy: array<string>,
+     *     having: array<Query>,
+     *     joins: array<Query>,
+     *     distinct: bool,
      *     limit: int|null,
      *     offset: int|null,
      *     orderAttributes: array<string>,
-     *     orderTypes: array<string>,
+     *     orderTypes: array<OrderDirection>,
      *     cursor: Document|null,
-     *     cursorDirection: string|null
+     *     cursorDirection: CursorDirection|null
      * }
      */
     public static function groupForDatabase(array $queries): array
     {
         $grouped = parent::groupByType($queries);
 
-        // Convert OrderDirection enums back to Database string constants
-        $orderTypes = [];
-        foreach ($grouped->orderTypes as $dir) {
-            $orderTypes[] = match ($dir) {
-                QueryOrderDirection::Asc => DatabaseOrderDirection::ASC->value,
-                QueryOrderDirection::Desc => DatabaseOrderDirection::DESC->value,
-                QueryOrderDirection::Random => DatabaseOrderDirection::RANDOM->value,
-            };
-        }
-
-        // Convert CursorDirection enum back to string
-        $cursorDirection = null;
-        if ($grouped->cursorDirection !== null) {
-            $cursorDirection = match ($grouped->cursorDirection) {
-                QueryCursorDirection::After => DatabaseCursorDirection::After->value,
-                QueryCursorDirection::Before => DatabaseCursorDirection::Before->value,
-            };
-        }
-
         /** @var array<Query> $filters */
         $filters = $grouped->filters;
         /** @var array<Query> $selections */
         $selections = $grouped->selections;
+        /** @var array<Query> $aggregations */
+        $aggregations = $grouped->aggregations;
+        /** @var array<Query> $having */
+        $having = $grouped->having;
+        /** @var array<Query> $joins */
+        $joins = $grouped->joins;
+        /** @var Document|null $cursor */
+        $cursor = $grouped->cursor;
 
         return [
             'filters' => $filters,
             'selections' => $selections,
+            'aggregations' => $aggregations,
+            'groupBy' => $grouped->groupBy,
+            'having' => $having,
+            'joins' => $joins,
+            'distinct' => $grouped->distinct,
             'limit' => $grouped->limit,
             'offset' => $grouped->offset,
             'orderAttributes' => $grouped->orderAttributes,
-            'orderTypes' => $orderTypes,
-            'cursor' => $grouped->cursor,
-            'cursorDirection' => $cursorDirection,
+            'orderTypes' => $grouped->orderTypes,
+            'cursor' => $cursor,
+            'cursorDirection' => $grouped->cursorDirection,
         ];
     }
 
+    /**
+     * Check whether this query targets a spatial attribute type (point, linestring, or polygon).
+     *
+     * @return bool True if the attribute type is spatial.
+     */
     public function isSpatialAttribute(): bool
     {
-        return in_array($this->attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
+        $type = ColumnType::tryFrom($this->attributeType);
+        return in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true);
     }
 
+    /**
+     * Check whether this query targets an object (JSON/hashmap) attribute type.
+     *
+     * @return bool True if the attribute type is object.
+     */
     public function isObjectAttribute(): bool
     {
-        return $this->attributeType === ColumnType::Object->value;
+        return ColumnType::tryFrom($this->attributeType) === ColumnType::Object;
     }
 }

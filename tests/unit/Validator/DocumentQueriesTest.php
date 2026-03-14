@@ -4,9 +4,7 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Query\Schema\ColumnType;
@@ -14,41 +12,36 @@ use Utopia\Query\Schema\ColumnType;
 class DocumentQueriesTest extends TestCase
 {
     /**
-     * @var array<string, mixed>
+     * @var array<Document>
      */
-    protected array $collection = [];
+    protected array $attributes = [];
 
     /**
      * @throws Exception
      */
     protected function setUp(): void
     {
-        $this->collection = [
-            '$collection' => ID::custom(Database::METADATA),
-            '$id' => ID::custom('movies'),
-            'name' => 'movies',
-            'attributes' => [
-                new Document([
-                    '$id' => 'title',
-                    'key' => 'title',
-                    'type' => ColumnType::String->value,
-                    'size' => 256,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'price',
-                    'key' => 'price',
-                    'type' => ColumnType::Double->value,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
+        $this->attributes = [
+            new Document([
+                '$id' => 'title',
+                'key' => 'title',
+                'type' => ColumnType::String->value,
+                'size' => 256,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'size' => 5,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
         ];
     }
 
@@ -61,7 +54,7 @@ class DocumentQueriesTest extends TestCase
      */
     public function test_valid_queries(): void
     {
-        $validator = new DocumentQueries($this->collection['attributes']);
+        $validator = new DocumentQueries($this->attributes);
 
         $queries = [
             Query::select(['title']),
@@ -78,7 +71,7 @@ class DocumentQueriesTest extends TestCase
      */
     public function test_invalid_queries(): void
     {
-        $validator = new DocumentQueries($this->collection['attributes']);
+        $validator = new DocumentQueries($this->attributes);
         $queries = [Query::limit(1)];
         $this->assertEquals(false, $validator->isValid($queries));
     }

@@ -4,7 +4,6 @@ namespace Tests\Unit\Validator;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
@@ -14,104 +13,105 @@ use Utopia\Query\Schema\ColumnType;
 class DocumentsQueriesTest extends TestCase
 {
     /**
-     * @var array<string, mixed>
+     * @var array<Document>
      */
-    protected array $collection = [];
+    protected array $attributes = [];
+
+    /**
+     * @var array<Document>
+     */
+    protected array $indexes = [];
 
     /**
      * @throws Exception
      */
     protected function setUp(): void
     {
-        $this->collection = [
-            '$id' => Database::METADATA,
-            '$collection' => Database::METADATA,
-            'name' => 'movies',
-            'attributes' => [
-                new Document([
-                    '$id' => 'title',
-                    'key' => 'title',
-                    'type' => ColumnType::String->value,
-                    'size' => 256,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'description',
-                    'key' => 'description',
-                    'type' => ColumnType::String->value,
-                    'size' => 1000000,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'rating',
-                    'key' => 'rating',
-                    'type' => ColumnType::Integer->value,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'price',
-                    'key' => 'price',
-                    'type' => ColumnType::Double->value,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'is_bool',
-                    'key' => 'is_bool',
-                    'type' => ColumnType::Boolean->value,
-                    'size' => 0,
-                    'required' => false,
-                    'signed' => false,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'id',
-                    'key' => 'id',
-                    'type' => ColumnType::Id->value,
-                    'size' => 0,
-                    'required' => false,
-                    'signed' => false,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('testindex2'),
-                    'type' => 'key',
-                    'attributes' => [
-                        'title',
-                        'description',
-                        'price',
-                    ],
-                    'orders' => [
-                        'ASC',
-                        'DESC',
-                    ],
-                ]),
-                new Document([
-                    '$id' => ID::custom('testindex3'),
-                    'type' => 'fulltext',
-                    'attributes' => [
-                        'title',
-                    ],
-                    'orders' => [],
-                ]),
-            ],
+        $this->attributes = [
+            new Document([
+                '$id' => 'title',
+                'key' => 'title',
+                'type' => ColumnType::String->value,
+                'size' => 256,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'description',
+                'key' => 'description',
+                'type' => ColumnType::String->value,
+                'size' => 1000000,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'rating',
+                'key' => 'rating',
+                'type' => ColumnType::Integer->value,
+                'size' => 5,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'size' => 5,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'is_bool',
+                'key' => 'is_bool',
+                'type' => ColumnType::Boolean->value,
+                'size' => 0,
+                'required' => false,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'id',
+                'key' => 'id',
+                'type' => ColumnType::Id->value,
+                'size' => 0,
+                'required' => false,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $this->indexes = [
+            new Document([
+                '$id' => ID::custom('testindex2'),
+                'type' => 'key',
+                'attributes' => [
+                    'title',
+                    'description',
+                    'price',
+                ],
+                'orders' => [
+                    'ASC',
+                    'DESC',
+                ],
+            ]),
+            new Document([
+                '$id' => ID::custom('testindex3'),
+                'type' => 'fulltext',
+                'attributes' => [
+                    'title',
+                ],
+                'orders' => [],
+            ]),
         ];
     }
 
@@ -125,8 +125,8 @@ class DocumentsQueriesTest extends TestCase
     public function test_valid_queries(): void
     {
         $validator = new Documents(
-            $this->collection['attributes'],
-            $this->collection['indexes'],
+            $this->attributes,
+            $this->indexes,
             ColumnType::Integer->value
         );
 
@@ -163,8 +163,8 @@ class DocumentsQueriesTest extends TestCase
     public function test_invalid_queries(): void
     {
         $validator = new Documents(
-            $this->collection['attributes'],
-            $this->collection['indexes'],
+            $this->attributes,
+            $this->indexes,
             ColumnType::Integer->value
         );
 

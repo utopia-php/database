@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
 class QueryTest extends TestCase
@@ -242,11 +243,11 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document([])),
         ];
 
-        $queries1 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
+        $queries1 = Query::getByType($queries, [Method::CursorAfter, Method::CursorBefore]);
 
         $this->assertCount(2, $queries1);
         foreach ($queries1 as $query) {
-            $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]));
+            $this->assertEquals(true, in_array($query->getMethod(), [Method::CursorAfter, Method::CursorBefore]));
         }
 
         $cursor = reset($queries1);
@@ -257,14 +258,14 @@ class QueryTest extends TestCase
 
         $query1 = $queries[1];
 
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query1->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query1->getMethod());
         $this->assertInstanceOf(Document::class, $query1->getValue());
         $this->assertTrue($query1->getValue()->isEmpty()); // Cursor Document is not updated
 
         /**
          * Using reference $queries2 => $queries
          */
-        $queries2 = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], false);
+        $queries2 = Query::getByType($queries, [Method::CursorAfter, Method::CursorBefore], false);
 
         $cursor = reset($queries2);
         $this->assertInstanceOf(Query::class, $cursor);
@@ -274,7 +275,7 @@ class QueryTest extends TestCase
         $query2 = $queries[1];
 
         $this->assertCount(2, $queries2);
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query2->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query2->getMethod());
         $this->assertInstanceOf(Document::class, $query2->getValue());
         $this->assertEquals('hello1', $query2->getValue()->getId()); // Cursor Document is updated
 
@@ -297,7 +298,7 @@ class QueryTest extends TestCase
         $query3 = $queries[1];
 
         $this->assertCount(2, $queries3);
-        $this->assertEquals(Query::TYPE_CURSOR_BEFORE, $query3->getMethod());
+        $this->assertEquals(Method::CursorBefore, $query3->getMethod());
         $this->assertInstanceOf(Document::class, $query3->getValue());
         $this->assertEquals('hello3', $query3->getValue()->getId()); // Cursor Document is updated
     }

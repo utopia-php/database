@@ -17,6 +17,6 @@ class IDTest extends TestCase
     {
         $id = ID::unique();
         $this->assertNotEmpty($id);
-        $this->assertIsString($id);
+        $this->assertIsString($id); // @phpstan-ignore method.alreadyNarrowedType
     }
 }

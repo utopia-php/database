@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Closure;
+use DateTime;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,6 +19,9 @@ use Utopia\Validator\Integer;
 use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
+/**
+ * Validates document structure against collection schema including required attributes, types, and formats.
+ */
 class Structure extends Validator
 {
     /**
@@ -103,8 +107,8 @@ class Structure extends Validator
     public function __construct(
         protected readonly Document $collection,
         private readonly string $idAttributeType,
-        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
-        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
+        private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
         private readonly ?Document $currentDocument = null
     ) {
@@ -124,7 +128,7 @@ class Structure extends Validator
      * Add a new Validator
      * Stores a callback and required params to create Validator
      *
-     * @param  Closure  $callback  Callback that accepts $params in order and returns \Utopia\Validator
+     * @param  Closure  $callback  Callback that accepts $params in order and returns Validator
      * @param  string  $type  Primitive data type for validation
      */
     public static function addFormat(string $name, Closure $callback, string $type): void
@@ -215,7 +219,10 @@ class Structure extends Validator
 
         $keys = [];
         $structure = $document->getArrayCopy();
-        $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
+        /** @var array<string, mixed> $collectionAttributes */
+        $collectionAttributes = $this->collection->getAttribute('attributes', []);
+        /** @var array<array<string, mixed>> $attributes */
+        $attributes = \array_merge($this->attributes, $collectionAttributes);
 
         if (! $this->checkForAllRequiredValues($structure, $attributes, $keys)) {
             return false;
@@ -236,7 +243,7 @@ class Structure extends Validator
      * Check for all required values
      *
      * @param  array<string, mixed>  $structure
-     * @param  array<string, mixed>  $attributes
+     * @param  array<array<string, mixed>>  $attributes
      * @param  array<string, mixed>  $keys
      */
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
@@ -246,6 +253,8 @@ class Structure extends Validator
         }
 
         foreach ($attributes as $attribute) { // Check all required attributes are set
+            /** @var array<string, mixed> $attribute */
+            /** @var string $name */
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
@@ -294,6 +303,7 @@ class Structure extends Validator
         foreach ($structure as $key => $value) {
             if (Operator::isOperator($value)) {
                 // Set the attribute name on the operator for validation
+                /** @var Operator $value */
                 $value->setAttribute($key);
 
                 $operatorValidator = new OperatorValidator($this->collection, $this->currentDocument);
@@ -306,11 +316,15 @@ class Structure extends Validator
                 continue;
             }
 
+            /** @var array<string, mixed> $attribute */
             $attribute = $keys[$key] ?? [];
+            /** @var string $type */
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
+            /** @var string $format */
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
+            /** @var int $size */
             $size = $attribute['size'] ?? 0;
             $signed = $attribute['signed'] ?? true;
 
@@ -318,26 +332,28 @@ class Structure extends Validator
                 continue;
             }
 
-            if ($type === ColumnType::Relationship->value) {
+            $columnType = ColumnType::tryFrom($type);
+
+            if ($columnType === ColumnType::Relationship) {
                 continue;
             }
 
             $validators = [];
 
-            switch ($type) {
-                case ColumnType::Id->value:
-                    $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
+            switch ($columnType) {
+                case ColumnType::Id:
+                    $validators[] = new Sequence($this->idAttributeType, ($attribute['$id'] ?? '') === '$sequence');
                     break;
 
-                case ColumnType::Varchar->value:
-                case ColumnType::Text->value:
-                case ColumnType::MediumText->value:
-                case ColumnType::LongText->value:
-                case ColumnType::String->value:
+                case ColumnType::Varchar:
+                case ColumnType::Text:
+                case ColumnType::MediumText:
+                case ColumnType::LongText:
+                case ColumnType::String:
                     $validators[] = new Text($size, min: 0);
                     break;
 
-                case ColumnType::Integer->value:
+                case ColumnType::Integer:
                     // Determine bit size based on attribute size in bytes
                     $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
@@ -349,36 +365,38 @@ class Structure extends Validator
                     $validators[] = new Range($min, $max, ColumnType::Integer->value);
                     break;
 
-                case ColumnType::Double->value:
+                case ColumnType::Double:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
                     $min = $signed ? -Database::MAX_DOUBLE : 0;
                     $validators[] = new Range($min, Database::MAX_DOUBLE, ColumnType::Double->value);
                     break;
 
-                case ColumnType::Boolean->value:
+                case ColumnType::Boolean:
                     $validators[] = new Boolean();
                     break;
 
-                case ColumnType::Datetime->value:
+                case ColumnType::Datetime:
                     $validators[] = new DatetimeValidator(
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate
                     );
                     break;
 
-                case ColumnType::Object->value:
+                case ColumnType::Object:
                     $validators[] = new ObjectValidator();
                     break;
 
-                case ColumnType::Point->value:
-                case ColumnType::Linestring->value:
-                case ColumnType::Polygon->value:
+                case ColumnType::Point:
+                case ColumnType::Linestring:
+                case ColumnType::Polygon:
                     $validators[] = new Spatial($type);
                     break;
 
-                case ColumnType::Vector->value:
-                    $validators[] = new Vector($attribute['size'] ?? 0);
+                case ColumnType::Vector:
+                    /** @var int $vectorSize */
+                    $vectorSize = $attribute['size'] ?? 0;
+                    $validators[] = new Vector($vectorSize);
                     break;
 
                 default:
@@ -394,8 +412,10 @@ class Structure extends Validator
 
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
-                $format = self::getFormat($format, $type);
-                $validators[] = $format['callback']($attribute);
+                $formatDef = self::getFormat($format, $type);
+                /** @var Validator $formatValidator */
+                $formatValidator = $formatDef['callback']($attribute);
+                $validators[] = $formatValidator;
             }
 
             if ($array) { // Validate attribute type for arrays - format for arrays handled separately

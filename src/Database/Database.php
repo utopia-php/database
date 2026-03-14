@@ -5510,7 +5510,8 @@ class Database
                     throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                 }
             } else {
-                $document->setAttribute('$tenant', $this->adapter->getTenant());
+                $tenant = $this->adapter->getTenant();
+                $document->setAttribute('$tenant', $tenant !== null ? (string) $tenant : null);
             }
         }
 
@@ -5625,7 +5626,8 @@ class Database
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
                 } else {
-                    $document->setAttribute('$tenant', $this->adapter->getTenant());
+                    $tenant = $this->adapter->getTenant();
+                    $document->setAttribute('$tenant', $tenant !== null ? (string) $tenant : null);
                 }
             }
 
@@ -7205,7 +7207,8 @@ class Database
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {
-                    $document->setAttribute('$tenant', $this->adapter->getTenant());
+                    $tenant = $this->adapter->getTenant();
+                    $document->setAttribute('$tenant', $tenant !== null ? (string) $tenant : null);
                 }
             }
 

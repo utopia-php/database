@@ -12,13 +12,13 @@ use Utopia\Database\SetType;
 
 class DocumentTest extends TestCase
 {
-    protected ?Document $document = null;
+    protected Document $document;
 
-    protected ?Document $empty = null;
+    protected Document $empty;
 
-    protected ?string $id = null;
+    protected string $id;
 
-    protected ?string $collection = null;
+    protected string $collection;
 
     protected function setUp(): void
     {
@@ -223,16 +223,21 @@ class DocumentTest extends TestCase
         $this->assertEquals(null, $this->document->find('findArray', 'demo'));
         $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
 
-        $this->assertEquals($this->document->getAttribute('children')[0], $this->document->find('name', 'x', 'children'));
-        $this->assertEquals($this->document->getAttribute('children')[2], $this->document->find('name', 'z', 'children'));
+        /** @var array<Document> $children */
+        $children = $this->document->getAttribute('children');
+        $this->assertEquals($children[0], $this->document->find('name', 'x', 'children'));
+        $this->assertEquals($children[2], $this->document->find('name', 'z', 'children'));
         $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
     }
 
     public function test_find_and_replace(): void
     {
+        $id = $this->id;
+        $collection = $this->collection;
+
         $document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
+            '$id' => ID::custom($id),
+            '$collection' => ID::custom($collection),
             '$permissions' => [
                 Permission::read(Role::user(ID::custom('123'))),
                 Permission::read(Role::team(ID::custom('123'))),
@@ -252,8 +257,10 @@ class DocumentTest extends TestCase
         ]);
 
         $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
-        $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
+        /** @var array<array<string, mixed>> $children */
+        $children = $document->getAttribute('children');
+        $this->assertEquals('1', $children[0]['name']);
+        $this->assertEquals(true, $children[0]['test']);
 
         // Array with wrong value
         $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
@@ -274,9 +281,12 @@ class DocumentTest extends TestCase
 
     public function test_find_and_remove(): void
     {
+        $id = $this->id;
+        $collection = $this->collection;
+
         $document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
+            '$id' => ID::custom($id),
+            '$collection' => ID::custom($collection),
             '$permissions' => [
                 Permission::read(Role::user(ID::custom('123'))),
                 Permission::read(Role::team(ID::custom('123'))),
@@ -295,8 +305,10 @@ class DocumentTest extends TestCase
             ],
         ]);
         $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
-        $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
-        $this->assertCount(2, $document->getAttribute('children'));
+        /** @var array<array<string, mixed>> $childrenAfterRemove */
+        $childrenAfterRemove = $document->getAttribute('children');
+        $this->assertEquals('y', $childrenAfterRemove[1]['name']);
+        $this->assertCount(2, $childrenAfterRemove);
 
         // Array with wrong value
         $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
@@ -359,16 +371,32 @@ class DocumentTest extends TestCase
         $after = clone $before;
 
         $before->setAttribute('name', 'before');
-        $before->getAttribute('document')->setAttribute('name', 'before_one');
-        $before->getAttribute('children')[0]->setAttribute('name', 'before_a');
-        $before->getAttribute('children')[0]->getAttribute('document')->setAttribute('name', 'before_two');
-        $before->getAttribute('children')[0]->getAttribute('children')[0]->setAttribute('name', 'before_x');
+        /** @var Document $beforeDoc */
+        $beforeDoc = $before->getAttribute('document');
+        $beforeDoc->setAttribute('name', 'before_one');
+        /** @var array<Document> $beforeChildren */
+        $beforeChildren = $before->getAttribute('children');
+        $beforeChildren[0]->setAttribute('name', 'before_a');
+        /** @var Document $beforeChildDoc */
+        $beforeChildDoc = $beforeChildren[0]->getAttribute('document');
+        $beforeChildDoc->setAttribute('name', 'before_two');
+        /** @var array<Document> $beforeChildChildren */
+        $beforeChildChildren = $beforeChildren[0]->getAttribute('children');
+        $beforeChildChildren[0]->setAttribute('name', 'before_x');
 
         $this->assertEquals('_', $after->getAttribute('name'));
-        $this->assertEquals('zero', $after->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('a', $after->getAttribute('children')[0]->getAttribute('name'));
-        $this->assertEquals('one', $after->getAttribute('children')[0]->getAttribute('document')->getAttribute('name'));
-        $this->assertEquals('x', $after->getAttribute('children')[0]->getAttribute('children')[0]->getAttribute('name'));
+        /** @var Document $afterDoc */
+        $afterDoc = $after->getAttribute('document');
+        $this->assertEquals('zero', $afterDoc->getAttribute('name'));
+        /** @var array<Document> $afterChildren */
+        $afterChildren = $after->getAttribute('children');
+        $this->assertEquals('a', $afterChildren[0]->getAttribute('name'));
+        /** @var Document $afterChildDoc */
+        $afterChildDoc = $afterChildren[0]->getAttribute('document');
+        $this->assertEquals('one', $afterChildDoc->getAttribute('name'));
+        /** @var array<Document> $afterChildChildren */
+        $afterChildChildren = $afterChildren[0]->getAttribute('children');
+        $this->assertEquals('x', $afterChildChildren[0]->getAttribute('name'));
     }
 
     public function test_get_array_copy(): void

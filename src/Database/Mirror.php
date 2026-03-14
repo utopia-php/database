@@ -2,17 +2,24 @@
 
 namespace Utopia\Database;
 
+use DateTime;
+use Throwable;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationship as RelationshipHook;
 use Utopia\Database\Hook\RelationshipHandler;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
 
+/**
+ * Wraps a source Database and replicates write operations to an optional destination Database.
+ */
 class Mirror extends Database
 {
     protected Database $source;
@@ -29,7 +36,7 @@ class Mirror extends Database
     /**
      * Callbacks to run when an error occurs on the destination database
      *
-     * @var array<callable(string, \Throwable): void>
+     * @var array<callable(string, Throwable): void>
      */
     protected array $errorCallbacks = [];
 
@@ -57,11 +64,21 @@ class Mirror extends Database
         $this->writeFilters = $filters;
     }
 
+    /**
+     * Get the source database instance.
+     *
+     * @return Database
+     */
     public function getSource(): Database
     {
         return $this->source;
     }
 
+    /**
+     * Get the destination database instance, if configured.
+     *
+     * @return Database|null
+     */
     public function getDestination(): ?Database
     {
         return $this->destination;
@@ -76,7 +93,7 @@ class Mirror extends Database
     }
 
     /**
-     * @param  callable(string, \Throwable): void  $callback
+     * @param  callable(string, Throwable): void  $callback
      */
     public function onError(callable $callback): void
     {
@@ -88,21 +105,24 @@ class Mirror extends Database
      */
     protected function delegate(string $method, array $args = []): mixed
     {
-        $result = $this->source->{$method}(...$args);
-
         if ($this->destination === null) {
-            return $result;
+            return $this->source->{$method}(...$args);
         }
 
+        $sourceResult = $this->source->{$method}(...$args);
+
         try {
-            $result = $this->destination->{$method}(...$args);
-        } catch (\Throwable $err) {
+            $this->destination->{$method}(...$args);
+        } catch (Throwable $err) {
             $this->logError($method, $err);
         }
 
-        return $result;
+        return $sourceResult;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setDatabase(string $name): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -110,6 +130,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setNamespace(string $namespace): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -117,6 +140,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setSharedTables(bool $sharedTables): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -124,6 +150,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setTenant(?int $tenant): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -131,6 +160,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setPreserveDates(bool $preserve): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -140,6 +172,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setPreserveSequence(bool $preserve): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -149,6 +184,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function enableValidation(): static
     {
         $this->delegate(__FUNCTION__);
@@ -158,6 +196,9 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function disableValidation(): static
     {
         $this->delegate(__FUNCTION__);
@@ -167,43 +208,70 @@ class Mirror extends Database
         return $this;
     }
 
-    public function on(string $event, string $name, ?callable $callback): static
+    /**
+     * {@inheritdoc}
+     */
+    public function addLifecycleHook(Lifecycle $hook): static
     {
-        $this->source->on($event, $name, $callback);
+        $this->source->addLifecycleHook($hook);
 
         return $this;
     }
 
-    protected function trigger(string $event, mixed $args = null): void
+    protected function trigger(Event $event, mixed $data = null): void
     {
-        $this->source->trigger($event, $args);
+        $this->source->trigger($event, $data);
     }
 
-    public function silent(callable $callback, ?array $listeners = null): mixed
+    /**
+     * {@inheritdoc}
+     */
+    public function silent(callable $callback): mixed
     {
-        return $this->source->silent($callback, $listeners);
+        return $this->source->silent($callback);
     }
 
-    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
+    /**
+     * {@inheritdoc}
+     */
+    public function withRequestTimestamp(?DateTime $requestTimestamp, callable $callback): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function exists(?string $database = null, ?string $collection = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function create(?string $database = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function delete(?string $database = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         $result = $this->source->createCollection(
@@ -220,12 +288,15 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $result = $filter->beforeCreateCollection(
+                $filtered = $filter->beforeCreateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
                     collection: $result,
                 );
+                if ($filtered !== null) {
+                    $result = $filtered;
+                }
             }
 
             $this->destination->createCollection(
@@ -245,13 +316,16 @@ class Mirror extends Database
                     'status' => 'upgraded',
                 ]));
             });
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('createCollection', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
         $result = $this->source->updateCollection($id, $permissions, $documentSecurity);
@@ -262,22 +336,28 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $result = $filter->beforeUpdateCollection(
+                $filtered = $filter->beforeUpdateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
                     collection: $result,
                 );
+                if ($filtered !== null) {
+                    $result = $filtered;
+                }
             }
 
             $this->destination->updateCollection($id, $permissions, $documentSecurity);
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('updateCollection', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function deleteCollection(string $id): bool
     {
         $result = $this->source->deleteCollection($id);
@@ -296,13 +376,16 @@ class Mirror extends Database
                     collectionId: $id,
                 );
             }
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('deleteCollection', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $result = $this->source->createAttribute($collection, $attribute);
@@ -312,27 +395,35 @@ class Mirror extends Database
         }
 
         try {
+            // Round-trip through Document is required: Filter interface accepts/returns Document,
+            // so we must serialize to Document for filter processing, then deserialize back.
             $document = $attribute->toDocument();
 
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->beforeCreateAttribute(
+                $filtered = $filter->beforeCreateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     attributeId: $attribute->key,
                     attribute: $document,
                 );
+                if ($filtered !== null) {
+                    $document = $filtered;
+                }
             }
 
             $filteredAttribute = Attribute::fromDocument($document);
             $result = $this->destination->createAttribute($collection, $filteredAttribute);
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('createAttribute', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createAttributes(string $collection, array $attributes): bool
     {
         $result = $this->source->createAttributes($collection, $attributes);
@@ -344,16 +435,21 @@ class Mirror extends Database
         try {
             $filteredAttributes = [];
             foreach ($attributes as $attribute) {
+                // Round-trip through Document is required: Filter interface accepts/returns Document,
+                // so we must serialize to Document for filter processing, then deserialize back.
                 $document = $attribute->toDocument();
 
                 foreach ($this->writeFilters as $filter) {
-                    $document = $filter->beforeCreateAttribute(
+                    $filtered = $filter->beforeCreateAttribute(
                         source: $this->source,
                         destination: $this->destination,
                         collectionId: $collection,
                         attributeId: $attribute->key,
                         attribute: $document,
                     );
+                    if ($filtered !== null) {
+                        $document = $filtered;
+                    }
                 }
 
                 $filteredAttributes[] = Attribute::fromDocument($document);
@@ -363,13 +459,16 @@ class Mirror extends Database
                 $collection,
                 $filteredAttributes,
             );
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('createAttributes', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $document = $this->source->updateAttribute(
@@ -393,36 +492,44 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->beforeUpdateAttribute(
+                $filtered = $filter->beforeUpdateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     attributeId: $id,
                     attribute: $document,
                 );
+                if ($filtered !== null) {
+                    $document = $filtered;
+                }
             }
+
+            $typedAttr = Attribute::fromDocument($document);
 
             $this->destination->updateAttribute(
                 $collection,
                 $id,
-                $document->getAttribute('type'),
-                $document->getAttribute('size'),
-                $document->getAttribute('required'),
-                $document->getAttribute('default'),
-                $document->getAttribute('signed'),
-                $document->getAttribute('array'),
-                $document->getAttribute('format'),
-                $document->getAttribute('formatOptions'),
-                $document->getAttribute('filters'),
+                $typedAttr->type,
+                $typedAttr->size,
+                $typedAttr->required,
+                $typedAttr->default,
+                $typedAttr->signed,
+                $typedAttr->array,
+                $typedAttr->format ?: null,
+                $typedAttr->formatOptions ?: null,
+                $typedAttr->filters ?: null,
                 $newKey,
             );
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('updateAttribute', $err);
         }
 
         return $document;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function deleteAttribute(string $collection, string $id): bool
     {
         $result = $this->source->deleteAttribute($collection, $id);
@@ -442,13 +549,16 @@ class Mirror extends Database
             }
 
             $this->destination->deleteAttribute($collection, $id);
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('deleteAttribute', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createIndex(string $collection, Index $index): bool
     {
         $result = $this->source->createIndex($collection, $index);
@@ -458,27 +568,35 @@ class Mirror extends Database
         }
 
         try {
+            // Round-trip through Document is required: Filter interface accepts/returns Document,
+            // so we must serialize to Document for filter processing, then deserialize back.
             $document = $index->toDocument();
 
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->beforeCreateIndex(
+                $filtered = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     indexId: $index->key,
                     index: $document,
                 );
+                if ($filtered !== null) {
+                    $document = $filtered;
+                }
             }
 
             $filteredIndex = Index::fromDocument($document);
             $result = $this->destination->createIndex($collection, $filteredIndex);
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('createIndex', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function deleteIndex(string $collection, string $id): bool
     {
         $result = $this->source->deleteIndex($collection, $id);
@@ -498,13 +616,16 @@ class Mirror extends Database
                     indexId: $id,
                 );
             }
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('deleteIndex', $err);
         }
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createDocument(string $collection, Document $document): Document
     {
         $document = $this->source->createDocument($collection, $document);
@@ -545,13 +666,16 @@ class Mirror extends Database
                     document: $clone,
                 );
             }
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('createDocument', $err);
         }
 
         return $document;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createDocuments(
         string $collection,
         array $documents,
@@ -579,49 +703,55 @@ class Mirror extends Database
             return $modified;
         }
 
-        try {
-            $clones = [];
+        $clones = [];
+        $destination = $this->destination;
 
-            foreach ($documents as $document) {
-                $clone = clone $document;
+        foreach ($documents as $document) {
+            $clone = clone $document;
 
-                foreach ($this->writeFilters as $filter) {
-                    $clone = $filter->beforeCreateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
-
-                $clones[] = $clone;
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeCreateDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
             }
 
-            $this->destination->withPreserveDates(
-                fn () => $this->destination->createDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                )
-            );
-
-            foreach ($clones as $clone) {
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterCreateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
-            }
-        } catch (\Throwable $err) {
-            $this->logError('createDocuments', $err);
+            $clones[] = $clone;
         }
+
+        Promise::async(function () use ($destination, $collection, $clones, $batchSize) {
+            try {
+                $destination->withPreserveDates(
+                    fn () => $destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+
+                foreach ($clones as $clone) {
+                    foreach ($this->writeFilters as $filter) {
+                        $filter->afterCreateDocument(
+                            source: $this->source,
+                            destination: $destination,
+                            collectionId: $collection,
+                            document: $clone,
+                        );
+                    }
+                }
+            } catch (Throwable $err) {
+                $this->logError('createDocuments', $err);
+            }
+        });
 
         return $modified;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $document = $this->source->updateDocument($collection, $id, $document);
@@ -663,13 +793,16 @@ class Mirror extends Database
                     document: $clone,
                 );
             }
-        } catch (\Throwable $err) {
+        } catch (Throwable $err) {
             $this->logError('updateDocument', $err);
         }
 
         return $document;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateDocuments(
         string $collection,
         Document $updates,
@@ -699,44 +832,50 @@ class Mirror extends Database
             return $modified;
         }
 
-        try {
-            $clone = clone $updates;
+        $clone = clone $updates;
+        $destination = $this->destination;
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeUpdateDocuments(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    updates: $clone,
-                    queries: $queries,
-                );
-            }
-
-            $this->destination->withPreserveDates(
-                fn () => $this->destination->updateDocuments(
-                    $collection,
-                    $clone,
-                    $queries,
-                    $batchSize,
-                )
+        foreach ($this->writeFilters as $filter) {
+            $clone = $filter->beforeUpdateDocuments(
+                source: $this->source,
+                destination: $destination,
+                collectionId: $collection,
+                updates: $clone,
+                queries: $queries,
             );
-
-            foreach ($this->writeFilters as $filter) {
-                $filter->afterUpdateDocuments(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    updates: $clone,
-                    queries: $queries,
-                );
-            }
-        } catch (\Throwable $err) {
-            $this->logError('updateDocuments', $err);
         }
+
+        Promise::async(function () use ($destination, $collection, $clone, $queries, $batchSize) {
+            try {
+                $destination->withPreserveDates(
+                    fn () => $destination->updateDocuments(
+                        $collection,
+                        $clone,
+                        $queries,
+                        $batchSize,
+                    )
+                );
+
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterUpdateDocuments(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        updates: $clone,
+                        queries: $queries,
+                    );
+                }
+            } catch (Throwable $err) {
+                $this->logError('updateDocuments', $err);
+            }
+        });
 
         return $modified;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function upsertDocuments(
         string $collection,
         array $documents,
@@ -764,49 +903,55 @@ class Mirror extends Database
             return $modified;
         }
 
-        try {
-            $clones = [];
+        $clones = [];
+        $destination = $this->destination;
 
-            foreach ($documents as $document) {
-                $clone = clone $document;
+        foreach ($documents as $document) {
+            $clone = clone $document;
 
-                foreach ($this->writeFilters as $filter) {
-                    $clone = $filter->beforeCreateOrUpdateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
-
-                $clones[] = $clone;
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeCreateOrUpdateDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
             }
 
-            $this->destination->withPreserveDates(
-                fn () => $this->destination->upsertDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                )
-            );
-
-            foreach ($clones as $clone) {
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterCreateOrUpdateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
-            }
-        } catch (\Throwable $err) {
-            $this->logError('upsertDocuments', $err);
+            $clones[] = $clone;
         }
+
+        Promise::async(function () use ($destination, $collection, $clones, $batchSize) {
+            try {
+                $destination->withPreserveDates(
+                    fn () => $destination->upsertDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+
+                foreach ($clones as $clone) {
+                    foreach ($this->writeFilters as $filter) {
+                        $filter->afterCreateOrUpdateDocument(
+                            source: $this->source,
+                            destination: $destination,
+                            collectionId: $collection,
+                            document: $clone,
+                        );
+                    }
+                }
+            } catch (Throwable $err) {
+                $this->logError('upsertDocuments', $err);
+            }
+        });
 
         return $modified;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function deleteDocument(string $collection, string $id): bool
     {
         $result = $this->source->deleteDocument($collection, $id);
@@ -823,33 +968,39 @@ class Mirror extends Database
             return $result;
         }
 
-        try {
-            foreach ($this->writeFilters as $filter) {
-                $filter->beforeDeleteDocument(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    documentId: $id,
-                );
-            }
-
-            $this->destination->deleteDocument($collection, $id);
-
-            foreach ($this->writeFilters as $filter) {
-                $filter->afterDeleteDocument(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    documentId: $id,
-                );
-            }
-        } catch (\Throwable $err) {
-            $this->logError('deleteDocument', $err);
+        foreach ($this->writeFilters as $filter) {
+            $filter->beforeDeleteDocument(
+                source: $this->source,
+                destination: $this->destination,
+                collectionId: $collection,
+                documentId: $id,
+            );
         }
+
+        $destination = $this->destination;
+        Promise::async(function () use ($destination, $collection, $id) {
+            try {
+                $destination->deleteDocument($collection, $id);
+
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterDeleteDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        documentId: $id,
+                    );
+                }
+            } catch (Throwable $err) {
+                $this->logError('deleteDocument', $err);
+            }
+        });
 
         return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function deleteDocuments(
         string $collection,
         array $queries = [],
@@ -877,72 +1028,113 @@ class Mirror extends Database
             return $modified;
         }
 
-        try {
-            foreach ($this->writeFilters as $filter) {
-                $filter->beforeDeleteDocuments(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    queries: $queries,
-                );
-            }
-
-            $this->destination->deleteDocuments(
-                $collection,
-                $queries,
-                $batchSize,
+        foreach ($this->writeFilters as $filter) {
+            $filter->beforeDeleteDocuments(
+                source: $this->source,
+                destination: $this->destination,
+                collectionId: $collection,
+                queries: $queries,
             );
-
-            foreach ($this->writeFilters as $filter) {
-                $filter->afterDeleteDocuments(
-                    source: $this->source,
-                    destination: $this->destination,
-                    collectionId: $collection,
-                    queries: $queries,
-                );
-            }
-        } catch (\Throwable $err) {
-            $this->logError('deleteDocuments', $err);
         }
+
+        $destination = $this->destination;
+        Promise::async(function () use ($destination, $collection, $queries, $batchSize) {
+            try {
+                $destination->deleteDocuments(
+                    $collection,
+                    $queries,
+                    $batchSize,
+                );
+
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterDeleteDocuments(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        queries: $queries,
+                    );
+                }
+            } catch (Throwable $err) {
+                $this->logError('deleteDocuments', $err);
+            }
+        });
 
         return $modified;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
-        return $this->delegate(__FUNCTION__, [$collection, $id, $formatOptions]);
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, [$collection, $id, $formatOptions]);
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function createRelationship(Relationship $relationship): bool
     {
-        return $this->delegate(__FUNCTION__, [$relationship]);
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, [$relationship]);
+        return $result;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function updateRelationship(
         string $collection,
         string $id,
@@ -951,30 +1143,55 @@ class Mirror extends Database
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function deleteRelationship(string $collection, string $id): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function deleteRelationship(string $collection, string $id): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
+    {
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
+    {
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * Create the upgrades tracking collection in the source database if it does not exist.
+     *
+     * @return void
      * @throws Limit
      * @throws DuplicateException
      * @throws Exception
@@ -1015,7 +1232,7 @@ class Mirror extends Database
                     type: IndexType::Key,
                     attributes: ['status'],
                     lengths: [Database::LENGTH_KEY],
-                    orders: [OrderDirection::ASC->value],
+                    orders: [OrderDirection::Asc->value],
                 ),
             ],
         );
@@ -1033,44 +1250,48 @@ class Mirror extends Database
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 return;
             }
         });
     }
 
-    protected function logError(string $action, \Throwable $err): void
+    protected function logError(string $action, Throwable $err): void
     {
         foreach ($this->errorCallbacks as $callback) {
             $callback($action, $err);
         }
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setAuthorization(Authorization $authorization): self
     {
 
         parent::setAuthorization($authorization);
 
-        if (isset($this->source)) {
-            $this->source->setAuthorization($authorization);
-        }
-        if (isset($this->destination)) {
+        $this->source->setAuthorization($authorization);
+
+        if ($this->destination !== null) {
             $this->destination->setAuthorization($authorization);
         }
 
         return $this;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function setRelationshipHook(?RelationshipHook $hook): self
     {
         parent::setRelationshipHook($hook);
 
-        if (isset($this->source)) {
-            $this->source->setRelationshipHook(
-                $hook !== null ? new RelationshipHandler($this->source) : null
-            );
-        }
-        if (isset($this->destination)) {
+        $this->source->setRelationshipHook(
+            $hook !== null ? new RelationshipHandler($this->source) : null
+        );
+
+        if ($this->destination !== null) {
             $this->destination->setRelationshipHook(
                 $hook !== null ? new RelationshipHandler($this->destination) : null
             );

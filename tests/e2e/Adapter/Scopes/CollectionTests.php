@@ -7,6 +7,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -17,11 +18,13 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
@@ -49,6 +52,15 @@ trait CollectionTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        // Clean up any leftover collections from prior runs
+        foreach ($database->listCollections(100) as $col) {
+            try {
+                $database->deleteCollection($col->getId());
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
 
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors', permissions: [
             Permission::create(Role::any()),
@@ -515,11 +527,11 @@ trait CollectionTests
 
         $indexes = [
             new Index(key: 'idx_username', type: IndexType::Key, attributes: ['username'], lengths: [100], orders: []),
-            new Index(key: 'idx_username_uid', type: IndexType::Key, attributes: ['username', '$id'], lengths: [99, 200], orders: [OrderDirection::DESC->value]),
+            new Index(key: 'idx_username_uid', type: IndexType::Key, attributes: ['username', '$id'], lengths: [99, 200], orders: [OrderDirection::Desc->value]),
         ];
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
-            $indexes[] = new Index(key: 'idx_cards', type: IndexType::Key, attributes: ['cards'], lengths: [500], orders: [OrderDirection::DESC->value]);
+            $indexes[] = new Index(key: 'idx_cards', type: IndexType::Key, attributes: ['cards'], lengths: [500], orders: [OrderDirection::Desc->value]);
         }
 
         $collection = $database->createCollection(
@@ -536,7 +548,7 @@ trait CollectionTests
 
         $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
         $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], 99);
-        $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], OrderDirection::DESC->value);
+        $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], OrderDirection::Desc->value);
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
             $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
@@ -1124,53 +1136,63 @@ trait CollectionTests
             $database = $this->getDatabase();
 
             $events = [
-                Database::EVENT_DATABASE_CREATE,
-                Database::EVENT_DATABASE_LIST,
-                Database::EVENT_COLLECTION_CREATE,
-                Database::EVENT_COLLECTION_LIST,
-                Database::EVENT_COLLECTION_READ,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_CREATE,
-                Database::EVENT_ATTRIBUTE_UPDATE,
-                Database::EVENT_INDEX_CREATE,
-                Database::EVENT_DOCUMENT_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_UPDATE,
-                Database::EVENT_DOCUMENT_READ,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_COUNT,
-                Database::EVENT_DOCUMENT_SUM,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_INCREASE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DECREASE,
-                Database::EVENT_DOCUMENTS_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_UPDATE,
-                Database::EVENT_INDEX_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
+                Event::DatabaseCreate->value,
+                Event::DatabaseList->value,
+                Event::CollectionCreate->value,
+                Event::CollectionList->value,
+                Event::CollectionRead->value,
+                Event::DocumentPurge->value,
+                Event::AttributeCreate->value,
+                Event::AttributeUpdate->value,
+                Event::IndexCreate->value,
+                Event::DocumentCreate->value,
+                Event::DocumentPurge->value,
+                Event::DocumentUpdate->value,
+                Event::DocumentRead->value,
+                Event::DocumentFind->value,
+                Event::DocumentFind->value,
+                Event::DocumentCount->value,
+                Event::DocumentSum->value,
+                Event::DocumentPurge->value,
+                Event::DocumentIncrease->value,
+                Event::DocumentPurge->value,
+                Event::DocumentDecrease->value,
+                Event::DocumentsCreate->value,
+                Event::DocumentPurge->value,
+                Event::DocumentPurge->value,
+                Event::DocumentPurge->value,
+                Event::DocumentsUpdate->value,
+                Event::IndexDelete->value,
+                Event::DocumentPurge->value,
+                Event::DocumentDelete->value,
+                Event::DocumentPurge->value,
+                Event::DocumentPurge->value,
+                Event::DocumentsDelete->value,
+                Event::DocumentPurge->value,
+                Event::AttributeDelete->value,
+                Event::CollectionDelete->value,
+                Event::DatabaseDelete->value,
+                Event::DocumentPurge->value,
+                Event::DocumentsDelete->value,
+                Event::DocumentPurge->value,
+                Event::AttributeDelete->value,
+                Event::CollectionDelete->value,
+                Event::DatabaseDelete->value,
             ];
 
-            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
-                $shifted = array_shift($events);
-                $this->assertEquals($shifted, $event);
+            $database->addLifecycleHook(new class ($this, $events) implements Lifecycle {
+                /** @param array<string> $events */
+                public function __construct(
+                    private readonly \PHPUnit\Framework\TestCase $test,
+                    private array &$events,
+                ) {
+                }
+
+                public function handle(Event $event, mixed $data): void
+                {
+                    $shifted = array_shift($this->events);
+                    $this->test->assertEquals($shifted, $event->value);
+                }
             });
 
             if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
@@ -1204,11 +1226,7 @@ trait CollectionTests
             ]));
 
             $executed = false;
-            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
-                $executed = true;
-            });
-
-            $database->silent(function () use ($database, $collectionId, $document) {
+            $database->silent(function () use ($database, $collectionId, $document, &$executed) {
                 $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
                 $database->getDocument($collectionId, 'doc1');
                 $database->find($collectionId);
@@ -1217,7 +1235,7 @@ trait CollectionTests
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            }, ['should-not-execute']);
+            });
 
             $this->assertFalse($executed);
 
@@ -1241,10 +1259,6 @@ trait CollectionTests
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb_'.static::getTestToken());
-
-            // Remove all listeners
-            $database->on(Database::EVENT_ALL, 'test', null);
-            $database->on(Database::EVENT_ALL, 'should-not-execute', null);
         });
     }
 
@@ -1317,13 +1331,18 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return 'SELECT 1';
+        $database->addQueryTransform('test', new class () implements QueryTransform {
+            public function transform(Event $event, string $query): string
+            {
+                return 'SELECT 1';
+            }
         });
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+
+        $database->removeQueryTransform('test');
     }
 
     public function testSetGlobalCollection(): void

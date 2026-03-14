@@ -56,7 +56,7 @@ class MongoDBTest extends Base
             ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
             ->setSharedTables(true)
-            ->setTenant(999)
+            ->setTenant('00000000-0000-7000-8000-0000000003e7')
             ->setNamespace(static::$namespace = 'my_shared_tables');
 
         if ($database->exists()) {

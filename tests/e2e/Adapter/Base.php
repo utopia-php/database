@@ -82,4 +82,26 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
+    private static array $uuidCache = [];
+
+    protected function getTenantId(int $index): string
+    {
+        if (isset(self::$uuidCache[$index])) {
+            return self::$uuidCache[$index];
+        }
+
+        $type = $this->getDatabase()->getIdAttributeType();
+
+        if ($type === Database::VAR_UUID7) {
+            $hex = str_pad(dechex($index), 12, '0', STR_PAD_LEFT);
+            $value = sprintf(
+                '00000000-0000-7000-8000-%s',
+                $hex
+            );
+        } else {
+            $value = (string) $index;
+        }
+
+        return self::$uuidCache[$index] = $value;
+    }
 }

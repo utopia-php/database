@@ -1100,8 +1100,8 @@ trait CollectionTests
         /**
          * Table
          */
-        $tenant1 = 1;
-        $tenant2 = 2;
+        $tenant1 = $this->getTenantId(1);
+        $tenant2 = $this->getTenantId(2);
 
         $database
             ->setDatabase('sharedTables')
@@ -1290,7 +1290,7 @@ trait CollectionTests
         $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
         $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
 
-        $database->setTenant(2);
+        $database->setTenant($this->getTenantId(2));
 
         try {
             $database->createCollection('duplicates', documentSecurity: false);
@@ -1314,7 +1314,7 @@ trait CollectionTests
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
         $this->assertEquals(1, \count($collection->getAttribute('indexes')));
 
-        $database->setTenant(1);
+        $database->setTenant($this->getTenantId(1));
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));

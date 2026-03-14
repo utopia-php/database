@@ -2,9 +2,12 @@
 
 namespace Utopia\Database\Adapter;
 
+use Exception;
 use PDOException;
+use PDOStatement;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
@@ -13,10 +16,21 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
+use Utopia\Query\Builder\MySQL as MySQLBuilder;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
+/**
+ * Database adapter for MySQL, extending MariaDB with MySQL-specific behavior and overrides.
+ */
 class MySQL extends MariaDB
 {
+    /**
+     * Get the list of capabilities supported by the MySQL adapter.
+     *
+     * @return array<Capability>
+     */
     public function capabilities(): array
     {
         $remove = [
@@ -40,7 +54,7 @@ class MySQL extends MariaDB
      *
      * @throws DatabaseException
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         if (! $this->supports(Capability::Timeouts)) {
             return;
@@ -50,15 +64,15 @@ class MySQL extends MariaDB
         }
 
         $this->timeout = $milliseconds;
+    }
 
-        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return \preg_replace(
-                pattern: '/SELECT/',
-                replacement: "SELECT /*+ max_execution_time({$milliseconds}) */",
-                subject: $sql,
-                limit: 1
-            );
-        });
+    protected function execute(mixed $stmt): bool
+    {
+        if ($this->timeout > 0) {
+            $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
+        }
+        /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
+        return $stmt->execute();
     }
 
     /**
@@ -92,7 +106,9 @@ class MySQL extends MariaDB
         try {
             $collectionSize->execute();
             $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
@@ -107,17 +123,19 @@ class MySQL extends MariaDB
      */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
+        /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($geomArray);
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
         $operator = match ($query->getMethod()) {
-            Query::TYPE_DISTANCE_EQUAL => '=',
-            Query::TYPE_DISTANCE_NOT_EQUAL => '!=',
-            Query::TYPE_DISTANCE_GREATER_THAN => '>',
-            Query::TYPE_DISTANCE_LESS_THAN => '<',
+            Method::DistanceEqual => '=',
+            Method::DistanceNotEqual => '!=',
+            Method::DistanceGreaterThan => '>',
+            Method::DistanceLessThan => '<',
             default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
         };
 
@@ -134,7 +152,7 @@ class MySQL extends MariaDB
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
     }
 
-    protected function processException(PDOException $e): \Exception
+    protected function processException(PDOException $e): Exception
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
             return new CharacterException('Invalid character', $e->getCode(), $e);
@@ -162,13 +180,17 @@ class MySQL extends MariaDB
         return parent::processException($e);
     }
 
-    protected function createBuilder(): \Utopia\Query\Builder\SQL
+    protected function createBuilder(): SQLBuilder
     {
-        return new \Utopia\Query\Builder\MySQL();
+        return new MySQLBuilder();
     }
 
     /**
-     * Spatial type attribute
+     * Get the MySQL SQL type definition for spatial column types with SRID support.
+     *
+     * @param string $type The spatial type (point, linestring, polygon)
+     * @param bool $required Whether the column is NOT NULL
+     * @return string
      */
     public function getSpatialSQLType(string $type, bool $required): string
     {
@@ -226,25 +248,25 @@ class MySQL extends MariaDB
      * Get SQL expression for operator
      * Override for MySQL-specific operator implementations
      */
-    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
 
         switch ($method) {
-            case OperatorType::ArrayAppend->value:
+            case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
-            case OperatorType::ArrayPrepend->value:
+            case OperatorType::ArrayPrepend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
-            case OperatorType::ArrayUnique->value:
+            case OperatorType::ArrayUnique:
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM (

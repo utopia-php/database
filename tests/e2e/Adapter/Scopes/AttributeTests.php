@@ -22,12 +22,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Database\OrderDirection;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Validator\Range;
@@ -403,7 +403,7 @@ trait AttributeTests
         $database->createAttribute('colors', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
         $database->createAttribute('colors', new Attribute(key: 'hex', type: ColumnType::String, size: 128, required: true));
 
-        $database->createIndex('colors', new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::ASC->value]));
+        $database->createIndex('colors', new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
 
         $database->createDocument('colors', new Document([
             '$permissions' => [
@@ -848,7 +848,7 @@ trait AttributeTests
         $this->assertEquals('string', $doc->getAttribute('rename_me'));
 
         // Create an index to check later
-        $database->createIndex('rename_test', new Index(key: 'renameIndexes', type: IndexType::Key, attributes: ['rename_me'], lengths: [], orders: [OrderDirection::DESC->value, OrderDirection::DESC->value]));
+        $database->createIndex('rename_test', new Index(key: 'renameIndexes', type: IndexType::Key, attributes: ['rename_me'], lengths: [], orders: [OrderDirection::Desc->value, OrderDirection::Desc->value]));
 
         $database->updateAttribute(
             collection: 'rename_test',
@@ -978,7 +978,7 @@ trait AttributeTests
             $database->createCollection('colors');
             $database->createAttribute('colors', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('colors', new Attribute(key: 'hex', type: ColumnType::String, size: 128, required: true));
-            $database->createIndex('colors', new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::ASC->value]));
+            $database->createIndex('colors', new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
             $database->createDocument('colors', new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),

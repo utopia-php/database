@@ -2,18 +2,26 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
+use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
-use Utopia\Database\CursorDirection;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\CursorDirection;
 
+/**
+ * Connection pool adapter that delegates database operations to pooled adapter instances.
+ */
 class Pool extends Adapter
 {
     /**
@@ -75,46 +83,110 @@ class Pool extends Adapter
         });
     }
 
-    public function supports(\Utopia\Database\Capability $feature): bool
+    /**
+     * Check if a specific capability is supported by the pooled adapter.
+     *
+     * @param Capability $feature The capability to check
+     * @return bool
+     */
+    public function supports(Capability $feature): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * Get all capabilities supported by the pooled adapter.
+     *
+     * @return array<Capability>
+     */
     public function capabilities(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Capability> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function before(string $event, string $name = '', ?callable $callback = null): static
+    /**
+     * Register a named query transform hook on the pooled adapter.
+     *
+     * @param string $name The transform name
+     * @param QueryTransform $transform The transform instance
+     * @return static
+     */
+    public function addQueryTransform(string $name, QueryTransform $transform): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
 
-    protected function trigger(string $event, mixed $query): mixed
+    /**
+     * Remove a named query transform hook from the pooled adapter.
+     *
+     * @param string $name The transform name to remove
+     * @return static
+     */
+    public function removeQueryTransform(string $name): static
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $this;
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    /**
+     * Set the maximum execution time for queries on the pooled adapter.
+     *
+     * @param int $milliseconds Timeout in milliseconds
+     * @param Event $event The event scope for the timeout
+     * @return void
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * Start a database transaction via the pooled adapter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException
+     */
     public function startTransaction(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * Commit the current database transaction via the pooled adapter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException
+     */
     public function commitTransaction(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * Roll back the current database transaction via the pooled adapter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException
+     */
     public function rollbackTransaction(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**
@@ -127,7 +199,7 @@ class Pool extends Adapter
      * @param  callable(): T  $callback
      * @return T
      *
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function withTransaction(callable $callback): mixed
     {
@@ -168,247 +240,487 @@ class Pool extends Adapter
 
     protected function quote(string $string): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function ping(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function reconnect(): void
     {
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function create(string $name): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function exists(string $database, ?string $collection = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function list(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function delete(string $name): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteCollection(string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function analyzeCollection(string $collection): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createAttributes(string $collection, array $attributes): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createRelationship(Relationship $relationship): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteRelationship(Relationship $relationship): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createDocument(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createDocuments(Document $collection, array $documents): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteDocument(string $collection, string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = CursorDirection::After->value, string $forPermission = PermissionType::Read->value): array
+    /**
+     * {@inheritDoc}
+     */
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var float|int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForString(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForInt(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxIndexLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxVarcharLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxUIDLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getMinDateTime(): \DateTime
+    /**
+     * {@inheritDoc}
+     */
+    public function getMinDateTime(): DateTime
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var DateTime $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfAttributes(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfIndexes(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfDefaultAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfDefaultIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getDocumentSizeLimit(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getAttributeWidth(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getKeywords(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<string> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     protected function getAttributeProjection(array $selections, string $prefix): mixed
@@ -416,81 +728,157 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int $value, string $updatedAt, float|int|null $min = null, float|int|null $max = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getConnectionId(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getInternalIndexesKeys(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<string> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSchemaAttributes(string $collection): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     protected function execute(mixed $stmt): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getIdAttributeType(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSequences(string $collection, array $documents): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<float>
+     */
     public function decodePoint(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<float> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<array<float>>
+     */
     public function decodeLinestring(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<array<float>> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<array<array<float>>>
+     */
     public function decodePolygon(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<array<array<float>>> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function setUTCDatetime(string $value): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function setSupportForAttributes(bool $support): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * Set the authorization instance used for permission checks.
+     *
+     * @param Authorization $authorization The authorization instance
+     * @return self
+     */
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
@@ -498,8 +886,13 @@ class Pool extends Adapter
         return $this;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSupportNonUtfCharacters(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 }

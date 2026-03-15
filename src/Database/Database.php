@@ -7717,11 +7717,19 @@ class Database
         }
 
         if (
-            !empty($value)
-            && $relationType !== Database::RELATION_MANY_TO_ONE
+            $relationType === Database::RELATION_ONE_TO_MANY
             && $side === Database::RELATION_SIDE_PARENT
         ) {
-            throw new RestrictedException('Cannot delete document because it has at least one related document.');
+            if (empty($value)) {
+                $value = $this->authorization->skip(fn () => $this->findOne($relatedCollection->getId(), [
+                    Query::select(['$id']),
+                    Query::equal($twoWayKey, [$document->getId()])
+                ]));
+            }
+
+            if (!empty($value)) {
+                throw new RestrictedException('Cannot delete document because it has at least one related document.');
+            }
         }
 
         if (
@@ -7820,6 +7828,15 @@ class Database
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
+
+                if (empty($value)) {
+                    $value = $this->authorization->skip(fn () => $this->find($relatedCollection->getId(), [
+                        Query::select(['$id']),
+                        Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX)
+                    ]));
+                }
+
                 foreach ($value as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
@@ -7913,6 +7930,14 @@ class Database
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
+                }
+
+                if (empty($value)) {
+                    $value = $this->authorization->skip(fn () => $this->find($relatedCollection->getId(), [
+                        Query::select(['$id']),
+                        Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX)
+                    ]));
                 }
 
                 $this->relationshipDeleteStack[] = $relationship;
@@ -8369,6 +8394,70 @@ class Database
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
+            }
+
+            $results[$index] = $node;
+        }
+
+        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+
+        return $results;
+    }
+
+    /**
+     * Find Documents Across Collections
+     *
+     * @param array<string> $collections
+     * @param array<Query> $queries
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    public function findAcrossCollections(array $collections, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
+    {
+        $collectionDocuments = [];
+        foreach ($collections as $id) {
+            $collection = $this->silent(fn () => $this->getCollection($id));
+            if ($collection->isEmpty()) {
+                throw new NotFoundException("Collection '{$id}' not found");
+            }
+            $collectionDocuments[] = $collection;
+        }
+
+        $this->checkQueryTypes($queries);
+
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $orderAttributes = $grouped['orderAttributes'];
+        $orderTypes = $grouped['orderTypes'];
+        $cursor = $grouped['cursor'];
+        $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
+
+        $results = $this->adapter->findAcrossCollections(
+            $collectionDocuments,
+            $queries,
+            $limit ?? 25,
+            $offset ?? 0,
+            $orderAttributes,
+            $orderTypes,
+            $cursor ?? [],
+            $cursorDirection,
+            $forPermission
+        );
+
+        foreach ($results as $index => $node) {
+            $collectionId = $node->getAttribute('$collection');
+            $collection = $this->silent(fn () => $this->getCollection($collectionId));
+
+            // Apply decoding and casting based on the source collection
+            $node = $this->adapter->castingAfter($collection, $node);
+            $node = $this->casting($collection, $node);
+            $node = $this->decode($collection, $node);
+
+            // Convert to custom document type if mapped
+            if (isset($this->documentTypes[$collectionId])) {
+                $node = $this->createDocumentInstance($collectionId, $node->getArrayCopy());
             }
 
             $results[$index] = $node;

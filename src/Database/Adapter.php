@@ -808,6 +808,32 @@ abstract class Adapter
     abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
     /**
+     * Find Documents Across Collections
+     *
+     * @param array<Document> $collections
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @return array<array<string, mixed>>
+     */
+    abstract public function findAcrossCollections(
+        array $collections,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ
+    ): array;
+
+    /**
      * Find Documents
      *
      * Find data sets using chosen queries
@@ -1264,9 +1290,13 @@ abstract class Adapter
         foreach ($queries as $query) {
             switch ($query->getMethod()) {
                 case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        $selections[] = $value;
-                    }
+                case Query::TYPE_SELECT_DISTINCT:
+                case Query::TYPE_COUNT:
+                case Query::TYPE_SUM:
+                case Query::TYPE_AVG:
+                case Query::TYPE_MIN:
+                case Query::TYPE_MAX:
+                    $selections[] = $query;
                     break;
             }
         }

@@ -68,6 +68,16 @@ class Query
     public const TYPE_OR = 'or';
     public const TYPE_CONTAINS_ALL = 'containsAll';
     public const TYPE_ELEM_MATCH = 'elemMatch';
+    public const TYPE_INNER_JOIN = 'innerJoin';
+    public const TYPE_LEFT_JOIN = 'leftJoin';
+    public const TYPE_RIGHT_JOIN = 'rightJoin';
+    public const TYPE_FULL_JOIN = 'fullJoin';
+    public const TYPE_SELECT_DISTINCT = 'selectDistinct';
+    public const TYPE_COUNT = 'count';
+    public const TYPE_SUM = 'sum';
+    public const TYPE_AVG = 'avg';
+    public const TYPE_MIN = 'min';
+    public const TYPE_MAX = 'max';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -119,7 +129,17 @@ class Query
         self::TYPE_OR,
         self::TYPE_CONTAINS_ALL,
         self::TYPE_ELEM_MATCH,
-        self::TYPE_REGEX
+        self::TYPE_REGEX,
+        self::TYPE_INNER_JOIN,
+        self::TYPE_LEFT_JOIN,
+        self::TYPE_RIGHT_JOIN,
+        self::TYPE_FULL_JOIN,
+        self::TYPE_SELECT_DISTINCT,
+        self::TYPE_COUNT,
+        self::TYPE_SUM,
+        self::TYPE_AVG,
+        self::TYPE_MIN,
+        self::TYPE_MAX
     ];
 
     public const VECTOR_TYPES = [
@@ -312,7 +332,17 @@ class Query
             self::TYPE_VECTOR_COSINE,
             self::TYPE_VECTOR_EUCLIDEAN,
             self::TYPE_EXISTS,
-            self::TYPE_NOT_EXISTS => true,
+            self::TYPE_NOT_EXISTS,
+            self::TYPE_INNER_JOIN,
+            self::TYPE_LEFT_JOIN,
+            self::TYPE_RIGHT_JOIN,
+            self::TYPE_FULL_JOIN,
+            self::TYPE_SELECT_DISTINCT,
+            self::TYPE_COUNT,
+            self::TYPE_SUM,
+            self::TYPE_AVG,
+            self::TYPE_MIN,
+            self::TYPE_MAX => true,
             default => false,
         };
     }
@@ -894,6 +924,7 @@ class Query
      * @return array{
      *     filters: array<Query>,
      *     selections: array<Query>,
+     *     joins: array<Query>,
      *     limit: int|null,
      *     offset: int|null,
      *     orderAttributes: array<string>,
@@ -906,6 +937,7 @@ class Query
     {
         $filters = [];
         $selections = [];
+        $joins = [];
         $limit = null;
         $offset = null;
         $orderAttributes = [];
@@ -968,6 +1000,13 @@ class Query
                     $selections[] = clone $query;
                     break;
 
+                case Query::TYPE_INNER_JOIN:
+                case Query::TYPE_LEFT_JOIN:
+                case Query::TYPE_RIGHT_JOIN:
+                case Query::TYPE_FULL_JOIN:
+                    $joins[] = clone $query;
+                    break;
+
                 default:
                     $filters[] = clone $query;
                     break;
@@ -977,6 +1016,7 @@ class Query
         return [
             'filters' => $filters,
             'selections' => $selections,
+            'joins' => $joins,
             'limit' => $limit,
             'offset' => $offset,
             'orderAttributes' => $orderAttributes,
@@ -1281,5 +1321,103 @@ class Query
     public static function elemMatch(string $attribute, array $queries): self
     {
         return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $on
+     * @param string $alias
+     * @return Query
+     */
+    public static function innerJoin(string $collection, string $on, string $alias = ''): self
+    {
+        return new self(self::TYPE_INNER_JOIN, $collection, [$on, $alias]);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $on
+     * @param string $alias
+     * @return Query
+     */
+    public static function leftJoin(string $collection, string $on, string $alias = ''): self
+    {
+        return new self(self::TYPE_LEFT_JOIN, $collection, [$on, $alias]);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $on
+     * @param string $alias
+     * @return Query
+     */
+    public static function rightJoin(string $collection, string $on, string $alias = ''): self
+    {
+        return new self(self::TYPE_RIGHT_JOIN, $collection, [$on, $alias]);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $on
+     * @param string $alias
+     * @return Query
+     */
+    public static function fullJoin(string $collection, string $on, string $alias = ''): self
+    {
+        return new self(self::TYPE_FULL_JOIN, $collection, [$on, $alias]);
+    }
+
+    /**
+     * @param array<string> $attributes
+     * @return Query
+     */
+    public static function selectDistinct(array $attributes): self
+    {
+        return new self(self::TYPE_SELECT_DISTINCT, values: $attributes);
+    }
+
+    /**
+     * @param string $attribute
+     * @return Query
+     */
+    public static function count(string $attribute = '*'): self
+    {
+        return new self(self::TYPE_COUNT, $attribute);
+    }
+
+    /**
+     * @param string $attribute
+     * @return Query
+     */
+    public static function sum(string $attribute): self
+    {
+        return new self(self::TYPE_SUM, $attribute);
+    }
+
+    /**
+     * @param string $attribute
+     * @return Query
+     */
+    public static function avg(string $attribute): self
+    {
+        return new self(self::TYPE_AVG, $attribute);
+    }
+
+    /**
+     * @param string $attribute
+     * @return Query
+     */
+    public static function min(string $attribute): self
+    {
+        return new self(self::TYPE_MIN, $attribute);
+    }
+
+    /**
+     * @param string $attribute
+     * @return Query
+     */
+    public static function max(string $attribute): self
+    {
+        return new self(self::TYPE_MAX, $attribute);
     }
 }

@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use DateTime;
 use Throwable;
+use Utopia\Async\Promise;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;

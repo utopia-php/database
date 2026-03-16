@@ -63,6 +63,7 @@ class Queries extends Validator
             return false;
         }
 
+        /** @var array<string> $aggregationAliases */
         $aggregationAliases = [];
         foreach ($value as $q) {
             if (! $q instanceof Query) {
@@ -77,7 +78,7 @@ class Queries extends Validator
                 Method::Min, Method::Max, Method::Stddev, Method::Variance,
             ], true)) {
                 $alias = $q->getValue('');
-                if ($alias !== '') {
+                if (\is_string($alias) && $alias !== '') {
                     $aggregationAliases[] = $alias;
                 }
             }

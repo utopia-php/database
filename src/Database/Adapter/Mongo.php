@@ -1454,9 +1454,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
+        unset($record['_version']);
 
         $updateQuery = [
             '$set' => $record,
+            '$inc' => ['_version' => 1],
         ];
 
         try {
@@ -2723,6 +2725,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             '$permissions' => '_permissions',
+            '$version' => '_version',
             default => $attribute
         };
     }
@@ -2833,6 +2836,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             'createdAt',
             'updatedAt',
             'collection',
+            'version',
         ];
 
         // First pass: recursively process array values and collect keys to rename
@@ -3704,7 +3708,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $oldUserAttributes = $oldDocument->getAttributes();
         $newUserAttributes = $newDocument->getAttributes();
 
-        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant'];
+        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant', '_version'];
 
         foreach ($oldUserAttributes as $originalKey => $originalValue) {
             if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {

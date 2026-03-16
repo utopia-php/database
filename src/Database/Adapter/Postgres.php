@@ -325,6 +325,7 @@ class Postgres extends SQL implements Feature\Timeouts
             }
 
             $table->text('_permissions')->nullable()->default(null);
+            $table->integer('_version')->nullable()->default(1);
         });
 
         // Build default indexes using schema builder
@@ -1041,6 +1042,11 @@ class Postgres extends SQL implements Feature\Timeouts
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = \json_encode($document->getPermissions());
 
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
+
             $name = $this->filter($collection);
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
@@ -1106,6 +1112,11 @@ class Postgres extends SQL implements Feature\Timeouts
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
 
             $name = $this->filter($collection);
 
@@ -2131,6 +2142,20 @@ class Postgres extends SQL implements Feature\Timeouts
     {
         // https://stackoverflow.com/questions/30455025/size-of-data-type-geographypoint-4326-in-postgis
         return 32;
+    }
+
+    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
+    {
+        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
+        $attribute = $this->quote($attribute);
+        $searchVal = $query->getValue();
+        $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+
+        return [
+            'expression' => "ts_rank(to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')), websearch_to_tsquery(?)) AS \"_relevance\"",
+            'order' => '"_relevance" DESC',
+            'bindings' => [$term],
+        ];
     }
 
     protected function processException(PDOException $e): Exception

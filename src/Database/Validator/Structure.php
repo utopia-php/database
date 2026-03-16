@@ -92,6 +92,16 @@ class Structure extends Validator
             'array' => false,
             'filters' => [],
         ],
+        [
+            '$id' => '$version',
+            'type' => 'integer',
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ],
     ];
 
     /**

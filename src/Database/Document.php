@@ -228,6 +228,23 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get the document's optimistic locking version.
+     *
+     * @return int|null The version number, or null if not set.
+     */
+    public function getVersion(): ?int
+    {
+        $version = $this->getAttribute('$version');
+
+        if ($version === null) {
+            return null;
+        }
+
+        /** @var int $version */
+        return $version;
+    }
+
+    /**
      * Get Document Attributes
      *
      * @return array<string, mixed>

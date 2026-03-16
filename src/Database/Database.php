@@ -29,6 +29,7 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Database
 {
+    use Traits\Async;
     use Traits\Attributes;
     use Traits\Collections;
     use Traits\Databases;
@@ -149,6 +150,16 @@ class Database
             'array' => false,
             'filters' => ['json'],
         ],
+        [
+            '$id' => '$version',
+            'type' => 'integer',
+            'size' => 0,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ],
     ];
 
     public const INTERNAL_ATTRIBUTE_KEYS = [
@@ -156,6 +167,7 @@ class Database
         '_createdAt',
         '_updatedAt',
         '_permissions',
+        '_version',
     ];
 
     public const INTERNAL_INDEXES = [

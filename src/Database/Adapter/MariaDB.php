@@ -162,6 +162,7 @@ class MariaDB extends SQL implements Feature\Timeouts
             $table->datetime('_createdAt', 3)->nullable()->default(null);
             $table->datetime('_updatedAt', 3)->nullable()->default(null);
             $table->mediumText('_permissions')->nullable()->default(null);
+            $table->rawColumn('`_version` INT(11) UNSIGNED DEFAULT 1');
 
             // User-defined attribute columns (raw SQL via getSQLType())
             foreach ($attributes as $attribute) {
@@ -869,6 +870,10 @@ class MariaDB extends SQL implements Feature\Timeouts
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = \json_encode($document->getPermissions());
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
 
             $name = $this->filter($collection);
 
@@ -961,6 +966,11 @@ class MariaDB extends SQL implements Feature\Timeouts
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
 
             $name = $this->filter($collection);
 
@@ -1144,10 +1154,9 @@ class MariaDB extends SQL implements Feature\Timeouts
 
     protected function execute(mixed $stmt): bool
     {
-        if ($this->timeout > 0) {
-            $seconds = $this->timeout / 1000;
-            $this->getPDO()->exec("SET max_statement_time = {$seconds}");
-        }
+        $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
+        $this->getPDO()->exec("SET max_statement_time = " . (float) $seconds);
+
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();
     }
@@ -1782,6 +1791,21 @@ class MariaDB extends SQL implements Feature\Timeouts
             default:
                 throw new OperatorException('Invalid operator');
         }
+    }
+
+    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
+    {
+        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
+        $attribute = $this->quote($attribute);
+        $quotedAlias = $this->quote($alias);
+        $searchVal = $query->getValue();
+        $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+
+        return [
+            'expression' => "MATCH({$quotedAlias}.{$attribute}) AGAINST (? IN BOOLEAN MODE) AS `_relevance`",
+            'order' => '`_relevance` DESC',
+            'bindings' => [$term],
+        ];
     }
 
     protected function processException(PDOException $e): Exception

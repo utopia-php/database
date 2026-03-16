@@ -567,6 +567,10 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             $document['$permissions'] = json_decode(\is_string($permsRaw) ? $permsRaw : '[]', true);
             unset($document['_permissions']);
         }
+        if (\array_key_exists('_version', $document)) {
+            $document['$version'] = $document['_version'];
+            unset($document['_version']);
+        }
 
         return new Document($document);
     }
@@ -737,6 +741,8 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             $opResult = $this->getOperatorBuilderExpression($column, $operator);
             $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
         }
+
+        $builder->setRaw('_version', $this->quote('_version') . ' + 1', []);
 
         // WHERE _id IN (sequence values)
         $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
@@ -948,6 +954,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
+        $collectionDoc = $collection;
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -986,21 +993,10 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             if (! empty($selections) && ! \in_array('*', $selections)) {
                 $builder->select($this->mapSelectionsToColumns($selections));
             }
-        } else {
-            // Add GROUP BY columns to SELECT so they appear in aggregation results
-            foreach ($queries as $query) {
-                if ($query->getMethod() === Method::GroupBy) {
-                    /** @var array<string> $groupCols */
-                    $groupCols = $query->getValues();
-                    $builder->select(\array_map(
-                        fn (string $col) => $this->filter($this->getInternalKeyForAttribute($col)),
-                        $groupCols
-                    ));
-                }
-            }
         }
 
-        // Resolve join table names and qualify ON-clause column references
+        $joinTablePrefixes = [];
+
         if ($hasJoins) {
             foreach ($queries as $query) {
                 if ($query->getMethod()->isJoin()) {
@@ -1018,10 +1014,59 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
                         $leftInternal = $this->getInternalKeyForAttribute($leftCol);
                         $rightInternal = $this->getInternalKeyForAttribute($rightCol);
 
+                        $rightPrefix = $resolvedTable;
                         $values[0] = $alias . '.' . $leftInternal;
-                        $values[2] = $resolvedTable . '.' . $rightInternal;
+                        $values[2] = $rightPrefix . '.' . $rightInternal;
+                        $query->setValues($values);
+
+                        $joinTablePrefixes[$joinTable] = $rightPrefix;
+                    }
+                }
+            }
+        }
+
+        if ($hasAggregation && ! empty($joinTablePrefixes)) {
+            /** @var array<Document> $collectionAttrs */
+            $collectionAttrs = $collectionDoc->getAttribute('attributes', []);
+            $mainAttributeIds = \array_map(
+                fn (Document $attr) => $attr->getId(),
+                $collectionAttrs
+            );
+            $defaultJoinPrefix = \array_values($joinTablePrefixes)[0];
+
+            foreach ($queries as $query) {
+                if ($query->getMethod()->isAggregate()) {
+                    $attr = $query->getAttribute();
+                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! \in_array($attr, $mainAttributeIds)) {
+                        $internalAttr = $this->getInternalKeyForAttribute($attr);
+                        $query->setAttribute($defaultJoinPrefix . '.' . $internalAttr);
+                    }
+                } elseif ($query->getMethod() === Method::GroupBy) {
+                    $values = $query->getValues();
+                    $qualified = false;
+                    foreach ($values as $i => $col) {
+                        if (\is_string($col) && ! \str_contains($col, '.') && ! \in_array($col, $mainAttributeIds)) {
+                            $internalCol = $this->getInternalKeyForAttribute($col);
+                            $values[$i] = $defaultJoinPrefix . '.' . $internalCol;
+                            $qualified = true;
+                        }
+                    }
+                    if ($qualified) {
                         $query->setValues($values);
                     }
+                }
+            }
+        }
+
+        if ($hasAggregation) {
+            foreach ($queries as $query) {
+                if ($query->getMethod() === Method::GroupBy) {
+                    /** @var array<string> $groupCols */
+                    $groupCols = $query->getValues();
+                    $builder->select(\array_map(
+                        fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
+                        $groupCols
+                    ));
                 }
             }
         }
@@ -1107,6 +1152,16 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             $vectorRaw = $this->getVectorOrderRaw($query, $alias);
             if ($vectorRaw !== null) {
                 $builder->orderByRaw($vectorRaw['expression'], $vectorRaw['bindings']);
+            }
+        }
+
+        // Full-text search relevance scoring
+        $searchQueries = $this->extractSearchQueries($queries);
+        foreach ($searchQueries as $searchQuery) {
+            $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
+            if ($relevanceRaw !== null) {
+                $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
+                $builder->orderByRaw($relevanceRaw['order']);
             }
         }
 
@@ -1213,11 +1268,45 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
                 $row['$permissions'] = \json_decode(\is_string($permsVal) ? $permsVal : '[]', true);
                 unset($row['_permissions']);
             }
+            if (\array_key_exists('_version', $row)) {
+                $row['$version'] = $row['_version'];
+                unset($row['_version']);
+            }
             $documents[] = new Document($row);
         }
 
         if ($cursorDirection === CursorDirection::Before) {
             $documents = \array_reverse($documents);
+        }
+
+        return $documents;
+    }
+
+    /**
+     * @param array<mixed> $bindings
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    public function rawQuery(string $query, array $bindings = []): array
+    {
+        try {
+            $stmt = $this->getPDO()->prepare($query);
+            foreach ($bindings as $i => $value) {
+                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+            }
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $results = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        $documents = [];
+        foreach ($results as $row) {
+            /** @var array<string, mixed> $row */
+            $documents[] = new Document($row);
         }
 
         return $documents;
@@ -2518,6 +2607,11 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
 
             $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
 
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $currentRegularAttributes['_version'] = $version;
+            }
+
             if (! empty($document->getSequence())) {
                 $currentRegularAttributes['_id'] = $document->getSequence();
             }
@@ -2744,6 +2838,11 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             '_updatedAt' => $document->getUpdatedAt(),
             '_permissions' => \json_encode($document->getPermissions()),
         ];
+
+        $version = $document->getVersion();
+        if ($version !== null) {
+            $row['_version'] = $version;
+        }
 
         if (! empty($document->getSequence())) {
             $row['_id'] = $document->getSequence();
@@ -3487,6 +3586,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             '$permissions' => '_permissions',
+            '$version' => '_version',
             default => $attribute
         };
     }
@@ -3505,5 +3605,33 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
     protected function processException(PDOException $e): Exception
     {
         return $e;
+    }
+
+    /**
+     * Extract search queries from the query list (non-destructive).
+     *
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    protected function extractSearchQueries(array $queries): array
+    {
+        $searchQueries = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Method::Search) {
+                $searchQueries[] = $query;
+            }
+        }
+
+        return $searchQueries;
+    }
+
+    /**
+     * Get the raw SQL expression for full-text search relevance scoring.
+     *
+     * @return array{expression: string, order: string, bindings: list<mixed>}|null
+     */
+    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
+    {
+        return null;
     }
 }

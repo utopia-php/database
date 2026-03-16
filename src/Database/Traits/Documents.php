@@ -374,6 +374,10 @@ trait Documents
             ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
+        if ($collection->getId() !== self::METADATA) {
+            $document->setAttribute('$version', 1);
+        }
+
         if (empty($document->getPermissions())) {
             $document->setAttribute('$permissions', []);
         }
@@ -494,6 +498,10 @@ trait Documents
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+
+            if ($collection->getId() !== self::METADATA) {
+                $document->setAttribute('$version', 1);
+            }
 
             if (empty($document->getPermissions())) {
                 $document->setAttribute('$permissions', []);
@@ -773,6 +781,13 @@ trait Documents
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
+            $oldVersion = $old->getVersion();
+            if ($oldVersion !== null && $shouldUpdate) {
+                $document->setAttribute('$version', $oldVersion + 1);
+            } elseif ($oldVersion !== null) {
+                $document->setAttribute('$version', $oldVersion);
+            }
+
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
@@ -1030,6 +1045,12 @@ trait Documents
                     if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
+
+                    $docVersion = $document->getVersion();
+                    if ($docVersion !== null) {
+                        $document->setAttribute('$version', $docVersion + 1);
+                    }
+
                     $encoded = $this->encode($collection, $document);
                     $batch[$index] = $this->adapter->castingBefore($collection, $encoded);
                 }
@@ -1309,6 +1330,17 @@ trait Documents
                 $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
                 $document->setAttribute('$createdAt', $createdAt);
+            }
+
+            if ($old->isEmpty()) {
+                $document->setAttribute('$version', 1);
+            } else {
+                $oldVersion = $old->getVersion();
+                if ($oldVersion !== null) {
+                    $document->setAttribute('$version', $oldVersion + 1);
+                } else {
+                    $document->setAttribute('$version', 1);
+                }
             }
 
             // Force matching optional parameter sets
@@ -2190,6 +2222,20 @@ trait Documents
         $this->trigger(Event::DocumentFind, $results);
 
         return $results;
+    }
+
+    /**
+     * Execute a raw query bypassing the query builder.
+     *
+     * @param string $query The raw query string
+     * @param array<mixed> $bindings Parameter bindings
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    public function rawQuery(string $query, array $bindings = []): array
+    {
+        return $this->adapter->rawQuery($query, $bindings);
     }
 
     /**

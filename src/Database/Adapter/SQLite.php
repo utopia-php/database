@@ -25,6 +25,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\Query;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\SQLite as SQLiteBuilder;
 use Utopia\Query\Query as BaseQuery;
@@ -222,7 +223,8 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
-				`_permissions` MEDIUMTEXT DEFAULT NULL".(! empty($attributes) ? ',' : '').'
+				`_permissions` MEDIUMTEXT DEFAULT NULL,
+				`_version` INTEGER DEFAULT 1".(! empty($attributes) ? ',' : '').'
 				'.\substr(\implode(' ', $attributeStrings), 0, -2).'
 			)
 		';
@@ -560,6 +562,11 @@ class SQLite extends MariaDB
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
+
             $name = $this->filter($collection);
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
@@ -622,6 +629,11 @@ class SQLite extends MariaDB
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
 
             $name = $this->filter($collection);
 
@@ -956,6 +968,11 @@ class SQLite extends MariaDB
 
             return false;
         }
+    }
+
+    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
+    {
+        return null;
     }
 
     protected function processException(PDOException $e): Exception
@@ -1522,6 +1539,11 @@ class SQLite extends MariaDB
             }
 
             $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $currentRegularAttributes['_version'] = $version;
+            }
 
             if (! empty($document->getSequence())) {
                 $currentRegularAttributes['_id'] = $document->getSequence();

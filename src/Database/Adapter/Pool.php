@@ -895,4 +895,14 @@ class Pool extends Adapter
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function rawQuery(string $query, array $bindings = []): array
+    {
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
 }

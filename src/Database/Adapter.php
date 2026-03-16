@@ -1019,6 +1019,20 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Execute a raw query and return results as Documents.
+     *
+     * @param string $query The raw query string
+     * @param array<mixed> $bindings Parameter bindings for prepared statements
+     * @return array<Document> The query results as Document objects
+     *
+     * @throws DatabaseException
+     */
+    public function rawQuery(string $query, array $bindings = []): array
+    {
+        throw new DatabaseException('Raw queries are not supported by this adapter');
+    }
+
+    /**
      * Filter Keys
      *
      * @throws DatabaseException

@@ -1799,7 +1799,10 @@ class Database
             // Metadata check (above) already verified collection is absent
             // from metadata. A DuplicateException from the adapter means the
             // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata creation.
+            // partial failure. Drop and recreate to ensure schema matches.
+            $this->adapter->deleteCollection($id);
+            $this->adapter->createCollection($id, $attributes, $indexes);
+            $created = true;
         }
 
         if ($id === self::METADATA) {

@@ -6059,9 +6059,18 @@ class Database
             }
             $document = new Document($document);
 
-            $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            $attributes = $collection->getAttribute('attributes', []);
+
+            $relationships = \array_filter($attributes, function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
+
+            $idAttributes = [];
+            foreach (\array_merge(self::INTERNAL_ATTRIBUTES, $attributes) as $attribute) {
+                if ($attribute['type'] === Database::VAR_ID) {
+                    $idAttributes[$attribute['$id']] = true;
+                }
+            }
 
             $shouldUpdate = false;
 
@@ -6160,7 +6169,8 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    if ($value != $oldValue) {
+                    $isIdType = isset($idAttributes[$key]);
+                    if ($isIdType ? $value != $oldValue : $value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
                     }

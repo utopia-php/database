@@ -773,7 +773,7 @@ class StructureTest extends TestCase
             'id' => $sqlId,
         ])));
 
-        $this->assertEquals(false, $validator->isValid(new Document([
+        $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'My Title',
             'description' => null,

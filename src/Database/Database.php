@@ -1790,16 +1790,19 @@ class Database
             }
         }
 
-        $created = false;
-
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
-            $created = true;
         } catch (DuplicateException $e) {
             // Metadata check (above) already verified collection is absent
             // from metadata. A DuplicateException from the adapter means the
             // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata creation.
+            // partial failure. Drop and recreate to ensure schema matches.
+            try {
+                $this->adapter->deleteCollection($id);
+            } catch (NotFoundException) {
+                // Already removed by a concurrent reconciler.
+            }
+            $this->adapter->createCollection($id, $attributes, $indexes);
         }
 
         if ($id === self::METADATA) {
@@ -1809,12 +1812,10 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (\Throwable $e) {
-            if ($created) {
-                try {
-                    $this->cleanupCollection($id);
-                } catch (\Throwable $e) {
-                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
-                }
+            try {
+                $this->cleanupCollection($id);
+            } catch (\Throwable $e) {
+                Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }
@@ -1856,7 +1857,7 @@ class Database
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -1892,7 +1893,7 @@ class Database
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
             && $collection->getTenant() !== null
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1947,7 +1948,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1973,7 +1974,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -2007,7 +2008,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -6054,11 +6055,15 @@ class Database
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $tenant = $old->getTenant();
+                $document['$tenant'] = $tenant;
+                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
             $document = new Document($document);
 
-            $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            $attributes = $collection->getAttribute('attributes', []);
+
+            $relationships = \array_filter($attributes, function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
 
@@ -6159,7 +6164,6 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
@@ -7201,7 +7205,7 @@ class Database
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                    if (!$old->isEmpty() && $old->getTenant() != $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {

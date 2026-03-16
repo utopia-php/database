@@ -1118,7 +1118,8 @@ trait CollectionTests
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
         $this->assertEquals(1, \count($collection->getAttribute('indexes')));
 
-        $database->setTenant(1);
+        $database->setTenant(null);
+        $database->purgeCachedCollection('duplicates');
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));

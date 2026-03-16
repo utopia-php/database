@@ -6055,7 +6055,9 @@ class Database
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $tenant = $old->getTenant();
+                $document['$tenant'] = $tenant;
+                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
             $document = new Document($document);
 
@@ -6064,13 +6066,6 @@ class Database
             $relationships = \array_filter($attributes, function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
-
-            $idAttributes = [];
-            foreach (\array_merge(self::INTERNAL_ATTRIBUTES, $attributes) as $attribute) {
-                if ($attribute['type'] === Database::VAR_ID) {
-                    $idAttributes[$attribute['$id']] = true;
-                }
-            }
 
             $shouldUpdate = false;
 
@@ -6169,8 +6164,7 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    $isIdType = isset($idAttributes[$key]);
-                    if ($isIdType ? $value != $oldValue : $value !== $oldValue) {
+                    if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
                     }

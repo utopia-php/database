@@ -1793,16 +1793,29 @@ class Database
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
         } catch (DuplicateException $e) {
-            // Metadata check (above) already verified collection is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Drop and recreate to ensure schema matches.
-            try {
-                $this->adapter->deleteCollection($id);
-            } catch (NotFoundException) {
-                // Already removed by a concurrent reconciler.
+            if ($this->adapter->getSharedTables()) {
+                // In shared-tables mode the physical table is reused across
+                // tenants. A DuplicateException simply means the table already
+                // exists for another tenant — not an orphan. Re-throw for
+                // _metadata so Database::create() properly signals duplicate;
+                // for other collections, skip and proceed to create per-tenant
+                // metadata document below.
+                if ($id === self::METADATA) {
+                    throw $e;
+                }
+            } else {
+                // Metadata check (above) already verified collection is absent
+                // from metadata. A DuplicateException from the adapter means
+                // the collection exists only in physical schema — an orphan
+                // from a prior partial failure. Drop and recreate to ensure
+                // schema matches.
+                try {
+                    $this->adapter->deleteCollection($id);
+                } catch (NotFoundException) {
+                    // Already removed by a concurrent reconciler.
+                }
+                $this->adapter->createCollection($id, $attributes, $indexes);
             }
-            $this->adapter->createCollection($id, $attributes, $indexes);
         }
 
         if ($id === self::METADATA) {
@@ -1812,10 +1825,12 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (\Throwable $e) {
-            try {
-                $this->cleanupCollection($id);
-            } catch (\Throwable $e) {
-                Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+            if (!$this->adapter->getSharedTables()) {
+                try {
+                    $this->cleanupCollection($id);
+                } catch (\Throwable $e) {
+                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+                }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }

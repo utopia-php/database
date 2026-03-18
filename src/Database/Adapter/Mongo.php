@@ -2061,7 +2061,7 @@ class Mongo extends Adapter
         $skipAuth = $context->skipAuth($this->filter($collection->getId()), $forPermission, $this->authorization);
         if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         $options = [];
@@ -2337,7 +2337,7 @@ class Mongo extends Adapter
         $skipAuth = $context->skipAuth($this->filter($collection->getId()), $permission, $this->authorization);
         if (! $skipAuth) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$permission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$permission}\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         /**
@@ -2432,7 +2432,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -3669,13 +3669,13 @@ class Mongo extends Adapter
 
     /**
      * @param string $collection
-     * @param array<int> $tenants
-     * @return int|null|array<string, array<int>>
+     * @param array<int|string> $tenants
+     * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|string|null|array {
         $values = [];
         if (!$this->sharedTables) {
             return $values;

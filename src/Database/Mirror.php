@@ -123,7 +123,7 @@ class Mirror extends Database
         return $this;
     }
 
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 

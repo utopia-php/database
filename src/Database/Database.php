@@ -6,7 +6,7 @@ use Exception;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -250,8 +250,7 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_INTEGER,
-            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
+            'type' => self::VAR_ID,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -925,6 +924,18 @@ class Database
     }
 
     /**
+     * Get ID Attribute Type.
+     *
+     * Returns the type of the internal ID attribute (e.g. VAR_INTEGER for SQL, VAR_UUID7 for MongoDB)
+     *
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return $this->adapter->getIdAttributeType();
+    }
+
+    /**
      * Set database to use for current scope
      *
      * @param string $name
@@ -1228,10 +1239,10 @@ class Database
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      * @return static
      */
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
 
@@ -1243,9 +1254,9 @@ class Database
      *
      * Get tenant to use if tables are shared
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->adapter->getTenant();
     }
@@ -1255,11 +1266,11 @@ class Database
      *
      * Execute a callback with a specific tenant
      *
-     * @param int|null $tenant
+     * @param int|string|null $tenant
      * @param callable $callback
      * @return mixed
      */
-    public function withTenant(?int $tenant, callable $callback): mixed
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
         $previous = $this->adapter->getTenant();
         $this->adapter->setTenant($tenant);
@@ -1783,16 +1794,19 @@ class Database
             }
         }
 
-        $created = false;
-
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
-            $created = true;
         } catch (DuplicateException $e) {
             // Metadata check (above) already verified collection is absent
             // from metadata. A DuplicateException from the adapter means the
             // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata creation.
+            // partial failure. Drop and recreate to ensure schema matches.
+            try {
+                $this->adapter->deleteCollection($id);
+            } catch (NotFoundException) {
+                // Already removed by a concurrent reconciler.
+            }
+            $this->adapter->createCollection($id, $attributes, $indexes);
         }
 
         if ($id === self::METADATA) {
@@ -1802,12 +1816,10 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (\Throwable $e) {
-            if ($created) {
-                try {
-                    $this->cleanupCollection($id);
-                } catch (\Throwable $e) {
-                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
-                }
+            try {
+                $this->cleanupCollection($id);
+            } catch (\Throwable $e) {
+                Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }
@@ -1849,7 +1861,7 @@ class Database
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -1885,7 +1897,7 @@ class Database
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
             && $collection->getTenant() !== null
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1940,7 +1952,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1966,7 +1978,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -2000,7 +2012,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -6061,11 +6073,15 @@ class Database
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $tenant = $old->getTenant();
+                $document['$tenant'] = $tenant;
+                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
             $document = new Document($document);
 
-            $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            $attributes = $collection->getAttribute('attributes', []);
+
+            $relationships = \array_filter($attributes, function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
 
@@ -6166,7 +6182,6 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
@@ -7223,7 +7238,7 @@ class Database
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                    if (!$old->isEmpty() && $old->getTenant() != $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {
@@ -7429,7 +7444,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -7529,7 +7544,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(

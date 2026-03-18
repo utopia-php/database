@@ -52,11 +52,11 @@ class Structure extends Validator
         ],
         [
             '$id' => '$tenant',
-            'type' => Database::VAR_INTEGER, // ? VAR_ID
-            'size' => 8,
+            'type' => Database::VAR_ID,
+            'size' => 0,
             'required' => false,
             'default' => null,
-            'signed' => false,
+            'signed' => true,
             'array' => false,
             'filters' => [],
         ],

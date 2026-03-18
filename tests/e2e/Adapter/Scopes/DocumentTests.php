@@ -208,6 +208,7 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
+            'id' => null,
         ]));
 
         $this->assertEquals($sequence, $manualIdDocument->getSequence());

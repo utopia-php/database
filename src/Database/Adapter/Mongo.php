@@ -727,18 +727,18 @@ class Mongo extends Adapter
      * Rename Attribute.
      *
      * @param string $collection
-     * @param string $old
-     * @param string $new
+     * @param string $id
+     * @param string $name
      * @return bool
      * @throws DatabaseException
      * @throws MongoException
      */
-    public function renameAttribute(string $collection, string $old, string $new): bool
+    public function renameAttribute(string $collection, string $id, string $name): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $from    = $this->filter($this->getInternalKeyForAttribute($old));
-        $to      = $this->filter($this->getInternalKeyForAttribute($new));
+        $from    = $this->filter($this->getInternalKeyForAttribute($id));
+        $to      = $this->filter($this->getInternalKeyForAttribute($name));
         $options = $this->getTransactionOptions();
 
         $this->getClient()->update(
@@ -1253,7 +1253,8 @@ class Mongo extends Adapter
             $record['_id'] = $sequence;
         }
         $options = $this->getTransactionOptions();
-        $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
+        //$record = $this->removeNullKeys($record);
+        $result = $this->insertDocument($name, $record, $options);
         $result = $this->replaceChars('_', '$', $result);
         // in order to keep the original object refrence.
         foreach ($result as $key => $value) {

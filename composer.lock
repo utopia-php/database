@@ -2026,16 +2026,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "7068870c086a6aea16173563a26b93ef3e408439"
+                "reference": "05ceba981436a4022553f7aaa2a05fa049d0f71c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/7068870c086a6aea16173563a26b93ef3e408439",
-                "reference": "7068870c086a6aea16173563a26b93ef3e408439",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/05ceba981436a4022553f7aaa2a05fa049d0f71c",
+                "reference": "05ceba981436a4022553f7aaa2a05fa049d0f71c",
                 "shasum": ""
             },
             "require": {
@@ -2072,9 +2072,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/1.0.0"
+                "source": "https://github.com/utopia-php/cache/tree/1.0.1"
             },
-            "time": "2026-01-28T10:55:44+00:00"
+            "time": "2026-03-12T03:39:09+00:00"
         },
         {
             "name": "utopia-php/console",
@@ -2126,16 +2126,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "1.0.0",
+            "version": "1.0.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d"
+                "reference": "677a21c53f7a1316c528b4b45b3fce886cee7223"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
-                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/677a21c53f7a1316c528b4b45b3fce886cee7223",
+                "reference": "677a21c53f7a1316c528b4b45b3fce886cee7223",
                 "shasum": ""
             },
             "require": {
@@ -2181,22 +2181,22 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/1.0.0"
+                "source": "https://github.com/utopia-php/mongo/tree/1.0.2"
             },
-            "time": "2026-02-12T05:54:06+00:00"
+            "time": "2026-03-18T02:45:50+00:00"
         },
         {
             "name": "utopia-php/pools",
-            "version": "1.0.2",
+            "version": "1.0.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/pools.git",
-                "reference": "b7d8dd00306cdd8bf3ff6f1dc90caeaf27dabeb1"
+                "reference": "74de7c5457a2c447f27e7ec4d72e8412a7d68c10"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/pools/zipball/b7d8dd00306cdd8bf3ff6f1dc90caeaf27dabeb1",
-                "reference": "b7d8dd00306cdd8bf3ff6f1dc90caeaf27dabeb1",
+                "url": "https://api.github.com/repos/utopia-php/pools/zipball/74de7c5457a2c447f27e7ec4d72e8412a7d68c10",
+                "reference": "74de7c5457a2c447f27e7ec4d72e8412a7d68c10",
                 "shasum": ""
             },
             "require": {
@@ -2234,9 +2234,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/pools/issues",
-                "source": "https://github.com/utopia-php/pools/tree/1.0.2"
+                "source": "https://github.com/utopia-php/pools/tree/1.0.3"
             },
-            "time": "2026-01-28T13:12:36+00:00"
+            "time": "2026-02-26T08:42:40+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -2474,16 +2474,16 @@
         },
         {
             "name": "laravel/pint",
-            "version": "v1.27.1",
+            "version": "v1.29.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/pint.git",
-                "reference": "54cca2de13790570c7b6f0f94f37896bee4abcb5"
+                "reference": "bdec963f53172c5e36330f3a400604c69bf02d39"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/pint/zipball/54cca2de13790570c7b6f0f94f37896bee4abcb5",
-                "reference": "54cca2de13790570c7b6f0f94f37896bee4abcb5",
+                "url": "https://api.github.com/repos/laravel/pint/zipball/bdec963f53172c5e36330f3a400604c69bf02d39",
+                "reference": "bdec963f53172c5e36330f3a400604c69bf02d39",
                 "shasum": ""
             },
             "require": {
@@ -2494,13 +2494,14 @@
                 "php": "^8.2.0"
             },
             "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.93.1",
-                "illuminate/view": "^12.51.0",
-                "larastan/larastan": "^3.9.2",
+                "friendsofphp/php-cs-fixer": "^3.94.2",
+                "illuminate/view": "^12.54.1",
+                "larastan/larastan": "^3.9.3",
                 "laravel-zero/framework": "^12.0.5",
                 "mockery/mockery": "^1.6.12",
-                "nunomaduro/termwind": "^2.3.3",
-                "pestphp/pest": "^3.8.5"
+                "nunomaduro/termwind": "^2.4.0",
+                "pestphp/pest": "^3.8.6",
+                "shipfastlabs/agent-detector": "^1.1.0"
             },
             "bin": [
                 "builds/pint"
@@ -2537,7 +2538,7 @@
                 "issues": "https://github.com/laravel/pint/issues",
                 "source": "https://github.com/laravel/pint"
             },
-            "time": "2026-02-10T20:00:20+00:00"
+            "time": "2026-03-12T15:51:39+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -2804,11 +2805,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.12.32",
+            "version": "1.12.33",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/2770dcdf5078d0b0d53f94317e06affe88419aa8",
-                "reference": "2770dcdf5078d0b0d53f94317e06affe88419aa8",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/37982d6fc7cbb746dda7773530cda557cdf119e1",
+                "reference": "37982d6fc7cbb746dda7773530cda557cdf119e1",
                 "shasum": ""
             },
             "require": {
@@ -2853,7 +2854,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-09-30T10:16:31+00:00"
+            "time": "2026-02-28T20:30:03+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -4583,7 +4584,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4592,6 +4593,6 @@
         "ext-mongodb": "*",
         "ext-mbstring": "*"
     },
-    "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "platform-dev": [],
+    "plugin-api-version": "2.6.0"
 }

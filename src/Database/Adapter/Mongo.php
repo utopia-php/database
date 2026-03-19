@@ -3520,8 +3520,8 @@ class Mongo extends Adapter
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Collection already exists
-        if ($e->getCode() === 48) {
+        // Collection already exists (code 48 from MongoDB, code 0 from client pre-check)
+        if ($e->getCode() === 48 || ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false)) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 

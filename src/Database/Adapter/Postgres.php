@@ -2146,6 +2146,11 @@ class Postgres extends SQL
         return false;
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     public function getSupportForUpserts(): bool
     {
         return true;

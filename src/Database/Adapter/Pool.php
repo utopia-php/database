@@ -563,6 +563,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

@@ -3601,6 +3601,16 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
     /**
      * @param string $collection
      * @param array<int|string> $tenants

@@ -974,6 +974,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     /**
      * Is upsert supported?
      *

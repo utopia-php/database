@@ -4576,7 +4576,8 @@ class Database
         $created = false;
         $existsInSchema = false;
 
-        if ($this->adapter->getSupportForSchemaIndexes()) {
+        if ($this->adapter->getSupportForSchemaIndexes()
+            && !($this->adapter->getSharedTables() && $this->isMigrating())) {
             $schemaIndexes = $this->getSchemaIndexes($collection->getId());
             $filteredId = $this->adapter->filter($id);
 

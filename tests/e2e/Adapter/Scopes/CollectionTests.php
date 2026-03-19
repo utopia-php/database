@@ -1393,14 +1393,13 @@ trait CollectionTests
         $col1Again = $database->getCollection($colName);
         $this->assertFalse($col1Again->isEmpty());
 
-        // Cleanup: delete per-tenant metadata docs
-        $database->setTenant($tenant1);
-        $database->deleteCollection($colName);
-        $database->setTenant($tenant2);
-        $database->deleteCollection($colName);
-
         if ($createdDb) {
             $database->delete();
+        } else {
+            $database->setTenant($tenant1);
+            $database->deleteCollection($colName);
+            $database->setTenant($tenant2);
+            $database->deleteCollection($colName);
         }
 
         $database

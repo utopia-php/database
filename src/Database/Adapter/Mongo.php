@@ -414,8 +414,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // For metadata collections outside transactions, check if exists first
-        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata, the physical collection may
+        // already exist for another tenant. Return early to avoid a
+        // "Collection Exists" exception from the client.
+        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 

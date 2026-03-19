@@ -8287,6 +8287,8 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        $queries = Query::clone($queries); // Convert queries will change the values
+
         $context = new QueryContext();
         $context->add($collection);
 
@@ -8557,6 +8559,8 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        $queries = Query::clone($queries); // Convert queries will change the values
+
         $context = new QueryContext();
         $context->add($collection);
 
@@ -8649,6 +8653,8 @@ class Database
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
+
+        $queries = Query::clone($queries); // Convert queries will change the values
 
         $context = new QueryContext();
         $context->add($collection);

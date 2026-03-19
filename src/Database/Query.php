@@ -1127,6 +1127,21 @@ class Query
     }
 
     /**
+     * @param array $queries
+     * @return array<Query>
+     */
+    public static function clone(array $queries): array
+    {
+        $filtered = [];
+
+        foreach ($queries as $query) {
+            $filtered[] = clone $query;
+        }
+
+        return $filtered;
+    }
+
+    /**
      * @param  array<Query>  $queries
      * @param bool $clone
      * @return array<Query>

@@ -1970,6 +1970,38 @@ trait DocumentTests
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
     }
 
+    public function testConvertQueriesValue(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        /**
+         * Run Check 2 times since convert queries changes query values
+         * Check validation does not throw
+         */
+        $queries = [
+            Query::greaterThan('$createdAt', '1976-06-12'),
+        ];
+
+        $documents = $database->find('movies', $queries);
+        $this->assertEquals(5, count($documents));
+
+        $documents = $database->find('movies', $queries);
+        $this->assertEquals(5, count($documents));
+
+        $count = $database->count('movies', $queries);
+        $this->assertEquals(5, $count);
+
+        $count = $database->count('movies', $queries);
+        $this->assertEquals(5, $count);
+
+        $sum = $database->sum('movies', 'price', $queries);
+        $this->assertEquals(130.93, $sum);
+
+        $sum = $database->sum('movies', 'price', $queries);
+        $this->assertEquals(130.93, $sum);
+    }
+
     public function testFindCheckPermissions(): void
     {
         /** @var Database $database */

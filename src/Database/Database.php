@@ -9250,6 +9250,10 @@ class Database
         return $this->adapter->getSchemaAttributes($collection);
     }
 
+    /**
+     * @param string $collection
+     * @return array<Document>
+     */
     public function getSchemaIndexes(string $collection): array
     {
         return $this->adapter->getSchemaIndexes($collection);

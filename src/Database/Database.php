@@ -1790,19 +1790,31 @@ class Database
             }
         }
 
+        $createdPhysicalTable = false;
+
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
+            $createdPhysicalTable = true;
         } catch (DuplicateException $e) {
-            // Metadata check (above) already verified collection is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Drop and recreate to ensure schema matches.
-            try {
-                $this->adapter->deleteCollection($id);
-            } catch (NotFoundException) {
-                // Already removed by a concurrent reconciler.
+            if ($this->adapter->getSharedTables()
+                && ($id === self::METADATA || $this->adapter->exists($this->adapter->getDatabase(), $id))) {
+                // In shared-tables mode the physical table is reused across
+                // tenants. A DuplicateException simply means the table already
+                // exists for another tenant — not an orphan.
+            } else {
+                // Metadata check (above) already verified collection is absent
+                // from metadata. A DuplicateException from the adapter means
+                // the collection exists only in physical schema — an orphan
+                // from a prior partial failure. Drop and recreate to ensure
+                // schema matches.
+                try {
+                    $this->adapter->deleteCollection($id);
+                } catch (NotFoundException) {
+                    // Already removed by a concurrent reconciler.
+                }
+                $this->adapter->createCollection($id, $attributes, $indexes);
+                $createdPhysicalTable = true;
             }
-            $this->adapter->createCollection($id, $attributes, $indexes);
         }
 
         if ($id === self::METADATA) {
@@ -1812,10 +1824,12 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (\Throwable $e) {
-            try {
-                $this->cleanupCollection($id);
-            } catch (\Throwable $e) {
-                Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+            if ($createdPhysicalTable) {
+                try {
+                    $this->cleanupCollection($id);
+                } catch (\Throwable $e) {
+                    Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
+                }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }
@@ -4560,18 +4574,49 @@ class Database
         }
 
         $created = false;
+        $existsInSchema = false;
 
-        try {
-            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes, [], $ttl);
+        if ($this->adapter->getSupportForSchemaIndexes()
+            && !($this->adapter->getSharedTables() && $this->isMigrating())) {
+            $schemaIndexes = $this->getSchemaIndexes($collection->getId());
+            $filteredId = $this->adapter->filter($id);
 
-            if (!$created) {
-                throw new DatabaseException('Failed to create index');
+            foreach ($schemaIndexes as $schemaIndex) {
+                if (\strtolower($schemaIndex->getId()) === \strtolower($filteredId)) {
+                    $schemaColumns = $schemaIndex->getAttribute('columns', []);
+                    $schemaLengths = $schemaIndex->getAttribute('lengths', []);
+
+                    $filteredAttributes = \array_map(fn ($a) => $this->adapter->filter($a), $attributes);
+                    $match = ($schemaColumns === $filteredAttributes && $schemaLengths === $lengths);
+
+                    if ($match) {
+                        $existsInSchema = true;
+                    } else {
+                        // Orphan index with wrong definition — drop so it
+                        // gets recreated with the correct shape.
+                        try {
+                            $this->adapter->deleteIndex($collection->getId(), $id);
+                        } catch (NotFoundException) {
+                        }
+                    }
+                    break;
+                }
             }
-        } catch (DuplicateException $e) {
-            // Metadata check (lines above) already verified index is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // index exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata update.
+        }
+
+        if (!$existsInSchema) {
+            try {
+                $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes, [], $ttl);
+
+                if (!$created) {
+                    throw new DatabaseException('Failed to create index');
+                }
+            } catch (DuplicateException) {
+                // Metadata check (lines above) already verified index is absent
+                // from metadata. A DuplicateException from the adapter means the
+                // index exists only in physical schema — an orphan from a prior
+                // partial failure. Skip creation and proceed to metadata update.
+            }
         }
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
@@ -9204,6 +9249,15 @@ class Database
     public function getSchemaAttributes(string $collection): array
     {
         return $this->adapter->getSchemaAttributes($collection);
+    }
+
+    /**
+     * @param string $collection
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return $this->adapter->getSchemaIndexes($collection);
     }
 
     /**

@@ -350,6 +350,32 @@ abstract class Adapter
     }
 
     /**
+     * Bulk update attributes for many documents by their IDs.
+     *
+     * Default implementation performs per-ID updates using updateDocument with
+     * permissions update skipped. Adapters can override for optimized paths.
+     *
+     * @param Document $collection
+     * @param array<string> $ids
+     * @param array<string,mixed> $attributes Encoded attribute keys expected by adapter
+     * @return int Number of documents processed
+     */
+    public function updateManyByIds(Document $collection, array $ids, array $attributes): int
+    {
+        if (empty($ids) || empty($attributes)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($ids as $id) {
+            $this->updateDocument($collection, $id, new Document($attributes), true);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
      * Start a new transaction.
      *
      * If a transaction is already active, this will only increment the transaction count and return true.

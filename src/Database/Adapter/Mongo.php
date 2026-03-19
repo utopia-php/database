@@ -430,6 +430,16 @@ class Mongo extends Adapter
             if ($e instanceof DuplicateException) {
                 return true;
             }
+            // Client throws code-0 "Collection Exists" when its pre-check
+            // finds the collection. In shared-tables/metadata context this
+            // is a no-op; otherwise re-throw as DuplicateException so
+            // Database::createCollection() can run orphan reconciliation.
+            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
+            }
             throw $e;
         }
 
@@ -3520,8 +3530,8 @@ class Mongo extends Adapter
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Collection already exists (code 48 from MongoDB, code 0 from client pre-check)
-        if ($e->getCode() === 48 || ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false)) {
+        // Collection already exists
+        if ($e->getCode() === 48) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 

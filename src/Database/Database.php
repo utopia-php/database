@@ -3563,8 +3563,6 @@ class Database
 
         $id ??= $relatedCollection->getId();
 
-        $twoWayKey ??= $collection->getId();
-
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
@@ -3573,13 +3571,17 @@ class Database
             }
 
             if (
-                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                $twoWay
+                && $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                && isset($attribute->getAttribute('options')['twoWayKey'])
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
         }
+
+        $twoWayKey ??= $collection->getId();
 
         $relationship = new Document([
             '$id' => ID::custom($id),

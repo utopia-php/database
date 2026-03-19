@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes\Relationships;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
@@ -35,8 +36,7 @@ trait ManyToOneTests
         $database->createRelationship(
             collection: 'review',
             relatedCollection: 'movie',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWayKey: 'reviews'
+            type: Database::RELATION_MANY_TO_ONE
         );
 
         // Check metadata for collection
@@ -50,7 +50,7 @@ trait ManyToOneTests
                 $this->assertEquals('movie', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('reviews', $attribute['options']['twoWayKey']);
+                $this->assertEquals('review', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -58,10 +58,10 @@ trait ManyToOneTests
         $collection = $database->getCollection('movie');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'reviews') {
+            if ($attribute['key'] === 'review') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('reviews', $attribute['$id']);
-                $this->assertEquals('reviews', $attribute['key']);
+                $this->assertEquals('review', $attribute['$id']);
+                $this->assertEquals('review', $attribute['key']);
                 $this->assertEquals('review', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
@@ -814,6 +814,86 @@ trait ManyToOneTests
         $store = $database->getDocument('store', 'store1');
         $products = $store->getAttribute('newProducts');
         $this->assertEquals(null, $products);
+    }
+
+    public function testManyToOneOneWayRelationshipDoesNotValidateTwoWayKeyDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('critic');
+        $database->createCollection('film');
+
+        $database->createAttribute('critic', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('film', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'critic',
+            relatedCollection: 'film',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: false,
+            id: 'favoriteFilm',
+            twoWayKey: 'films'
+        );
+
+        $database->createRelationship(
+            collection: 'critic',
+            relatedCollection: 'film',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: false,
+            id: 'leastFavoriteFilm',
+            twoWayKey: 'films'
+        );
+
+        $collection = $database->getCollection('critic');
+        $attributes = $collection->getAttribute('attributes', []);
+        $keys = \array_map(fn (Document $attribute) => $attribute->getId(), $attributes);
+
+        $this->assertContains('favoriteFilm', $keys);
+        $this->assertContains('leastFavoriteFilm', $keys);
+    }
+
+    public function testManyToOneTwoWayRelationshipStillValidatesTwoWayKeyDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('employee');
+        $database->createCollection('department');
+
+        $database->createAttribute('employee', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('department', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'employee',
+            relatedCollection: 'department',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'primaryDepartment',
+            twoWayKey: 'employees'
+        );
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Related attribute already exists');
+
+        $database->createRelationship(
+            collection: 'employee',
+            relatedCollection: 'department',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'secondaryDepartment',
+            twoWayKey: 'employees'
+        );
     }
 
     public function testNestedManyToOne_OneToOneRelationship(): void

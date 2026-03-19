@@ -3547,6 +3547,9 @@ class Database
         return 'rel_' . \md5($collectionId . ':' . $id);
     }
 
+    /**
+     * @param array<string, mixed>|Document $relationship
+     */
     private function getRelationshipTwoWayKey(array|Document $relationship): string
     {
         $options = \is_array($relationship)

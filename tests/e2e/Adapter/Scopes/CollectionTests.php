@@ -1333,28 +1333,35 @@ trait CollectionTests
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+        $createdDb = false;
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if ($sharedTables) {
+            // Already in shared-tables mode (SharedTables/* test classes)
+        } elseif ($database->getAdapter()->getSupportForSchemas()) {
+            $dbName = 'stMultiTenant';
+            if ($database->exists($dbName)) {
+                $database->setDatabase($dbName)->delete();
+            }
+            $database
+                ->setDatabase($dbName)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(10)
+                ->create();
+            $createdDb = true;
+        } else {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $dbName = 'stMultiTenant';
-        if ($database->exists($dbName)) {
-            $database->setDatabase($dbName)->delete();
-        }
+        $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 10 : 'tenant_10';
+        $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 20 : 'tenant_20';
+        $colName = 'multiTenantCol';
 
-        $tenant1 = 10;
-        $tenant2 = 20;
+        $database->setTenant($tenant1);
 
-        $database
-            ->setDatabase($dbName)
-            ->setNamespace('')
-            ->setSharedTables(true)
-            ->setTenant($tenant1)
-            ->create();
-
-        $database->createCollection('multiTenantCol', [
+        $database->createCollection($colName, [
             new Document([
                 '$id' => 'name',
                 'type' => Database::VAR_STRING,
@@ -1363,13 +1370,13 @@ trait CollectionTests
             ]),
         ]);
 
-        $col1 = $database->getCollection('multiTenantCol');
+        $col1 = $database->getCollection($colName);
         $this->assertFalse($col1->isEmpty());
         $this->assertEquals(1, \count($col1->getAttribute('attributes')));
 
         $database->setTenant($tenant2);
 
-        $database->createCollection('multiTenantCol', [
+        $database->createCollection($colName, [
             new Document([
                 '$id' => 'name',
                 'type' => Database::VAR_STRING,
@@ -1378,18 +1385,29 @@ trait CollectionTests
             ]),
         ]);
 
-        $col2 = $database->getCollection('multiTenantCol');
+        $col2 = $database->getCollection($colName);
         $this->assertFalse($col2->isEmpty());
         $this->assertEquals(1, \count($col2->getAttribute('attributes')));
 
         $database->setTenant($tenant1);
-        $col1Again = $database->getCollection('multiTenantCol');
+        $col1Again = $database->getCollection($colName);
         $this->assertFalse($col1Again->isEmpty());
+
+        // Cleanup: delete per-tenant metadata docs
+        $database->setTenant($tenant1);
+        $database->deleteCollection($colName);
+        $database->setTenant($tenant2);
+        $database->deleteCollection($colName);
+
+        if ($createdDb) {
+            $database->delete();
+        }
 
         $database
             ->setSharedTables($sharedTables)
             ->setNamespace($namespace)
-            ->setDatabase($schema);
+            ->setDatabase($schema)
+            ->setTenant($originalTenant);
     }
 
     public function testSharedTablesMultiTenantCreate(): void
@@ -1399,35 +1417,46 @@ trait CollectionTests
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+        $createdDb = false;
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 100 : 'tenant_100';
+        $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 200 : 'tenant_200';
+
+        if ($sharedTables) {
+            // Already in shared-tables mode; create() should be idempotent
+            $database->setTenant($tenant1);
+            $database->create();
+            $database->setTenant($tenant2);
+            $database->create();
+            $this->assertTrue($database->exists());
+        } elseif ($database->getAdapter()->getSupportForSchemas()) {
+            $dbName = 'stMultiCreate';
+            if ($database->exists($dbName)) {
+                $database->setDatabase($dbName)->delete();
+            }
+            $database
+                ->setDatabase($dbName)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant($tenant1)
+                ->create();
+            $this->assertTrue($database->exists($dbName));
+            $database->setTenant($tenant2);
+            $database->create();
+            $this->assertTrue($database->exists($dbName));
+            $database->delete();
+            $createdDb = true;
+        } else {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $dbName = 'stMultiCreate';
-        if ($database->exists($dbName)) {
-            $database->setDatabase($dbName)->delete();
-        }
-
-        $database
-            ->setDatabase($dbName)
-            ->setNamespace('')
-            ->setSharedTables(true)
-            ->setTenant(100)
-            ->create();
-
-        $this->assertTrue($database->exists($dbName));
-
-        $database->setTenant(200);
-        $database->create();
-
-        $this->assertTrue($database->exists($dbName));
-
         $database
             ->setSharedTables($sharedTables)
             ->setNamespace($namespace)
-            ->setDatabase($schema);
+            ->setDatabase($schema)
+            ->setTenant($originalTenant);
     }
 
     public function testEvents(): void

@@ -1796,8 +1796,10 @@ class Database
             $this->adapter->createCollection($id, $attributes, $indexes);
             $createdPhysicalTable = true;
         } catch (DuplicateException $e) {
-            if ($this->adapter->getSharedTables()
-                && ($id === self::METADATA || $this->adapter->exists($this->adapter->getDatabase(), $id))) {
+            if ($id === self::METADATA
+                || ($this->adapter->getSharedTables()
+                    && $this->adapter->exists($this->adapter->getDatabase(), $id))) {
+                // The metadata table must never be dropped during reconciliation.
                 // In shared-tables mode the physical table is reused across
                 // tenants. A DuplicateException simply means the table already
                 // exists for another tenant — not an orphan.

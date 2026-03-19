@@ -1796,7 +1796,11 @@ class Database
             if ($this->adapter->getSharedTables()) {
                 // In shared-tables mode the physical table is reused across
                 // tenants. A DuplicateException simply means the table already
-                // exists for another tenant — not an orphan. Skip and proceed.
+                // exists for another tenant — not an orphan. Verify the table
+                // is actually present before writing tenant metadata.
+                if ($id !== self::METADATA && !$this->adapter->exists($this->adapter->getDatabase(), $id)) {
+                    throw $e;
+                }
             } else {
                 // Metadata check (above) already verified collection is absent
                 // from metadata. A DuplicateException from the adapter means

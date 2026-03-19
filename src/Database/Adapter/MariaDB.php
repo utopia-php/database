@@ -1854,6 +1854,58 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return true;
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        try {
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                    INDEX_NAME as indexName,
+                    COLUMN_NAME as columnName,
+                    NON_UNIQUE as nonUnique,
+                    SEQ_IN_INDEX as seqInIndex,
+                    INDEX_TYPE as indexType,
+                    SUB_PART as subPart
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+                ORDER BY INDEX_NAME, SEQ_IN_INDEX
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            $grouped = [];
+            foreach ($rows as $row) {
+                $name = $row['indexName'];
+                if (!isset($grouped[$name])) {
+                    $grouped[$name] = [
+                        '$id' => $name,
+                        'indexName' => $name,
+                        'indexType' => $row['indexType'],
+                        'nonUnique' => (int)$row['nonUnique'],
+                        'columns' => [],
+                        'lengths' => [],
+                    ];
+                }
+                $grouped[$name]['columns'][] = $row['columnName'];
+                $grouped[$name]['lengths'][] = $row['subPart'] !== null ? (int)$row['subPart'] : null;
+            }
+
+            return \array_map(fn ($idx) => new Document($idx), \array_values($grouped));
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema indexes', $e->getCode(), $e);
+        }
+    }
+
     /**
      * Set max execution time
      * @param int $milliseconds

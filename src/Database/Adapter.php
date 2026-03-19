@@ -959,6 +959,13 @@ abstract class Adapter
     abstract public function getSupportForSchemaAttributes(): bool;
 
     /**
+     * Are schema indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaIndexes(): bool;
+
+    /**
      * Is index supported?
      *
      * @return bool
@@ -1364,6 +1371,17 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * Get Schema Indexes
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
 
     /**
      * Get the expected column type for a given attribute type.

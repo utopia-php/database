@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Write;
+use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -65,6 +66,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     protected array $writeHooks = [];
 
+    protected ?QueryProfiler $profiler = null;
+
     protected Authorization $authorization;
 
     /**
@@ -109,6 +112,18 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function getAuthorization(): Authorization
     {
         return $this->authorization;
+    }
+
+    public function setProfiler(?QueryProfiler $profiler): static
+    {
+        $this->profiler = $profiler;
+
+        return $this;
+    }
+
+    public function getProfiler(): ?QueryProfiler
+    {
+        return $this->profiler;
     }
 
     /**
@@ -1030,6 +1045,14 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function rawQuery(string $query, array $bindings = []): array
     {
         throw new DatabaseException('Raw queries are not supported by this adapter');
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    public function newQueryBuilder(string $collection): \Utopia\Query\Builder
+    {
+        throw new DatabaseException('Query builder is not supported by this adapter');
     }
 
     /**

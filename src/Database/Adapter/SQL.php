@@ -2439,6 +2439,11 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         return $builder;
     }
 
+    public function newQueryBuilder(string $collection): SQLBuilder
+    {
+        return $this->newBuilder($this->filter($collection));
+    }
+
     protected function getIdentifierQuoteChar(): string
     {
         return '`';
@@ -2534,6 +2539,19 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
     protected function execute(mixed $stmt): bool
     {
         /** @var PDOStatement|PDOStatementProxy $stmt */
+        if ($this->profiler !== null && $this->profiler->isEnabled()) {
+            $start = \microtime(true);
+            $result = $stmt->execute();
+            $durationMs = (\microtime(true) - $start) * 1000;
+            $this->profiler->log(
+                $stmt->queryString ?? '',
+                [],
+                $durationMs,
+            );
+
+            return $result;
+        }
+
         return $stmt->execute();
     }
 

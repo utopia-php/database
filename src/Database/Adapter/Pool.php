@@ -78,6 +78,7 @@ class Pool extends Adapter
             foreach ($this->getMetadata() as $key => $value) {
                 $adapter->setMetadata($key, $value);
             }
+            $adapter->setProfiler($this->profiler);
 
             return $adapter->{$method}(...$args);
         });
@@ -902,6 +903,13 @@ class Pool extends Adapter
     public function rawQuery(string $query, array $bindings = []): array
     {
         /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function newQueryBuilder(string $collection): \Utopia\Query\Builder
+    {
+        /** @var \Utopia\Query\Builder $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }

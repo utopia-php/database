@@ -50,7 +50,7 @@ trait ManyToManyTests
                 $this->assertEquals('song', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('playlist', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 
@@ -323,6 +323,38 @@ trait ManyToManyTests
         $playlist = $database->getDocument('playlist', 'playlist1');
         $songs = $playlist->getAttribute('newSongs');
         $this->assertEquals(null, $songs);
+    }
+
+    public function testManyToManyOneWayRelationshipIgnoresProvidedTwoWayKey(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('course');
+        $database->createCollection('tag');
+
+        $database->createAttribute('course', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tag', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'course',
+            relatedCollection: 'tag',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: false,
+            id: 'tags',
+            twoWayKey: 'shouldBeIgnored'
+        );
+
+        $collection = $database->getCollection('course');
+        $attributes = $collection->getAttribute('attributes', []);
+        $relationship = \array_values(\array_filter($attributes, fn (Document $attribute) => $attribute->getId() === 'tags'))[0];
+
+        $this->assertEquals(null, $relationship['options']['twoWayKey']);
     }
 
     public function testManyToManyTwoWayRelationship(): void

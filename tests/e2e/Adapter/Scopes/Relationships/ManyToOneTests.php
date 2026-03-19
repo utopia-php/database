@@ -50,7 +50,7 @@ trait ManyToOneTests
                 $this->assertEquals('movie', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('review', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 
@@ -58,14 +58,14 @@ trait ManyToOneTests
         $collection = $database->getCollection('movie');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'review') {
+            if ($attribute['key'] === 'review_movie') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('review', $attribute['$id']);
-                $this->assertEquals('review', $attribute['key']);
+                $this->assertEquals('review_movie', $attribute['$id']);
+                $this->assertEquals('review_movie', $attribute['key']);
                 $this->assertEquals('review', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('movie', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 
@@ -853,9 +853,11 @@ trait ManyToOneTests
         $collection = $database->getCollection('critic');
         $attributes = $collection->getAttribute('attributes', []);
         $keys = \array_map(fn (Document $attribute) => $attribute->getId(), $attributes);
+        $favoriteFilm = \array_values(\array_filter($attributes, fn (Document $attribute) => $attribute->getId() === 'favoriteFilm'))[0];
 
         $this->assertContains('favoriteFilm', $keys);
         $this->assertContains('leastFavoriteFilm', $keys);
+        $this->assertEquals(null, $favoriteFilm['options']['twoWayKey']);
     }
 
     public function testManyToOneTwoWayRelationshipStillValidatesTwoWayKeyDuplicates(): void

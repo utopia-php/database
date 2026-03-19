@@ -52,7 +52,7 @@ trait OneToOneTests
                 $this->assertEquals('library', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('person', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 
@@ -1035,11 +1035,11 @@ trait OneToOneTests
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'child1') {
-                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
 
             if ($attribute['key'] === 'children') {
-                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 

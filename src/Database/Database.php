@@ -1790,17 +1790,17 @@ class Database
             }
         }
 
+        $createdPhysicalTable = false;
+
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
+            $createdPhysicalTable = true;
         } catch (DuplicateException $e) {
-            if ($this->adapter->getSharedTables()) {
+            if ($this->adapter->getSharedTables()
+                && ($id === self::METADATA || $this->adapter->exists($this->adapter->getDatabase(), $id))) {
                 // In shared-tables mode the physical table is reused across
                 // tenants. A DuplicateException simply means the table already
-                // exists for another tenant — not an orphan. Verify the table
-                // is actually present before writing tenant metadata.
-                if ($id !== self::METADATA && !$this->adapter->exists($this->adapter->getDatabase(), $id)) {
-                    throw $e;
-                }
+                // exists for another tenant — not an orphan.
             } else {
                 // Metadata check (above) already verified collection is absent
                 // from metadata. A DuplicateException from the adapter means
@@ -1813,6 +1813,7 @@ class Database
                     // Already removed by a concurrent reconciler.
                 }
                 $this->adapter->createCollection($id, $attributes, $indexes);
+                $createdPhysicalTable = true;
             }
         }
 
@@ -1823,14 +1824,12 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (\Throwable $e) {
-            if (!$this->adapter->getSharedTables()) {
+            if ($createdPhysicalTable) {
                 try {
                     $this->cleanupCollection($id);
                 } catch (\Throwable $e) {
                     Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
                 }
-            } else {
-                Console::warning("createCollection '{$id}' metadata failed in shared-tables mode; physical table retained. Metadata document must be re-created.");
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }

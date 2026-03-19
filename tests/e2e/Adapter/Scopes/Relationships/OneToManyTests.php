@@ -50,7 +50,7 @@ trait OneToManyTests
                 $this->assertEquals('album', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('artist', $attribute['options']['twoWayKey']);
+                $this->assertEquals(null, $attribute['options']['twoWayKey']);
             }
         }
 
@@ -384,6 +384,38 @@ trait OneToManyTests
         $artist = $database->getDocument('artist', 'artist1');
         $albums = $artist->getAttribute('newAlbums', '');
         $this->assertEquals(null, $albums);
+    }
+
+    public function testOneToManyOneWayRelationshipIgnoresProvidedTwoWayKey(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('publisher');
+        $database->createCollection('book');
+
+        $database->createAttribute('publisher', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('book', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'publisher',
+            relatedCollection: 'book',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: false,
+            id: 'books',
+            twoWayKey: 'shouldBeIgnored'
+        );
+
+        $collection = $database->getCollection('publisher');
+        $attributes = $collection->getAttribute('attributes', []);
+        $relationship = \array_values(\array_filter($attributes, fn (Document $attribute) => $attribute->getId() === 'books'))[0];
+
+        $this->assertEquals(null, $relationship['options']['twoWayKey']);
     }
 
     public function testOneToManyTwoWayRelationship(): void

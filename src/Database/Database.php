@@ -3536,6 +3536,29 @@ class Database
         );
     }
 
+    private function getOneWayRelationshipInternalKey(string $collectionId, string $id): string
+    {
+        $candidate = $collectionId . '_' . $id;
+
+        if (\strlen($candidate) <= self::LENGTH_KEY) {
+            return $candidate;
+        }
+
+        return 'rel_' . \md5($collectionId . ':' . $id);
+    }
+
+    /**
+     * @param array<string, mixed>|Document $relationship
+     */
+    private function getRelationshipTwoWayKey(array|Document $relationship): string
+    {
+        $options = \is_array($relationship)
+            ? ($relationship['options'] ?? [])
+            : $relationship->getAttribute('options', []);
+
+        return $options['internalTwoWayKey'] ?? $options['twoWayKey'] ?? '';
+    }
+
     /**
      * Create a relationship attribute
      *
@@ -3576,8 +3599,7 @@ class Database
         }
 
         $id ??= $relatedCollection->getId();
-
-        $twoWayKey ??= $collection->getId();
+        $publicTwoWayKey = $twoWay ? ($twoWayKey ?? $collection->getId()) : null;
 
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
@@ -3587,13 +3609,19 @@ class Database
             }
 
             if (
-                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
-                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
+                $twoWay
+                && $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                && isset($attribute->getAttribute('options')['twoWayKey'])
+                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower((string) $publicTwoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
         }
+
+        $twoWayKey = $twoWay
+            ? (string) $publicTwoWayKey
+            : $this->getOneWayRelationshipInternalKey($collection->getId(), $id);
 
         $relationship = new Document([
             '$id' => ID::custom($id),
@@ -3605,7 +3633,8 @@ class Database
                 'relatedCollection' => $relatedCollection->getId(),
                 'relationType' => $type,
                 'twoWay' => $twoWay,
-                'twoWayKey' => $twoWayKey,
+                'twoWayKey' => $publicTwoWayKey,
+                'internalTwoWayKey' => $twoWayKey,
                 'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_PARENT,
             ],
@@ -3621,7 +3650,8 @@ class Database
                 'relatedCollection' => $collection->getId(),
                 'relationType' => $type,
                 'twoWay' => $twoWay,
-                'twoWayKey' => $id,
+                'twoWayKey' => $twoWay ? $id : null,
+                'internalTwoWayKey' => $id,
                 'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_CHILD,
             ],
@@ -3896,22 +3926,26 @@ class Database
 
         // Determine if we need to alter the database (rename columns/indexes)
         $oldAttribute = $attributes[$attributeIndex];
-        $oldTwoWayKey = $oldAttribute['options']['twoWayKey'];
+        $oldTwoWayKey = $this->getRelationshipTwoWayKey($oldAttribute);
+        $oldPublicTwoWayKey = $oldAttribute['options']['twoWayKey'] ?? null;
+        $actualTwoWay = $twoWay ?? $oldAttribute['options']['twoWay'];
+        $actualOnDelete = $onDelete ?? $oldAttribute['options']['onDelete'];
+        $actualNewKey = $newKey ?? $id;
+        $actualPublicNewTwoWayKey = $actualTwoWay ? ($newTwoWayKey ?? $oldPublicTwoWayKey ?? $collection->getId()) : null;
+        $actualNewTwoWayKey = $actualTwoWay
+            ? (string) $actualPublicNewTwoWayKey
+            : $this->getOneWayRelationshipInternalKey($collection->getId(), $actualNewKey);
         $altering = (!\is_null($newKey) && $newKey !== $id)
-            || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $oldTwoWayKey);
+            || ($actualNewTwoWayKey !== $oldTwoWayKey);
 
         // Validate new keys don't already exist
         if (
-            !\is_null($newTwoWayKey)
-            && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedCollection->getAttribute('attributes', [])))
+            $actualTwoWay
+            && !\is_null($actualPublicNewTwoWayKey)
+            && \in_array($actualPublicNewTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedCollection->getAttribute('attributes', [])))
         ) {
             throw new DuplicateException('Related attribute already exists');
         }
-
-        $actualNewKey = $newKey ?? $id;
-        $actualNewTwoWayKey = $newTwoWayKey ?? $oldTwoWayKey;
-        $actualTwoWay = $twoWay ?? $oldAttribute['options']['twoWay'];
-        $actualOnDelete = $onDelete ?? $oldAttribute['options']['onDelete'];
 
         $adapterUpdated = false;
         if ($altering) {
@@ -3957,14 +3991,15 @@ class Database
         }
 
         try {
-            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $type, $side) {
+            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualPublicNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $type, $side) {
                 $attribute->setAttribute('$id', $actualNewKey);
                 $attribute->setAttribute('key', $actualNewKey);
                 $attribute->setAttribute('options', [
                     'relatedCollection' => $relatedCollection->getId(),
                     'relationType' => $type,
                     'twoWay' => $actualTwoWay,
-                    'twoWayKey' => $actualNewTwoWayKey,
+                    'twoWayKey' => $actualPublicNewTwoWayKey,
+                    'internalTwoWayKey' => $actualNewTwoWayKey,
                     'onDelete' => $actualOnDelete,
                     'side' => $side,
                 ]);
@@ -3972,7 +4007,8 @@ class Database
 
             $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function ($twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
-                $options['twoWayKey'] = $actualNewKey;
+                $options['twoWayKey'] = $actualTwoWay ? $actualNewKey : null;
+                $options['internalTwoWayKey'] = $actualNewKey;
                 $options['twoWay'] = $actualTwoWay;
                 $options['onDelete'] = $actualOnDelete;
 
@@ -4109,7 +4145,8 @@ class Database
             try {
                 $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function ($twoWayAttribute) use ($oldTwoWayKey, $id, $oldAttribute) {
                     $options = $twoWayAttribute->getAttribute('options', []);
-                    $options['twoWayKey'] = $id;
+                    $options['twoWayKey'] = $oldAttribute['options']['twoWay'] ? $id : null;
+                    $options['internalTwoWayKey'] = $id;
                     $options['twoWay'] = $oldAttribute['options']['twoWay'];
                     $options['onDelete'] = $oldAttribute['options']['onDelete'];
                     $twoWayAttribute->setAttribute('$id', $oldTwoWayKey);
@@ -4203,7 +4240,7 @@ class Database
         $relatedCollection = $relationship['options']['relatedCollection'];
         $type = $relationship['options']['relationType'];
         $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
+        $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
         $side = $relationship['options']['side'];
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
@@ -4987,7 +5024,7 @@ class Database
 
                         // Get two-way relationship info
                         $twoWay = $relationship['options']['twoWay'];
-                        $twoWayKey = $relationship['options']['twoWayKey'];
+                        $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
 
                         // Queue if:
                         // 1. No explicit selects (fetch all recursively), OR
@@ -5165,7 +5202,7 @@ class Database
     ): array {
         $key = $relationship['key'];
         $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
+        $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
         $side = $relationship['options']['side'];
         $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
 
@@ -5263,7 +5300,7 @@ class Database
     ): array {
         $key = $relationship['key'];
         $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
+        $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
         $side = $relationship['options']['side'];
         $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
 
@@ -5358,7 +5395,7 @@ class Database
     ): array {
         $key = $relationship['key'];
         $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
+        $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
         $side = $relationship['options']['side'];
         $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
         $collection = $this->getCollection($relationship->getAttribute('collection'));
@@ -5754,7 +5791,7 @@ class Database
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
-            $twoWayKey = $relationship['options']['twoWayKey'];
+            $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
             $side = $relationship['options']['side'];
 
             if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->relationshipWriteStack[$stackCount - 1] !== $relatedCollection->getId()) {
@@ -6583,7 +6620,7 @@ class Database
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = (string)$relationship['options']['relationType'];
             $twoWay = (bool)$relationship['options']['twoWay'];
-            $twoWayKey = (string)$relationship['options']['twoWayKey'];
+            $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
             $side = (string)$relationship['options']['side'];
 
             if (Operator::isOperator($value)) {
@@ -7671,7 +7708,7 @@ class Database
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
-            $twoWayKey = $relationship['options']['twoWayKey'];
+            $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
             $onDelete = $relationship['options']['onDelete'];
             $side = $relationship['options']['side'];
 
@@ -7690,7 +7727,7 @@ class Database
                         $existingKey = $processedRelationship['key'];
                         $existingCollection = $processedRelationship['collection'];
                         $existingRelatedCollection = $processedRelationship['options']['relatedCollection'];
-                        $existingTwoWayKey = $processedRelationship['options']['twoWayKey'];
+                        $existingTwoWayKey = $this->getRelationshipTwoWayKey($processedRelationship);
                         $existingSide = $processedRelationship['options']['side'];
 
                         // If this relationship has already been fetched for this document, skip it
@@ -9520,7 +9557,7 @@ class Database
                     'toCollection' => $relationship['options']['relatedCollection'],
                     'relationType' => $relationship['options']['relationType'],
                     'side' => $relationship['options']['side'],
-                    'twoWayKey' => $relationship['options']['twoWayKey'],
+                    'twoWayKey' => $this->getRelationshipTwoWayKey($relationship),
                 ];
 
                 $currentCollection = $relationship['options']['relatedCollection'];
@@ -9894,7 +9931,7 @@ class Database
                 return null;
             }
 
-            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+            $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
             $relatedCollectionDoc = $this->silent(fn () => $this->getCollection($relatedCollection));
             $junction = $this->getJunctionCollection($collection, $relatedCollectionDoc, $side);
 
@@ -9922,7 +9959,7 @@ class Database
                 ])
             ));
 
-            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+            $twoWayKey = $this->getRelationshipTwoWayKey($relationship);
             $parentIds = [];
 
             foreach ($matchingDocs as $doc) {

@@ -1796,13 +1796,7 @@ class Database
             if ($this->adapter->getSharedTables()) {
                 // In shared-tables mode the physical table is reused across
                 // tenants. A DuplicateException simply means the table already
-                // exists for another tenant — not an orphan. Re-throw for
-                // _metadata so Database::create() properly signals duplicate;
-                // for other collections, skip and proceed to create per-tenant
-                // metadata document below.
-                if ($id === self::METADATA) {
-                    throw $e;
-                }
+                // exists for another tenant — not an orphan. Skip and proceed.
             } else {
                 // Metadata check (above) already verified collection is absent
                 // from metadata. A DuplicateException from the adapter means
@@ -1831,6 +1825,8 @@ class Database
                 } catch (\Throwable $e) {
                     Console::error("Failed to rollback collection '{$id}': " . $e->getMessage());
                 }
+            } else {
+                Console::warning("createCollection '{$id}' metadata failed in shared-tables mode; physical table retained. Metadata document must be re-created.");
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }

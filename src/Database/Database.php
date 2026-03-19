@@ -9,6 +9,7 @@ use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -18,6 +19,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Relationship;
+use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
@@ -34,6 +37,7 @@ class Database
     use Traits\Collections;
     use Traits\Databases;
     use Traits\Documents;
+    use Traits\Entities;
     use Traits\Indexes;
     use Traits\Relationships;
     use Traits\Transactions;
@@ -294,6 +298,12 @@ class Database
      * @var array<string, class-string<Document>>
      */
     protected array $documentTypes = [];
+
+    protected ?TypeRegistry $typeRegistry = null;
+
+    protected ?QueryCache $queryCache = null;
+
+    protected ?QueryProfiler $profiler = null;
 
     private Authorization $authorization;
 
@@ -603,6 +613,63 @@ class Database
     public function getAdapter(): Adapter
     {
         return $this->adapter;
+    }
+
+    public function query(string $collection): QueryBuilder
+    {
+        return new QueryBuilder($this, $collection);
+    }
+
+    public function setTypeRegistry(?TypeRegistry $typeRegistry): static
+    {
+        $this->typeRegistry = $typeRegistry;
+
+        return $this;
+    }
+
+    public function getTypeRegistry(): ?TypeRegistry
+    {
+        return $this->typeRegistry;
+    }
+
+    public function setQueryCache(?QueryCache $queryCache): static
+    {
+        $this->queryCache = $queryCache;
+
+        return $this;
+    }
+
+    public function getQueryCache(): ?QueryCache
+    {
+        return $this->queryCache;
+    }
+
+    public function enableProfiling(): static
+    {
+        if ($this->profiler === null) {
+            $this->profiler = new QueryProfiler();
+        }
+
+        $this->profiler->enable();
+        $this->adapter->setProfiler($this->profiler);
+
+        return $this;
+    }
+
+    public function disableProfiling(): static
+    {
+        if ($this->profiler !== null) {
+            $this->profiler->disable();
+        }
+
+        $this->adapter->setProfiler(null);
+
+        return $this;
+    }
+
+    public function getProfiler(): ?QueryProfiler
+    {
+        return $this->profiler;
     }
 
     /**
@@ -1259,8 +1326,6 @@ class Database
             }
 
             // Assign default only if no value provided
-            // False positive "Call to function is_null() with mixed will always evaluate to false"
-            // @phpstan-ignore-next-line
             if (is_null($value) && ! is_null($default)) {
                 // Skip applying defaults during updates to avoid resetting unspecified attributes
                 if (! $applyDefaults) {

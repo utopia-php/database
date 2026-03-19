@@ -2484,6 +2484,49 @@ trait Documents
 
     /**
      * @param  array<Query>  $queries
+     * @return Generator<int, Document>
+     */
+    public function cursor(string $collection, array $queries = [], int $batchSize = 100): Generator
+    {
+        $lastDocument = null;
+
+        while (true) {
+            $batchQueries = $queries;
+            $batchQueries[] = Query::limit($batchSize);
+
+            if ($lastDocument !== null) {
+                $batchQueries[] = Query::cursorAfter($lastDocument);
+            }
+
+            $documents = $this->find($collection, $batchQueries);
+
+            if ($documents === []) {
+                break;
+            }
+
+            foreach ($documents as $document) {
+                yield $document;
+            }
+
+            $lastDocument = \end($documents);
+
+            if (\count($documents) < $batchSize) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Document>
+     */
+    public function aggregate(string $collection, array $queries): array
+    {
+        return $this->find($collection, $queries);
+    }
+
+    /**
+     * @param  array<Query>  $queries
      * @return array<string>
      */
     private function validateSelections(Document $collection, array $queries): array

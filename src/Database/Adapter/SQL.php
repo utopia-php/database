@@ -2334,6 +2334,16 @@ abstract class SQL extends Adapter
         return [];
     }
 
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     public function getTenantQuery(
         string $collection,
         string $alias = '',

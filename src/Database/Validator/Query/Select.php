@@ -54,7 +54,18 @@ class Select extends Base
             return false;
         }
 
-        if ($value->getMethod() !== Query::TYPE_SELECT) {
+        $method = $value->getMethod();
+        $allowedMethods = [
+            Query::TYPE_SELECT,
+            Query::TYPE_SELECT_DISTINCT,
+            Query::TYPE_COUNT,
+            Query::TYPE_SUM,
+            Query::TYPE_AVG,
+            Query::TYPE_MIN,
+            Query::TYPE_MAX,
+        ];
+
+        if (!\in_array($method, $allowedMethods)) {
             return false;
         }
 
@@ -63,17 +74,28 @@ class Select extends Base
             Database::INTERNAL_ATTRIBUTES
         );
 
-        if (\count($value->getValues()) === 0) {
+        $attributes = $value->getValues();
+
+        // For aggregates, the attribute is stored in the attribute property, not values
+        if (\in_array($method, [Query::TYPE_COUNT, Query::TYPE_SUM, Query::TYPE_AVG, Query::TYPE_MIN, Query::TYPE_MAX])) {
+            $attributes = [$value->getAttribute()];
+        }
+
+        if (\count($attributes) === 0 && $method === Query::TYPE_SELECT) {
             $this->message = 'No attributes selected';
             return false;
         }
 
-        if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
+        if (\count($attributes) !== \count(\array_unique($attributes))) {
             $this->message = 'Duplicate attributes selected';
             return false;
-
         }
-        foreach ($value->getValues() as $attribute) {
+
+        foreach ($attributes as $attribute) {
+            if ($attribute === '*') {
+                continue;
+            }
+
             if (\str_contains($attribute, '.')) {
                 //special symbols with `dots`
                 if (isset($this->schema[$attribute])) {
@@ -90,7 +112,7 @@ class Select extends Base
                 continue;
             }
 
-            if ($this->supportForAttributes && !isset($this->schema[$attribute]) && $attribute !== '*') {
+            if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
                 $this->message = 'Attribute not found in schema: ' . $attribute;
                 return false;
             }

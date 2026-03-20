@@ -2287,7 +2287,13 @@ abstract class SQL extends Adapter
     {
         $conditions = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() === Query::TYPE_SELECT ||
+                in_array($query->getMethod(), [
+                    Query::TYPE_INNER_JOIN,
+                    Query::TYPE_LEFT_JOIN,
+                    Query::TYPE_RIGHT_JOIN,
+                    Query::TYPE_FULL_JOIN,
+                ])) {
                 continue;
             }
 
@@ -2382,33 +2388,70 @@ abstract class SQL extends Adapter
      */
     protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
-        if (empty($selections) || \in_array('*', $selections)) {
+        if (empty($selections)) {
             return "{$this->quote($prefix)}.*";
         }
 
-        // Handle specific selections with spatial conversion where needed
-        $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
-        ];
-
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
-
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
-        }
-
         $projections = [];
+        $isDistinct = false;
+
         foreach ($selections as $selection) {
-            $filteredSelection = $this->filter($selection);
-            $quotedSelection = $this->quote($filteredSelection);
-            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
+            if ($selection instanceof Query) {
+                switch ($selection->getMethod()) {
+                    case Query::TYPE_SELECT_DISTINCT:
+                        $isDistinct = true;
+                        foreach ($selection->getValues() as $value) {
+                            $projections[] = "{$this->quote($prefix)}.{$this->quote($this->filter($value))}";
+                        }
+                        break;
+                    case Query::TYPE_COUNT:
+                        $attr = $selection->getAttribute();
+                        $target = ($attr === '*') ? '*' : "{$this->quote($prefix)}.{$this->quote($this->filter($attr))}";
+                        $projections[] = "COUNT({$target}) AS _count";
+                        break;
+                    case Query::TYPE_SUM:
+                        $projections[] = "SUM({$this->quote($prefix)}.{$this->quote($this->filter($selection->getAttribute()))}) AS _sum";
+                        break;
+                    case Query::TYPE_AVG:
+                        $projections[] = "AVG({$this->quote($prefix)}.{$this->quote($this->filter($selection->getAttribute()))}) AS _avg";
+                        break;
+                    case Query::TYPE_MIN:
+                        $projections[] = "MIN({$this->quote($prefix)}.{$this->quote($this->filter($selection->getAttribute()))}) AS _min";
+                        break;
+                    case Query::TYPE_MAX:
+                        $projections[] = "MAX({$this->quote($prefix)}.{$this->quote($this->filter($selection->getAttribute()))}) AS _max";
+                        break;
+                    case Query::TYPE_SELECT:
+                        foreach ($selection->getValues() as $value) {
+                            if ($value === '*') {
+                                $projections[] = "{$this->quote($prefix)}.*";
+                                continue;
+                            }
+                            $projections[] = "{$this->quote($prefix)}.{$this->quote($this->filter($value))}";
+                        }
+                        break;
+                }
+            } else {
+                // Backward compatibility for string selections
+                if ($selection === '*') {
+                    $projections[] = "{$this->quote($prefix)}.*";
+                } else {
+                    $projections[] = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
+                }
+            }
         }
 
-        return \implode(',', $projections);
+        if (empty($projections)) {
+            return "{$this->quote($prefix)}.*";
+        }
+
+        $sql = \implode(', ', \array_unique($projections));
+
+        if ($isDistinct) {
+            $sql = "DISTINCT " . $sql;
+        }
+
+        return $sql;
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string
@@ -3033,6 +3076,24 @@ abstract class SQL extends Adapter
 
         $queries = $otherQueries;
 
+        // Extract join queries
+        $joinQueries = [];
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), [
+                Query::TYPE_INNER_JOIN,
+                Query::TYPE_LEFT_JOIN,
+                Query::TYPE_RIGHT_JOIN,
+                Query::TYPE_FULL_JOIN,
+            ])) {
+                $joinQueries[] = $query;
+            } else {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $queries = $otherQueries;
+
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
@@ -3149,9 +3210,32 @@ abstract class SQL extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
+        $sqlJoins = '';
+        foreach ($joinQueries as $query) {
+            $joinMethod = match ($query->getMethod()) {
+                Query::TYPE_INNER_JOIN => 'INNER JOIN',
+                Query::TYPE_LEFT_JOIN => 'LEFT JOIN',
+                Query::TYPE_RIGHT_JOIN => 'RIGHT JOIN',
+                Query::TYPE_FULL_JOIN => 'FULL JOIN',
+                default => 'INNER JOIN',
+            };
+
+            $joinCollection = $this->filter($query->getAttribute());
+            $joinTable = $this->getSQLTable($joinCollection);
+            $joinOn = $query->getValues()[0] ?? '';
+            $joinAlias = $query->getValues()[1] ?? '';
+
+            $sqlJoins .= " {$joinMethod} {$joinTable}";
+            if (!empty($joinAlias)) {
+                $sqlJoins .= " AS {$this->quote($this->filter($joinAlias))}";
+            }
+            $sqlJoins .= " ON {$joinOn}";
+        }
+
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoins}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -3209,6 +3293,159 @@ abstract class SQL extends Adapter
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
             $results = \array_reverse($results);
+        }
+
+        return $results;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function findAcrossCollections(array $collections, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    {
+        $roles = $this->authorization->getRoles();
+        $subqueries = [];
+        $binds = [];
+        $alias = Query::DEFAULT_ALIAS;
+
+        // Parse queries to find filter attributes
+        $groupedQueries = Query::groupByType($queries);
+        $filters = $groupedQueries['filters'];
+        $selections = $this->getAttributeSelections($queries);
+
+        foreach ($collections as $i => $collection) {
+            $name = $this->filter($collection->getId());
+            $table = $this->getSQLTable($name);
+            $where = [];
+
+            // Add permissions check for this specific collection
+            if ($this->authorization->getStatus()) {
+                $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+            }
+
+            // Add tenant check
+            if ($this->sharedTables) {
+                $where[] = "{$this->getTenantQuery($collection->getId(), $alias, condition: '')}";
+            }
+
+            // Add filters if they exist
+            $collectionFilters = [];
+            foreach ($filters as $filter) {
+                $attr = $filter->getAttribute();
+                // Check if attribute exists in this collection
+                $hasAttr = false;
+                foreach ($collection->getAttribute('attributes', []) as $collectionAttr) {
+                    if ($collectionAttr->getId() === $attr) {
+                        $hasAttr = true;
+                        break;
+                    }
+                }
+
+                if ($hasAttr) {
+                    $collectionFilters[] = $filter;
+                }
+            }
+
+            $filterConditions = $this->getSQLConditions($collectionFilters, $binds);
+            if (!empty($filterConditions)) {
+                $where[] = $filterConditions;
+            }
+
+            $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            // Harmonize projection: Select common attributes + any specific selections
+            $projectionParts = [
+                "{$this->quote($alias)}.{$this->quote('_uid')} AS {$this->quote('$id')}",
+                "{$this->quote($alias)}.{$this->quote('_createdAt')} AS {$this->quote('$createdAt')}",
+                "{$this->quote($alias)}.{$this->quote('_updatedAt')} AS {$this->quote('$updatedAt')}",
+                "{$this->quote($alias)}.{$this->quote('_permissions')} AS {$this->quote('$permissions')}",
+                "'{$name}' AS {$this->quote('$collection')}"
+            ];
+
+            foreach ($selections as $selection) {
+                $attr = $selection->getAttribute();
+                if ($attr === '$id' || $attr === '$createdAt' || $attr === '$updatedAt' || $attr === '$permissions') {
+                    continue;
+                }
+
+                $internalAttr = $this->getInternalKeyForAttribute($attr);
+                // Check if attribute exists in this collection
+                $hasAttr = false;
+                foreach ($collection->getAttribute('attributes', []) as $collectionAttr) {
+                    if ($collectionAttr->getId() === $attr) {
+                        $hasAttr = true;
+                        break;
+                    }
+                }
+
+                if ($hasAttr) {
+                    $projectionParts[] = "{$this->quote($alias)}.{$this->quote($internalAttr)} AS {$this->quote($attr)}";
+                } else {
+                    $projectionParts[] = "NULL AS {$this->quote($attr)}";
+                }
+            }
+
+            $projection = implode(', ', $projectionParts);
+
+            $subqueries[] = "(SELECT {$projection} FROM {$table} AS {$this->quote($alias)} {$sqlWhere})";
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+        }
+
+        $sqlUnion = implode(' UNION ALL ', $subqueries);
+
+        // Build global ORDER BY
+        $orders = [];
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+            $orders[] = "{$this->quote($originalAttribute)} {$this->filter($orderType)}";
+        }
+        $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
+
+        $sqlLimit = '';
+        if (!is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+        if (!is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
+
+        $sql = "
+            SELECT * FROM (
+                {$sqlUnion}
+            ) AS global_search
+            {$sqlOrder}
+            {$sqlLimit};
+        ";
+
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $results = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        foreach ($results as $index => $document) {
+            if (isset($document['$permissions'])) {
+                $document['$permissions'] = json_decode($document['$permissions'] ?? '[]', true);
+            }
+            $results[$index] = new Document($document);
         }
 
         return $results;

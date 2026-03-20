@@ -7,6 +7,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
@@ -73,6 +74,7 @@ class Documents extends IndexedQueries
             ),
             new Order($attributes, $supportForAttributes),
             new Select($attributes, $supportForAttributes),
+            new Join(),
         ];
 
         parent::__construct($attributes, $indexes, $validators);

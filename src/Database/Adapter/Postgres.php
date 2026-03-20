@@ -2067,9 +2067,8 @@ class Postgres extends SQL
         $string = substr($value, 1, -1);
         if (empty($string)) {
             return [];
-        } else {
-            return explode(',', $string);
         }
+        return str_getcsv($string, ',', '"', '\\');
     }
 
     /**
@@ -2086,7 +2085,7 @@ class Postgres extends SQL
         }
 
         foreach ($value as &$item) {
-            $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
+            $item = '"' . str_replace('"', '\\"', $item) . '"';
         }
 
         return '{' . implode(",", $value) . '}';

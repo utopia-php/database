@@ -1127,7 +1127,7 @@ class Query
     }
 
     /**
-     * @param array $queries
+     * @param array<Query> $queries
      * @return array<Query>
      */
     public static function clone(array $queries): array

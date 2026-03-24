@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a658f43f0a0582869241a962dc88d53a",
+    "content-hash": "0e67b717130969da75a82da58d886303",
     "packages": [
         {
             "name": "brick/math",
@@ -2091,11 +2091,17 @@
         },
         {
             "name": "utopia-php/async",
-            "version": "1.0.0",
-            "dist": {
-                "type": "path",
-                "url": "../async",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/async.git",
                 "reference": "7a0c6957b41731a5c999382ad26a0b2fdbd19812"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/async/zipball/7a0c6957b41731a5c999382ad26a0b2fdbd19812",
+                "reference": "7a0c6957b41731a5c999382ad26a0b2fdbd19812",
+                "shasum": ""
             },
             "require": {
                 "opis/closure": "4.*",
@@ -2122,6 +2128,7 @@
                 "react/child-process": "Required for ReactPHP parallel adapter",
                 "react/event-loop": "Required for ReactPHP promise and parallel adapters"
             },
+            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -2195,10 +2202,11 @@
                 }
             ],
             "description": "High-performance concurrent + parallel library with Promise and Parallel execution support for PHP.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "source": "https://github.com/utopia-php/async/tree/main",
+                "issues": "https://github.com/utopia-php/async/issues"
+            },
+            "time": "2026-01-09T06:16:09+00:00"
         },
         {
             "name": "utopia-php/cache",
@@ -2417,10 +2425,16 @@
         {
             "name": "utopia-php/query",
             "version": "dev-feat-builder",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/query.git",
+                "reference": "ff2b8bb4b146a450502dd5873265ea3e4f9a6399"
+            },
             "dist": {
-                "type": "path",
-                "url": "../query",
-                "reference": "9852c1471734f60bdbf8ba8690b51c902621b61e"
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/ff2b8bb4b146a450502dd5873265ea3e4f9a6399",
+                "reference": "ff2b8bb4b146a450502dd5873265ea3e4f9a6399",
+                "shasum": ""
             },
             "require": {
                 "php": ">=8.4"
@@ -2471,10 +2485,11 @@
                 "upf",
                 "utopia"
             ],
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "source": "https://github.com/utopia-php/query/tree/feat-builder",
+                "issues": "https://github.com/utopia-php/query/issues"
+            },
+            "time": "2026-03-24T02:55:26+00:00"
         },
         {
             "name": "utopia-php/telemetry",

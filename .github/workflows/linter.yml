@@ -11,34 +11,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          path: database
-
-      - name: Checkout query library
-        uses: actions/checkout@v4
-        with:
-          repository: utopia-php/query
-          ref: feat-builder
-          path: query
-
-      - name: Checkout async library
-        uses: actions/checkout@v4
-        with:
-          repository: utopia-php/async
-          path: async
 
       - run: git checkout HEAD^2
         if: github.event_name == 'pull_request'
-        working-directory: database
 
       - name: Run Linter
         run: |
-          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -v $PWD/async:/async -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
-          "sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
-           sed -i 's|\"url\": \"../async\"|\"url\": \"/async\"|' composer.json && \
-           sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
-           sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
-           sed -i 's|\"url\": \"../async\"|\"url\": \"/async\"|' composer.lock && \
-           composer install --profile --ignore-platform-reqs && \
-           if [ -L vendor/utopia-php/query ]; then rm vendor/utopia-php/query && cp -r /query vendor/utopia-php/query; fi && \
-           if [ -L vendor/utopia-php/async ]; then rm vendor/utopia-php/async && cp -r /async vendor/utopia-php/async; fi && \
+          docker run --rm -v $PWD:/app -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
+          "composer install --profile --ignore-platform-reqs && \
            composer lint"

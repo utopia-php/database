@@ -43,7 +43,7 @@
         "utopia-php/cache": "1.*",
         "utopia-php/pools": "1.*",
         "utopia-php/mongo": "1.*",
-        "utopia-php/query": "@dev",
+        "utopia-php/query": "dev-feat-builder",
         "utopia-php/async": "@dev"
     },
     "require-dev": {
@@ -64,18 +64,12 @@
     },
     "repositories": [
         {
-            "type": "path",
-            "url": "../query",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/utopia-php/query.git"
         },
         {
-            "type": "path",
-            "url": "../async",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/utopia-php/async.git"
         }
     ],
     "config": {

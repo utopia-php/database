@@ -17,21 +17,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: database
-
-      - name: Checkout query library
-        uses: actions/checkout@v4
-        with:
-          repository: utopia-php/query
-          ref: feat-builder
-          path: query
-
-      - name: Checkout async library
-        uses: actions/checkout@v4
-        with:
-          repository: utopia-php/async
-          path: async
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -40,7 +25,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: database/Dockerfile
+          file: Dockerfile
           push: false
           tags: ${{ env.IMAGE }}
           load: true

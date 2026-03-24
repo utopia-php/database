@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -9,7 +10,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use PHPUnit\Framework\Attributes\DataProvider;
 use Utopia\Query\Schema\ColumnType;
 
 trait AggregationTests

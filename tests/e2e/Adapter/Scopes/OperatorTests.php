@@ -2,6 +2,8 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -10,8 +12,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;

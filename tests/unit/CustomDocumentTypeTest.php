@@ -121,7 +121,6 @@ class CustomDocumentTypeTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not exist');
 
-        /** @phpstan-ignore-next-line */
         $this->database->setDocumentType('users', 'NonExistentClass');
     }
 
@@ -130,7 +129,6 @@ class CustomDocumentTypeTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('must extend');
 
-        /** @phpstan-ignore-next-line */
         $this->database->setDocumentType('users', \stdClass::class);
     }
 

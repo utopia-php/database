@@ -18,7 +18,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Write;
-use Utopia\Database\PermissionType;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;

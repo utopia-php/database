@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use PHPUnit\Framework\Attributes\Group;
 use Utopia\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -14,7 +15,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
-use PHPUnit\Framework\Attributes\Group;
 use Utopia\Query\Schema\IndexType;
 
 trait GeneralTests

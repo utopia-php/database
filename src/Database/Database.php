@@ -19,7 +19,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Relationship;
-use Utopia\Database\PermissionType;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;

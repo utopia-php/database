@@ -4,7 +4,6 @@ namespace Utopia\Database\Seeder;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Query\Query;
 
 class Fixture
 {

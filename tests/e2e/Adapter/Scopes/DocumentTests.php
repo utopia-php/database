@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use PDOException;
+use PHPUnit\Framework\Attributes\Depends;
 use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
@@ -4874,6 +4875,8 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        $this->getDatabase()->getAuthorization()->removeRole('user:x');
+
         $documents = $database->find('movies');
         $movieDocuments = $documents;
 
@@ -4935,6 +4938,8 @@ trait DocumentTests
             Query::orderAsc(''),
         ]);
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
+
+        $this->getDatabase()->getAuthorization()->addRole('user:x');
     }
 
     public function testFindCheckPermissions(): void
@@ -6376,8 +6381,7 @@ trait DocumentTests
         }
     }
 
-    /** @depends testFind */
-
+    #[Depends('testFindCheckPermissions')]
     public function testForeach(): void
     {
         $this->initMoviesFixture();

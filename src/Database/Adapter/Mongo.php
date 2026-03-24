@@ -2427,18 +2427,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * @param  array<int>  $tenants
-     * @return int|null|array<string, array<int>>
+     * @param  array<int|string>  $tenants
+     * @return int|string|null|array<string, array<int|string>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|string|null|array {
         if (! $this->sharedTables) {
             return null;
         }
 
-        /** @var array<int> $values */
+        /** @var array<int|string> $values */
         $values = [];
 
         if (\count($tenants) === 0) {

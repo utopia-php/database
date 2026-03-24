@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PHPUnit\Framework\Attributes\Depends;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -1169,9 +1170,7 @@ trait CollectionTests
         $this->assertNotNull($document->getSequence());
     }
 
-    /**
-     * @depends testCreatedAtUpdatedAt
-     */
+    #[Depends('testCreatedAtUpdatedAt')]
     public function testCreatedAtUpdatedAtAssert(): void
     {
         /** @var Database $database */

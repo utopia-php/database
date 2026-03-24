@@ -10,11 +10,11 @@ use Utopia\Database\Document;
 class TenantWrite implements Write
 {
     /**
-     * @param int $tenant The current tenant identifier
+     * @param int|string $tenant The current tenant identifier
      * @param string $column The column name used to store the tenant value
      */
     public function __construct(
-        private int $tenant,
+        private int|string $tenant,
         private string $column = '_tenant',
     ) {
     }

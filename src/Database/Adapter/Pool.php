@@ -79,6 +79,7 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
             $adapter->setProfiler($this->profiler);
+            $adapter->resetQueryTransforms();
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addQueryTransform($tName, $tTransform);
             }
@@ -233,6 +234,7 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
             $adapter->setProfiler($this->profiler);
+            $adapter->resetQueryTransforms();
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addQueryTransform($tName, $tTransform);
             }

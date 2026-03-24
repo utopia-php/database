@@ -135,6 +135,7 @@ class ReadWritePool extends Pool
         }
 
         $adapter->setProfiler($this->profiler);
+        $adapter->resetQueryTransforms();
         foreach ($this->queryTransforms as $tName => $tTransform) {
             $adapter->addQueryTransform($tName, $tTransform);
         }

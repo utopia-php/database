@@ -9,7 +9,6 @@ use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Filter;
 use Utopia\Query\Hook\Join\Condition as JoinCondition;
 use Utopia\Query\Hook\Join\Filter as JoinFilter;
-use Utopia\Query\Hook\Join\Placement;
 
 /**
  * SQL read hook that generates permission-checking subquery conditions for document access control.
@@ -99,22 +98,15 @@ class PermissionFilter implements Filter, JoinFilter
     }
 
     /**
-     * Generate a permission filter condition for JOIN operations, placed on ON or WHERE depending on join type.
-     *
-     * @param string $table The base table name being joined
-     * @param JoinType $joinType The type of join being performed
-     * @return JoinCondition|null The join condition with appropriate placement, or null if not applicable
+     * Permission filtering for joined tables is not applied here because this hook
+     * already covers the main table via filter(). The generated condition references
+     * the main table's document column and permissions table, so duplicating it on
+     * join ON/WHERE clauses is redundant for inner joins and semantically incorrect
+     * for outer joins. Per-join-table permission checks should use separate hooks.
      */
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
-        $condition = $this->filter($table);
-
-        $placement = match ($joinType) {
-            JoinType::Left, JoinType::Right => Placement::On,
-            default => Placement::Where,
-        };
-
-        return new JoinCondition($condition, $placement);
+        return null;
     }
 
     private function quoteTableIdentifier(string $table): string

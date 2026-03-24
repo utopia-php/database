@@ -699,6 +699,19 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Get the maximum length for unique document IDs.
+     *
+     * SQLite uses VARCHAR(36) for the _uid column, unlike other SQL adapters
+     * which use VARCHAR(255).
+     *
+     * @return int
+     */
+    public function getMaxUIDLength(): int
+    {
+        return 36;
+    }
+
+    /**
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html
      *

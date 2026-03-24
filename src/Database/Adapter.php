@@ -457,6 +457,18 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Remove all registered query transform hooks.
+     *
+     * @return $this
+     */
+    public function resetQueryTransforms(): static
+    {
+        $this->queryTransforms = [];
+
+        return $this;
+    }
+
+    /**
      * Ping Database
      */
     abstract public function ping(): bool;

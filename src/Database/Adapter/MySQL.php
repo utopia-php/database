@@ -68,9 +68,7 @@ class MySQL extends MariaDB
 
     protected function execute(mixed $stmt): bool
     {
-        if ($this->timeout > 0) {
-            $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
-        }
+        $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
         /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
         return $stmt->execute();
     }

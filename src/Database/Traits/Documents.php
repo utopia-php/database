@@ -356,6 +356,10 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         if ($collection->getId() !== self::METADATA) {
             $isValid = $this->authorization->isValid(new Input(PermissionType::Create->value, $collection->getCreate()));
             if (! $isValid) {
@@ -604,6 +608,11 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         $newUpdatedAt = $document->getUpdatedAt();
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
@@ -1719,6 +1728,10 @@ trait Documents
     public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(

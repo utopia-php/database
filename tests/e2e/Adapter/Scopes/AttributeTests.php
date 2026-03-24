@@ -237,8 +237,9 @@ trait AttributeTests
 
         $database = $this->getDatabase();
 
-        if (! $database->exists($this->testDatabase, 'attributes')) {
+        try {
             $database->createCollection('attributes');
+        } catch (DuplicateException) {
         }
 
         self::$attributesCollectionFixtureInit = true;
@@ -423,7 +424,7 @@ trait AttributeTests
 
         $database = $this->getDatabase();
 
-        if (! $database->exists($this->testDatabase, 'flowers')) {
+        try {
             $database->createCollection('flowers');
             $database->createAttribute('flowers', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('flowers', new Attribute(key: 'inStock', type: ColumnType::Integer, size: 0, required: false));
@@ -451,6 +452,7 @@ trait AttributeTests
                 ],
                 'name' => 'Lily',
             ]));
+        } catch (DuplicateException) {
         }
 
         self::$flowersFixtureInit = true;
@@ -947,7 +949,7 @@ trait AttributeTests
 
         $database = $this->getDatabase();
 
-        if (! $database->exists($this->testDatabase, 'colors')) {
+        try {
             $database->createCollection('colors');
             $database->createAttribute('colors', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('colors', new Attribute(key: 'hex', type: ColumnType::String, size: 128, required: true));
@@ -963,6 +965,7 @@ trait AttributeTests
                 'hex' => '#000000',
             ]));
             $database->renameAttribute('colors', 'name', 'verbose');
+        } catch (DuplicateException) {
         }
 
         self::$colorsFixtureInit = true;

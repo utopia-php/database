@@ -181,13 +181,14 @@ trait IndexTests
 
         $database = $this->getDatabase();
 
-        if (! $database->exists($this->testDatabase, 'numbers')) {
+        try {
             $database->createCollection('numbers');
             $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
             $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
             $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
             $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
             $database->renameIndex('numbers', 'index1', 'index3');
+        } catch (DuplicateException) {
         }
 
         self::$renameIndexFixtureInit = true;

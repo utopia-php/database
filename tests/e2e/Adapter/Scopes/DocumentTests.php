@@ -48,54 +48,60 @@ trait DocumentTests
         }
 
         $database = $this->getDatabase();
-        $database->createCollection('documents');
 
-        $database->createAttribute('documents', new Attribute(key: 'string', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute('documents', new Attribute(key: 'integer_signed', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('documents', new Attribute(key: 'integer_unsigned', type: ColumnType::Integer, size: 4, required: true, signed: false));
-        $database->createAttribute('documents', new Attribute(key: 'bigint_signed', type: ColumnType::Integer, size: 8, required: true));
-        $database->createAttribute('documents', new Attribute(key: 'bigint_unsigned', type: ColumnType::Integer, size: 9, required: true, signed: false));
-        $database->createAttribute('documents', new Attribute(key: 'float_signed', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('documents', new Attribute(key: 'float_unsigned', type: ColumnType::Double, size: 0, required: true, signed: false));
-        $database->createAttribute('documents', new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true));
-        $database->createAttribute('documents', new Attribute(key: 'colors', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
-        $database->createAttribute('documents', new Attribute(key: 'empty', type: ColumnType::String, size: 32, required: false, default: null, signed: true, array: true));
-        $database->createAttribute('documents', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: false, default: null));
-        $database->createAttribute('documents', new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: false, default: null));
+        try {
+            $database->createCollection('documents');
 
-        $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
+            $database->createAttribute('documents', new Attribute(key: 'string', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute('documents', new Attribute(key: 'integer_signed', type: ColumnType::Integer, size: 0, required: true));
+            $database->createAttribute('documents', new Attribute(key: 'integer_unsigned', type: ColumnType::Integer, size: 4, required: true, signed: false));
+            $database->createAttribute('documents', new Attribute(key: 'bigint_signed', type: ColumnType::Integer, size: 8, required: true));
+            $database->createAttribute('documents', new Attribute(key: 'bigint_unsigned', type: ColumnType::Integer, size: 9, required: true, signed: false));
+            $database->createAttribute('documents', new Attribute(key: 'float_signed', type: ColumnType::Double, size: 0, required: true));
+            $database->createAttribute('documents', new Attribute(key: 'float_unsigned', type: ColumnType::Double, size: 0, required: true, signed: false));
+            $database->createAttribute('documents', new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true));
+            $database->createAttribute('documents', new Attribute(key: 'colors', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
+            $database->createAttribute('documents', new Attribute(key: 'empty', type: ColumnType::String, size: 32, required: false, default: null, signed: true, array: true));
+            $database->createAttribute('documents', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: false, default: null));
+            $database->createAttribute('documents', new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: false, default: null));
+
+            $sequence = '1000000';
+            if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+                $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
+            }
+
+            $document = $database->createDocument('documents', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::read(Role::user(ID::custom('1'))),
+                    Permission::read(Role::user(ID::custom('2'))),
+                    Permission::create(Role::any()),
+                    Permission::create(Role::user(ID::custom('1x'))),
+                    Permission::create(Role::user(ID::custom('2x'))),
+                    Permission::update(Role::any()),
+                    Permission::update(Role::user(ID::custom('1x'))),
+                    Permission::update(Role::user(ID::custom('2x'))),
+                    Permission::delete(Role::any()),
+                    Permission::delete(Role::user(ID::custom('1x'))),
+                    Permission::delete(Role::user(ID::custom('2x'))),
+                ],
+                'string' => 'text📝',
+                'integer_signed' => -Database::MAX_INT,
+                'integer_unsigned' => Database::MAX_INT,
+                'bigint_signed' => -Database::MAX_BIG_INT,
+                'bigint_unsigned' => Database::MAX_BIG_INT,
+                'float_signed' => -5.55,
+                'float_unsigned' => 5.55,
+                'boolean' => true,
+                'colors' => ['pink', 'green', 'blue'],
+                'empty' => [],
+                'with-dash' => 'Works',
+                'id' => $sequence,
+            ]));
+        } catch (DuplicateException) {
+            $documents = $database->find('documents', [Query::limit(1)]);
+            $document = $documents[0];
         }
-
-        $document = $database->createDocument('documents', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::read(Role::user(ID::custom('1'))),
-                Permission::read(Role::user(ID::custom('2'))),
-                Permission::create(Role::any()),
-                Permission::create(Role::user(ID::custom('1x'))),
-                Permission::create(Role::user(ID::custom('2x'))),
-                Permission::update(Role::any()),
-                Permission::update(Role::user(ID::custom('1x'))),
-                Permission::update(Role::user(ID::custom('2x'))),
-                Permission::delete(Role::any()),
-                Permission::delete(Role::user(ID::custom('1x'))),
-                Permission::delete(Role::user(ID::custom('2x'))),
-            ],
-            'string' => 'text📝',
-            'integer_signed' => -Database::MAX_INT,
-            'integer_unsigned' => Database::MAX_INT,
-            'bigint_signed' => -Database::MAX_BIG_INT,
-            'bigint_unsigned' => Database::MAX_BIG_INT,
-            'float_signed' => -5.55,
-            'float_unsigned' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-            'empty' => [],
-            'with-dash' => 'Works',
-            'id' => $sequence,
-        ]));
 
         self::$documentsFixtureInit = true;
         self::$documentsFixtureDoc = $document;
@@ -114,6 +120,8 @@ trait DocumentTests
     protected function initMoviesFixture(): array
     {
         if (self::$moviesFixtureInit && self::$moviesFixtureData !== null) {
+            $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
+            $this->getDatabase()->getAuthorization()->addRole('user:x');
             return self::$moviesFixtureData;
         }
 
@@ -121,94 +129,25 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole('user:x');
         $database = $this->getDatabase();
 
-        $database->createCollection('movies', permissions: [
-            Permission::create(Role::any()),
-            Permission::update(Role::users()),
-        ]);
+        try {
+            $database->createCollection('movies', permissions: [
+                Permission::create(Role::any()),
+                Permission::update(Role::users()),
+            ]);
 
-        $database->createAttribute('movies', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'director', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'year', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'genres', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
-        $database->createAttribute('movies', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute('movies', new Attribute(key: 'nullable', type: ColumnType::String, size: 128, required: false));
+            $database->createAttribute('movies', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'director', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'year', type: ColumnType::Integer, size: 0, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'genres', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
+            $database->createAttribute('movies', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute('movies', new Attribute(key: 'nullable', type: ColumnType::String, size: 128, required: false));
 
-        $permissions = [
-            Permission::read(Role::any()),
-            Permission::read(Role::user('1')),
-            Permission::read(Role::user('2')),
-            Permission::create(Role::any()),
-            Permission::create(Role::user('1x')),
-            Permission::create(Role::user('2x')),
-            Permission::update(Role::any()),
-            Permission::update(Role::user('1x')),
-            Permission::update(Role::user('2x')),
-            Permission::delete(Role::any()),
-            Permission::delete(Role::user('1x')),
-            Permission::delete(Role::user('2x')),
-        ];
-
-        $document = $database->createDocument('movies', new Document([
-            '$id' => ID::custom('frozen'),
-            '$permissions' => $permissions,
-            'name' => 'Frozen',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2013,
-            'price' => 39.50,
-            'active' => true,
-            'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works',
-        ]));
-
-        $database->createDocument('movies', new Document([
-            '$permissions' => $permissions,
-            'name' => 'Frozen II',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2019,
-            'price' => 39.50,
-            'active' => true,
-            'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works',
-        ]));
-
-        $database->createDocument('movies', new Document([
-            '$permissions' => $permissions,
-            'name' => 'Captain America: The First Avenger',
-            'director' => 'Joe Johnston',
-            'year' => 2011,
-            'price' => 25.94,
-            'active' => true,
-            'genres' => ['science fiction', 'action', 'comics'],
-            'with-dash' => 'Works2',
-        ]));
-
-        $database->createDocument('movies', new Document([
-            '$permissions' => $permissions,
-            'name' => 'Captain Marvel',
-            'director' => 'Anna Boden & Ryan Fleck',
-            'year' => 2019,
-            'price' => 25.99,
-            'active' => true,
-            'genres' => ['science fiction', 'action', 'comics'],
-            'with-dash' => 'Works2',
-        ]));
-
-        $database->createDocument('movies', new Document([
-            '$permissions' => $permissions,
-            'name' => 'Work in Progress',
-            'director' => 'TBD',
-            'year' => 2025,
-            'price' => 0.0,
-            'active' => false,
-            'genres' => [],
-            'with-dash' => 'Works3',
-        ]));
-
-        $database->createDocument('movies', new Document([
-            '$permissions' => [
-                Permission::read(Role::user('x')),
+            $permissions = [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
                 Permission::create(Role::any()),
                 Permission::create(Role::user('1x')),
                 Permission::create(Role::user('2x')),
@@ -218,16 +157,90 @@ trait DocumentTests
                 Permission::delete(Role::any()),
                 Permission::delete(Role::user('1x')),
                 Permission::delete(Role::user('2x')),
-            ],
-            'name' => 'Work in Progress 2',
-            'director' => 'TBD',
-            'year' => 2026,
-            'price' => 0.0,
-            'active' => false,
-            'genres' => [],
-            'with-dash' => 'Works3',
-            'nullable' => 'Not null',
-        ]));
+            ];
+
+            $document = $database->createDocument('movies', new Document([
+                '$id' => ID::custom('frozen'),
+                '$permissions' => $permissions,
+                'name' => 'Frozen',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2013,
+                'price' => 39.50,
+                'active' => true,
+                'genres' => ['animation', 'kids'],
+                'with-dash' => 'Works',
+            ]));
+
+            $database->createDocument('movies', new Document([
+                '$permissions' => $permissions,
+                'name' => 'Frozen II',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2019,
+                'price' => 39.50,
+                'active' => true,
+                'genres' => ['animation', 'kids'],
+                'with-dash' => 'Works',
+            ]));
+
+            $database->createDocument('movies', new Document([
+                '$permissions' => $permissions,
+                'name' => 'Captain America: The First Avenger',
+                'director' => 'Joe Johnston',
+                'year' => 2011,
+                'price' => 25.94,
+                'active' => true,
+                'genres' => ['science fiction', 'action', 'comics'],
+                'with-dash' => 'Works2',
+            ]));
+
+            $database->createDocument('movies', new Document([
+                '$permissions' => $permissions,
+                'name' => 'Captain Marvel',
+                'director' => 'Anna Boden & Ryan Fleck',
+                'year' => 2019,
+                'price' => 25.99,
+                'active' => true,
+                'genres' => ['science fiction', 'action', 'comics'],
+                'with-dash' => 'Works2',
+            ]));
+
+            $database->createDocument('movies', new Document([
+                '$permissions' => $permissions,
+                'name' => 'Work in Progress',
+                'director' => 'TBD',
+                'year' => 2025,
+                'price' => 0.0,
+                'active' => false,
+                'genres' => [],
+                'with-dash' => 'Works3',
+            ]));
+
+            $database->createDocument('movies', new Document([
+                '$permissions' => [
+                    Permission::read(Role::user('x')),
+                    Permission::create(Role::any()),
+                    Permission::create(Role::user('1x')),
+                    Permission::create(Role::user('2x')),
+                    Permission::update(Role::any()),
+                    Permission::update(Role::user('1x')),
+                    Permission::update(Role::user('2x')),
+                    Permission::delete(Role::any()),
+                    Permission::delete(Role::user('1x')),
+                    Permission::delete(Role::user('2x')),
+                ],
+                'name' => 'Work in Progress 2',
+                'director' => 'TBD',
+                'year' => 2026,
+                'price' => 0.0,
+                'active' => false,
+                'genres' => [],
+                'with-dash' => 'Works3',
+                'nullable' => 'Not null',
+            ]));
+
+        } catch (DuplicateException) {
+            $document = $database->getDocument('movies', 'frozen');
+        }
 
         self::$moviesFixtureInit = true;
         self::$moviesFixtureData = ['$sequence' => $document->getSequence()];
@@ -252,38 +265,39 @@ trait DocumentTests
         $collection = 'increase_decrease';
 
         try {
-            $database->deleteCollection($collection);
-        } catch (\Throwable) {
+            $database->createCollection($collection);
+
+            $database->createAttribute($collection, new Attribute(key: 'increase', type: ColumnType::Integer, size: 0, required: true));
+            $database->createAttribute($collection, new Attribute(key: 'decrease', type: ColumnType::Integer, size: 0, required: true));
+            $database->createAttribute($collection, new Attribute(key: 'increase_text', type: ColumnType::String, size: 255, required: true));
+            $database->createAttribute($collection, new Attribute(key: 'increase_float', type: ColumnType::Double, size: 0, required: true));
+            $database->createAttribute($collection, new Attribute(key: 'sizes', type: ColumnType::Integer, size: 8, required: false, array: true));
+
+            $document = $database->createDocument($collection, new Document([
+                'increase' => 100,
+                'decrease' => 100,
+                'increase_float' => 100,
+                'increase_text' => 'some text',
+                'sizes' => [10, 20, 30],
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+
+            $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
+            $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
+            $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
+            $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
+
+            $document = $database->getDocument($collection, $document->getId());
+        } catch (DuplicateException) {
+            $documents = $database->find($collection, [Query::limit(1)]);
+            $document = $documents[0];
         }
 
-        $database->createCollection($collection);
-
-        $database->createAttribute($collection, new Attribute(key: 'increase', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'decrease', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'increase_text', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'increase_float', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'sizes', type: ColumnType::Integer, size: 8, required: false, array: true));
-
-        $document = $database->createDocument($collection, new Document([
-            'increase' => 100,
-            'decrease' => 100,
-            'increase_float' => 100,
-            'increase_text' => 'some text',
-            'sizes' => [10, 20, 30],
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-        ]));
-
-        $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
-        $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
-        $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
-        $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
-
-        $document = $database->getDocument($collection, $document->getId());
         self::$incDecFixtureInit = true;
         self::$incDecFixtureDoc = $document;
 
@@ -1319,7 +1333,7 @@ trait DocumentTests
         ]));
 
         $documents = $database->find($collection, [
-            Query::search('ft', 'al@ba.io'), // === al ba io*
+            Query::search('ft', 'al@ba.io'), // tokenized as: al ba io*
         ]);
 
         if ($database->getAdapter()->supports(Capability::FulltextWildcard)) {
@@ -1934,6 +1948,8 @@ trait DocumentTests
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
         $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+
+        $this->getDatabase()->getAuthorization()->addRole('user:x');
     }
 
     public function testUpdateDocument(): void
@@ -6475,6 +6491,7 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
         $count = $database->count('movies');
         $this->assertEquals(5, $count);
+        $this->getDatabase()->getAuthorization()->addRole('user:x');
 
         $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies');

@@ -1693,7 +1693,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
      */
     public function getMaxUIDLength(): int
     {
-        return 255;
+        return 36;
     }
 
     /**

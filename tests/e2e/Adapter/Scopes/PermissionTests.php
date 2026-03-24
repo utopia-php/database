@@ -9,9 +9,11 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
@@ -56,32 +58,38 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        try {
-            $database->deleteCollection('collectionSecurity');
-        } catch (\Throwable) {
-        }
-
-        $collection = $database->createCollection('collectionSecurity', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users()),
-        ], documentSecurity: false);
-
-        $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
-
-        $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
-        $document = $database->createDocument($collection->getId(), new Document([
-            '$id' => \Utopia\Database\Helpers\ID::unique(),
-            '$permissions' => [
-                Permission::read(Role::user('random')),
-                Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random')),
-            ],
-            'test' => 'lorem',
-        ]));
+        try {
+            $collection = $database->createCollection('collectionSecurity', permissions: [
+                Permission::create(Role::users()),
+                Permission::read(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], documentSecurity: false);
+
+            $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+
+            $this->getDatabase()->getAuthorization()->cleanRoles();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+            $document = $database->createDocument($collection->getId(), new Document([
+                '$id' => \Utopia\Database\Helpers\ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::user('random')),
+                    Permission::update(Role::user('random')),
+                    Permission::delete(Role::user('random')),
+                ],
+                'test' => 'lorem',
+            ]));
+        } catch (DuplicateException) {
+            $this->getDatabase()->getAuthorization()->cleanRoles();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+            $documents = $database->find('collectionSecurity', [Query::limit(1)]);
+            $document = $documents[0];
+            $collection = $database->getCollection('collectionSecurity');
+        }
 
         self::$collPermFixtureInit = true;
         self::$collPermFixtureData = [
@@ -114,66 +122,52 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        foreach (['collectionSecurity.Parent', 'collectionSecurity.OneToOne', 'collectionSecurity.OneToMany'] as $col) {
-            try {
-                $database->deleteCollection($col);
-            } catch (\Throwable) {
-            }
-        }
-
-        $collection = $database->createCollection('collectionSecurity.Parent', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users()),
-        ], documentSecurity: true);
-
-        $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
-
-        $collectionOneToOne = $database->createCollection('collectionSecurity.OneToOne', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users()),
-        ], documentSecurity: true);
-
-        $database->createAttribute($collectionOneToOne->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
-
-        $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
-
-        $collectionOneToMany = $database->createCollection('collectionSecurity.OneToMany', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users()),
-        ], documentSecurity: true);
-
-        $database->createAttribute($collectionOneToMany->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
-
-        $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
-
-        $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
-        $document = $database->createDocument($collection->getId(), new Document([
-            '$id' => \Utopia\Database\Helpers\ID::unique(),
-            '$permissions' => [
-                Permission::read(Role::user('random')),
-                Permission::update(Role::user('random')),
-                Permission::delete(Role::user('random')),
-            ],
-            'test' => 'lorem',
-            RelationType::OneToOne->value => [
+        try {
+            $collection = $database->createCollection('collectionSecurity.Parent', permissions: [
+                Permission::create(Role::users()),
+                Permission::read(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], documentSecurity: true);
+
+            $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+
+            $collectionOneToOne = $database->createCollection('collectionSecurity.OneToOne', permissions: [
+                Permission::create(Role::users()),
+                Permission::read(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], documentSecurity: true);
+
+            $database->createAttribute($collectionOneToOne->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+
+            $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
+
+            $collectionOneToMany = $database->createCollection('collectionSecurity.OneToMany', permissions: [
+                Permission::create(Role::users()),
+                Permission::read(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], documentSecurity: true);
+
+            $database->createAttribute($collectionOneToMany->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+
+            $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
+
+            $this->getDatabase()->getAuthorization()->cleanRoles();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+            $document = $database->createDocument($collection->getId(), new Document([
                 '$id' => \Utopia\Database\Helpers\ID::unique(),
                 '$permissions' => [
                     Permission::read(Role::user('random')),
                     Permission::update(Role::user('random')),
                     Permission::delete(Role::user('random')),
                 ],
-                'test' => 'lorem ipsum',
-            ],
-            RelationType::OneToMany->value => [
-                [
+                'test' => 'lorem',
+                RelationType::OneToOne->value => [
                     '$id' => \Utopia\Database\Helpers\ID::unique(),
                     '$permissions' => [
                         Permission::read(Role::user('random')),
@@ -181,17 +175,37 @@ trait PermissionTests
                         Permission::delete(Role::user('random')),
                     ],
                     'test' => 'lorem ipsum',
-                ], [
-                    '$id' => \Utopia\Database\Helpers\ID::unique(),
-                    '$permissions' => [
-                        Permission::read(Role::user('torsten')),
-                        Permission::update(Role::user('random')),
-                        Permission::delete(Role::user('random')),
-                    ],
-                    'test' => 'dolor',
                 ],
-            ],
-        ]));
+                RelationType::OneToMany->value => [
+                    [
+                        '$id' => \Utopia\Database\Helpers\ID::unique(),
+                        '$permissions' => [
+                            Permission::read(Role::user('random')),
+                            Permission::update(Role::user('random')),
+                            Permission::delete(Role::user('random')),
+                        ],
+                        'test' => 'lorem ipsum',
+                    ], [
+                        '$id' => \Utopia\Database\Helpers\ID::unique(),
+                        '$permissions' => [
+                            Permission::read(Role::user('torsten')),
+                            Permission::update(Role::user('random')),
+                            Permission::delete(Role::user('random')),
+                        ],
+                        'test' => 'dolor',
+                    ],
+                ],
+            ]));
+        } catch (DuplicateException) {
+            $this->getDatabase()->getAuthorization()->cleanRoles();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+            $collection = $database->getCollection('collectionSecurity.Parent');
+            $collectionOneToOne = $database->getCollection('collectionSecurity.OneToOne');
+            $collectionOneToMany = $database->getCollection('collectionSecurity.OneToMany');
+            $documents = $database->find('collectionSecurity.Parent', [Query::limit(1)]);
+            $document = $documents[0];
+        }
 
         self::$relPermFixtureInit = true;
         self::$relPermFixtureData = [
@@ -220,18 +234,17 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         try {
-            $database->deleteCollection('collectionUpdate');
-        } catch (\Throwable) {
+            $collection = $database->createCollection('collectionUpdate', permissions: [
+                Permission::create(Role::users()),
+                Permission::read(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], documentSecurity: false);
+
+            $database->updateCollection('collectionUpdate', [], true);
+        } catch (DuplicateException) {
+            $collection = $database->getCollection('collectionUpdate');
         }
-
-        $collection = $database->createCollection('collectionUpdate', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users()),
-        ], documentSecurity: false);
-
-        $database->updateCollection('collectionUpdate', [], true);
 
         self::$collUpdateFixtureInit = true;
         self::$collUpdateFixtureData = [
@@ -468,6 +481,8 @@ trait PermissionTests
 
     public function testReadPermissionsFailure(): void
     {
+        $this->initDocumentsFixture();
+
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
@@ -503,6 +518,8 @@ trait PermissionTests
 
     public function testNoChangeUpdateDocumentWithoutPermission(): void
     {
+        $this->initDocumentsFixture();
+
         /** @var Database $database */
         $database = $this->getDatabase();
 

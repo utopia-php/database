@@ -1872,9 +1872,38 @@ class Database
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
-            if (! empty($selects)) {
-                $documentHashKey = $documentKey.':'.\md5(\implode($selects));
+            $sortedSelects = $selects;
+            \sort($sortedSelects);
+
+            $filterSignatures = [];
+            if ($this->filter) {
+                $disabled = $this->disabledFilters ?? [];
+
+                foreach (self::$filters as $name => $callbacks) {
+                    if (isset($disabled[$name])) {
+                        continue;
+                    }
+                    if (\array_key_exists($name, $this->instanceFilters)) {
+                        continue;
+                    }
+                    $filterSignatures[$name] = $callbacks['signature'];
+                }
+
+                foreach ($this->instanceFilters as $name => $callbacks) {
+                    if (isset($disabled[$name])) {
+                        continue;
+                    }
+                    $filterSignatures[$name] = $callbacks['signature'];
+                }
+
+                \ksort($filterSignatures);
             }
+
+            $payload = \json_encode([
+                'selects' => $sortedSelects,
+                'filters' => $filterSignatures,
+            ]) ?: '';
+            $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 
         return [

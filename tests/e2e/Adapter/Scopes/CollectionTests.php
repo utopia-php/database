@@ -7,6 +7,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -15,6 +16,8 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -914,7 +917,7 @@ trait CollectionTests
             $database->createCollection($colName, [
                 new Document([
                     '$id' => 'name',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 128,
                     'required' => true,
                 ]),
@@ -929,7 +932,7 @@ trait CollectionTests
             $database->createCollection($colName, [
                 new Document([
                     '$id' => 'name',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 128,
                     'required' => true,
                 ]),
@@ -1018,53 +1021,62 @@ trait CollectionTests
             $database = $this->getDatabase();
 
             $events = [
-                Database::EVENT_DATABASE_CREATE,
-                Database::EVENT_DATABASE_LIST,
-                Database::EVENT_COLLECTION_CREATE,
-                Database::EVENT_COLLECTION_LIST,
-                Database::EVENT_COLLECTION_READ,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_CREATE,
-                Database::EVENT_ATTRIBUTE_UPDATE,
-                Database::EVENT_INDEX_CREATE,
-                Database::EVENT_DOCUMENT_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_UPDATE,
-                Database::EVENT_DOCUMENT_READ,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_COUNT,
-                Database::EVENT_DOCUMENT_SUM,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_INCREASE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DECREASE,
-                Database::EVENT_DOCUMENTS_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_UPDATE,
-                Database::EVENT_INDEX_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
+                Event::DatabaseCreate,
+                Event::DatabaseList,
+                Event::CollectionCreate,
+                Event::CollectionList,
+                Event::CollectionRead,
+                Event::DocumentPurge,
+                Event::AttributeCreate,
+                Event::AttributeUpdate,
+                Event::IndexCreate,
+                Event::DocumentCreate,
+                Event::DocumentPurge,
+                Event::DocumentUpdate,
+                Event::DocumentRead,
+                Event::DocumentFind,
+                Event::DocumentFind,
+                Event::DocumentCount,
+                Event::DocumentSum,
+                Event::DocumentPurge,
+                Event::DocumentIncrease,
+                Event::DocumentPurge,
+                Event::DocumentDecrease,
+                Event::DocumentsCreate,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentsUpdate,
+                Event::IndexDelete,
+                Event::DocumentPurge,
+                Event::DocumentDelete,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentsDelete,
+                Event::DocumentPurge,
+                Event::AttributeDelete,
+                Event::CollectionDelete,
+                Event::DatabaseDelete,
+                Event::DocumentPurge,
+                Event::DocumentsDelete,
+                Event::DocumentPurge,
+                Event::AttributeDelete,
+                Event::CollectionDelete,
+                Event::DatabaseDelete,
             ];
 
-            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
-                $shifted = array_shift($events);
-                $this->assertEquals($shifted, $event);
+            $test = $this;
+            $database->addLifecycleHook(new class ($events, $test) implements Lifecycle {
+                /** @param array<Event> $events */
+                public function __construct(private array &$events, private $test)
+                {
+                }
+
+                public function handle(Event $event, mixed $data): void
+                {
+                    $shifted = array_shift($this->events);
+                    $this->test->assertEquals($shifted, $event);
+                }
             });
 
             if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
@@ -1082,10 +1094,10 @@ trait CollectionTests
             $database->createCollection($collectionId);
             $database->listCollections();
             $database->getCollection($collectionId);
-            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->createAttribute($collectionId, new Attribute(key: 'attr1', type: ColumnType::Integer, size: 2, required: false));
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index2_'.uniqid();
-            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+            $database->createIndex($collectionId, new Index(key: $indexId1, type: IndexType::Key, attributes: ['attr1']));
 
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
@@ -1098,9 +1110,6 @@ trait CollectionTests
             ]));
 
             $executed = false;
-            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
-                $executed = true;
-            });
 
             $database->silent(function () use ($database, $collectionId, $document) {
                 $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
@@ -1111,7 +1120,7 @@ trait CollectionTests
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            }, ['should-not-execute']);
+            });
 
             $this->assertFalse($executed);
 
@@ -1135,10 +1144,6 @@ trait CollectionTests
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
-
-            // Remove all listeners
-            $database->on(Database::EVENT_ALL, 'test', null);
-            $database->on(Database::EVENT_ALL, 'should-not-execute', null);
         });
     }
 
@@ -1148,7 +1153,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('created_at'));
-        $database->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
+        $database->createAttribute('created_at', new Attribute(key: 'title', type: ColumnType::String, size: 100, required: false));
         $document = $database->createDocument('created_at', new Document([
             '$id' => ID::custom('uid123'),
 
@@ -1193,7 +1198,7 @@ trait CollectionTests
         $database->createCollection('docs', attributes: [
             new Document([
                 '$id' => 'name',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'size' => 767,
                 'required' => true,
             ]),
@@ -1204,13 +1209,18 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return 'SELECT 1';
+        $database->addQueryTransform('test', new class () implements QueryTransform {
+            public function transform(Event $event, string $query): string
+            {
+                return 'SELECT 1';
+            }
         });
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+
+        $database->removeQueryTransform('test');
     }
 
     public function testSetGlobalCollection(): void

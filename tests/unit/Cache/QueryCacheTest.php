@@ -19,20 +19,20 @@ class QueryCacheTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->cache = $this->createMock(Cache::class);
+        $this->cache = self::createStub(Cache::class);
         $this->queryCache = new QueryCache($this->cache);
     }
 
     public function testConstructorWithDefaults(): void
     {
-        $cache = $this->createMock(Cache::class);
+        $cache = self::createStub(Cache::class);
         $queryCache = new QueryCache($cache);
         $this->assertTrue($queryCache->isEnabled('any_collection'));
     }
 
     public function testConstructorWithCustomName(): void
     {
-        $cache = $this->createMock(Cache::class);
+        $cache = self::createStub(Cache::class);
         $queryCache = new QueryCache($cache, 'custom');
         $key = $queryCache->buildQueryKey('users', [], 'ns', null);
         $this->assertStringStartsWith('custom:', $key);
@@ -133,11 +133,14 @@ class QueryCacheTest extends TestCase
 
     public function testSetSerializesDocuments(): void
     {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
         $docs = [
             new Document(['$id' => 'doc1', 'name' => 'Alice']),
         ];
 
-        $this->cache->expects($this->once())
+        $cache->expects($this->once())
             ->method('save')
             ->with(
                 'cache-key',
@@ -146,16 +149,19 @@ class QueryCacheTest extends TestCase
                 })
             );
 
-        $this->queryCache->set('cache-key', $docs);
+        $queryCache->set('cache-key', $docs);
     }
 
     public function testInvalidateCollectionCallsPurge(): void
     {
-        $this->cache->expects($this->once())
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->expects($this->once())
             ->method('purge')
             ->with($this->stringContains('users'));
 
-        $this->queryCache->invalidateCollection('users');
+        $queryCache->invalidateCollection('users');
     }
 
     public function testIsEnabledReturnsTrueByDefault(): void
@@ -171,10 +177,13 @@ class QueryCacheTest extends TestCase
 
     public function testFlushDelegatesToCacheFlush(): void
     {
-        $this->cache->expects($this->once())
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->expects($this->once())
             ->method('flush');
 
-        $this->queryCache->flush();
+        $queryCache->flush();
     }
 
     public function testCacheRegionDefaults(): void

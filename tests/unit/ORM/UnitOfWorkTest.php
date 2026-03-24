@@ -129,7 +129,7 @@ class UnitOfWorkTest extends TestCase
 
         $this->assertNull($this->uow->getState($e1));
         $this->assertNull($this->uow->getState($e2));
-        $this->assertEmpty($this->identityMap->all());
+        $this->assertEmpty(\iterator_to_array($this->identityMap->all()));
     }
 
     public function testGetStateReturnsNullForUntracked(): void

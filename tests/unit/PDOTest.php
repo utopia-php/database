@@ -23,22 +23,19 @@ class PDOTest extends TestCase
             ->disableOriginalConstructor()
             ->getMock();
 
-        // Create a PDOStatement mock since query returns a PDOStatement
-        $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $pdoStatementStub = self::createStub(\PDOStatement::class);
 
-        // Expect that when we call 'query', the mock returns our PDOStatement mock.
+        // Expect that when we call 'query', the mock returns our PDOStatement stub.
         $pdoMock->expects($this->once())
             ->method('query')
             ->with('SELECT 1')
-            ->willReturn($pdoStatementMock);
+            ->willReturn($pdoStatementStub);
 
         $pdoProperty->setValue($pdoWrapper, $pdoMock);
 
         $result = $pdoWrapper->query('SELECT 1');
 
-        $this->assertSame($pdoStatementMock, $result);
+        $this->assertSame($pdoStatementStub, $result);
     }
 
     public function test_lost_connection_retries_call(): void
@@ -52,17 +49,19 @@ class PDOTest extends TestCase
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $pdoStatementStub = self::createStub(\PDOStatement::class);
 
+        $callCount = 0;
         $pdoMock->expects($this->exactly(2))
             ->method('query')
             ->with('SELECT 1')
-            ->will($this->onConsecutiveCalls(
-                $this->throwException(new \Exception('Lost connection')),
-                $pdoStatementMock
-            ));
+            ->willReturnCallback(function () use (&$callCount, $pdoStatementStub) {
+                $callCount++;
+                if ($callCount === 1) {
+                    throw new \Exception('Lost connection');
+                }
+                return $pdoStatementStub;
+            });
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
@@ -77,7 +76,7 @@ class PDOTest extends TestCase
 
         $result = $pdoWrapper->query('SELECT 1');
 
-        $this->assertSame($pdoStatementMock, $result);
+        $this->assertSame($pdoStatementStub, $result);
     }
 
     public function test_non_lost_connection_exception_is_rethrown(): void
@@ -135,19 +134,17 @@ class PDOTest extends TestCase
             ->disableOriginalConstructor()
             ->getMock();
 
-        $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $pdoStatementStub = self::createStub(\PDOStatement::class);
 
         $pdoMock->expects($this->once())
             ->method('prepare')
             ->with('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY])
-            ->willReturn($pdoStatementMock);
+            ->willReturn($pdoStatementStub);
 
         $pdoProperty->setValue($pdoWrapper, $pdoMock);
 
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
-        $this->assertSame($pdoStatementMock, $result);
+        $this->assertSame($pdoStatementStub, $result);
     }
 }

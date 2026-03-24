@@ -2,28 +2,19 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use Exception;
-use Throwable;
-use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
+use PHPUnit\Framework\Attributes\Group;
 use Utopia\Query\Schema\IndexType;
 
 trait GeneralTests
@@ -84,245 +75,13 @@ trait GeneralTests
         }
     }
 
-    public function testPreserveDatesUpdate(): void
-    {
-        $this->getDatabase()->getAuthorization()->disable();
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $database->setPreserveDates(true);
-
-        $database->createCollection('preserve_update_dates');
-
-        $database->createAttribute('preserve_update_dates', new Attribute(key: 'attr1', type: ColumnType::String, size: 10, required: false));
-
-        $doc1 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [],
-            'attr1' => 'value1',
-        ]));
-
-        $doc2 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc2',
-            '$permissions' => [],
-            'attr1' => 'value2',
-        ]));
-
-        $doc3 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc3',
-            '$permissions' => [],
-            'attr1' => 'value3',
-        ]));
-        // updating with empty dates
-        try {
-            $doc1->setAttribute('$updatedAt', '');
-            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
-            $this->fail('Failed to throw structure exception');
-
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
-        }
-
-        try {
-            $this->getDatabase()->updateDocuments(
-                'preserve_update_dates',
-                new Document([
-                    '$updatedAt' => '',
-                ]),
-                [
-                    Query::equal('$id', [
-                        $doc2->getId(),
-                        $doc3->getId(),
-                    ]),
-                ]
-            );
-            $this->fail('Failed to throw structure exception');
-
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
-        }
-
-        // non empty dates
-        $newDate = '2000-01-01T10:00:00.000+00:00';
-
-        $doc1->setAttribute('$updatedAt', $newDate);
-        $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
-        $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
-
-        $this->getDatabase()->updateDocuments(
-            'preserve_update_dates',
-            new Document([
-                '$updatedAt' => $newDate,
-            ]),
-            [
-                Query::equal('$id', [
-                    $doc2->getId(),
-                    $doc3->getId(),
-                ]),
-            ]
-        );
-
-        $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
-        $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
-        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
-        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
-
-        $database->deleteCollection('preserve_update_dates');
-
-        $database->setPreserveDates(false);
-
-        $this->getDatabase()->getAuthorization()->reset();
-    }
-
-    public function testPreserveDatesCreate(): void
-    {
-        $this->getDatabase()->getAuthorization()->disable();
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $database->setPreserveDates(true);
-
-        $database->createCollection('preserve_create_dates');
-
-        $database->createAttribute('preserve_create_dates', new Attribute(key: 'attr1', type: ColumnType::String, size: 10, required: false));
-
-        // empty string for $createdAt should throw Structure exception
-        try {
-            $date = '';
-            $database->createDocument('preserve_create_dates', new Document([
-                '$id' => 'doc1',
-                '$permissions' => [],
-                'attr1' => 'value1',
-                '$createdAt' => $date,
-            ]));
-            $this->fail('Failed to throw structure exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
-        }
-
-        try {
-            $database->createDocuments('preserve_create_dates', [
-                new Document([
-                    '$id' => 'doc2',
-                    '$permissions' => [],
-                    'attr1' => 'value2',
-                    '$createdAt' => $date,
-                ]),
-                new Document([
-                    '$id' => 'doc3',
-                    '$permissions' => [],
-                    'attr1' => 'value3',
-                    '$createdAt' => $date,
-                ]),
-            ], batchSize: 2);
-            $this->fail('Failed to throw structure exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
-        }
-
-        // non empty date
-        $date = '2000-01-01T10:00:00.000+00:00';
-
-        $database->createDocument('preserve_create_dates', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [],
-            'attr1' => 'value1',
-            '$createdAt' => $date,
-        ]));
-
-        $database->createDocuments('preserve_create_dates', [
-            new Document([
-                '$id' => 'doc2',
-                '$permissions' => [],
-                'attr1' => 'value2',
-                '$createdAt' => $date,
-            ]),
-            new Document([
-                '$id' => 'doc3',
-                '$permissions' => [],
-                'attr1' => 'value3',
-                '$createdAt' => $date,
-            ]),
-            new Document([
-                '$id' => 'doc4',
-                '$permissions' => [],
-                'attr1' => 'value3',
-                '$createdAt' => null,
-            ]),
-            new Document([
-                '$id' => 'doc5',
-                '$permissions' => [],
-                'attr1' => 'value3',
-            ]),
-        ], batchSize: 2);
-
-        $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
-        $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
-        $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
-        $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
-        $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
-        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
-        $this->assertNotEmpty($date, $doc4->getAttribute('$createdAt'));
-        $this->assertNotEquals($date, $doc4->getAttribute('$createdAt'));
-        $this->assertNotEmpty($date, $doc5->getAttribute('$createdAt'));
-        $this->assertNotEquals($date, $doc5->getAttribute('$createdAt'));
-
-        $database->deleteCollection('preserve_create_dates');
-
-        $database->setPreserveDates(false);
-
-        $this->getDatabase()->getAuthorization()->reset();
-    }
-
-    public function testGetAttributeLimit(): void
-    {
-        $this->assertIsInt($this->getDatabase()->getLimitForAttributes());
-    }
-
-    public function testGetIndexLimit(): void
-    {
-        $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());
-    }
-
-    public function testGetId(): void
-    {
-        $this->assertEquals(20, strlen(ID::unique()));
-        $this->assertEquals(13, strlen(ID::unique(0)));
-        $this->assertEquals(13, strlen(ID::unique(-1)));
-        $this->assertEquals(23, strlen(ID::unique(10)));
-
-        // ensure two sequential calls to getId do not give the same result
-        $this->assertNotEquals(ID::unique(10), ID::unique(10));
-    }
-
     public function testSharedTablesUpdateTenant(): void
     {
         $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
         if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
@@ -366,66 +125,9 @@ trait GeneralTests
             }
             $database
                 ->setSharedTables($sharedTables)
+                ->setTenant($tenant)
                 ->setNamespace($namespace)
                 ->setDatabase($schema);
-        }
-    }
-
-    public function testFindOrderByAfterException(): void
-    {
-        /**
-         * ORDER BY - After Exception
-         * Must be last assertion in test
-         */
-        $document = new Document([
-            '$collection' => 'other collection',
-        ]);
-
-        $this->expectException(Exception::class);
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->find('movies', [
-            Query::limit(2),
-            Query::offset(0),
-            Query::cursorAfter($document),
-        ]);
-    }
-
-    public function testNestedQueryValidation(): void
-    {
-        $this->getDatabase()->createCollection(__FUNCTION__, [
-            new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true),
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any()),
-        ]);
-
-        $this->getDatabase()->createDocuments(__FUNCTION__, [
-            new Document([
-                '$id' => ID::unique(),
-                'name' => 'test1',
-            ]),
-            new Document([
-                '$id' => ID::unique(),
-                'name' => 'doc2',
-            ]),
-        ]);
-
-        try {
-            $this->getDatabase()->find(__FUNCTION__, [
-                Query::or([
-                    Query::equal('name', ['test1']),
-                    Query::search('name', 'doc'),
-                ]),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertInstanceOf(QueryException::class, $e);
-            $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
         }
     }
 
@@ -438,6 +140,7 @@ trait GeneralTests
         $tenantPerDocument = $database->getTenantPerDocument();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
         if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
@@ -629,13 +332,12 @@ trait GeneralTests
         $database
             ->setSharedTables($sharedTables)
             ->setTenantPerDocument($tenantPerDocument)
+            ->setTenant($tenant)
             ->setNamespace($namespace)
             ->setDatabase($schema);
     }
 
-    /**
-     * @group redis-destructive
-     */
+    #[Group('redis-destructive')]
     public function testCacheFallback(): void
     {
         /** @var Database $database */
@@ -701,9 +403,7 @@ trait GeneralTests
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
-    /**
-     * @group redis-destructive
-     */
+    #[Group('redis-destructive')]
     public function testCacheReconnect(): void
     {
         /** @var Database $database */

@@ -23,7 +23,7 @@ class MigrationRunnerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = $this->createMock(Database::class);
+        $this->db = self::createStub(Database::class);
     }
 
     private function createMigration(string $version, ?callable $up = null, ?callable $down = null): Migration
@@ -67,7 +67,7 @@ class MigrationRunnerTest extends TestCase
 
     private function createTrackerMock(array $appliedVersions = [], int $lastBatch = 0, array $batchDocs = []): MigrationTracker
     {
-        $tracker = $this->createMock(MigrationTracker::class);
+        $tracker = self::createStub(MigrationTracker::class);
         $tracker->method('setup');
         $tracker->method('getAppliedVersions')->willReturn($appliedVersions);
         $tracker->method('getLastBatch')->willReturn($lastBatch);

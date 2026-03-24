@@ -2,11 +2,13 @@
 
 namespace Tests\Unit\Seeder;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Seeder\Fixture;
 
+#[AllowMockObjectsWithoutExpectations]
 class FixtureTest extends TestCase
 {
     private Database $db;
@@ -19,7 +21,7 @@ class FixtureTest extends TestCase
         $this->fixture = new Fixture();
     }
 
-    public function testLoadCreatesDocumentsViaCreateDocument(): void
+    public function testLoadSingleDocumentUsesCreateDocument(): void
     {
         $this->db->expects($this->once())
             ->method('createDocument')
@@ -31,15 +33,23 @@ class FixtureTest extends TestCase
         ]);
 
         $this->assertCount(1, $this->fixture->getCreated());
+        $this->assertEquals('u1', $this->fixture->getCreated()[0]['id']);
     }
 
-    public function testLoadTracksCreatedIDs(): void
+    public function testLoadMultipleDocumentsUsesCreateDocuments(): void
     {
-        $this->db->method('createDocument')
-            ->willReturnOnConsecutiveCalls(
-                new Document(['$id' => 'u1', 'name' => 'Alice']),
-                new Document(['$id' => 'u2', 'name' => 'Bob']),
-            );
+        $this->db->expects($this->once())
+            ->method('createDocuments')
+            ->willReturnCallback(function (string $collection, array $docs, int $batch, ?callable $onNext) {
+                foreach ($docs as $i => $doc) {
+                    $created = new Document(['$id' => 'u' . ($i + 1)]);
+                    if ($onNext) {
+                        $onNext($created);
+                    }
+                }
+
+                return \count($docs);
+            });
 
         $this->fixture->load($this->db, 'users', [
             ['name' => 'Alice'],
@@ -55,7 +65,10 @@ class FixtureTest extends TestCase
     public function testGetCreatedReturnsAllTrackedEntries(): void
     {
         $this->db->method('createDocument')
-            ->willReturn(new Document(['$id' => 'doc1']));
+            ->willReturnOnConsecutiveCalls(
+                new Document(['$id' => 'doc1']),
+                new Document(['$id' => 'doc2']),
+            );
 
         $this->fixture->load($this->db, 'users', [['name' => 'A']]);
         $this->fixture->load($this->db, 'posts', [['title' => 'B']]);
@@ -66,50 +79,23 @@ class FixtureTest extends TestCase
         $this->assertEquals('posts', $created[1]['collection']);
     }
 
-    public function testCleanupDeletesInReverseOrder(): void
-    {
-        $deleteOrder = [];
-
-        $this->db->method('createDocument')
-            ->willReturnOnConsecutiveCalls(
-                new Document(['$id' => 'u1']),
-                new Document(['$id' => 'u2']),
-                new Document(['$id' => 'u3']),
-            );
-
-        $this->db->method('deleteDocument')
-            ->willReturnCallback(function (string $collection, string $id) use (&$deleteOrder) {
-                $deleteOrder[] = $id;
-
-                return true;
-            });
-
-        $this->fixture->load($this->db, 'users', [
-            ['name' => 'A'],
-            ['name' => 'B'],
-            ['name' => 'C'],
-        ]);
-
-        $this->fixture->cleanup($this->db);
-
-        $this->assertEquals(['u3', 'u2', 'u1'], $deleteOrder);
-    }
-
-    public function testCleanupClearsTheCreatedList(): void
+    public function testCleanupDeletesDocumentsIndividually(): void
     {
         $this->db->method('createDocument')
             ->willReturn(new Document(['$id' => 'u1']));
-        $this->db->method('deleteDocument')
+
+        $this->db->expects($this->once())
+            ->method('deleteDocument')
+            ->with('users', 'u1')
             ->willReturn(true);
 
         $this->fixture->load($this->db, 'users', [['name' => 'A']]);
-        $this->assertNotEmpty($this->fixture->getCreated());
-
         $this->fixture->cleanup($this->db);
+
         $this->assertEmpty($this->fixture->getCreated());
     }
 
-    public function testCleanupHandlesDeleteErrorsSilently(): void
+    public function testCleanupHandlesDeleteErrors(): void
     {
         $this->db->method('createDocument')
             ->willReturn(new Document(['$id' => 'u1']));
@@ -122,23 +108,33 @@ class FixtureTest extends TestCase
         $this->assertEmpty($this->fixture->getCreated());
     }
 
-    public function testLoadWithMultipleDocuments(): void
+    public function testLoadWithEmptyArray(): void
     {
-        $this->db->expects($this->exactly(3))
-            ->method('createDocument')
-            ->willReturnOnConsecutiveCalls(
-                new Document(['$id' => 'u1']),
-                new Document(['$id' => 'u2']),
-                new Document(['$id' => 'u3']),
-            );
+        $this->db->expects($this->never())->method('createDocument');
+        $this->db->expects($this->never())->method('createDocuments');
 
-        $this->fixture->load($this->db, 'users', [
-            ['name' => 'Alice'],
-            ['name' => 'Bob'],
-            ['name' => 'Charlie'],
-        ]);
+        $this->fixture->load($this->db, 'users', []);
+        $this->assertEmpty($this->fixture->getCreated());
+    }
 
-        $this->assertCount(3, $this->fixture->getCreated());
+    public function testCleanupWithNoCreatedDocuments(): void
+    {
+        $this->db->expects($this->never())->method('deleteDocument');
+        $this->fixture->cleanup($this->db);
+        $this->assertEmpty($this->fixture->getCreated());
+    }
+
+    public function testMultipleCleanupCallsAreIdempotent(): void
+    {
+        $this->db->method('createDocument')
+            ->willReturn(new Document(['$id' => 'u1']));
+        $this->db->expects($this->once())->method('deleteDocument')
+            ->with('users', 'u1')
+            ->willReturn(true);
+
+        $this->fixture->load($this->db, 'users', [['name' => 'A']]);
+        $this->fixture->cleanup($this->db);
+        $this->fixture->cleanup($this->db);
     }
 
     public function testLoadWithMultipleCollections(): void
@@ -156,23 +152,5 @@ class FixtureTest extends TestCase
         $this->assertCount(2, $created);
         $this->assertEquals('users', $created[0]['collection']);
         $this->assertEquals('posts', $created[1]['collection']);
-    }
-
-    public function testCleanupWithNoCreatedDocuments(): void
-    {
-        $this->db->expects($this->never())->method('deleteDocument');
-        $this->fixture->cleanup($this->db);
-        $this->assertEmpty($this->fixture->getCreated());
-    }
-
-    public function testMultipleCleanupCallsAreIdempotent(): void
-    {
-        $this->db->method('createDocument')
-            ->willReturn(new Document(['$id' => 'u1']));
-        $this->db->expects($this->once())->method('deleteDocument');
-
-        $this->fixture->load($this->db, 'users', [['name' => 'A']]);
-        $this->fixture->cleanup($this->db);
-        $this->fixture->cleanup($this->db);
     }
 }

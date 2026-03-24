@@ -317,7 +317,7 @@ class UnitOfWorkAdvancedTest extends TestCase
 
         $this->assertNull($this->uow->getState($e1));
         $this->assertNull($this->uow->getState($e2));
-        $this->assertEmpty($this->identityMap->all());
+        $this->assertEmpty(\iterator_to_array($this->identityMap->all()));
     }
 
     public function testCascadePersistDeeplyNestedEntities(): void
@@ -398,7 +398,7 @@ class UnitOfWorkAdvancedTest extends TestCase
 
         $this->uow->persist($entity);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $db->method('withTransaction')
             ->willReturnCallback(function (callable $callback) {
                 return $callback();
@@ -435,7 +435,7 @@ class UnitOfWorkAdvancedTest extends TestCase
         $this->uow->registerManaged($entity, $metadata);
         $this->uow->remove($entity);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $db->method('withTransaction')
             ->willReturnCallback(function (callable $callback) {
                 return $callback();
@@ -462,7 +462,7 @@ class UnitOfWorkAdvancedTest extends TestCase
         $this->uow->persist($entity);
         $this->assertEquals(EntityState::New, $this->uow->getState($entity));
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $db->method('withTransaction')
             ->willReturnCallback(function (callable $callback) {
                 return $callback();
@@ -496,7 +496,7 @@ class UnitOfWorkAdvancedTest extends TestCase
         $this->uow->registerManaged($entity, $metadata);
         $this->uow->remove($entity);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $db->method('withTransaction')
             ->willReturnCallback(function (callable $callback) {
                 return $callback();

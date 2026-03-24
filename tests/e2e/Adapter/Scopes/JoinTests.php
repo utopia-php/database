@@ -5,37 +5,14 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Utopia\Query\Schema\ColumnType;
 
 trait JoinTests
 {
-    public function testJoinUnsupportedAdapterThrows(): void
-    {
-        $database = static::getDatabase();
-        if ($database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $col = 'j_unsup';
-        if ($database->exists($database->getDatabase(), $col)) {
-            $database->deleteCollection($col);
-        }
-        $database->createCollection($col);
-        $database->createAttribute($col, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
-        $database->createDocument($col, new Document([
-            'value' => 1,
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $this->expectException(QueryException::class);
-        $database->find($col, [Query::join('other', 'value', '$id')]);
-    }
-
     public function testLeftJoinNoMatchesReturnsAllMainRows(): void
     {
         $database = static::getDatabase();
@@ -877,205 +854,6 @@ trait JoinTests
         $this->cleanupAggCollections($database, $cols);
     }
 
-    public function testJoinPermissionSomeHidden(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jpsh_o';
-        $cCol = 'jpsh_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('viewer'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('viewer'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 500,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('viewer')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::sum('amount', 'total'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinPermissionGroupedByStatusWithDocSec(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jpgs_o';
-        $cCol = 'jpgs_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'status' => 'done', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('alice'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'status' => 'done', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('alice'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'status' => 'open', 'amount' => 50,
-            '$permissions' => [Permission::read(Role::user('bob'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'status' => 'open', 'amount' => 75,
-            '$permissions' => [Permission::read(Role::user('alice'))],
-        ]));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('alice')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::groupBy(['status']),
-        ]);
-
-        $mapped = [];
-        foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('status')] = $doc->getAttribute('cnt');
-        }
-        $this->assertEquals(2, $mapped['done']);
-        $this->assertEquals(1, $mapped['open']);
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('bob')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::groupBy(['status']),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals('open', $results[0]->getAttribute('status'));
-        $this->assertEquals(1, $results[0]->getAttribute('cnt'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinPermissionWithHavingCorrectly(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jphc_o';
-        $cCol = 'jphc_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        foreach (['c1', 'c2'] as $cid) {
-            $database->createDocument($cCol, new Document([
-                '$id' => $cid, 'name' => 'Customer ' . $cid,
-                '$permissions' => [Permission::read(Role::any())],
-            ]));
-        }
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('viewer'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('viewer'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 1000,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c2', 'amount' => 50,
-            '$permissions' => [Permission::read(Role::user('viewer'))],
-        ]));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('viewer')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::sum('amount', 'total'),
-            Query::groupBy(['cust_uid']),
-            Query::having([Query::greaterThan('total', 100)]),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
     public function testJoinMultipleFilterTypes(): void
     {
         $database = static::getDatabase();
@@ -1186,170 +964,6 @@ trait JoinTests
         }
 
         $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinOverlappingPermissions(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jop_o';
-        $cCol = 'jop_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [
-                Permission::read(Role::user('alice')),
-                Permission::read(Role::team('staff')),
-            ],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('alice'))],
-        ]));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('alice')->toString());
-        $database->getAuthorization()->addRole(Role::team('staff')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::sum('amount', 'total'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinAuthDisabledBypassesPerms(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jad_o';
-        $cCol = 'jad_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-
-        $database->getAuthorization()->disable();
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::sum('amount', 'total'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
-
-        $database->getAuthorization()->reset();
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('nobody')->toString());
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals(0, $results[0]->getAttribute('cnt'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinCursorWithAggregationThrows(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jca_o';
-        $cCol = 'jca_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $doc = $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        try {
-            $this->expectException(QueryException::class);
-            $database->find($oCol, [
-                Query::join($cCol, 'cust_uid', '$id'),
-                Query::count('*', 'cnt'),
-                Query::cursorAfter($doc),
-            ]);
-        } finally {
-            $this->cleanupAggCollections($database, $cols);
-        }
     }
 
     public function testJoinNotEqualFilter(): void
@@ -1752,7 +1366,7 @@ trait JoinTests
     /**
      * @return array<string, array{string, int}>
      */
-    public function joinTypeProvider(): array
+    public static function joinTypeProvider(): array
     {
         return [
             'inner join' => ['join', 2],
@@ -1760,9 +1374,7 @@ trait JoinTests
         ];
     }
 
-    /**
-     * @dataProvider joinTypeProvider
-     */
+    #[DataProvider('joinTypeProvider')]
     public function testJoinTypeCountsCorrectly(string $joinMethod, int $expectedGroups): void
     {
         $database = static::getDatabase();
@@ -1818,7 +1430,7 @@ trait JoinTests
     /**
      * @return array<string, array{string, string, int|float}>
      */
-    public function joinAggregationTypeProvider(): array
+    public static function joinAggregationTypeProvider(): array
     {
         return [
             'count' => ['count', '*', 10],
@@ -1829,9 +1441,7 @@ trait JoinTests
         ];
     }
 
-    /**
-     * @dataProvider joinAggregationTypeProvider
-     */
+    #[DataProvider('joinAggregationTypeProvider')]
     public function testJoinWithDifferentAggTypes(string $aggMethod, string $attribute, int|float $expected): void
     {
         $database = static::getDatabase();
@@ -1888,84 +1498,9 @@ trait JoinTests
     }
 
     /**
-     * @return array<string, array{list<string>, string, int}>
-     */
-    public function joinPermissionEscalationProvider(): array
-    {
-        return [
-            'no matching roles' => [['any'], 'nr', 0],
-            'role_a only' => [[Role::user('role_a')->toString()], 'ra', 2],
-            'role_b only' => [[Role::user('role_b')->toString()], 'rb', 1],
-            'both roles' => [[Role::user('role_a')->toString(), Role::user('role_b')->toString()], 'ab', 3],
-        ];
-    }
-
-    /**
-     * @dataProvider joinPermissionEscalationProvider
-     *
-     * @param list<string> $roles
-     */
-    public function testJoinPermissionEscalation(array $roles, string $suffix, int $expectedCount): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jpe_o_' . $suffix;
-        $cCol = 'jpe_c_' . $suffix;
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        $database->createCollection($oCol, documentSecurity: true);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('role_a'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('role_a'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 300,
-            '$permissions' => [Permission::read(Role::user('role_b'))],
-        ]));
-
-        $database->getAuthorization()->cleanRoles();
-        foreach ($roles as $role) {
-            $database->getAuthorization()->addRole($role);
-        }
-
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals($expectedCount, $results[0]->getAttribute('cnt'));
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole('any');
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    /**
      * @return array<string, array{string, string, int|float, int}>
      */
-    public function joinHavingOperatorProvider(): array
+    public static function joinHavingOperatorProvider(): array
     {
         return [
             'gt 2' => ['greaterThan', 'cnt', 2, 2],
@@ -1975,9 +1510,7 @@ trait JoinTests
         ];
     }
 
-    /**
-     * @dataProvider joinHavingOperatorProvider
-     */
+    #[DataProvider('joinHavingOperatorProvider')]
     public function testJoinHavingOperators(string $operator, string $alias, int|float $threshold, int $expectedGroups): void
     {
         $database = static::getDatabase();
@@ -2823,62 +2356,6 @@ trait JoinTests
         $keys = array_map(fn ($d) => $d->getAttribute('cust_uid') . '_' . $d->getAttribute('status'), $results);
         $this->assertContains('c1_done', $keys);
         $this->assertContains('c2_open', $keys);
-
-        $this->cleanupAggCollections($database, $cols);
-    }
-
-    public function testJoinDocSecDisabledSeesAll(): void
-    {
-        $database = static::getDatabase();
-        if (! $database->getAdapter()->supports(Capability::Joins)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $oCol = 'jdsd_o';
-        $cCol = 'jdsd_c';
-        $cols = [$oCol, $cCol];
-        $this->cleanupAggCollections($database, $cols);
-
-        $database->createCollection($cCol, permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-        ]);
-        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-
-        // documentSecurity = false → collection-level permissions only
-        $database->createCollection($oCol, permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-        ], documentSecurity: false);
-        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
-
-        $database->createDocument($cCol, new Document([
-            '$id' => 'c1', 'name' => 'Customer 1',
-            '$permissions' => [Permission::read(Role::any())],
-        ]));
-
-        // Documents have restrictive doc-level permissions, but collection allows any read
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 100,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-        $database->createDocument($oCol, new Document([
-            'cust_uid' => 'c1', 'amount' => 200,
-            '$permissions' => [Permission::read(Role::user('admin'))],
-        ]));
-
-        // Even with 'any' role (no admin), should see all since docSec is off
-        $results = $database->find($oCol, [
-            Query::join($cCol, 'cust_uid', '$id'),
-            Query::count('*', 'cnt'),
-            Query::sum('amount', 'total'),
-        ]);
-
-        $this->assertCount(1, $results);
-        $this->assertEquals(2, $results[0]->getAttribute('cnt'));
-        $this->assertEquals(300, $results[0]->getAttribute('total'));
 
         $this->cleanupAggCollections($database, $cols);
     }

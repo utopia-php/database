@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Repository;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -54,6 +55,7 @@ class AdminSpecification implements Specification
     }
 }
 
+#[AllowMockObjectsWithoutExpectations]
 class RepositoryTest extends TestCase
 {
     private Database $db;

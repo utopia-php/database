@@ -16,16 +16,10 @@ class DateTimeTest extends TestCase
 
     private string $maxString = '9999-12-31 23:59:59';
 
-    public function __construct()
-    {
-        parent::__construct();
-
-        $this->minAllowed = new \DateTime($this->minString);
-        $this->maxAllowed = new \DateTime($this->maxString);
-    }
-
     protected function setUp(): void
     {
+        $this->minAllowed = new \DateTime($this->minString);
+        $this->maxAllowed = new \DateTime($this->maxString);
     }
 
     protected function tearDown(): void

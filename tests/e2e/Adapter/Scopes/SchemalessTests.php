@@ -3,16 +3,13 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
-use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -122,45 +119,6 @@ trait SchemalessTests
         $database->deleteCollection($colName);
     }
 
-    public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        // test to ensure internal attributes are checked during creating schemaless document
-        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $colName = uniqid('schemaless');
-        $database->createCollection($colName);
-        try {
-            $docs = [
-                new Document(['$id' => true, 'freeA' => 'doc1']),
-                new Document(['$id' => true, 'freeB' => 'test']),
-                new Document(['$id' => true]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        try {
-            $docs = [
-                new Document(['$createdAt' => true, 'freeA' => 'doc1']),
-                new Document(['$updatedAt' => true, 'freeB' => 'test']),
-                new Document(['$permissions' => 12]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        $database->deleteCollection($colName);
-
-    }
 
     public function testSchemalessSelectionOnUnknownAttributes(): void
     {
@@ -741,37 +699,6 @@ trait SchemalessTests
         $database->deleteCollection($col);
     }
 
-    public function testSchemalessIndexDuplicatePrevention(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $col = uniqid('sl_idx_dup');
-        $database->createCollection($col);
-
-        $database->createDocument($col, new Document([
-            '$id' => 'a',
-            '$permissions' => [Permission::read(Role::any())],
-            'name' => 'x',
-        ]));
-
-        $this->assertTrue($database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])));
-
-        try {
-            $database->createIndex($col, new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DuplicateException::class, $e);
-        }
-
-        $database->deleteCollection($col);
-    }
 
     public function testSchemalessObjectIndexes(): void
     {
@@ -889,116 +816,6 @@ trait SchemalessTests
         $database->getAuthorization()->cleanRoles();
     }
 
-    public function testSchemalessInternalAttributes(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $col = uniqid('sl_internal_full');
-        $database->createCollection($col);
-
-        $database->getAuthorization()->addRole(Role::any()->toString());
-
-        $doc = $database->createDocument($col, new Document([
-            '$id' => 'i1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'alpha',
-        ]));
-
-        $this->assertEquals('i1', $doc->getId());
-        $this->assertEquals($col, $doc->getCollection());
-        $this->assertNotEmpty($doc->getSequence());
-        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
-        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
-        $perms = $doc->getPermissions();
-        $this->assertGreaterThanOrEqual(1, count($perms));
-        $this->assertContains(Permission::read(Role::any()), $perms);
-        $this->assertContains(Permission::update(Role::any()), $perms);
-        $this->assertContains(Permission::delete(Role::any()), $perms);
-
-        $selected = $database->getDocument($col, 'i1', [
-            Query::select(['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions']),
-        ]);
-        $this->assertEquals('alpha', $selected->getAttribute('name'));
-        $this->assertArrayHasKey('$id', $selected);
-        $this->assertArrayHasKey('$sequence', $selected);
-        $this->assertArrayHasKey('$collection', $selected);
-        $this->assertArrayHasKey('$createdAt', $selected);
-        $this->assertArrayHasKey('$updatedAt', $selected);
-        $this->assertArrayHasKey('$permissions', $selected);
-
-        $found = $database->find($col, [
-            Query::equal('$id', ['i1']),
-            Query::select(['$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions']),
-        ]);
-        $this->assertCount(1, $found);
-        $this->assertArrayHasKey('$id', $found[0]);
-        $this->assertArrayHasKey('$sequence', $found[0]);
-        $this->assertArrayHasKey('$collection', $found[0]);
-        $this->assertArrayHasKey('$createdAt', $found[0]);
-        $this->assertArrayHasKey('$updatedAt', $found[0]);
-        $this->assertArrayHasKey('$permissions', $found[0]);
-
-        $seq = $doc->getSequence();
-        $bySeq = $database->find($col, [Query::equal('$sequence', [$seq])]);
-        $this->assertCount(1, $bySeq);
-        $this->assertEquals('i1', $bySeq[0]->getId());
-
-        $createdAtBefore = $doc->getAttribute('$createdAt');
-        $updatedAtBefore = $doc->getAttribute('$updatedAt');
-        $updated = $database->updateDocument($col, 'i1', new Document(['name' => 'beta']));
-        $this->assertEquals('beta', $updated->getAttribute('name'));
-        $this->assertEquals($createdAtBefore, $updated->getAttribute('$createdAt'));
-        $this->assertNotEquals($updatedAtBefore, $updated->getAttribute('$updatedAt'));
-
-        $changed = $database->updateDocument($col, 'i1', new Document(['$id' => 'i1-new']));
-        $this->assertEquals('i1-new', $changed->getId());
-        $refetched = $database->getDocument($col, 'i1-new');
-        $this->assertEquals('i1-new', $refetched->getId());
-
-        try {
-            $database->updateDocument($col, 'i1-new', new Document(['$permissions' => 'invalid']));
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-        }
-
-        $database->setPreserveDates(true);
-        $customCreated = '2000-01-01T00:00:00.000+00:00';
-        $customUpdated = '2000-01-02T00:00:00.000+00:00';
-        $d2 = $database->createDocument($col, new Document([
-            '$id' => 'i2',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$createdAt' => $customCreated,
-            '$updatedAt' => $customUpdated,
-            'v' => 1,
-        ]));
-        $this->assertEquals($customCreated, $d2->getAttribute('$createdAt'));
-        $this->assertEquals($customUpdated, $d2->getAttribute('$updatedAt'));
-
-        $newUpdated = '2000-01-03T00:00:00.000+00:00';
-        $d2u = $database->updateDocument($col, 'i2', new Document([
-            'v' => 2,
-            '$updatedAt' => $newUpdated,
-        ]));
-        $this->assertEquals($customCreated, $d2u->getAttribute('$createdAt'));
-        $this->assertEquals($newUpdated, $d2u->getAttribute('$updatedAt'));
-        $database->setPreserveDates(false);
-
-        $database->deleteCollection($col);
-        $database->getAuthorization()->cleanRoles();
-    }
 
     public function testSchemalessDates(): void
     {
@@ -2361,111 +2178,6 @@ trait SchemalessTests
         $database->deleteCollection($col2);
     }
 
-    public function testSchemalessTTLIndexDuplicatePrevention(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        $col = uniqid('sl_ttl_dup');
-        $database->createCollection($col);
-
-        $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600))
-        );
-
-        try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 7200));
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 86400));
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(1, $indexes);
-
-        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
-        $this->assertContains('idx_ttl_expires', $indexIds);
-        $this->assertNotContains('idx_ttl_deleted', $indexIds);
-
-        try {
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted_duplicate', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 172800));
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
-
-        $this->assertTrue(
-            $database->createIndex($col, new Index(key: 'idx_ttl_deleted', type: IndexType::Ttl, attributes: ['deletedAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 1800))
-        );
-
-        $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(1, $indexes);
-
-        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
-        $this->assertNotContains('idx_ttl_expires', $indexIds);
-        $this->assertContains('idx_ttl_deleted', $indexIds);
-
-        $col3 = uniqid('sl_ttl_dup_collection');
-
-        $expiresAtAttr = new Document([
-            '$id' => ID::custom('expiresAt'),
-            'type' => ColumnType::Datetime->value,
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ]);
-
-        $ttlIndex1 = new Document([
-            '$id' => ID::custom('idx_ttl_1'),
-            'type' => IndexType::Ttl->value,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [OrderDirection::Asc->value],
-            'ttl' => 3600,
-        ]);
-
-        $ttlIndex2 = new Document([
-            '$id' => ID::custom('idx_ttl_2'),
-            'type' => IndexType::Ttl->value,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [OrderDirection::Asc->value],
-            'ttl' => 7200,
-        ]);
-
-        try {
-            $database->createCollection($col3, [$expiresAtAttr], [$ttlIndex1, $ttlIndex2]);
-            $this->fail('Expected exception for duplicate TTL indexes in createCollection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $database->deleteCollection($col);
-    }
 
     public function testSchemalessDatetimeCreationAndFetching(): void
     {

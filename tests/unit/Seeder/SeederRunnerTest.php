@@ -53,7 +53,7 @@ class SeederRunnerTest extends TestCase
         $runner->register($seederA);
         $runner->register($seederB);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $runner->run($db);
 
         $this->assertEquals(['A', 'B'], $order);
@@ -80,7 +80,7 @@ class SeederRunnerTest extends TestCase
         $runner = new SeederRunner();
         $runner->register($seeder);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $runner->run($db);
 
         $this->assertEquals(1, $count);
@@ -108,7 +108,7 @@ class SeederRunnerTest extends TestCase
         $runner = new SeederRunner();
         $runner->register($seeder);
 
-        $db = $this->createMock(Database::class);
+        $db = self::createStub(Database::class);
         $runner->run($db);
         $runner->reset();
         $runner->run($db);

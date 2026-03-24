@@ -16,7 +16,7 @@ class LazyProxyTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = $this->createMock(Database::class);
+        $this->db = self::createStub(Database::class);
         $this->batchLoader = new BatchLoader($this->db);
     }
 
@@ -120,15 +120,18 @@ class LazyProxyTest extends TestCase
 
     public function testMultipleProxiesBatchResolvedTogether(): void
     {
+        $db = $this->createMock(Database::class);
+        $batchLoader = new BatchLoader($db);
+
         $doc1 = new Document(['$id' => 'u1', 'name' => 'Alice']);
         $doc2 = new Document(['$id' => 'u2', 'name' => 'Bob']);
 
-        $this->db->expects($this->once())
+        $db->expects($this->once())
             ->method('find')
             ->willReturn([$doc1, $doc2]);
 
-        $proxy1 = new LazyProxy($this->batchLoader, 'users', 'u1');
-        $proxy2 = new LazyProxy($this->batchLoader, 'users', 'u2');
+        $proxy1 = new LazyProxy($batchLoader, 'users', 'u1');
+        $proxy2 = new LazyProxy($batchLoader, 'users', 'u2');
 
         $proxy1->getAttribute('name');
 
@@ -146,33 +149,39 @@ class LazyProxyTest extends TestCase
 
     public function testBatchLoaderResolveClearsPendingAfterResolution(): void
     {
+        $db = $this->createMock(Database::class);
+        $batchLoader = new BatchLoader($db);
+
         $doc = new Document(['$id' => 'u1', 'name' => 'Alice']);
-        $this->db->expects($this->once())
+        $db->expects($this->once())
             ->method('find')
             ->willReturn([$doc]);
 
-        $proxy = new LazyProxy($this->batchLoader, 'users', 'u1');
-        $this->batchLoader->resolve('users', 'u1');
+        $proxy = new LazyProxy($batchLoader, 'users', 'u1');
+        $batchLoader->resolve('users', 'u1');
 
-        $result = $this->batchLoader->resolve('users', 'u1');
+        $result = $batchLoader->resolve('users', 'u1');
         $this->assertNull($result);
     }
 
     public function testBatchLoaderResolveFetchesAllPendingAtOnce(): void
     {
+        $db = $this->createMock(Database::class);
+        $batchLoader = new BatchLoader($db);
+
         $doc1 = new Document(['$id' => 'u1', 'name' => 'Alice']);
         $doc2 = new Document(['$id' => 'u2', 'name' => 'Bob']);
         $doc3 = new Document(['$id' => 'u3', 'name' => 'Charlie']);
 
-        $this->db->expects($this->once())
+        $db->expects($this->once())
             ->method('find')
             ->willReturn([$doc1, $doc2, $doc3]);
 
-        new LazyProxy($this->batchLoader, 'users', 'u1');
-        new LazyProxy($this->batchLoader, 'users', 'u2');
-        new LazyProxy($this->batchLoader, 'users', 'u3');
+        new LazyProxy($batchLoader, 'users', 'u1');
+        new LazyProxy($batchLoader, 'users', 'u2');
+        new LazyProxy($batchLoader, 'users', 'u3');
 
-        $result = $this->batchLoader->resolve('users', 'u1');
+        $result = $batchLoader->resolve('users', 'u1');
         $this->assertInstanceOf(Document::class, $result);
         $this->assertEquals('u1', $result->getId());
     }

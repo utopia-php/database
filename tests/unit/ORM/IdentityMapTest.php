@@ -58,7 +58,7 @@ class IdentityMapTest extends TestCase
 
         $this->map->clear();
 
-        $this->assertEmpty($this->map->all());
+        $this->assertEmpty(\iterator_to_array($this->map->all()));
         $this->assertFalse($this->map->has('users', 'a'));
     }
 
@@ -72,7 +72,7 @@ class IdentityMapTest extends TestCase
         $this->map->put('users', 'b', $e2);
         $this->map->put('posts', 'c', $e3);
 
-        $all = $this->map->all();
+        $all = \iterator_to_array($this->map->all(), false);
         $this->assertCount(3, $all);
         $this->assertContains($e1, $all);
         $this->assertContains($e2, $all);
@@ -90,6 +90,6 @@ class IdentityMapTest extends TestCase
         $this->map->put('users', 'a', $e2);
 
         $this->assertSame($e2, $this->map->get('users', 'a'));
-        $this->assertCount(1, $this->map->all());
+        $this->assertCount(1, \iterator_to_array($this->map->all(), false));
     }
 }

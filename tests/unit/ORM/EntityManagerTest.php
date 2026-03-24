@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\ORM;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -13,6 +14,7 @@ use Utopia\Database\ORM\MetadataFactory;
 use Utopia\Database\ORM\UnitOfWork;
 use Utopia\Database\Query;
 
+#[AllowMockObjectsWithoutExpectations]
 class EntityManagerTest extends TestCase
 {
     private EntityManager $em;
@@ -398,7 +400,7 @@ class EntityManagerTest extends TestCase
         $this->em->getIdentityMap()->put('users', 'clear-map-1', $entity);
         $this->em->clear();
 
-        $this->assertEmpty($this->em->getIdentityMap()->all());
+        $this->assertEmpty(\iterator_to_array($this->em->getIdentityMap()->all()));
     }
 
     public function testGetUnitOfWorkReturnsUnitOfWork(): void

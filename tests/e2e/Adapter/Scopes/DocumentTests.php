@@ -43,7 +43,7 @@ trait DocumentTests
     protected function initDocumentsFixture(): Document
     {
         if (self::$documentsFixtureInit && self::$documentsFixtureDoc !== null) {
-            return self::$documentsFixtureDoc;
+            return clone self::$documentsFixtureDoc;
         }
 
         $database = $this->getDatabase();
@@ -2019,10 +2019,14 @@ trait DocumentTests
     {
         $document = $this->initDocumentsFixture();
         $result = $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
-        $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
+        $deleted = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
 
         $this->assertEquals(true, $result);
-        $this->assertEquals(true, $document->isEmpty());
+        $this->assertEquals(true, $deleted->isEmpty());
+
+        // Re-create the fixture document so subsequent tests can use it
+        $recreated = $this->getDatabase()->createDocument('documents', $document);
+        self::$documentsFixtureDoc = $recreated;
     }
 
     public function testUpdateDocuments(): void

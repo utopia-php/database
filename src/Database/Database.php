@@ -3589,7 +3589,8 @@ class Database
             }
 
             if (
-                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                $twoWay
+                && $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {

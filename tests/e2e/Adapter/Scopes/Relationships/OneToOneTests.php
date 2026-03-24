@@ -1024,25 +1024,22 @@ trait OneToOneTests
             id: 'child1'
         );
 
-        try {
-            $database->createRelationship(
-                collection: 'parent',
-                relatedCollection: 'child',
-                type: Database::RELATION_ONE_TO_MANY,
-                id: 'children',
-            );
-            $this->fail('Failed to throw Exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Related attribute already exists', $e->getMessage());
-        }
-
-        $database->createRelationship(
+        $result = $database->createRelationship(
             collection: 'parent',
             relatedCollection: 'child',
             type: Database::RELATION_ONE_TO_MANY,
             id: 'children',
+        );
+        $this->assertTrue($result);
+
+        $result = $database->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'childrenById',
             twoWayKey: 'parent_id'
         );
+        $this->assertTrue($result);
 
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
@@ -1052,6 +1049,10 @@ trait OneToOneTests
             }
 
             if ($attribute['key'] === 'children') {
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+            }
+
+            if ($attribute['key'] === 'childrenById') {
                 $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
             }
         }

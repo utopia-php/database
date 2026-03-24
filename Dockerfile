@@ -5,13 +5,16 @@ WORKDIR /usr/local/src/
 COPY database/composer.lock /usr/local/src/
 COPY database/composer.json /usr/local/src/
 
-# Copy local query lib dependency (referenced as ../query in composer.json)
+# Copy local dependencies (referenced as ../query and ../async in composer.json)
 COPY query /usr/local/query
+COPY async /usr/local/async
 
-# Rewrite path repository to use copied location
+# Rewrite path repositories to use copied locations
 RUN sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.json \
+ && sed -i 's|"url": "../async"|"url": "/usr/local/async"|' /usr/local/src/composer.json \
  && sed -i 's|"symlink": true|"symlink": false|' /usr/local/src/composer.json \
- && sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.lock
+ && sed -i 's|"url": "../query"|"url": "/usr/local/query"|' /usr/local/src/composer.lock \
+ && sed -i 's|"url": "../async"|"url": "/usr/local/async"|' /usr/local/src/composer.lock
 
 RUN COMPOSER_MIRROR_PATH_REPOS=1 composer install \
     --ignore-platform-reqs \
@@ -117,8 +120,9 @@ RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
-# Ensure query lib is copied (not symlinked) in vendor
+# Ensure local libs are copied (not symlinked) in vendor
 COPY query /usr/src/code/vendor/utopia-php/query
+COPY async /usr/src/code/vendor/utopia-php/async
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20240924/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20240924/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20240924/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/

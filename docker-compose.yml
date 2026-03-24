@@ -19,6 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
       - ../query/src:/usr/src/code/vendor/utopia-php/query/src
+      - ../async/src:/usr/src/code/vendor/utopia-php/async/src
       - ../mongo/src:/usr/src/code/vendor/utopia-php/mongo/src
     environment:
       PHP_IDE_CONFIG: serverName=tests

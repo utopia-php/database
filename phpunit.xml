@@ -1,13 +1,13 @@
-<phpunit 
-    backupGlobals="false"
-    backupStaticAttributes="false"
+<phpunit
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/12.0/phpunit.xsd"
     bootstrap="vendor/autoload.php"
     colors="true"
-    convertErrorsToExceptions="true"
-    convertNoticesToExceptions="true"
-    convertWarningsToExceptions="true"
     processIsolation="false"
     stopOnFailure="false"
+    requireCoverageMetadata="false"
+    displayDetailsOnPhpunitDeprecations="false"
+    displayDetailsOnPhpunitNotices="false"
 >
     <testsuites>
         <testsuite name="unit">

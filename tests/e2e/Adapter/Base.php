@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\JoinTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
+use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
@@ -32,6 +33,7 @@ abstract class Base extends TestCase
     use IndexTests;
     use JoinTests;
     use ObjectAttributeTests;
+    use OperatorTests;
     use PermissionTests;
     use RelationshipTests;
     use SchemalessTests;

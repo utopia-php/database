@@ -1576,7 +1576,7 @@ trait Documents
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -1676,7 +1676,7 @@ trait Documents
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(

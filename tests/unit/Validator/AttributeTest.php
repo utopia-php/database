@@ -3,12 +3,14 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Attribute;
+use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 
 class AttributeTest extends TestCase
@@ -1745,5 +1747,330 @@ class AttributeTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Cannot set an array default value for a non-array attribute');
         $validator->isValid($attribute);
+    }
+
+    public function test_get_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertEquals('object', $validator->getType());
+    }
+
+    public function test_get_description(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertEquals('Invalid attribute', $validator->getDescription());
+    }
+
+    public function test_is_array(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertFalse($validator->isArray());
+    }
+
+    public function test_is_valid_with_attribute_vo_directly(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'directAttr',
+            type: ColumnType::String,
+            size: 255,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_attribute_does_not_collide_with_schema(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('existing_column'),
+                    'key' => 'existing_column',
+                    'type' => ColumnType::String->value,
+                    'size' => 255,
+                ]),
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('new_column'),
+            'key' => 'new_column',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function test_invalid_format_for_type(): void
+    {
+        Structure::addFormat('testformat', function (mixed $attribute) {
+            return new \Utopia\Validator\Text(100);
+        }, ColumnType::Integer->value);
+
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('formatted'),
+            'key' => 'formatted',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'format' => 'testformat',
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Format ("testformat") not available for this attribute type ("string")');
+        $validator->isValid($attribute);
+    }
+
+    public function test_id_type_attribute_validation(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'myId',
+            type: ColumnType::Id,
+            size: 0,
+            required: false,
+            default: null,
+            signed: false,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_unknown_column_type_in_check_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'badtype',
+            type: ColumnType::Enum,
+            size: 0,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Unknown attribute type: enum');
+        $validator->isValid($attrVO);
+    }
+
+    public function test_null_default_value_in_validate_default_types(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'nullableField',
+            type: ColumnType::String,
+            size: 255,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_vector_component_non_numeric_default_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'vec',
+            type: ColumnType::Vector,
+            size: 3,
+            required: false,
+            default: [1.0, 2.0, 3.0],
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+
+        $validator2 = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attrVO2 = new AttributeVO(
+            key: 'vec2',
+            type: ColumnType::Vector,
+            size: 3,
+            required: false,
+            default: [1.0, 'notANumber', 3.0],
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Vector default value must contain only numeric elements');
+        $validator2->isValid($attrVO2);
+    }
+
+    public function test_unknown_column_type_with_default_value(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'baddefault',
+            type: ColumnType::Enum,
+            size: 0,
+            required: false,
+            default: 'somevalue',
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Unknown attribute type: enum');
+        $validator->isValid($attrVO);
+    }
+
+    public function test_schema_duplicate_check_with_filter_callback(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('_prefix_column'),
+                    'key' => '_prefix_column',
+                    'type' => ColumnType::String->value,
+                    'size' => 255,
+                ]),
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+            filterCallback: fn (string $key) => str_replace('_prefix_', '', $key),
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('column'),
+            'key' => 'column',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Attribute already exists in schema');
+        $validator->isValid($attribute);
+    }
+
+    public function test_relationship_type_passes_check_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'parent',
+            type: ColumnType::Relationship,
+            size: 0,
+            required: false,
+            default: null,
+            signed: false,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
     }
 }

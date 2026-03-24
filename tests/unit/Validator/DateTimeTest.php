@@ -188,4 +188,50 @@ class DateTimeTest extends TestCase
             $this->assertEquals('Offset must be a positive integer.', $e->getMessage());
         }
     }
+
+    public function test_empty_and_non_string_values(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isValid(''));
+        $this->assertFalse($dateValidator->isValid(12345));
+        $this->assertFalse($dateValidator->isValid(null));
+        $this->assertFalse($dateValidator->isValid([]));
+        $this->assertFalse($dateValidator->isValid(false));
+    }
+
+    public function test_year_outside_min_max_range(): void
+    {
+        $dateValidator = new DatetimeValidator(
+            new \DateTime('2000-01-01'),
+            new \DateTime('2050-12-31'),
+        );
+
+        $this->assertFalse($dateValidator->isValid('1999-06-15 12:00:00'));
+        $this->assertFalse($dateValidator->isValid('2051-01-01 00:00:00'));
+        $this->assertTrue($dateValidator->isValid('2025-06-15 12:00:00'));
+    }
+
+    public function test_value_without_four_digit_year(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isValid('noon'));
+        $this->assertFalse($dateValidator->isValid('tomorrow'));
+        $this->assertFalse($dateValidator->isValid('next Monday'));
+    }
+
+    public function test_is_array(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isArray());
+    }
+
+    public function test_get_type(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertEquals('string', $dateValidator->getType());
+    }
 }

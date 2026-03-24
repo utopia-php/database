@@ -30,4 +30,27 @@ class CursorTest extends TestCase
         $this->assertFalse($validator->isValid(Query::orderAsc('attr')));
         $this->assertFalse($validator->isValid(Query::orderDesc('attr')));
     }
+
+    public function test_non_query_value_returns_false(): void
+    {
+        $validator = new Cursor();
+
+        $this->assertFalse($validator->isValid('some_string'));
+        $this->assertFalse($validator->isValid(42));
+        $this->assertFalse($validator->isValid(null));
+        $this->assertFalse($validator->isValid(['array']));
+    }
+
+    public function test_invalid_cursor_value_fails_uid_validation(): void
+    {
+        $validator = new Cursor();
+
+        $tooLong = str_repeat('x', 300);
+        $query = new Query(Method::CursorAfter, values: [$tooLong]);
+        $this->assertFalse($validator->isValid($query));
+        $this->assertStringContainsString('Invalid cursor', $validator->getDescription());
+
+        $emptyQuery = new Query(Method::CursorBefore, values: ['']);
+        $this->assertFalse($validator->isValid($emptyQuery));
+    }
 }

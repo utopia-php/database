@@ -1544,4 +1544,32 @@ class OperatorTest extends TestCase
         // Check updates
         $this->assertEquals(['name' => 'Regular value'], $updates);
     }
+
+    public function test_clone_deep_copies_nested_operator_values(): void
+    {
+        $nested = Operator::increment(1);
+        $parent = new Operator(OperatorType::ArrayAppend, 'items', [$nested, 'plain']);
+
+        $cloned = clone $parent;
+
+        $parentValues = $parent->getValues();
+        $clonedValues = $cloned->getValues();
+
+        $this->assertNotSame($parentValues[0], $clonedValues[0]);
+        $this->assertInstanceOf(Operator::class, $clonedValues[0]);
+        $this->assertEquals($nested->getMethod(), $clonedValues[0]->getMethod());
+        $this->assertEquals($nested->getValues(), $clonedValues[0]->getValues());
+
+        $clonedValues[0]->setMethod(OperatorType::Decrement);
+        $this->assertEquals(OperatorType::Increment, $parentValues[0]->getMethod());
+    }
+
+    public function test_is_method_with_operator_type_enum(): void
+    {
+        $this->assertTrue(Operator::isMethod(OperatorType::Increment));
+        $this->assertTrue(Operator::isMethod(OperatorType::Decrement));
+        $this->assertTrue(Operator::isMethod(OperatorType::ArrayAppend));
+        $this->assertTrue(Operator::isMethod(OperatorType::Toggle));
+        $this->assertTrue(Operator::isMethod(OperatorType::DateSetNow));
+    }
 }

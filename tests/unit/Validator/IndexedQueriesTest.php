@@ -216,4 +216,99 @@ class IndexedQueriesTest extends TestCase
             $this->assertEquals('Invalid query: Syntax error', $e->getMessage());
         }
     }
+
+    public function test_single_vector_query_passes(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $vectorQuery = Query::vectorCosine('embedding', [0.1, 0.2, 0.3]);
+        $this->assertTrue($validator->isValid([$vectorQuery]));
+    }
+
+    public function test_nested_queries_containing_vector_methods(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $orQuery = Query::or([
+            Query::equal('name', ['alice']),
+            Query::equal('name', ['bob']),
+        ]);
+        $vectorQuery = Query::vectorDot('embedding', [0.1, 0.2, 0.3]);
+        $this->assertTrue($validator->isValid([$orQuery, $vectorQuery]));
+    }
+
+    public function test_unparseable_string_query_returns_error(): void
+    {
+        $validator = new IndexedQueries([], [], [new Limit()]);
+
+        $this->assertFalse($validator->isValid(['totally broken }{']));
+        $this->assertStringContainsString('Invalid query', $validator->getDescription());
+    }
+
+    public function test_nested_non_having_with_invalid_sub_queries(): void
+    {
+        $validator = new IndexedQueries([], [], [new Filter([], ColumnType::Integer->value)]);
+
+        $nestedOr = Query::or([Query::equal('nonexistent', ['value'])]);
+        $this->assertFalse($validator->isValid([$nestedOr]));
+    }
+
+    public function test_multiple_vector_queries_fails(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $vectorQuery1 = Query::vectorCosine('embedding', [0.1, 0.2, 0.3]);
+        $vectorQuery2 = Query::vectorEuclidean('embedding', [0.4, 0.5, 0.6]);
+
+        $this->assertFalse($validator->isValid([$vectorQuery1, $vectorQuery2]));
+        $this->assertEquals('Cannot use multiple vector queries in a single request', $validator->getDescription());
+    }
 }

@@ -82,6 +82,12 @@ class SQLite extends MariaDB
         ));
     }
 
+    protected function execute(mixed $stmt): bool
+    {
+        /** @var \PDOStatement|PDOStatementProxy $stmt */
+        return $stmt->execute();
+    }
+
     /**
      * Check whether the adapter supports storing non-UTF characters. SQLite does not.
      *

@@ -56,13 +56,13 @@ class Mirror extends Database
         ?Database $destination = null,
         array $filters = [],
     ) {
+        $this->source = $source;
+        $this->destination = $destination;
+        $this->writeFilters = $filters;
         parent::__construct(
             $source->getAdapter(),
             $source->getCache()
         );
-        $this->source = $source;
-        $this->destination = $destination;
-        $this->writeFilters = $filters;
     }
 
     /**

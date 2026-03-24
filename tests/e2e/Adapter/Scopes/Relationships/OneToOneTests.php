@@ -1041,6 +1041,20 @@ trait OneToOneTests
         );
         $this->assertTrue($result);
 
+        try {
+            $database->createRelationship(
+                collection: 'parent',
+                relatedCollection: 'child',
+                type: Database::RELATION_ONE_TO_MANY,
+                twoWay: true,
+                id: 'twoWayChildren',
+                twoWayKey: 'parent_id'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {

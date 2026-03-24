@@ -13,6 +13,21 @@ use Utopia\Database\Exception\Structure as StructureException;
  */
 class Document extends ArrayObject
 {
+    /** @var array<string, true>|null */
+    private static ?array $internalKeySet = null;
+
+    private ?array $parsedPermissions = null;
+
+    private static function getInternalKeySet(): array
+    {
+        if (self::$internalKeySet === null) {
+            self::$internalKeySet = [];
+            foreach (Database::internalAttributes() as $attr) {
+                self::$internalKeySet[$attr->key] = true;
+            }
+        }
+        return self::$internalKeySet;
+    }
     /**
      * Construct.
      *
@@ -32,6 +47,10 @@ class Document extends ArrayObject
 
         if (array_key_exists('$permissions', $input) && ! is_array($input['$permissions'])) {
             throw new StructureException('$permissions must be of type array');
+        }
+
+        if (array_key_exists('$permissions', $input) && is_array($input['$permissions'])) {
+            $input['$permissions'] = \array_values(\array_unique($input['$permissions']));
         }
 
         foreach ($input as $key => $value) {
@@ -109,7 +128,7 @@ class Document extends ArrayObject
     {
         /** @var array<string> $permissions */
         $permissions = $this->getAttribute('$permissions', []);
-        return \array_values(\array_unique($permissions));
+        return $permissions;
     }
 
     /**
@@ -174,16 +193,21 @@ class Document extends ArrayObject
      */
     public function getPermissionsByType(string $type): array
     {
-        $typePermissions = [];
-
-        foreach ($this->getPermissions() as $permission) {
-            if (! \str_starts_with($permission, $type)) {
-                continue;
+        if ($this->parsedPermissions === null) {
+            $this->parsedPermissions = [];
+            foreach ($this->getPermissions() as $permission) {
+                foreach (['read', 'create', 'update', 'delete', 'write'] as $t) {
+                    if (\str_starts_with($permission, $t)) {
+                        $this->parsedPermissions[$t][] = \str_replace([$t . '(', ')', '"', ' '], '', $permission);
+                        break;
+                    }
+                }
             }
-            $typePermissions[] = \str_replace([$type.'(', ')', '"', ' '], '', $permission);
+            foreach ($this->parsedPermissions as &$roles) {
+                $roles = \array_values(\array_unique($roles));
+            }
         }
-
-        return \array_unique($typePermissions);
+        return $this->parsedPermissions[$type] ?? [];
     }
 
     /**
@@ -252,14 +276,10 @@ class Document extends ArrayObject
     public function getAttributes(): array
     {
         $attributes = [];
-
-        $internalKeys = \array_map(
-            fn (Attribute $attr) => $attr->key,
-            Database::internalAttributes()
-        );
+        $keySet = self::getInternalKeySet();
 
         foreach ($this as $attribute => $value) {
-            if (\in_array($attribute, $internalKeys)) {
+            if (isset($keySet[$attribute])) {
                 continue;
             }
 
@@ -299,6 +319,13 @@ class Document extends ArrayObject
             SetType::Append => $this[$key] = [...(array) $this[$key], $value],
             SetType::Prepend => $this[$key] = [$value, ...(array) $this[$key]],
         };
+
+        if ($key === '$permissions') {
+            if (\is_array($this[$key])) {
+                $this[$key] = \array_values(\array_unique($this[$key]));
+            }
+            $this->parsedPermissions = null;
+        }
 
         return $this;
     }

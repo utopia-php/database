@@ -7,21 +7,42 @@ use Utopia\Database\ORM\Mapping\BelongsTo;
 use Utopia\Database\ORM\Mapping\BelongsToMany;
 use Utopia\Database\ORM\Mapping\Column;
 use Utopia\Database\ORM\Mapping\CreatedAt;
+use Utopia\Database\ORM\Mapping\Embedded;
 use Utopia\Database\ORM\Mapping\Entity;
 use Utopia\Database\ORM\Mapping\HasMany;
 use Utopia\Database\ORM\Mapping\HasOne;
 use Utopia\Database\ORM\Mapping\Id;
 use Utopia\Database\ORM\Mapping\Permissions;
+use Utopia\Database\ORM\Mapping\PostPersist;
+use Utopia\Database\ORM\Mapping\PostRemove;
+use Utopia\Database\ORM\Mapping\PostUpdate;
+use Utopia\Database\ORM\Mapping\PrePersist;
+use Utopia\Database\ORM\Mapping\PreRemove;
+use Utopia\Database\ORM\Mapping\PreUpdate;
+use Utopia\Database\ORM\Mapping\SoftDelete;
 use Utopia\Database\ORM\Mapping\TableIndex;
 use Utopia\Database\ORM\Mapping\Tenant;
 use Utopia\Database\ORM\Mapping\UpdatedAt;
 use Utopia\Database\ORM\Mapping\Version;
 use Utopia\Database\RelationType;
+use Utopia\Database\Type\TypeRegistry;
 
 class MetadataFactory
 {
     /** @var array<string, EntityMetadata> */
     private static array $cache = [];
+
+    private ?TypeRegistry $typeRegistry = null;
+
+    public function setTypeRegistry(?TypeRegistry $typeRegistry): void
+    {
+        $this->typeRegistry = $typeRegistry;
+    }
+
+    public function getTypeRegistry(): ?TypeRegistry
+    {
+        return $this->typeRegistry;
+    }
 
     public function getMetadata(string $className): EntityMetadata
     {
@@ -39,6 +60,14 @@ class MetadataFactory
         /** @var Entity $entity */
         $entity = $entityAttrs[0]->newInstance();
 
+        $softDeleteAttrs = $ref->getAttributes(SoftDelete::class);
+        $softDeleteColumn = null;
+        if ($softDeleteAttrs !== []) {
+            /** @var SoftDelete $sd */
+            $sd = $softDeleteAttrs[0]->newInstance();
+            $softDeleteColumn = $sd->column;
+        }
+
         $idProperty = null;
         $versionProperty = null;
         $createdAtProperty = null;
@@ -47,6 +76,7 @@ class MetadataFactory
         $permissionsProperty = null;
         $columns = [];
         $relationships = [];
+        $embeddables = [];
 
         foreach ($ref->getProperties() as $prop) {
             $name = $prop->getName();
@@ -87,6 +117,15 @@ class MetadataFactory
                 continue;
             }
 
+            $embeddedAttrs = $prop->getAttributes(Embedded::class);
+            if ($embeddedAttrs !== []) {
+                /** @var Embedded $emb */
+                $emb = $embeddedAttrs[0]->newInstance();
+                $embeddables[$name] = new EmbeddableMapping($name, $emb->type, $emb->prefix ?: $name . '_');
+
+                continue;
+            }
+
             $columnAttrs = $prop->getAttributes(Column::class);
             if ($columnAttrs !== []) {
                 /** @var Column $col */
@@ -108,6 +147,8 @@ class MetadataFactory
             $indexes[] = $idxAttr->newInstance();
         }
 
+        $lifecycleCallbacks = $this->parseLifecycleCallbacks($ref);
+
         $metadata = new EntityMetadata(
             className: $className,
             collection: $entity->collection,
@@ -122,6 +163,14 @@ class MetadataFactory
             columns: $columns,
             relationships: $relationships,
             indexes: $indexes,
+            embeddables: $embeddables,
+            softDeleteColumn: $softDeleteColumn,
+            prePersistCallbacks: $lifecycleCallbacks['prePersist'],
+            postPersistCallbacks: $lifecycleCallbacks['postPersist'],
+            preUpdateCallbacks: $lifecycleCallbacks['preUpdate'],
+            postUpdateCallbacks: $lifecycleCallbacks['postUpdate'],
+            preRemoveCallbacks: $lifecycleCallbacks['preRemove'],
+            postRemoveCallbacks: $lifecycleCallbacks['postRemove'],
         );
 
         self::$cache[$className] = $metadata;
@@ -212,5 +261,50 @@ class MetadataFactory
         }
 
         return null;
+    }
+
+    /**
+     * @return array{prePersist: array<string>, postPersist: array<string>, preUpdate: array<string>, postUpdate: array<string>, preRemove: array<string>, postRemove: array<string>}
+     */
+    private function parseLifecycleCallbacks(ReflectionClass $ref): array
+    {
+        $callbacks = [
+            'prePersist' => [],
+            'postPersist' => [],
+            'preUpdate' => [],
+            'postUpdate' => [],
+            'preRemove' => [],
+            'postRemove' => [],
+        ];
+
+        foreach ($ref->getMethods() as $method) {
+            $name = $method->getName();
+
+            if ($method->getAttributes(PrePersist::class)) {
+                $callbacks['prePersist'][] = $name;
+            }
+
+            if ($method->getAttributes(PostPersist::class)) {
+                $callbacks['postPersist'][] = $name;
+            }
+
+            if ($method->getAttributes(PreUpdate::class)) {
+                $callbacks['preUpdate'][] = $name;
+            }
+
+            if ($method->getAttributes(PostUpdate::class)) {
+                $callbacks['postUpdate'][] = $name;
+            }
+
+            if ($method->getAttributes(PreRemove::class)) {
+                $callbacks['preRemove'][] = $name;
+            }
+
+            if ($method->getAttributes(PostRemove::class)) {
+                $callbacks['postRemove'][] = $name;
+            }
+        }
+
+        return $callbacks;
     }
 }

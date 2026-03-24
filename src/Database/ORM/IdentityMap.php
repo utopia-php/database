@@ -32,18 +32,10 @@ class IdentityMap
         $this->map = [];
     }
 
-    /**
-     * @return array<object>
-     */
-    public function all(): array
+    public function all(): \Generator
     {
-        $entities = [];
         foreach ($this->map as $collection) {
-            foreach ($collection as $entity) {
-                $entities[] = $entity;
-            }
+            yield from $collection;
         }
-
-        return $entities;
     }
 }

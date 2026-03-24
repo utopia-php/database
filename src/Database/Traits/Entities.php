@@ -74,6 +74,11 @@ trait Entities
         return $this->getEntityManager()->createCollectionFromEntity($className);
     }
 
+    public function syncCollectionFromEntity(string $className): void
+    {
+        $this->getEntityManager()->syncCollectionFromEntity($className);
+    }
+
     public function detachEntity(object $entity): void
     {
         $this->getEntityManager()->detach($entity);

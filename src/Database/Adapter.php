@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Write;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
@@ -70,6 +71,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected Authorization $authorization;
 
+    /** @var array<string, true>|null */
+    private ?array $capabilitySet = null;
+
     /**
      * Check if this adapter supports a given capability.
      *
@@ -77,7 +81,13 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function supports(Capability $feature): bool
     {
-        return \in_array($feature, $this->capabilities(), true);
+        if ($this->capabilitySet === null) {
+            $this->capabilitySet = [];
+            foreach ($this->capabilities() as $cap) {
+                $this->capabilitySet[$cap->name] = true;
+            }
+        }
+        return isset($this->capabilitySet[$feature->name]);
     }
 
     /**
@@ -608,10 +618,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function analyzeCollection(string $collection): bool;
 
     /**
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    /**
      * Create Attribute
      *
      * @throws TimeoutException
@@ -1048,9 +1054,16 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * @param  array<mixed>  $bindings
+     *
      * @throws DatabaseException
      */
-    public function newQueryBuilder(string $collection): \Utopia\Query\Builder
+    public function rawMutation(string $query, array $bindings = []): int
+    {
+        throw new DatabaseException('Raw mutations are not supported by this adapter');
+    }
+
+    public function getBuilder(string $collection): \Utopia\Query\Builder
     {
         throw new DatabaseException('Query builder is not supported by this adapter');
     }

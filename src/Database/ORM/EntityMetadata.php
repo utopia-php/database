@@ -11,6 +11,13 @@ class EntityMetadata
      * @param  array<string, RelationshipMapping>  $relationships
      * @param  array<TableIndex>  $indexes
      * @param  array<string>  $permissions
+     * @param  array<string, EmbeddableMapping>  $embeddables
+     * @param  array<string>  $prePersistCallbacks
+     * @param  array<string>  $postPersistCallbacks
+     * @param  array<string>  $preUpdateCallbacks
+     * @param  array<string>  $postUpdateCallbacks
+     * @param  array<string>  $preRemoveCallbacks
+     * @param  array<string>  $postRemoveCallbacks
      */
     public function __construct(
         public readonly string $className,
@@ -26,6 +33,14 @@ class EntityMetadata
         public readonly array $columns,
         public readonly array $relationships,
         public readonly array $indexes,
+        public readonly array $embeddables = [],
+        public readonly ?string $softDeleteColumn = null,
+        public readonly array $prePersistCallbacks = [],
+        public readonly array $postPersistCallbacks = [],
+        public readonly array $preUpdateCallbacks = [],
+        public readonly array $postUpdateCallbacks = [],
+        public readonly array $preRemoveCallbacks = [],
+        public readonly array $postRemoveCallbacks = [],
     ) {
     }
 }

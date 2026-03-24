@@ -60,6 +60,15 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
      */
     protected const MAX_ARRAY_OPERATOR_SIZE = 10000;
 
+    private const COLUMN_RENAME_MAP = [
+        '_uid' => '$id',
+        '_id' => '$sequence',
+        '_tenant' => '$tenant',
+        '_createdAt' => '$createdAt',
+        '_updatedAt' => '$updatedAt',
+        '_version' => '$version',
+    ];
+
     /**
      * Controls how many fractional digits are used when binding float parameters.
      */
@@ -529,8 +538,14 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         }
 
         $result = $builder->build();
-        $stmt = $this->executeResult($result);
-        $stmt->execute();
+
+        try {
+            $stmt = $this->executeResult($result);
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -542,35 +557,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         /** @var array<string, mixed> $document */
         $document = $rows[0];
 
-        if (\array_key_exists('_id', $document)) {
-            $document['$sequence'] = $document['_id'];
-            unset($document['_id']);
-        }
-        if (\array_key_exists('_uid', $document)) {
-            $document['$id'] = $document['_uid'];
-            unset($document['_uid']);
-        }
-        if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'];
-            unset($document['_tenant']);
-        }
-        if (\array_key_exists('_createdAt', $document)) {
-            $document['$createdAt'] = $document['_createdAt'];
-            unset($document['_createdAt']);
-        }
-        if (\array_key_exists('_updatedAt', $document)) {
-            $document['$updatedAt'] = $document['_updatedAt'];
-            unset($document['_updatedAt']);
-        }
-        if (\array_key_exists('_permissions', $document)) {
-            $permsRaw = $document['_permissions'];
-            $document['$permissions'] = json_decode(\is_string($permsRaw) ? $permsRaw : '[]', true);
-            unset($document['_permissions']);
-        }
-        if (\array_key_exists('_version', $document)) {
-            $document['$version'] = $document['_version'];
-            unset($document['_version']);
-        }
+        $this->remapRow($document);
 
         return new Document($document);
     }
@@ -597,12 +584,16 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         try {
             $name = $this->filter($collection);
 
-            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+            $attributeKeySet = [];
+            foreach (Database::INTERNAL_ATTRIBUTE_KEYS as $k) {
+                $attributeKeySet[$k] = true;
+            }
 
             $hasSequence = null;
             foreach ($documents as $document) {
-                $attributes = $document->getAttributes();
-                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
+                foreach ($document->getAttributes() as $key => $value) {
+                    $attributeKeySet[$key] = true;
+                }
 
                 if ($hasSequence === null) {
                     $hasSequence = ! empty($document->getSequence());
@@ -611,7 +602,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
                 }
             }
 
-            $attributeKeys = array_unique($attributeKeys);
+            $attributeKeys = \array_keys($attributeKeySet);
 
             if ($hasSequence) {
                 $attributeKeys[] = '_id';
@@ -996,12 +987,14 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         }
 
         $joinTablePrefixes = [];
+        $joinIndex = 0;
 
         if ($hasJoins) {
             foreach ($queries as $query) {
                 if ($query->getMethod()->isJoin()) {
                     $joinTable = $query->getAttribute();
                     $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
+                    $joinAlias = 'j' . $joinIndex++;
                     $query->setAttribute($resolvedTable);
 
                     $values = $query->getValues();
@@ -1014,12 +1007,12 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
                         $leftInternal = $this->getInternalKeyForAttribute($leftCol);
                         $rightInternal = $this->getInternalKeyForAttribute($rightCol);
 
-                        $rightPrefix = $resolvedTable;
                         $values[0] = $alias . '.' . $leftInternal;
-                        $values[2] = $rightPrefix . '.' . $rightInternal;
+                        $values[2] = $joinAlias . '.' . $rightInternal;
+                        $values[3] = $joinAlias;
                         $query->setValues($values);
 
-                        $joinTablePrefixes[$joinTable] = $rightPrefix;
+                        $joinTablePrefixes[$joinTable] = $joinAlias;
                     }
                 }
             }
@@ -1157,11 +1150,14 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
 
         // Full-text search relevance scoring
         $searchQueries = $this->extractSearchQueries($queries);
-        foreach ($searchQueries as $searchQuery) {
-            $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
-            if ($relevanceRaw !== null) {
-                $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
-                $builder->orderByRaw($relevanceRaw['order']);
+        if (! empty($searchQueries)) {
+            $builder->select(['*']);
+            foreach ($searchQueries as $searchQuery) {
+                $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
+                if ($relevanceRaw !== null) {
+                    $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
+                    $builder->orderByRaw($relevanceRaw['order']);
+                }
             }
         }
 
@@ -1243,35 +1239,7 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
 
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
-            if (\array_key_exists('_uid', $row)) {
-                $row['$id'] = $row['_uid'];
-                unset($row['_uid']);
-            }
-            if (\array_key_exists('_id', $row)) {
-                $row['$sequence'] = $row['_id'];
-                unset($row['_id']);
-            }
-            if (\array_key_exists('_tenant', $row)) {
-                $row['$tenant'] = $row['_tenant'];
-                unset($row['_tenant']);
-            }
-            if (\array_key_exists('_createdAt', $row)) {
-                $row['$createdAt'] = $row['_createdAt'];
-                unset($row['_createdAt']);
-            }
-            if (\array_key_exists('_updatedAt', $row)) {
-                $row['$updatedAt'] = $row['_updatedAt'];
-                unset($row['_updatedAt']);
-            }
-            if (\array_key_exists('_permissions', $row)) {
-                $permsVal = $row['_permissions'];
-                $row['$permissions'] = \json_decode(\is_string($permsVal) ? $permsVal : '[]', true);
-                unset($row['_permissions']);
-            }
-            if (\array_key_exists('_version', $row)) {
-                $row['$version'] = $row['_version'];
-                unset($row['_version']);
-            }
+            $this->remapRow($row);
             $documents[] = new Document($row);
         }
 
@@ -2439,7 +2407,25 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         return $builder;
     }
 
-    public function newQueryBuilder(string $collection): SQLBuilder
+    public function rawMutation(string $query, array $bindings = []): int
+    {
+        try {
+            $stmt = $this->getPDO()->prepare($query);
+            foreach ($bindings as $i => $value) {
+                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+            }
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $count = $stmt->rowCount();
+        $stmt->closeCursor();
+
+        return $count;
+    }
+
+    public function getBuilder(string $collection): SQLBuilder
     {
         return $this->newBuilder($this->filter($collection));
     }
@@ -2847,6 +2833,23 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
      * @param  array<string>  $spatialAttributes
      * @return array<string, mixed>
      */
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function remapRow(array &$row): void
+    {
+        foreach (self::COLUMN_RENAME_MAP as $internal => $public) {
+            if (\array_key_exists($internal, $row)) {
+                $row[$public] = $row[$internal];
+                unset($row[$internal]);
+            }
+        }
+        if (\array_key_exists('_permissions', $row)) {
+            $row['$permissions'] = \json_decode(\is_string($row['_permissions']) ? $row['_permissions'] : '[]', true);
+            unset($row['_permissions']);
+        }
+    }
+
     protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialAttributes = []): array
     {
         $attributes = $document->getAttributes();

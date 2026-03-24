@@ -41,6 +41,16 @@ class EntityManager
         $this->unitOfWork->remove($entity);
     }
 
+    public function forceRemove(object $entity): void
+    {
+        $this->unitOfWork->forceRemove($entity);
+    }
+
+    public function restore(object $entity): void
+    {
+        $this->unitOfWork->restore($entity);
+    }
+
     public function flush(): void
     {
         $this->unitOfWork->flush($this->db);
@@ -80,9 +90,14 @@ class EntityManager
      * @param  array<Query>  $queries
      * @return array<T>
      */
-    public function findMany(string $className, array $queries = []): array
+    public function findMany(string $className, array $queries = [], bool $withTrashed = false): array
     {
         $metadata = $this->metadataFactory->getMetadata($className);
+
+        if (! $withTrashed && $metadata->softDeleteColumn !== null) {
+            $queries[] = Query::isNull($metadata->softDeleteColumn);
+        }
+
         $documents = $this->db->find($metadata->collection, $queries);
         $entities = [];
 
@@ -138,6 +153,31 @@ class EntityManager
         }
 
         return $doc;
+    }
+
+    public function syncCollectionFromEntity(string $className): void
+    {
+        $metadata = $this->metadataFactory->getMetadata($className);
+        $defs = $this->entityMapper->toCollectionDefinitions($metadata);
+
+        /** @var \Utopia\Database\Collection $desired */
+        $desired = $defs['collection'];
+
+        if (! $this->db->exists($this->db->getAdapter()->getDatabase(), $metadata->collection)) {
+            $this->createCollectionFromEntity($className);
+
+            return;
+        }
+
+        $currentDoc = $this->db->getCollection($metadata->collection);
+        $current = \Utopia\Database\Collection::fromDocument($currentDoc);
+
+        $differ = new \Utopia\Database\Schema\SchemaDiff();
+        $diff = $differ->diff($current, $desired);
+
+        if ($diff->hasChanges()) {
+            $diff->apply($this->db, $metadata->collection);
+        }
     }
 
     public function detach(object $entity): void

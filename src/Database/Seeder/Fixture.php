@@ -4,6 +4,7 @@ namespace Utopia\Database\Seeder;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Query\Query;
 
 class Fixture
 {
@@ -15,18 +16,39 @@ class Fixture
      */
     public function load(Database $db, string $collection, array $documents): void
     {
-        foreach ($documents as $document) {
-            $doc = $db->createDocument($collection, new Document($document));
-            $this->created[] = ['collection' => $collection, 'id' => $doc->getId()];
+        if ($documents === []) {
+            return;
+        }
+
+        $docs = \array_map(fn (array $d) => new Document($d), $documents);
+
+        if (\count($docs) === 1) {
+            $created = $db->createDocument($collection, $docs[0]);
+            $this->created[] = ['collection' => $collection, 'id' => $created->getId()];
+        } else {
+            $db->createDocuments($collection, $docs, Database::INSERT_BATCH_SIZE, function (Document $created) use ($collection): void {
+                $this->created[] = ['collection' => $collection, 'id' => $created->getId()];
+            });
         }
     }
 
     public function cleanup(Database $db): void
     {
+        if ($this->created === []) {
+            return;
+        }
+
+        $grouped = [];
         foreach (\array_reverse($this->created) as $entry) {
-            try {
-                $db->deleteDocument($entry['collection'], $entry['id']);
-            } catch (\Throwable) {
+            $grouped[$entry['collection']][] = $entry['id'];
+        }
+
+        foreach ($grouped as $collection => $ids) {
+            foreach ($ids as $id) {
+                try {
+                    $db->deleteDocument($collection, $id);
+                } catch (\Throwable) {
+                }
             }
         }
 

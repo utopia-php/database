@@ -2020,6 +2020,9 @@ trait Documents
      * @param  PermissionType  $forPermission  The permission type to check for authorization
      * @return array<Document>
      *
+     * @param  array<Query>  $queries
+     * @return array<Document>
+     *
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
@@ -2174,19 +2177,40 @@ trait Documents
         } else {
             $queries = $convertedQueries;
 
-            $getResults = fn () => $this->adapter->find(
-                $collection,
-                $queries,
-                $limit ?? 25,
-                $offset ?? 0,
-                $orderAttributes,
-                $orderTypes,
-                $cursor,
-                $cursorDirection,
-                $forPermission
-            );
+            $cacheKey = null;
+            if ($this->queryCache !== null && $this->queryCache->isEnabled($collection->getId())) {
+                $cacheKey = $this->queryCache->buildQueryKey(
+                    $collection->getId(),
+                    $queries,
+                    $this->adapter->getNamespace(),
+                    $this->adapter->getTenant(),
+                );
+                $cached = $this->queryCache->get($cacheKey);
+                if ($cached !== null) {
+                    $results = $cached;
+                    $cacheKey = null;
+                }
+            }
 
-            $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+            if (! isset($results)) {
+                $getResults = fn () => $this->adapter->find(
+                    $collection,
+                    $queries,
+                    $limit ?? 25,
+                    $offset ?? 0,
+                    $orderAttributes,
+                    $orderTypes,
+                    $cursor,
+                    $cursorDirection,
+                    $forPermission
+                );
+
+                $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+
+                if ($cacheKey !== null && $this->queryCache !== null) {
+                    $this->queryCache->set($cacheKey, $results);
+                }
+            }
         }
 
         if ($isAggregation) {
@@ -2517,7 +2541,9 @@ trait Documents
     }
 
     /**
-     * @param  array<Query>  $queries
+     * Execute aggregation queries (count, sum, avg, min, max, groupBy) and return results.
+     *
+     * @param  array<Query>  $queries  Must include at least one aggregation query (Query::count(), Query::sum(), etc.)
      * @return array<Document>
      */
     public function aggregate(string $collection, array $queries): array

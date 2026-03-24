@@ -133,5 +133,10 @@ class ReadWritePool extends Pool
         foreach ($this->getMetadata() as $key => $value) {
             $adapter->setMetadata($key, $value);
         }
+
+        $adapter->setProfiler($this->profiler);
+        foreach ($this->queryTransforms as $tName => $tTransform) {
+            $adapter->addQueryTransform($tName, $tTransform);
+        }
     }
 }

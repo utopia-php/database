@@ -2,8 +2,6 @@
 
 namespace Utopia\Database\ORM;
 
-use ReflectionClass;
-use ReflectionProperty;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
@@ -13,11 +11,36 @@ use Utopia\Database\RelationSide;
 
 class EntityMapper
 {
+    /** @var array<string, array<string, \ReflectionProperty>> */
+    private static array $reflectionPropertyCache = [];
+
+    /** @var array<string, \ReflectionClass<object>> */
+    private static array $reflectionClassCache = [];
+
     private MetadataFactory $metadataFactory;
 
     public function __construct(MetadataFactory $metadataFactory)
     {
         $this->metadataFactory = $metadataFactory;
+    }
+
+    private function getReflectionProperty(string $class, string $property): \ReflectionProperty
+    {
+        if (!isset(self::$reflectionPropertyCache[$class][$property])) {
+            self::$reflectionPropertyCache[$class][$property] = new \ReflectionProperty($class, $property);
+        }
+        return self::$reflectionPropertyCache[$class][$property];
+    }
+
+    /**
+     * @return \ReflectionClass<object>
+     */
+    private function getReflectionClass(string $class): \ReflectionClass
+    {
+        if (!isset(self::$reflectionClassCache[$class])) {
+            self::$reflectionClassCache[$class] = new \ReflectionClass($class);
+        }
+        return self::$reflectionClassCache[$class];
     }
 
     public function toDocument(object $entity, EntityMetadata $metadata): Document
@@ -51,6 +74,19 @@ class EntityMapper
         foreach ($metadata->columns as $mapping) {
             $value = $this->getPropertyValue($entity, $mapping->propertyName);
             $data[$mapping->documentKey] = $value;
+        }
+
+        foreach ($metadata->embeddables as $mapping) {
+            $value = $this->getPropertyValue($entity, $mapping->propertyName);
+            if ($value === null) {
+                continue;
+            }
+            $embType = $this->metadataFactory->getTypeRegistry()?->getEmbeddable($mapping->typeName);
+            if ($embType !== null) {
+                foreach ($embType->decompose($value) as $key => $val) {
+                    $data[$mapping->prefix . $key] = $val;
+                }
+            }
         }
 
         foreach ($metadata->relationships as $mapping) {
@@ -94,7 +130,7 @@ class EntityMapper
             return $existing;
         }
 
-        $ref = new ReflectionClass($metadata->className);
+        $ref = $this->getReflectionClass($metadata->className);
         $entity = $ref->newInstanceWithoutConstructor();
 
         if ($id !== '') {
@@ -128,6 +164,17 @@ class EntityMapper
         foreach ($metadata->columns as $mapping) {
             $value = $document->getAttribute($mapping->documentKey, $mapping->column->default);
             $this->setPropertyValue($entity, $mapping->propertyName, $value);
+        }
+
+        foreach ($metadata->embeddables as $mapping) {
+            $embType = $this->metadataFactory->getTypeRegistry()?->getEmbeddable($mapping->typeName);
+            if ($embType !== null) {
+                $values = [];
+                foreach ($embType->attributes() as $attr) {
+                    $values[$attr->key] = $document->getAttribute($mapping->prefix . $attr->key);
+                }
+                $this->setPropertyValue($entity, $mapping->propertyName, $embType->compose($values));
+            }
         }
 
         foreach ($metadata->relationships as $mapping) {
@@ -254,6 +301,17 @@ class EntityMapper
             );
         }
 
+        foreach ($metadata->embeddables as $mapping) {
+            $embType = $this->metadataFactory->getTypeRegistry()?->getEmbeddable($mapping->typeName);
+            if ($embType !== null) {
+                foreach ($embType->attributes() as $attr) {
+                    $prefixed = clone $attr;
+                    $prefixed->key = $mapping->prefix . $attr->key;
+                    $attributes[] = $prefixed;
+                }
+            }
+        }
+
         $indexes = [];
         foreach ($metadata->indexes as $tableIndex) {
             $indexes[] = new Index(
@@ -298,7 +356,7 @@ class EntityMapper
 
     private function getPropertyValue(object $entity, string $property): mixed
     {
-        $ref = new ReflectionProperty($entity, $property);
+        $ref = $this->getReflectionProperty($entity::class, $property);
 
         if (! $ref->isInitialized($entity)) {
             return null;
@@ -309,7 +367,7 @@ class EntityMapper
 
     private function setPropertyValue(object $entity, string $property, mixed $value): void
     {
-        $ref = new ReflectionProperty($entity, $property);
+        $ref = $this->getReflectionProperty($entity::class, $property);
         $ref->setValue($entity, $value);
     }
 }

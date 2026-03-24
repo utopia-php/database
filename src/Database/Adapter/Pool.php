@@ -79,6 +79,9 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
             $adapter->setProfiler($this->profiler);
+            foreach ($this->queryTransforms as $tName => $tTransform) {
+                $adapter->addQueryTransform($tName, $tTransform);
+            }
 
             return $adapter->{$method}(...$args);
         });
@@ -118,7 +121,7 @@ class Pool extends Adapter
      */
     public function addQueryTransform(string $name, QueryTransform $transform): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->queryTransforms[$name] = $transform;
 
         return $this;
     }
@@ -131,7 +134,7 @@ class Pool extends Adapter
      */
     public function removeQueryTransform(string $name): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        unset($this->queryTransforms[$name]);
 
         return $this;
     }
@@ -228,6 +231,10 @@ class Pool extends Adapter
             $adapter->resetMetadata();
             foreach ($this->getMetadata() as $key => $value) {
                 $adapter->setMetadata($key, $value);
+            }
+            $adapter->setProfiler($this->profiler);
+            foreach ($this->queryTransforms as $tName => $tTransform) {
+                $adapter->addQueryTransform($tName, $tTransform);
             }
 
             $this->pinnedAdapter = $adapter;
@@ -907,7 +914,14 @@ class Pool extends Adapter
         return $result;
     }
 
-    public function newQueryBuilder(string $collection): \Utopia\Query\Builder
+    public function rawMutation(string $query, array $bindings = []): int
+    {
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function getBuilder(string $collection): \Utopia\Query\Builder
     {
         /** @var \Utopia\Query\Builder $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

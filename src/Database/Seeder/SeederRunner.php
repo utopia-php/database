@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Seeder;
 
+use Utopia\Async\Promise;
 use Utopia\Database\Database;
 
 class SeederRunner
@@ -20,9 +21,47 @@ class SeederRunner
     public function run(Database $db): void
     {
         $this->executed = [];
+        $remaining = $this->seeders;
 
-        foreach ($this->seeders as $class => $seeder) {
-            $this->runWithDependencies($class, $db);
+        while ($remaining !== []) {
+            $ready = [];
+            foreach ($remaining as $class => $seeder) {
+                $deps = $seeder->dependencies();
+                $allDepsResolved = true;
+                foreach ($deps as $dep) {
+                    if (! isset($this->executed[$dep])) {
+                        $allDepsResolved = false;
+                        break;
+                    }
+                }
+                if ($allDepsResolved) {
+                    $ready[$class] = $seeder;
+                }
+            }
+
+            if ($ready === []) {
+                $unresolved = \implode(', ', \array_keys($remaining));
+                throw new \RuntimeException("Circular dependency detected in seeders: {$unresolved}");
+            }
+
+            if (\count($ready) > 1) {
+                $tasks = [];
+                foreach ($ready as $class => $seeder) {
+                    $tasks[] = function () use ($seeder, $db): void {
+                        $seeder->run($db);
+                    };
+                }
+                Promise::map($tasks)->await();
+            } else {
+                foreach ($ready as $seeder) {
+                    $seeder->run($db);
+                }
+            }
+
+            foreach ($ready as $class => $seeder) {
+                $this->executed[$class] = true;
+                unset($remaining[$class]);
+            }
         }
     }
 
@@ -37,23 +76,5 @@ class SeederRunner
     public function reset(): void
     {
         $this->executed = [];
-    }
-
-    private function runWithDependencies(string $class, Database $db): void
-    {
-        if (isset($this->executed[$class])) {
-            return;
-        }
-
-        if (! isset($this->seeders[$class])) {
-            throw new \RuntimeException("Seeder '{$class}' is not registered");
-        }
-
-        foreach ($this->seeders[$class]->dependencies() as $dep) {
-            $this->runWithDependencies($dep, $db);
-        }
-
-        $this->seeders[$class]->run($db);
-        $this->executed[$class] = true;
     }
 }

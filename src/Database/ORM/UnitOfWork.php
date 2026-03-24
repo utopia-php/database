@@ -4,6 +4,7 @@ namespace Utopia\Database\ORM;
 
 use SplObjectStorage;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 
 class UnitOfWork
 {
@@ -48,10 +49,10 @@ class UnitOfWork
 
             if ($state === EntityState::Removed) {
                 $this->entityStates[$entity] = EntityState::Managed;
-                $this->scheduledDeletions = \array_filter(
-                    $this->scheduledDeletions,
-                    fn (object $e) => $e !== $entity
-                );
+                $key = \array_search($entity, $this->scheduledDeletions, true);
+                if ($key !== false) {
+                    unset($this->scheduledDeletions[$key]);
+                }
 
                 return;
             }
@@ -73,10 +74,42 @@ class UnitOfWork
 
         if ($state === EntityState::New) {
             unset($this->entityStates[$entity]);
-            $this->scheduledInsertions = \array_filter(
-                $this->scheduledInsertions,
-                fn (object $e) => $e !== $entity
-            );
+            $key = \array_search($entity, $this->scheduledInsertions, true);
+            if ($key !== false) {
+                unset($this->scheduledInsertions[$key]);
+            }
+
+            return;
+        }
+
+        if ($state === EntityState::Managed) {
+            $metadata = $this->metadataFactory->getMetadata($entity::class);
+            if ($metadata->softDeleteColumn !== null) {
+                $ref = new \ReflectionProperty($entity, $metadata->softDeleteColumn);
+                $ref->setValue($entity, \date('Y-m-d H:i:s'));
+
+                return;
+            }
+
+            $this->entityStates[$entity] = EntityState::Removed;
+            $this->scheduledDeletions[] = $entity;
+        }
+    }
+
+    public function forceRemove(object $entity): void
+    {
+        if (! $this->entityStates->contains($entity)) {
+            return;
+        }
+
+        $state = $this->entityStates[$entity];
+
+        if ($state === EntityState::New) {
+            unset($this->entityStates[$entity]);
+            $key = \array_search($entity, $this->scheduledInsertions, true);
+            if ($key !== false) {
+                unset($this->scheduledInsertions[$key]);
+            }
 
             return;
         }
@@ -85,6 +118,17 @@ class UnitOfWork
             $this->entityStates[$entity] = EntityState::Removed;
             $this->scheduledDeletions[] = $entity;
         }
+    }
+
+    public function restore(object $entity): void
+    {
+        $metadata = $this->metadataFactory->getMetadata($entity::class);
+        if ($metadata->softDeleteColumn === null) {
+            return;
+        }
+
+        $ref = new \ReflectionProperty($entity, $metadata->softDeleteColumn);
+        $ref->setValue($entity, null);
     }
 
     public function registerManaged(object $entity, EntityMetadata $metadata): void
@@ -138,20 +182,47 @@ class UnitOfWork
 
         $db->withTransaction(function () use ($db, $inserts, $updates, $deletes): void {
             foreach ($inserts as $collection => $entities) {
+                $documents = [];
+                $entityMap = [];
+
                 foreach ($entities as $entity) {
                     $metadata = $this->metadataFactory->getMetadata($entity::class);
-                    $document = $this->entityMapper->toDocument($entity, $metadata);
-                    $created = $db->createDocument($collection, $document);
-                    $this->entityMapper->applyDocumentToEntity($created, $entity, $metadata);
-                    $this->identityMap->put($collection, $created->getId(), $entity);
-                    $this->entityStates[$entity] = EntityState::Managed;
-                    $this->originalSnapshots[$entity] = $this->entityMapper->takeSnapshot($entity, $metadata);
+                    $this->invokeCallbacks($entity, $metadata->prePersistCallbacks);
+                    $doc = $this->entityMapper->toDocument($entity, $metadata);
+                    $documents[] = $doc;
+                    $entityMap[] = $entity;
+                }
+
+                if (\count($documents) === 1) {
+                    $created = $db->createDocument($collection, $documents[0]);
+                    $metadata = $this->metadataFactory->getMetadata($entityMap[0]::class);
+                    $this->entityMapper->applyDocumentToEntity($created, $entityMap[0], $metadata);
+                    $this->identityMap->put($collection, $created->getId(), $entityMap[0]);
+                    $this->entityStates[$entityMap[0]] = EntityState::Managed;
+                    $this->originalSnapshots[$entityMap[0]] = $this->entityMapper->takeSnapshot($entityMap[0], $metadata);
+                    $this->invokeCallbacks($entityMap[0], $metadata->postPersistCallbacks);
+                } else {
+                    $idx = 0;
+                    $db->createDocuments($collection, $documents, Database::INSERT_BATCH_SIZE, function (Document $created) use (&$entityMap, &$idx, $collection): void {
+                        if (! isset($entityMap[$idx])) {
+                            return;
+                        }
+                        $entity = $entityMap[$idx];
+                        $metadata = $this->metadataFactory->getMetadata($entity::class);
+                        $this->entityMapper->applyDocumentToEntity($created, $entity, $metadata);
+                        $this->identityMap->put($collection, $created->getId(), $entity);
+                        $this->entityStates[$entity] = EntityState::Managed;
+                        $this->originalSnapshots[$entity] = $this->entityMapper->takeSnapshot($entity, $metadata);
+                        $this->invokeCallbacks($entity, $metadata->postPersistCallbacks);
+                        $idx++;
+                    });
                 }
             }
 
             foreach ($updates as $collection => $entities) {
                 foreach ($entities as $entity) {
                     $metadata = $this->metadataFactory->getMetadata($entity::class);
+                    $this->invokeCallbacks($entity, $metadata->preUpdateCallbacks);
                     $document = $this->entityMapper->toDocument($entity, $metadata);
                     $id = $this->entityMapper->getId($entity, $metadata);
 
@@ -162,6 +233,7 @@ class UnitOfWork
                     $updated = $db->updateDocument($collection, $id, $document);
                     $this->entityMapper->applyDocumentToEntity($updated, $entity, $metadata);
                     $this->originalSnapshots[$entity] = $this->entityMapper->takeSnapshot($entity, $metadata);
+                    $this->invokeCallbacks($entity, $metadata->postUpdateCallbacks);
                 }
             }
 
@@ -174,6 +246,7 @@ class UnitOfWork
                         continue;
                     }
 
+                    $this->invokeCallbacks($entity, $metadata->preRemoveCallbacks);
                     $db->deleteDocument($collection, $id);
                     $this->identityMap->remove($collection, $id);
                     $this->entityStates->detach($entity);
@@ -181,6 +254,8 @@ class UnitOfWork
                     if ($this->originalSnapshots->contains($entity)) {
                         $this->originalSnapshots->detach($entity);
                     }
+
+                    $this->invokeCallbacks($entity, $metadata->postRemoveCallbacks);
                 }
             }
         });
@@ -199,15 +274,15 @@ class UnitOfWork
             $this->originalSnapshots->detach($entity);
         }
 
-        $this->scheduledInsertions = \array_filter(
-            $this->scheduledInsertions,
-            fn (object $e) => $e !== $entity
-        );
+        $key = \array_search($entity, $this->scheduledInsertions, true);
+        if ($key !== false) {
+            unset($this->scheduledInsertions[$key]);
+        }
 
-        $this->scheduledDeletions = \array_filter(
-            $this->scheduledDeletions,
-            fn (object $e) => $e !== $entity
-        );
+        $key = \array_search($entity, $this->scheduledDeletions, true);
+        if ($key !== false) {
+            unset($this->scheduledDeletions[$key]);
+        }
 
         $metadata = $this->metadataFactory->getMetadata($entity::class);
         $id = $this->entityMapper->getId($entity, $metadata);
@@ -266,6 +341,16 @@ class UnitOfWork
             } elseif (\is_object($value) && ! $this->entityStates->contains($value)) {
                 $this->persist($value);
             }
+        }
+    }
+
+    /**
+     * @param  array<string>  $methods
+     */
+    private function invokeCallbacks(object $entity, array $methods): void
+    {
+        foreach ($methods as $method) {
+            $entity->{$method}();
         }
     }
 }

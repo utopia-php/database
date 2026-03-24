@@ -3,6 +3,7 @@
 namespace Utopia\Database\Hook;
 
 use Exception;
+use Utopia\Async\Promise;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -1366,7 +1367,7 @@ class RelationshipHandler implements Relationship
             );
 
             /** @var array<array<Document>> $chunkResults */
-            $chunkResults = \array_map(fn (callable $task) => $task(), $tasks);
+            $chunkResults = Promise::map($tasks)->await();
 
             foreach ($chunkResults as $chunkDocs) {
                 \array_push($relatedDocuments, ...$chunkDocs);
@@ -1464,7 +1465,7 @@ class RelationshipHandler implements Relationship
             );
 
             /** @var array<array<Document>> $chunkResults */
-            $chunkResults = \array_map(fn (callable $task) => $task(), $tasks);
+            $chunkResults = Promise::map($tasks)->await();
 
             foreach ($chunkResults as $chunkDocs) {
                 \array_push($relatedDocuments, ...$chunkDocs);
@@ -1568,7 +1569,7 @@ class RelationshipHandler implements Relationship
             );
 
             /** @var array<array<Document>> $chunkResults */
-            $chunkResults = \array_map(fn (callable $task) => $task(), $tasks);
+            $chunkResults = Promise::map($tasks)->await();
 
             foreach ($chunkResults as $chunkDocs) {
                 \array_push($relatedDocuments, ...$chunkDocs);
@@ -1654,7 +1655,7 @@ class RelationshipHandler implements Relationship
             );
 
             /** @var array<array<Document>> $junctionChunkResults */
-            $junctionChunkResults = \array_map(fn (callable $task) => $task(), $tasks);
+            $junctionChunkResults = Promise::map($tasks)->await();
 
             foreach ($junctionChunkResults as $chunkJunctions) {
                 \array_push($junctions, ...$chunkJunctions);
@@ -1719,7 +1720,7 @@ class RelationshipHandler implements Relationship
                 );
 
                 /** @var array<array<Document>> $relatedChunkResults */
-                $relatedChunkResults = \array_map(fn (callable $task) => $task(), $tasks);
+                $relatedChunkResults = Promise::map($tasks)->await();
 
                 foreach ($relatedChunkResults as $chunkDocs) {
                     \array_push($foundRelated, ...$chunkDocs);

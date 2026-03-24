@@ -19,6 +19,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\QueryTransform;
 use Utopia\Database\Hook\Relationship;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
@@ -615,9 +616,27 @@ class Database
         return $this->adapter;
     }
 
-    public function query(string $collection): QueryBuilder
+    /**
+     * Get a utopia-php/query Builder for a collection, pre-configured with
+     * attribute mapping, tenant filtering, and permission hooks.
+     */
+    public function from(string $collection): \Utopia\Query\Builder
     {
-        return new QueryBuilder($this, $collection);
+        return $this->adapter->getBuilder($collection);
+    }
+
+    /**
+     * @return array<Document>|int
+     */
+    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\BuildResult $query): array|int
+    {
+        $result = $query instanceof \Utopia\Query\Builder\BuildResult ? $query : $query->build();
+
+        if ($result->readOnly) {
+            return $this->adapter->rawQuery($result->query, $result->bindings);
+        }
+
+        return $this->adapter->rawMutation($result->query, $result->bindings);
     }
 
     public function setTypeRegistry(?TypeRegistry $typeRegistry): static

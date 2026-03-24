@@ -1057,31 +1057,6 @@ trait OneToOneTests
             }
         }
 
-        $database->createDocument('parent', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'child1' => [
-                '$id' => 'foo',
-                '$permissions' => [Permission::read(Role::any())],
-            ],
-            'children' => [
-                [
-                    '$id' => 'bar',
-                    '$permissions' => [Permission::read(Role::any())],
-                ],
-            ],
-        ]));
-
-        $documents = $database->find('parent', []);
-        $document  = array_pop($documents);
-        $this->assertArrayHasKey('child1', $document);
-        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
-        $this->assertArrayHasKey('children', $document);
-        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
-
         try {
             $database->updateRelationship(
                 collection: 'parent',

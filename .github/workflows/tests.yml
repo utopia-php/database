@@ -27,6 +27,12 @@ jobs:
           ref: feat-builder
           path: query
 
+      - name: Checkout async library
+        uses: actions/checkout@v4
+        with:
+          repository: utopia-php/async
+          path: async
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

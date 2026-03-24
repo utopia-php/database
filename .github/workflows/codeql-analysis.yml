@@ -20,17 +20,25 @@ jobs:
           ref: feat-builder
           path: query
 
+      - name: Checkout async library
+        uses: actions/checkout@v4
+        with:
+          repository: utopia-php/async
+          path: async
+
       - run: git checkout HEAD^2
         if: github.event_name == 'pull_request'
         working-directory: database
 
       - name: Run CodeQL
         run: |
-          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 php:8.4-cli-alpine sh -c \
+          docker run --rm -v $PWD/database:/app -v $PWD/query:/query -v $PWD/async:/async -w /app -e COMPOSER_MIRROR_PATH_REPOS=1 php:8.4-cli-alpine sh -c \
           "php -r \"copy('https://getcomposer.org/installer', '/tmp/composer-setup.php');\" && \
            php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.json && \
+           sed -i 's|\"url\": \"../async\"|\"url\": \"/async\"|' composer.json && \
            sed -i 's|\"symlink\": true|\"symlink\": false|' composer.json && \
            sed -i 's|\"url\": \"../query\"|\"url\": \"/query\"|' composer.lock && \
+           sed -i 's|\"url\": \"../async\"|\"url\": \"/async\"|' composer.lock && \
            composer install --profile --ignore-platform-reqs && \
            composer check"

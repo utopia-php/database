@@ -115,7 +115,7 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => 'integer',
+            'type' => 'id',
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -246,12 +246,12 @@ class Database
     protected string $cacheName = 'default';
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected static array $filters = [];
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
 
@@ -322,6 +322,10 @@ class Database
     ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        foreach ($filters as $name => $callbacks) {
+            $filters[$name]['signature'] = self::computeCallableSignature($callbacks['encode'])
+                . ':' . self::computeCallableSignature($callbacks['decode']);
+        }
         $this->instanceFilters = $filters;
 
         $this->setAuthorization(new Authorization());
@@ -609,6 +613,16 @@ class Database
     }
 
     /**
+     * Get ID Attribute Type.
+     *
+     * Returns the type of the internal ID attribute (e.g. integer for SQL, uuid7 for MongoDB)
+     */
+    public function getIdAttributeType(): string
+    {
+        return $this->adapter->getIdAttributeType();
+    }
+
+    /**
      * Get Database Adapter
      */
     public function getAdapter(): Adapter
@@ -769,7 +783,7 @@ class Database
      *
      * Set tenant to use if tables are shared
      */
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
 
@@ -781,7 +795,7 @@ class Database
      *
      * Get tenant to use if tables are shared
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->adapter->getTenant();
     }
@@ -791,7 +805,7 @@ class Database
      *
      * Execute a callback with a specific tenant
      */
-    public function withTenant(?int $tenant, callable $callback): mixed
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
         $previous = $this->adapter->getTenant();
         $this->adapter->setTenant($tenant);
@@ -1222,7 +1236,24 @@ class Database
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,
+            'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
+    }
+
+    private static function computeCallableSignature(callable $callable): string
+    {
+        if (\is_string($callable)) {
+            return $callable;
+        }
+
+        if (\is_array($callable)) {
+            $class = \is_object($callable[0]) ? \get_class($callable[0]) : $callable[0];
+            return $class . '::' . $callable[1];
+        }
+
+        $closure = \Closure::fromCallable($callable);
+        $ref = new \ReflectionFunction($closure);
+        return ($ref->getFileName() ?: 'unknown') . ':' . $ref->getStartLine();
     }
 
     /**
@@ -1292,7 +1323,7 @@ class Database
     /**
      * Get instance filters
      *
-     * @return array<string, array{encode: callable, decode: callable}>
+     * @return array<string, array{encode: callable, decode: callable, signature: string}>
      */
     public function getInstanceFilters(): array
     {
@@ -1801,6 +1832,17 @@ class Database
     public function getSchemaAttributes(string $collection): array
     {
         return $this->adapter->getSchemaAttributes($collection);
+    }
+
+    /**
+     * Get the physical schema indexes for a collection from the database engine.
+     *
+     * @param string $collection The collection identifier.
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return $this->adapter->getSchemaIndexes($collection);
     }
 
     /**

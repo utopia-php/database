@@ -874,6 +874,398 @@ trait CollectionTests
             ->setDatabase($schema);
     }
 
+    public function testSharedTablesMultiTenantCreateCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+        $createdDb = false;
+
+        if ($sharedTables) {
+            // Already in shared-tables mode (SharedTables/* test classes)
+        } elseif ($database->getAdapter()->supports(Capability::Schemas)) {
+            $dbName = 'stMultiTenant';
+            if ($database->exists($dbName)) {
+                $database->setDatabase($dbName)->delete();
+            }
+            $database
+                ->setDatabase($dbName)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(10)
+                ->create();
+            $createdDb = true;
+        } else {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 10 : 'tenant_10';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 20 : 'tenant_20';
+            $colName = 'multiTenantCol';
+
+            $database->setTenant($tenant1);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col1 = $database->getCollection($colName);
+            $this->assertFalse($col1->isEmpty());
+            $this->assertEquals(1, \count($col1->getAttribute('attributes')));
+
+            $database->setTenant($tenant2);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col2 = $database->getCollection($colName);
+            $this->assertFalse($col2->isEmpty());
+            $this->assertEquals(1, \count($col2->getAttribute('attributes')));
+
+            $database->setTenant($tenant1);
+            $col1Again = $database->getCollection($colName);
+            $this->assertFalse($col1Again->isEmpty());
+
+            if ($createdDb) {
+                $database->delete();
+            } else {
+                $database->setTenant($tenant1);
+                $database->deleteCollection($colName);
+                $database->setTenant($tenant2);
+                $database->deleteCollection($colName);
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
+    public function testSharedTablesMultiTenantCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 100 : 'tenant_100';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 200 : 'tenant_200';
+
+            if ($sharedTables) {
+                // Already in shared-tables mode; create() should be idempotent.
+                // No assertion on exists() since SQLite always returns false for
+                // database-level exists. The test verifies create() doesn't throw.
+                $database->setTenant($tenant1);
+                $database->create();
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue(true);
+            } elseif ($database->getAdapter()->supports(Capability::Schemas)) {
+                $dbName = 'stMultiCreate';
+                if ($database->exists($dbName)) {
+                    $database->setDatabase($dbName)->delete();
+                }
+                $database
+                    ->setDatabase($dbName)
+                    ->setNamespace('')
+                    ->setSharedTables(true)
+                    ->setTenant($tenant1)
+                    ->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->delete();
+            } else {
+                $this->expectNotToPerformAssertions();
+
+                return;
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
+    public function testEvents(): void
+    {
+        $this->getDatabase()->getAuthorization()->skip(function () {
+            $database = $this->getDatabase();
+
+            $events = [
+                Database::EVENT_DATABASE_CREATE,
+                Database::EVENT_DATABASE_LIST,
+                Database::EVENT_COLLECTION_CREATE,
+                Database::EVENT_COLLECTION_LIST,
+                Database::EVENT_COLLECTION_READ,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_ATTRIBUTE_CREATE,
+                Database::EVENT_ATTRIBUTE_UPDATE,
+                Database::EVENT_INDEX_CREATE,
+                Database::EVENT_DOCUMENT_CREATE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_READ,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_COUNT,
+                Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_INCREASE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_DECREASE,
+                Database::EVENT_DOCUMENTS_CREATE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENTS_UPDATE,
+                Database::EVENT_INDEX_DELETE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_DELETE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENTS_DELETE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_ATTRIBUTE_DELETE,
+                Database::EVENT_COLLECTION_DELETE,
+                Database::EVENT_DATABASE_DELETE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_DOCUMENTS_DELETE,
+                Database::EVENT_DOCUMENT_PURGE,
+                Database::EVENT_ATTRIBUTE_DELETE,
+                Database::EVENT_COLLECTION_DELETE,
+                Database::EVENT_DATABASE_DELETE,
+            ];
+
+            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
+                $shifted = array_shift($events);
+                $this->assertEquals($shifted, $event);
+            });
+
+            if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
+                $database->setDatabase('hellodb');
+                $database->create();
+            } else {
+                \array_shift($events);
+            }
+
+            $database->list();
+
+            $database->setDatabase($this->testDatabase);
+
+            $collectionId = ID::unique();
+            $database->createCollection($collectionId);
+            $database->listCollections();
+            $database->getCollection($collectionId);
+            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->updateAttributeRequired($collectionId, 'attr1', true);
+            $indexId1 = 'index2_'.uniqid();
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+
+            $document = $database->createDocument($collectionId, new Document([
+                '$id' => 'doc1',
+                'attr1' => 10,
+                '$permissions' => [
+                    Permission::delete(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]));
+
+            $executed = false;
+            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
+                $executed = true;
+            });
+
+            $database->silent(function () use ($database, $collectionId, $document) {
+                $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+                $database->getDocument($collectionId, 'doc1');
+                $database->find($collectionId);
+                $database->findOne($collectionId);
+                $database->count($collectionId);
+                $database->sum($collectionId, 'attr1');
+                $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+                $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            }, ['should-not-execute']);
+
+            $this->assertFalse($executed);
+
+            $database->createDocuments($collectionId, [
+                new Document([
+                    'attr1' => 10,
+                ]),
+                new Document([
+                    'attr1' => 20,
+                ]),
+            ]);
+
+            $database->updateDocuments($collectionId, new Document([
+                'attr1' => 15,
+            ]));
+
+            $database->deleteIndex($collectionId, $indexId1);
+            $database->deleteDocument($collectionId, 'doc1');
+
+            $database->deleteDocuments($collectionId);
+            $database->deleteAttribute($collectionId, 'attr1');
+            $database->deleteCollection($collectionId);
+            $database->delete('hellodb');
+
+            // Remove all listeners
+            $database->on(Database::EVENT_ALL, 'test', null);
+            $database->on(Database::EVENT_ALL, 'should-not-execute', null);
+        });
+    }
+
+    public function testCreatedAtUpdatedAt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('created_at'));
+        $database->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
+        $document = $database->createDocument('created_at', new Document([
+            '$id' => ID::custom('uid123'),
+
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $this->assertNotEmpty($document->getSequence());
+        $this->assertNotNull($document->getSequence());
+    }
+
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $document = $database->getDocument('created_at', 'uid123');
+        $this->assertEquals(true, ! $document->isEmpty());
+        sleep(1);
+        $document->setAttribute('title', 'new title');
+        $database->updateDocument('created_at', 'uid123', $document);
+        $document = $database->getDocument('created_at', 'uid123');
+
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
+        $this->expectException(DuplicateException::class);
+
+        $database->createCollection('created_at');
+    }
+
+    public function testTransformations(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('docs', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ]),
+        ]);
+
+        $database->createDocument('docs', new Document([
+            '$id' => 'doc1',
+            'name' => 'value1',
+        ]));
+
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
+            return 'SELECT 1';
+        });
+
+        $result = $database->getDocument('docs', 'doc1');
+
+        $this->assertTrue($result->isEmpty());
+    }
+
+    public function testSetGlobalCollection(): void
+    {
+        $db = $this->getDatabase();
+
+        $collectionId = 'globalCollection';
+
+        // set collection as global
+        $db->setGlobalCollections([$collectionId]);
+
+        // metadata collection should not contain tenant in the cache key
+        [$collectionKey, $documentKey, $hashKey] = $db->getCacheKeys(
+            Database::METADATA,
+            $collectionId,
+            []
+        );
+
+        $this->assertNotEmpty($collectionKey);
+        $this->assertNotEmpty($documentKey);
+        $this->assertNotEmpty($hashKey);
+
+        if ($db->getSharedTables()) {
+            $this->assertStringNotContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
+        }
+
+        // non global collection should contain tenant in the cache key
+        $nonGlobalCollectionId = 'nonGlobalCollection';
+        [$collectionKeyRegular] = $db->getCacheKeys(
+            Database::METADATA,
+            $nonGlobalCollectionId
+        );
+        if ($db->getSharedTables()) {
+            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKeyRegular);
+        }
+
+        // Non metadata collection should contain tenant in the cache key
+        [$collectionKey, $documentKey, $hashKey] = $db->getCacheKeys(
+            $collectionId,
+            ID::unique(),
+            []
+        );
+
+        $this->assertNotEmpty($collectionKey);
+        $this->assertNotEmpty($documentKey);
+        $this->assertNotEmpty($hashKey);
+
+        if ($db->getSharedTables()) {
+            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
+        }
+
+        $db->resetGlobalCollections();
+        $this->assertEmpty($db->getGlobalCollections());
+    }
+
     public function testCreateCollectionWithLongId(): void
     {
         $database = static::getDatabase();

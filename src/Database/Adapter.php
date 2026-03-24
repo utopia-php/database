@@ -37,7 +37,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected bool $sharedTables = false;
 
-    protected ?int $tenant = null;
+    protected int|string|null $tenant = null;
 
     protected bool $tenantPerDocument = false;
 
@@ -235,7 +235,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      *
      * Set tenant to use if tables are shared
      */
-    public function setTenant(?int $tenant): bool
+    public function setTenant(int|string|null $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -247,7 +247,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      *
      * Get tenant to use for shared tables
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->tenant;
     }
@@ -934,6 +934,19 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @return array<Document>
      */
     public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the physical schema indexes for a collection from the database engine.
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection The collection identifier.
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
     {
         return [];
     }

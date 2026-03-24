@@ -439,7 +439,7 @@ class Operator extends Validator
 
                 break;
             case OperatorType::StringConcat:
-                if ($type !== ColumnType::String || $isArray) {
+                if (! \in_array($type, [ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText]) || $isArray) {
                     $this->message = "Cannot apply {$methodName} operator to non-string field '{$operator->getAttribute()}'";
 
                     return false;
@@ -451,7 +451,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if ($this->currentDocument !== null) {
+                if ($this->currentDocument !== null && \in_array($type, [ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText])) {
                     /** @var string $currentString */
                     $currentString = $this->currentDocument->getAttribute($operator->getAttribute()) ?? '';
                     $concatValue = $values[0];
@@ -469,7 +469,7 @@ class Operator extends Validator
                 break;
             case OperatorType::StringReplace:
                 // Replace only works on string types
-                if ($type !== ColumnType::String) {
+                if (! \in_array($type, [ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText])) {
                     $this->message = "Cannot apply {$methodName} operator to non-string field '{$operator->getAttribute()}'";
 
                     return false;

@@ -2158,6 +2158,11 @@ class Postgres extends SQL implements Feature\Timeouts
         ];
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     protected function processException(PDOException $e): Exception
     {
         // Timeout
@@ -2198,6 +2203,11 @@ class Postgres extends SQL implements Feature\Timeouts
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
+        }
+
+        // Unknown table
+        if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
         // Unknown column

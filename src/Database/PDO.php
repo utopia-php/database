@@ -7,7 +7,7 @@ use InvalidArgumentException;
 use PDO as PhpPDO;
 use PDOStatement;
 use Throwable;
-use Utopia\CLI\Console;
+use Utopia\Console;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.

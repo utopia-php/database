@@ -542,8 +542,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $id = $this->getNamespace().'_'.$this->filter($name);
 
-        // For metadata collections outside transactions, check if exists first
-        if (! $this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata, the physical collection may
+        // already exist for another tenant. Return early to avoid a
+        // "Collection Exists" exception from the client.
+        if (! $this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -559,6 +561,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
                 return true;
+            }
+            // Client throws code-0 "Collection Exists" when its pre-check
+            // finds the collection. In shared-tables/metadata context this
+            // is a no-op; otherwise re-throw as DuplicateException so
+            // Database::createCollection() can run orphan reconciliation.
+            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
             }
             throw $e;
         }

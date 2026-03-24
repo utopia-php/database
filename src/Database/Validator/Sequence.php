@@ -67,14 +67,22 @@ class Sequence extends Validator
             return false;
         }
 
-        if (! \is_string($value)) {
+        if ($value === null) {
+            return true;
+        }
+
+        if (! \is_string($value) && ! \is_int($value)) {
             return false;
+        }
+
+        if (! $this->primary) {
+            return true;
         }
 
         $idType = ColumnType::tryFrom($this->idAttributeType);
 
         return match ($idType) {
-            ColumnType::Uuid7 => preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1,
+            ColumnType::Uuid7 => \is_string($value) && preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1,
             ColumnType::Integer => (new Range($this->primary ? 1 : 0, Database::MAX_BIG_INT, ColumnType::Integer->value))->isValid($value),
             default => false,
         };

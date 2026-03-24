@@ -237,17 +237,16 @@ class Document extends ArrayObject
     /**
      * Get the tenant ID associated with this document.
      *
-     * @return int|null The tenant ID, or null if not set.
+     * @return int|string|null The tenant ID, or null if not set.
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         $tenant = $this->getAttribute('$tenant');
 
-        if ($tenant === null) {
-            return null;
+        if (\is_numeric($tenant)) {
+            return (int) $tenant;
         }
 
-        /** @var int $tenant */
         return $tenant;
     }
 

@@ -3514,6 +3514,16 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         return 'REGEXP';
     }
 
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     /**
      * Get the SQL tenant filter clause for shared-table queries.
      *

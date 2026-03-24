@@ -318,7 +318,7 @@ class Filter extends Base
         if (
             ! $array &&
             in_array($method, [Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains]) &&
-            $attributeType !== ColumnType::String &&
+            ! in_array($attributeType, [ColumnType::String, ColumnType::Varchar, ColumnType::Text, ColumnType::MediumText, ColumnType::LongText]) &&
             $attributeType !== ColumnType::Object &&
             ! in_array($attributeType, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])
         ) {

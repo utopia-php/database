@@ -151,6 +151,7 @@ class Pool extends Adapter
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
+        $this->timeout = $milliseconds;
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 

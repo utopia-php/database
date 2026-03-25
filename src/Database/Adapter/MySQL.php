@@ -54,6 +54,8 @@ class MySQL extends MariaDB
      *
      * @throws DatabaseException
      */
+    private bool $timeoutDirty = false;
+
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         if (! $this->supports(Capability::Timeouts)) {
@@ -64,11 +66,23 @@ class MySQL extends MariaDB
         }
 
         $this->timeout = $milliseconds;
+        $this->timeoutDirty = true;
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        if ($this->timeout > 0) {
+            $this->timeoutDirty = true;
+        }
+        $this->timeout = 0;
     }
 
     protected function execute(mixed $stmt): bool
     {
-        $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
+        if ($this->timeoutDirty) {
+            $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
+            $this->timeoutDirty = false;
+        }
         /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
         return $stmt->execute();
     }

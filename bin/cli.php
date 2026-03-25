@@ -9,11 +9,11 @@ ini_set('memory_limit', '-1');
 
 $cli = new CLI();
 
-include 'tasks/load.php';
 include 'tasks/index.php';
+include 'tasks/load.php';
+include 'tasks/operators.php';
 include 'tasks/query.php';
 include 'tasks/relationships.php';
-include 'tasks/operators.php';
 
 $cli
     ->error()

@@ -1912,76 +1912,82 @@ trait OneToManyTests
             return;
         }
 
-        $database->createCollection('relation1');
-        $database->createCollection('relation2');
+        $relation1 = 'relation1_' . uniqid();
+        $relation2 = 'relation2_' . uniqid();
 
-        $database->createRelationship(new Relationship(collection: 'relation1', relatedCollection: 'relation2', type: RelationType::OneToMany));
+        $database->createCollection($relation1);
+        $database->createCollection($relation2);
 
-        $relation1 = $database->getCollection('relation1');
+        $database->createRelationship(new Relationship(collection: $relation1, relatedCollection: $relation2, type: RelationType::OneToMany));
+
+        $relation1Col = $database->getCollection($relation1);
         /** @var array<mixed> $_ac_attributes_1840 */
-        $_ac_attributes_1840 = $relation1->getAttribute('attributes');
+        $_ac_attributes_1840 = $relation1Col->getAttribute('attributes');
         $this->assertCount(1, $_ac_attributes_1840);
         /** @var array<mixed> $_ac_indexes_1841 */
-        $_ac_indexes_1841 = $relation1->getAttribute('indexes');
+        $_ac_indexes_1841 = $relation1Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1841);
-        $relation2 = $database->getCollection('relation2');
+        $relation2Col = $database->getCollection($relation2);
         /** @var array<mixed> $_ac_attributes_1843 */
-        $_ac_attributes_1843 = $relation2->getAttribute('attributes');
+        $_ac_attributes_1843 = $relation2Col->getAttribute('attributes');
         $this->assertCount(1, $_ac_attributes_1843);
         /** @var array<mixed> $_ac_indexes_1844 */
-        $_ac_indexes_1844 = $relation2->getAttribute('indexes');
+        $_ac_indexes_1844 = $relation2Col->getAttribute('indexes');
         $this->assertCount(1, $_ac_indexes_1844);
 
-        $database->deleteRelationship('relation2', 'relation1');
+        $database->deleteRelationship($relation2, $relation1);
 
-        $relation1 = $database->getCollection('relation1');
+        $relation1Col = $database->getCollection($relation1);
         /** @var array<mixed> $_ac_attributes_1849 */
-        $_ac_attributes_1849 = $relation1->getAttribute('attributes');
+        $_ac_attributes_1849 = $relation1Col->getAttribute('attributes');
         $this->assertCount(0, $_ac_attributes_1849);
         /** @var array<mixed> $_ac_indexes_1850 */
-        $_ac_indexes_1850 = $relation1->getAttribute('indexes');
+        $_ac_indexes_1850 = $relation1Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1850);
-        $relation2 = $database->getCollection('relation2');
+        $relation2Col = $database->getCollection($relation2);
         /** @var array<mixed> $_ac_attributes_1852 */
-        $_ac_attributes_1852 = $relation2->getAttribute('attributes');
+        $_ac_attributes_1852 = $relation2Col->getAttribute('attributes');
         $this->assertCount(0, $_ac_attributes_1852);
         /** @var array<mixed> $_ac_indexes_1853 */
-        $_ac_indexes_1853 = $relation2->getAttribute('indexes');
+        $_ac_indexes_1853 = $relation2Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1853);
 
-        $database->createRelationship(new Relationship(collection: 'relation1', relatedCollection: 'relation2', type: RelationType::ManyToOne));
+        $database->createRelationship(new Relationship(collection: $relation1, relatedCollection: $relation2, type: RelationType::ManyToOne));
 
-        $relation1 = $database->getCollection('relation1');
+        $relation1Col = $database->getCollection($relation1);
         /** @var array<mixed> $_ac_attributes_1858 */
-        $_ac_attributes_1858 = $relation1->getAttribute('attributes');
+        $_ac_attributes_1858 = $relation1Col->getAttribute('attributes');
         $this->assertCount(1, $_ac_attributes_1858);
         /** @var array<mixed> $_ac_indexes_1859 */
-        $_ac_indexes_1859 = $relation1->getAttribute('indexes');
+        $_ac_indexes_1859 = $relation1Col->getAttribute('indexes');
         $this->assertCount(1, $_ac_indexes_1859);
-        $relation2 = $database->getCollection('relation2');
+        $relation2Col = $database->getCollection($relation2);
         /** @var array<mixed> $_ac_attributes_1861 */
-        $_ac_attributes_1861 = $relation2->getAttribute('attributes');
+        $_ac_attributes_1861 = $relation2Col->getAttribute('attributes');
         $this->assertCount(1, $_ac_attributes_1861);
         /** @var array<mixed> $_ac_indexes_1862 */
-        $_ac_indexes_1862 = $relation2->getAttribute('indexes');
+        $_ac_indexes_1862 = $relation2Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1862);
 
-        $database->deleteRelationship('relation1', 'relation2');
+        $database->deleteRelationship($relation1, $relation2);
 
-        $relation1 = $database->getCollection('relation1');
+        $relation1Col = $database->getCollection($relation1);
         /** @var array<mixed> $_ac_attributes_1867 */
-        $_ac_attributes_1867 = $relation1->getAttribute('attributes');
+        $_ac_attributes_1867 = $relation1Col->getAttribute('attributes');
         $this->assertCount(0, $_ac_attributes_1867);
         /** @var array<mixed> $_ac_indexes_1868 */
-        $_ac_indexes_1868 = $relation1->getAttribute('indexes');
+        $_ac_indexes_1868 = $relation1Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1868);
-        $relation2 = $database->getCollection('relation2');
+        $relation2Col = $database->getCollection($relation2);
         /** @var array<mixed> $_ac_attributes_1870 */
-        $_ac_attributes_1870 = $relation2->getAttribute('attributes');
+        $_ac_attributes_1870 = $relation2Col->getAttribute('attributes');
         $this->assertCount(0, $_ac_attributes_1870);
         /** @var array<mixed> $_ac_indexes_1871 */
-        $_ac_indexes_1871 = $relation2->getAttribute('indexes');
+        $_ac_indexes_1871 = $relation2Col->getAttribute('indexes');
         $this->assertCount(0, $_ac_indexes_1871);
+
+        $database->deleteCollection($relation1);
+        $database->deleteCollection($relation2);
     }
 
     public function testUpdateParentAndChild_OneToMany(): void
@@ -2130,18 +2136,20 @@ trait OneToManyTests
             return;
         }
 
-        // Setup collections with relationships
-        $database->createCollection('products');
-        $database->createCollection('categories');
+        $products = 'products_' . uniqid();
+        $categories = 'categories_' . uniqid();
 
-        $database->createAttribute('products', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('products', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('categories', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createCollection($products);
+        $database->createCollection($categories);
 
-        $database->createRelationship(new Relationship(collection: 'categories', relatedCollection: 'products', type: RelationType::OneToMany, twoWay: true, key: 'products', twoWayKey: 'category'));
+        $database->createAttribute($products, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($products, new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($categories, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+
+        $database->createRelationship(new Relationship(collection: $categories, relatedCollection: $products, type: RelationType::OneToMany, twoWay: true, key: 'products', twoWayKey: 'category'));
 
         // Create category with products
-        $database->createDocument('categories', new Document([
+        $database->createDocument($categories, new Document([
             '$id' => 'electronics',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2171,29 +2179,27 @@ trait OneToManyTests
         ]));
 
         // Verify initial state
-        $product1 = $database->getDocument('products', 'product1');
+        $product1 = $database->getDocument($products, 'product1');
         $this->assertEquals('Laptop', $product1->getAttribute('name'));
         $this->assertEquals(999.99, $product1->getAttribute('price'));
         $this->assertEquals('electronics', $product1->getAttribute('category')->getId());
 
-        $product2 = $database->getDocument('products', 'product2');
+        $product2 = $database->getDocument($products, 'product2');
         $this->assertEquals('Mouse', $product2->getAttribute('name'));
         $this->assertEquals(25.50, $product2->getAttribute('price'));
         $this->assertEquals('electronics', $product2->getAttribute('category')->getId());
 
         // Perform a BATCH partial update - ONLY update price, NOT the category relationship
-        // This is the critical test case - batch updates with relationships
         $database->updateDocuments(
-            'products',
+            $products,
             new Document([
-                'price' => 50.00, // Update price for all matching products
-                // NOTE: We deliberately do NOT include the 'category' field here - this is a partial update
+                'price' => 50.00,
             ]),
             [Query::equal('$id', ['product1', 'product2'])]
         );
 
         // Verify that prices were updated but category relationships were preserved
-        $product1After = $database->getDocument('products', 'product1');
+        $product1After = $database->getDocument($products, 'product1');
         $this->assertEquals('Laptop', $product1After->getAttribute('name'), 'Product name should be preserved');
         $this->assertEquals(50.00, $product1After->getAttribute('price'), 'Price should be updated');
 
@@ -2202,21 +2208,21 @@ trait OneToManyTests
         $this->assertNotNull($categoryAfter, 'Category relationship should be preserved after batch partial update');
         $this->assertEquals('electronics', $categoryAfter->getId(), 'Category should still be electronics');
 
-        $product2After = $database->getDocument('products', 'product2');
+        $product2After = $database->getDocument($products, 'product2');
         $this->assertEquals('Mouse', $product2After->getAttribute('name'), 'Product name should be preserved');
         $this->assertEquals(50.00, $product2After->getAttribute('price'), 'Price should be updated');
         $this->assertEquals('electronics', $product2After->getAttribute('category')->getId(), 'Category should still be electronics');
 
         // Verify the reverse relationship is still intact
-        $category = $database->getDocument('categories', 'electronics');
-        /** @var array<\Utopia\Database\Document> $products */
-        $products = $category->getAttribute('products');
-        $this->assertCount(2, $products, 'Category should still have 2 products');
-        $this->assertEquals('product1', $products[0]->getId());
-        $this->assertEquals('product2', $products[1]->getId());
+        $category = $database->getDocument($categories, 'electronics');
+        /** @var array<\Utopia\Database\Document> $productsArr */
+        $productsArr = $category->getAttribute('products');
+        $this->assertCount(2, $productsArr, 'Category should still have 2 products');
+        $this->assertEquals('product1', $productsArr[0]->getId());
+        $this->assertEquals('product2', $productsArr[1]->getId());
 
-        $database->deleteCollection('products');
-        $database->deleteCollection('categories');
+        $database->deleteCollection($products);
+        $database->deleteCollection($categories);
     }
 
     public function testPartialUpdateOnlyRelationship(): void
@@ -2230,26 +2236,20 @@ trait OneToManyTests
             return;
         }
 
-        // Cleanup any leftover collections from prior failed runs
-        if (! $database->getCollection('authors')->isEmpty()) {
-            $database->deleteCollection('authors');
-        }
-        if (! $database->getCollection('books')->isEmpty()) {
-            $database->deleteCollection('books');
-        }
+        $authors = 'authors_' . uniqid();
+        $books = 'books_' . uniqid();
 
-        // Setup collections
-        $database->createCollection('authors');
-        $database->createCollection('books');
+        $database->createCollection($authors);
+        $database->createCollection($books);
 
-        $database->createAttribute('authors', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('authors', new Attribute(key: 'bio', type: ColumnType::String, size: 1000, required: false));
-        $database->createAttribute('books', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($authors, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($authors, new Attribute(key: 'bio', type: ColumnType::String, size: 1000, required: false));
+        $database->createAttribute($books, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(new Relationship(collection: 'authors', relatedCollection: 'books', type: RelationType::OneToMany, twoWay: true, key: 'books', twoWayKey: 'author'));
+        $database->createRelationship(new Relationship(collection: $authors, relatedCollection: $books, type: RelationType::OneToMany, twoWay: true, key: 'books', twoWayKey: 'author'));
 
         // Create author with one book
-        $database->createDocument('authors', new Document([
+        $database->createDocument($authors, new Document([
             '$id' => 'author1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2270,7 +2270,7 @@ trait OneToManyTests
         ]));
 
         // Create a second book independently
-        $database->createDocument('books', new Document([
+        $database->createDocument($books, new Document([
             '$id' => 'book2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2280,7 +2280,7 @@ trait OneToManyTests
         ]));
 
         // Verify initial state
-        $author = $database->getDocument('authors', 'author1');
+        $author = $database->getDocument($authors, 'author1');
         $this->assertEquals('John Doe', $author->getAttribute('name'));
         $this->assertEquals('A great author', $author->getAttribute('bio'));
         /** @var array<mixed> $_ac_books_2164 */
@@ -2291,12 +2291,10 @@ trait OneToManyTests
         $this->assertEquals('book1', $_arr_books_2165[0]->getId());
 
         // Partial update that ONLY changes the relationship (adds book2 to the author)
-        // Do NOT update name or bio
-        $database->updateDocument('authors', 'author1', new Document([
+        $database->updateDocument($authors, 'author1', new Document([
             '$id' => 'author1',
-            '$collection' => 'authors',
-            'books' => ['book1', 'book2'], // Update relationship
-            // NOTE: We deliberately do NOT include 'name' or 'bio'
+            '$collection' => $authors,
+            'books' => ['book1', 'book2'],
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -2304,7 +2302,7 @@ trait OneToManyTests
         ]));
 
         // Verify that the relationship was updated but other fields preserved
-        $authorAfter = $database->getDocument('authors', 'author1');
+        $authorAfter = $database->getDocument($authors, 'author1');
         $this->assertEquals('John Doe', $authorAfter->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('A great author', $authorAfter->getAttribute('bio'), 'Bio should be preserved');
         $this->assertCount(2, $authorAfter->getAttribute('books'), 'Should now have 2 books');
@@ -2316,14 +2314,14 @@ trait OneToManyTests
         $this->assertContains('book2', $bookIds);
 
         // Verify reverse relationships
-        $book1 = $database->getDocument('books', 'book1');
+        $book1 = $database->getDocument($books, 'book1');
         $this->assertEquals('author1', $book1->getAttribute('author')->getId());
 
-        $book2 = $database->getDocument('books', 'book2');
+        $book2 = $database->getDocument($books, 'book2');
         $this->assertEquals('author1', $book2->getAttribute('author')->getId());
 
-        $database->deleteCollection('authors');
-        $database->deleteCollection('books');
+        $database->deleteCollection($authors);
+        $database->deleteCollection($books);
     }
 
     public function testPartialUpdateBothDataAndRelationship(): void
@@ -2337,27 +2335,21 @@ trait OneToManyTests
             return;
         }
 
-        // Cleanup any leftover collections from prior failed runs
-        if (! $database->getCollection('teams')->isEmpty()) {
-            $database->deleteCollection('teams');
-        }
-        if (! $database->getCollection('players')->isEmpty()) {
-            $database->deleteCollection('players');
-        }
+        $teams = 'teams_' . uniqid();
+        $players = 'players_' . uniqid();
 
-        // Setup collections
-        $database->createCollection('teams');
-        $database->createCollection('players');
+        $database->createCollection($teams);
+        $database->createCollection($players);
 
-        $database->createAttribute('teams', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('teams', new Attribute(key: 'city', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('teams', new Attribute(key: 'founded', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute('players', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($teams, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($teams, new Attribute(key: 'city', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($teams, new Attribute(key: 'founded', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($players, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
 
-        $database->createRelationship(new Relationship(collection: 'teams', relatedCollection: 'players', type: RelationType::OneToMany, twoWay: true, key: 'players', twoWayKey: 'team'));
+        $database->createRelationship(new Relationship(collection: $teams, relatedCollection: $players, type: RelationType::OneToMany, twoWay: true, key: 'players', twoWayKey: 'team'));
 
         // Create team with players
-        $database->createDocument('teams', new Document([
+        $database->createDocument($teams, new Document([
             '$id' => 'team1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2387,7 +2379,7 @@ trait OneToManyTests
         ]));
 
         // Create an additional player
-        $database->createDocument('players', new Document([
+        $database->createDocument($players, new Document([
             '$id' => 'player3',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2397,7 +2389,7 @@ trait OneToManyTests
         ]));
 
         // Verify initial state
-        $team = $database->getDocument('teams', 'team1');
+        $team = $database->getDocument($teams, 'team1');
         $this->assertEquals('The Warriors', $team->getAttribute('name'));
         $this->assertEquals('San Francisco', $team->getAttribute('city'));
         $this->assertEquals(1946, $team->getAttribute('founded'));
@@ -2407,9 +2399,9 @@ trait OneToManyTests
 
         // Partial update that changes BOTH flat data (city) AND relationship (players)
         // Do NOT update name or founded
-        $database->updateDocument('teams', 'team1', new Document([
+        $database->updateDocument($teams, 'team1', new Document([
             '$id' => 'team1',
-            '$collection' => 'teams',
+            '$collection' => $teams,
             'city' => 'Oakland', // Update flat data
             'players' => ['player1', 'player3'], // Update relationship (replace player2 with player3)
             // NOTE: We deliberately do NOT include 'name' or 'founded'
@@ -2420,7 +2412,7 @@ trait OneToManyTests
         ]));
 
         // Verify that both updates worked and other fields preserved
-        $teamAfter = $database->getDocument('teams', 'team1');
+        $teamAfter = $database->getDocument($teams, 'team1');
         $this->assertEquals('The Warriors', $teamAfter->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Oakland', $teamAfter->getAttribute('city'), 'City should be updated');
         $this->assertEquals(1946, $teamAfter->getAttribute('founded'), 'Founded should be preserved');
@@ -2434,17 +2426,17 @@ trait OneToManyTests
         $this->assertNotContains('player2', $playerIds, 'Should no longer have player2');
 
         // Verify reverse relationships
-        $player1 = $database->getDocument('players', 'player1');
+        $player1 = $database->getDocument($players, 'player1');
         $this->assertEquals('team1', $player1->getAttribute('team')->getId());
 
-        $player2 = $database->getDocument('players', 'player2');
+        $player2 = $database->getDocument($players, 'player2');
         $this->assertNull($player2->getAttribute('team'), 'Player2 should no longer have a team');
 
-        $player3 = $database->getDocument('players', 'player3');
+        $player3 = $database->getDocument($players, 'player3');
         $this->assertEquals('team1', $player3->getAttribute('team')->getId());
 
-        $database->deleteCollection('teams');
-        $database->deleteCollection('players');
+        $database->deleteCollection($teams);
+        $database->deleteCollection($players);
     }
 
     public function testPartialUpdateOneToManyChildSide(): void
@@ -2458,18 +2450,21 @@ trait OneToManyTests
             return;
         }
 
-        $database->createCollection('blogs');
-        $database->createCollection('posts');
+        $blogs = 'blogs_' . uniqid();
+        $posts = 'posts_' . uniqid();
 
-        $database->createAttribute('blogs', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('blogs', new Attribute(key: 'description', type: ColumnType::String, size: 1000, required: false));
-        $database->createAttribute('posts', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('posts', new Attribute(key: 'views', type: ColumnType::Integer, size: 0, required: false));
+        $database->createCollection($blogs);
+        $database->createCollection($posts);
 
-        $database->createRelationship(new Relationship(collection: 'blogs', relatedCollection: 'posts', type: RelationType::OneToMany, twoWay: true, key: 'posts', twoWayKey: 'blog'));
+        $database->createAttribute($blogs, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($blogs, new Attribute(key: 'description', type: ColumnType::String, size: 1000, required: false));
+        $database->createAttribute($posts, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($posts, new Attribute(key: 'views', type: ColumnType::Integer, size: 0, required: false));
+
+        $database->createRelationship(new Relationship(collection: $blogs, relatedCollection: $posts, type: RelationType::OneToMany, twoWay: true, key: 'posts', twoWayKey: 'blog'));
 
         // Create blog with posts
-        $database->createDocument('blogs', new Document([
+        $database->createDocument($blogs, new Document([
             '$id' => 'blog1',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Tech Blog',
@@ -2480,20 +2475,20 @@ trait OneToManyTests
         ]));
 
         // Partial update from child (post) side - update views only, preserve blog relationship
-        $database->updateDocument('posts', 'post1', new Document([
+        $database->updateDocument($posts, 'post1', new Document([
             '$id' => 'post1',
-            '$collection' => 'posts',
+            '$collection' => $posts,
             'views' => 200,
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
         ]));
 
-        $post = $database->getDocument('posts', 'post1');
+        $post = $database->getDocument($posts, 'post1');
         $this->assertEquals('Post 1', $post->getAttribute('title'), 'Title should be preserved');
         $this->assertEquals(200, $post->getAttribute('views'), 'Views should be updated');
         $this->assertEquals('blog1', $post->getAttribute('blog')->getId(), 'Blog relationship should be preserved');
 
-        $database->deleteCollection('blogs');
-        $database->deleteCollection('posts');
+        $database->deleteCollection($blogs);
+        $database->deleteCollection($posts);
     }
 
     public function testPartialUpdateWithStringIdsVsDocuments(): void
@@ -2507,17 +2502,20 @@ trait OneToManyTests
             return;
         }
 
-        $database->createCollection('libraries');
-        $database->createCollection('books_lib');
+        $libraries = 'libraries_' . uniqid();
+        $booksLib = 'books_lib_' . uniqid();
 
-        $database->createAttribute('libraries', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('libraries', new Attribute(key: 'location', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute('books_lib', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createCollection($libraries);
+        $database->createCollection($booksLib);
 
-        $database->createRelationship(new Relationship(collection: 'libraries', relatedCollection: 'books_lib', type: RelationType::OneToMany, twoWay: true, key: 'books', twoWayKey: 'library'));
+        $database->createAttribute($libraries, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($libraries, new Attribute(key: 'location', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($booksLib, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+
+        $database->createRelationship(new Relationship(collection: $libraries, relatedCollection: $booksLib, type: RelationType::OneToMany, twoWay: true, key: 'books', twoWayKey: 'library'));
 
         // Create library with books
-        $database->createDocument('libraries', new Document([
+        $database->createDocument($libraries, new Document([
             '$id' => 'lib1',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'Central Library',
@@ -2528,44 +2526,44 @@ trait OneToManyTests
         ]));
 
         // Create standalone book
-        $database->createDocument('books_lib', new Document([
+        $database->createDocument($booksLib, new Document([
             '$id' => 'book2',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Book Two',
         ]));
 
         // Partial update using STRING IDs for relationship
-        $database->updateDocument('libraries', 'lib1', new Document([
+        $database->updateDocument($libraries, 'lib1', new Document([
             '$id' => 'lib1',
-            '$collection' => 'libraries',
-            'books' => ['book1', 'book2'], // Using string IDs
+            '$collection' => $libraries,
+            'books' => ['book1', 'book2'],
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
         ]));
 
-        $lib = $database->getDocument('libraries', 'lib1');
+        $lib = $database->getDocument($libraries, 'lib1');
         $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
         $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
 
         // Create another standalone book
-        $database->createDocument('books_lib', new Document([
+        $database->createDocument($booksLib, new Document([
             '$id' => 'book3',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Book Three',
         ]));
 
         // Partial update using DOCUMENT OBJECTS for relationship
-        $database->updateDocument('libraries', 'lib1', new Document([
+        $database->updateDocument($libraries, 'lib1', new Document([
             '$id' => 'lib1',
-            '$collection' => 'libraries',
-            'books' => [ // Using Document objects
+            '$collection' => $libraries,
+            'books' => [
                 new Document(['$id' => 'book1']),
                 new Document(['$id' => 'book3']),
             ],
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
         ]));
 
-        $lib = $database->getDocument('libraries', 'lib1');
+        $lib = $database->getDocument($libraries, 'lib1');
         $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
         $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
@@ -2576,7 +2574,7 @@ trait OneToManyTests
         $this->assertContains('book1', $bookIds);
         $this->assertContains('book3', $bookIds);
 
-        $database->deleteCollection('libraries');
-        $database->deleteCollection('books_lib');
+        $database->deleteCollection($libraries);
+        $database->deleteCollection($booksLib);
     }
 }

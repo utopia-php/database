@@ -14,9 +14,26 @@ use Utopia\Query\Schema\ColumnType;
 
 trait AggregationTests
 {
+    private static array $createdProductCollections = [];
+    private static string $aggWorkerSuffix = '';
+
+    private function getAggSuffix(): string
+    {
+        if (self::$aggWorkerSuffix === '') {
+            self::$aggWorkerSuffix = '_' . substr(uniqid(), -6);
+        }
+
+        return self::$aggWorkerSuffix;
+    }
+
     private function createProducts(Database $database, string $collection = 'agg_products'): void
     {
+        if (isset(self::$createdProductCollections[$collection])) {
+            return;
+        }
+
         if ($database->exists($database->getDatabase(), $collection)) {
+            self::$createdProductCollections[$collection] = true;
             return;
         }
 
@@ -1241,7 +1258,7 @@ trait AggregationTests
             return;
         }
 
-        $col = 'dp_agg_' . $collSuffix;
+        $col = 'dp_agg_' . $collSuffix . $this->getAggSuffix();
         $this->createProducts($database, $col);
 
         $aggQuery = match ($method) {
@@ -1288,7 +1305,7 @@ trait AggregationTests
             return;
         }
 
-        $col = 'dp_grpby';
+        $col = 'dp_grpby' . $this->getAggSuffix();
         $this->createProducts($database, $col);
 
         $queries = array_merge($filters, [

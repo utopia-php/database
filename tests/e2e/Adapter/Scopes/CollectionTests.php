@@ -921,7 +921,7 @@ trait CollectionTests
         try {
             $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 10 : 'tenant_10';
             $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 20 : 'tenant_20';
-            $colName = 'multiTenantCol';
+            $colName = 'mt_' . uniqid();
 
             $database->setTenant($tenant1);
 

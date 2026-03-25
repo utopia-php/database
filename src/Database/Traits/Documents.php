@@ -470,6 +470,14 @@ trait Documents
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        if (
+            $this->adapter->getSharedTables()
+            && ! $this->adapter->getTenantPerDocument()
+            && empty($this->adapter->getTenant())
+        ) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (! $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
@@ -1207,6 +1215,18 @@ trait Documents
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
+        if (
+            $this->adapter->getSharedTables()
+            && ! $this->adapter->getTenantPerDocument()
+            && empty($this->adapter->getTenant())
+        ) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        if (! $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
+            throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
+        }
+
         if (empty($documents)) {
             return 0;
         }

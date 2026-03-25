@@ -1425,6 +1425,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $this->replaceChars('$', '_', $record);
 
         $filters = ['_uid' => $id];
+
+        $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
 
         try {
@@ -1462,6 +1464,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
+
+        $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
 
         $record = $updates->getArrayCopy();
@@ -1601,6 +1605,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = ['_uid' => $id];
+
+        $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
 
         $options = $this->getTransactionOptions();
@@ -1627,6 +1633,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters([new Query(Method::Equal, '_id', $sequences)]);
+
+        $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
@@ -1656,6 +1664,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
+
+        $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
 
         if ($max !== null || $min !== null) {

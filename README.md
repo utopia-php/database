@@ -896,6 +896,10 @@ Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP ve
 
 ## Testing
 
+### Setup
+
+`docker-compose up --detach`
+
 ### E2E
 
 `docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/e2e`
@@ -908,6 +912,9 @@ Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP ve
 
 `docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit`
 
+### Teardown
+
+`docker-compose down`
 
 ## Contributing
 

@@ -214,6 +214,7 @@ class Database
     public const EVENT_INDEX_DELETE = 'index_delete';
 
     public const EVENT_CACHE_PURGE_FAILURE = 'cache_purge_failure';
+    public const EVENT_CACHE_READ_FAILURE = 'cache_read_failure';
 
     public const INSERT_BATCH_SIZE = 1_000;
     public const DELETE_BATCH_SIZE = 1_000;
@@ -1642,7 +1643,11 @@ class Database
             $this->cache->flush();
         } catch (\Throwable $e) {
             Console::warning('Failed to flush cache on database delete: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
         }
 
         return $deleted;
@@ -4794,7 +4799,11 @@ class Database
             $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
         } catch (\Throwable $e) {
             Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_READ_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_READ_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             $cached = null;
         }
 
@@ -4874,7 +4883,11 @@ class Database
                 $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (\Throwable $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
-                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+                try {
+                    $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+                } catch (\Throwable $innerException) {
+                    Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+                }
             }
         }
 
@@ -6283,12 +6296,6 @@ class Database
 
             $document = $this->adapter->castingAfter($collection, $document);
 
-            $this->purgeCachedDocument($collection->getId(), $id);
-
-            if ($document->getId() !== $id) {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
-            }
-
             // If operators were used, refetch document to get computed values
             $hasOperators = false;
             foreach ($document->getArrayCopy() as $value) {
@@ -6308,6 +6315,13 @@ class Database
 
         if ($document->isEmpty()) {
             return $document;
+        }
+
+        // Purge cache outside the transaction so cache failures cannot roll back DB writes (half-open)
+        $this->purgeCachedDocument($collection->getId(), $id);
+
+        if ($document->getId() !== $id) {
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
         }
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
@@ -7646,12 +7660,12 @@ class Database
 
             $result = $this->adapter->deleteDocument($collection->getId(), $id);
 
-            $this->purgeCachedDocument($collection->getId(), $id);
-
             return $result;
         });
 
         if ($deleted) {
+            // Purge cache outside the transaction so cache failures cannot roll back DB writes (half-open)
+            $this->purgeCachedDocument($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
         }
 
@@ -8227,7 +8241,11 @@ class Database
             $documentKeys = $this->cache->list($collectionKey);
         } catch (\Throwable $e) {
             Console::warning('Failed to list collection cache keys: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             return false;
         }
 
@@ -8236,7 +8254,11 @@ class Database
                 $this->cache->purge($documentKey);
             } catch (\Throwable $e) {
                 Console::warning('Failed to purge document cache key: ' . $e->getMessage());
-                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+                try {
+                    $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+                } catch (\Throwable $innerException) {
+                    Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+                }
             }
         }
 
@@ -8244,7 +8266,11 @@ class Database
             $this->cache->purge($collectionKey);
         } catch (\Throwable $e) {
             Console::warning('Failed to purge collection cache key: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             return false;
         }
 
@@ -8274,7 +8300,11 @@ class Database
             $this->cache->purge($collectionKey, $documentKey);
         } catch (\Throwable $e) {
             Console::warning('Failed to purge document reference from collection cache: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             $success = false;
         }
 
@@ -8282,7 +8312,11 @@ class Database
             $this->cache->purge($documentKey);
         } catch (\Throwable $e) {
             Console::warning('Failed to purge document cache key: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             $success = false;
         }
 
@@ -8306,15 +8340,23 @@ class Database
             $result = $this->purgeCachedDocumentInternal($collectionId, $id);
         } catch (\Throwable $e) {
             Console::warning('Failed to purge document cache: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
             return false;
         }
 
         if ($id !== null) {
-            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-                '$id' => $id,
-                '$collection' => $collectionId
-            ]));
+            try {
+                $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                    '$id' => $id,
+                    '$collection' => $collectionId
+                ]));
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_DOCUMENT_PURGE listener threw: ' . $innerException->getMessage());
+            }
         }
 
         return $result;
@@ -10121,7 +10163,11 @@ class Database
             $this->withRetries($operation);
         } catch (\Throwable $e) {
             Console::warning('Failed to purge cache after retries: ' . $e->getMessage());
-            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            try {
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            } catch (\Throwable $innerException) {
+                Console::error('Cache unavailable: EVENT_CACHE_PURGE_FAILURE listener threw: ' . $innerException->getMessage());
+            }
         }
     }
 

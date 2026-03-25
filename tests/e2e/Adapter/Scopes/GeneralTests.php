@@ -373,7 +373,7 @@ trait GeneralTests
         // Bring down Redis
         $stdout = '';
         $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', '', $stdout, $stderr);
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop -t 0', '', $stdout, $stderr);
 
         // Check we can read data still
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
@@ -444,7 +444,7 @@ trait GeneralTests
             // Bring down Redis
             $stdout = '';
             $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', '', $stdout, $stderr);
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop -t 0', '', $stdout, $stderr);
             sleep(1);
 
             // Restart Redis containers
@@ -703,6 +703,7 @@ trait GeneralTests
     {
         $redis = new \Redis();
         $redis->connect('redis', 6379, 2.0);
+        $redis->setOption(\Redis::OPT_READ_TIMEOUT, 5);
         $redis->select(0);
         $adapter = new \Utopia\Cache\Adapter\Redis($redis);
         $adapter->setMaxRetries(3);

@@ -659,7 +659,7 @@ trait Documents
                     }
                 }
 
-                $internalKeys = ['$id', '$internalId', '$collection', '$createdAt', '$updatedAt', '$tenant', '$sequence', '$version'];
+                $internalKeys = ['$internalId', '$collection', '$tenant', '$sequence'];
 
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {

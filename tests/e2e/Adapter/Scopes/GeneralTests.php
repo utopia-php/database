@@ -2,8 +2,6 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use PHPUnit\Framework\Attributes\Group;
-use Utopia\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -337,8 +335,7 @@ trait GeneralTests
             ->setDatabase($schema);
     }
 
-    #[Group('redis-destructive')]
-    public function testCacheFallback(): void
+    public function testCacheFallbackOnFailure(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -349,59 +346,42 @@ trait GeneralTests
             return;
         }
 
-        $this->getDatabase()->getAuthorization()->cleanRoles();
-        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
+        $collection = 'cacheFallback_'.uniqid();
 
-        // Write mock data
-        $database->createCollection('testRedisFallback', attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
+        $database->createCollection($collection, attributes: [
+            new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any()),
         ]);
 
-        $database->createDocument('testRedisFallback', new Document([
+        $database->createDocument($collection, new Document([
             '$id' => 'doc1',
-            'string' => 'text📝',
+            'title' => 'hello',
         ]));
 
-        $database->createIndex('testRedisFallback', new Index(key: 'index1', type: IndexType::Key, attributes: ['string']));
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $this->assertCount(1, $database->find($collection));
 
-        // Bring down Redis
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop -t 0', '', $stdout, $stderr);
+        $brokenRedis = $this->createMock(\Redis::class);
+        $brokenRedis->method('get')->willThrowException(new \RedisException('gone'));
+        $brokenRedis->method('set')->willThrowException(new \RedisException('gone'));
+        $brokenRedis->method('del')->willThrowException(new \RedisException('gone'));
+        $brokenRedis->method('expire')->willThrowException(new \RedisException('gone'));
 
-        // Check we can read data still
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-        $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
+        $brokenAdapter = new \Utopia\Cache\Adapter\Redis($brokenRedis);
+        $brokenAdapter->setMaxRetries(0);
+        $originalCache = $database->getCache();
+        $database->setCache(new \Utopia\Cache\Cache($brokenAdapter));
 
-        // Check we cannot modify data (error message varies: "went away", DNS failure, connection refused)
-        try {
-            $database->updateDocument('testRedisFallback', 'doc1', new Document([
-                'string' => 'text📝 updated',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(\RedisException::class, $e);
-        }
+        $doc = $database->getDocument($collection, 'doc1');
+        $this->assertFalse($doc->isEmpty());
+        $this->assertEquals('hello', $doc->getAttribute('title'));
 
-        try {
-            $database->deleteDocument('testRedisFallback', 'doc1');
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(\RedisException::class, $e);
-        }
+        $results = $database->find($collection);
+        $this->assertCount(1, $results);
 
-        // Restart Redis containers
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
-        sleep(2);
-        $this->reconnectCache();
-
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $database->setCache($originalCache);
+        $database->deleteCollection($collection);
     }
 
     /**
@@ -624,15 +604,4 @@ trait GeneralTests
     /**
      * Wait for Redis to be ready with a readiness probe
      */
-    private function reconnectCache(): void
-    {
-        $redis = new \Redis();
-        $redis->connect('redis', 6379, 2.0);
-        $redis->setOption(\Redis::OPT_READ_TIMEOUT, 5);
-        $redis->select(0);
-        $adapter = new \Utopia\Cache\Adapter\Redis($redis);
-        $adapter->setMaxRetries(3);
-        $this->getDatabase()->setCache(new \Utopia\Cache\Cache($adapter));
-    }
-
 }

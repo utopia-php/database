@@ -1,0 +1,2389 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Cannot access offset ''columnName'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Cannot access offset ''indexName'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Cannot access offset ''indexType'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Cannot access offset ''nonUnique'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Cannot access offset ''subPart'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 2
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 4
+			path: src/Database/Adapter/MariaDB.php
+
+		-
+			message: '#^Method Utopia\\Database\\Adapter\\Pool\:\:getSchemaIndexes\(\) should return array\<Utopia\\Database\\Document\> but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Adapter/Pool.php
+
+		-
+			message: '#^Method Utopia\\Database\\Adapter\\Pool\:\:getSupportForSchemaIndexes\(\) should return bool but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Adapter/Pool.php
+
+		-
+			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) has parameter \$attributeKeys with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) has parameter \$spatialAttributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_diff expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_intersect expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$query of method Utopia\\Database\\Profiler\\QueryProfiler\:\:log\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$row of method Utopia\\Database\\Adapter\:\:decorateRow\(\) expects array\<string, mixed\>, array given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#2 \$arrays of function array_diff expects an array of values castable to string, array\<int, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#2 \$arrays of function array_diff expects an array of values castable to string, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#2 \$arrays of function array_diff expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#2 \$arrays of function array_intersect expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 3
+			path: src/Database/Adapter/SQL.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_diff expects an array of values castable to string, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Adapter/SQLite.php
+
+		-
+			message: '#^Parameter \#1 \$input of class Utopia\\Database\\Document constructor expects array\<string, mixed\>, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Cache/QueryCache.php
+
+		-
+			message: '#^Parameter \#3 \$hash of method Utopia\\Cache\\Cache\:\:load\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Cache/QueryCache.php
+
+		-
+			message: '#^Binary operation "\." between mixed and ''\:\:'' results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Database/Database.php
+
+		-
+			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Database/Database.php
+
+		-
+			message: '#^Call to function is_null\(\) with mixed will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: src/Database/Database.php
+
+		-
+			message: '#^Parameter \#4 \$tenant of method Utopia\\Database\\Cache\\QueryCache\:\:buildQueryKey\(\) expects int\|null, int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Database.php
+
+		-
+			message: '#^Method Utopia\\Database\\Document\:\:getInternalKeySet\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Document.php
+
+		-
+			message: '#^Method Utopia\\Database\\Document\:\:getPermissionsByType\(\) should return array\<string\> but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Document.php
+
+		-
+			message: '#^Method Utopia\\Database\\Document\:\:getTenant\(\) should return int\|string\|null but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Document.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Database/Document.php
+
+		-
+			message: '#^Property Utopia\\Database\\Document\:\:\$parsedPermissions type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Document.php
+
+		-
+			message: '#^Parameter \#1 \$collection of class Utopia\\Database\\Event\\DocumentDeleted constructor expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Event/EventDispatcherHook.php
+
+		-
+			message: '#^Parameter \#2 \$documentId of class Utopia\\Database\\Event\\DocumentDeleted constructor expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Event/EventDispatcherHook.php
+
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 1
+			path: src/Database/Loading/LazyProxy.php
+
+		-
+			message: '#^Property Utopia\\Database\\Loading\\LazyProxy\:\:\$batchLoader \(Utopia\\Database\\Loading\\BatchLoader\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Database/Loading/LazyProxy.php
+
+		-
+			message: '#^Property Utopia\\Database\\Loading\\LazyProxy\:\:\$realDocument is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/Database/Loading/LazyProxy.php
+
+		-
+			message: '#^Parameter \#1 \$version of method Utopia\\Database\\Migration\\MigrationTracker\:\:markRolledBack\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Migration/MigrationRunner.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 2
+			path: src/Database/Migration/MigrationRunner.php
+
+		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 1
+			path: src/Database/Migration/MigrationTracker.php
+
+		-
+			message: '#^Method Utopia\\Database\\Migration\\MigrationTracker\:\:getAppliedVersions\(\) should return array\<string\> but returns array\<mixed\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Migration/MigrationTracker.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Utopia\\Database\\Adapter and ''enableAlterLocks'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Database/Migration/Strategy/OnlineSchemaChange.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: src/Database/Migration/Strategy/OnlineSchemaChange.php
+
+		-
+			message: '#^Parameter \#1 \$class of class ReflectionProperty constructor expects class\-string\|object, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/EntityMapper.php
+
+		-
+			message: '#^Parameter \#1 \$objectOrClass of class ReflectionClass constructor expects class\-string\<T of object\>\|T of object, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/EntityMapper.php
+
+		-
+			message: '#^Method Utopia\\Database\\ORM\\MetadataFactory\:\:parseLifecycleCallbacks\(\) has parameter \$ref with generic class ReflectionClass but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Database/ORM/MetadataFactory.php
+
+		-
+			message: '#^Parameter \#1 \$objectOrClass of class ReflectionClass constructor expects class\-string\<T of object\>\|T of object, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/MetadataFactory.php
+
+		-
+			message: '#^Cannot access constant class on mixed\.$#'
+			identifier: classConstant.nonObject
+			count: 2
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Cannot assign offset mixed to SplObjectStorage\<object, array\<string, mixed\>\>\.$#'
+			identifier: offsetAssign.dimType
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$className of method Utopia\\Database\\ORM\\MetadataFactory\:\:getMetadata\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$entity of method Utopia\\Database\\ORM\\EntityMapper\:\:getId\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$entity of method Utopia\\Database\\ORM\\EntityMapper\:\:takeSnapshot\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$entity of method Utopia\\Database\\ORM\\EntityMapper\:\:toDocument\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$entity of method Utopia\\Database\\ORM\\UnitOfWork\:\:invokeCallbacks\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$object of method SplObjectStorage\<object,Utopia\\Database\\ORM\\EntityState\>\:\:contains\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#1 \$object of method SplObjectStorage\<object,array\<string, mixed\>\>\:\:contains\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Parameter \#2 \$entity of method Utopia\\Database\\ORM\\EntityMapper\:\:applyDocumentToEntity\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/ORM/UnitOfWork.php
+
+		-
+			message: '#^Offset ''function'' on array\{function\: string, line\?\: int, file\?\: string, class\?\: class\-string, type\?\: ''\-\>''\|''\:\:'', args\?\: list\<mixed\>, object\?\: object\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Database/Profiler/QueryProfiler.php
+
+		-
+			message: '#^Parameter \#2 \$values of static method Utopia\\Query\\Query\:\:equal\(\) expects array\<array\<mixed\>\|bool\|float\|int\|string\|null\>, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Repository/Repository.php
+
+		-
+			message: '#^Parameter \#3 \$type of method Utopia\\Database\\Database\:\:updateAttribute\(\) expects string\|Utopia\\Query\\Schema\\ColumnType\|null, Utopia\\Database\\Attribute given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Schema/DiffResult.php
+
+		-
+			message: '#^Method Utopia\\Database\\Seeder\\Factory\:\:createMany\(\) should return array\<Utopia\\Database\\Document\> but returns int\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Database/Seeder/Factory.php
+
+		-
+			message: '#^Method Utopia\\Database\\Type\\EmbeddableType\:\:compose\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Type/EmbeddableType.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Database/Validator/Query/Select.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: src/Database/Validator/Sequence.php
+
+		-
+			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\+" between mixed and 1 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\+" between mixed and 7 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\-" between mixed and 1 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\." between mixed and ''_'' results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\." between mixed and ''new_value'' results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertFalse\(\) with false will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<Utopia\\Database\\Document\> will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Utopia\\Database\\Document will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 5
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true and ''Exception thrown as…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 10
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''\$id'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 158
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''age'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''array'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 11
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''attributes'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''avatar'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''birds'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''boolean'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''buildings'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''bulkUpdated'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''capital'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''children'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''country'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''cows'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''cpu'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''data'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''date'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''debug'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''default'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 12
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''description'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''dormitory'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''emoji'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''farmer'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''filters'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''float'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''floor'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''format'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 10
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''formatOptions'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 16
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''home'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''info'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''inspections'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 11
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''key'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 20
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''lengths'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 7
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level1'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level2'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level2OneToManyChild'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3ManyToOneParent'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3OneToMany'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 9
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3OneToManyChild'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3OneToOne'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level3OneToOneNull'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level4'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''level5'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''matrix'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''max'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''mayor'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 8
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''min'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''name'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 25
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''null_value'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''number'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''options'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 54
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''orders'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''origin'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''owner'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''pattern'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''pets'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 8
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''platforms'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''players'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''plot'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''prizes'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''projects'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''publisher'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''relatedCollection'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 13
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''relationType'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 13
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''required'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 13
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''rooms'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''signed'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 11
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''size'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 13
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''skills'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''stones'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''string'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''supporters'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''teacher'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''team'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''toppings'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 8
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''towns'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''toys'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''twoWay'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 13
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''twoWayKey'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 15
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''type'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 43
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''user'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''version'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset ''year'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 214
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset 1 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 60
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset 2 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 5
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset 4 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 10
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot access offset int\<0, 2\> on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method assertEquals\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getArrayCopy\(\) on array\<string, mixed\>\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on Utopia\\Database\\Document\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on array\<string, mixed\>\.$#'
+			identifier: method.nonObject
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 47
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getId\(\) on Utopia\\Database\\Document\|false\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getId\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 77
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method getPermissions\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method isEmpty\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method setAttribute\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 7
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot call method setDefaultStatus\(\) on Utopia\\Database\\Validator\\Authorization\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot cast mixed to float\.$#'
+			identifier: cast.double
+			count: 16
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 16
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 5
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:cleanupAggCollections\(\) has parameter \$collections with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:groupByCountProvider\(\) should return array\<string, array\{string, array\<string\>, array\<Utopia\\Database\\Query\>, int\}\> but returns array\{''group by category no filter''\: array\{''category'', array\{\}, 3\}, ''group by category price \> 50''\: array\{''category'', array\{Utopia\\Database\\Query\}, 3\}, ''group by category price \> 200''\: array\{''category'', array\{Utopia\\Database\\Query\}, 1\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:initMoviesFixture\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:invalidDefaultValues\(\) should return array\<array\<bool\|float\|int\|string\>\> but returns array\<int, list\<bool\|float\|int\|string\|Utopia\\Query\\Schema\\ColumnType\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:singleAggregationProvider\(\) should return array\<string, array\{string, string, string, array\<Utopia\\Database\\Query\>, float\|int\}\> but returns array\{''count all products''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{\}, 9\}, ''count electronics''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count clothing''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count books''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count price \> 100''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 4\}, ''count price \<\= 50''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 4\}, ''sum all prices''\: array\{''sum'', ''sum'', ''price'', ''total'', array\{\}, 2785\}, ''sum electronics''\: array\{''sum'', ''sum'', ''price'', ''total'', array\{Utopia\\Database\\Query\}, 2500\}, \.\.\.\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1084\:\:__construct\(\) has parameter \$events with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1084\:\:__construct\(\) has parameter \$test with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^PHPDoc tag @param for parameter \$type with type string is incompatible with native type Utopia\\Query\\Schema\\ColumnType\.$#'
+			identifier: parameter.phpDocType
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^PHPDoc tag @return with type array\<Utopia\\Database\\Document\> is incompatible with native type void\.$#'
+			identifier: return.phpDocType
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^PHPDoc tag @throws with type Tests\\E2E\\Adapter\\Scopes\\AuthorizationException\|Tests\\E2E\\Adapter\\Scopes\\ConflictException\|Tests\\E2E\\Adapter\\Scopes\\DatabaseException\|Tests\\E2E\\Adapter\\Scopes\\LimitException\|Tests\\E2E\\Adapter\\Scopes\\StructureException\|Utopia\\Database\\Exception\\Duplicate is not subtype of Throwable$#'
+			identifier: throws.notThrowable
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^PHPDoc tag @throws with type Tests\\E2E\\Adapter\\Scopes\\DatabaseException\|Tests\\E2E\\Adapter\\Scopes\\QueryException\|Utopia\\Database\\Exception\\Authorization\|Utopia\\Database\\Exception\\Duplicate\|Utopia\\Database\\Exception\\Limit\|Utopia\\Database\\Exception\\Structure\|Utopia\\Database\\Exception\\Timeout is not subtype of Throwable$#'
+			identifier: throws.notThrowable
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^PHPDoc tag @throws with type Tests\\E2E\\Adapter\\Scopes\\DatabaseException\|Utopia\\Database\\Exception\\Duplicate\|Utopia\\Database\\Exception\\Limit is not subtype of Throwable$#'
+			identifier: throws.notThrowable
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$array of function end expects array\|object, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$array of function sort expects TArray of array\<T\>, mixed given\.$#'
+			identifier: argument.type
+			count: 4
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$datetime of class DateTime constructor expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 27
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$id of method Utopia\\Database\\Database\:\:deleteCollection\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$json of function json_decode expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$min of class Utopia\\Validator\\Range constructor expects float\|int, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string of function base64_decode expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string of function base64_encode expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string of function strlen expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string of function strlen expects string, string\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string of function substr expects string, string\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$string1 of function strcmp expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \$value of function count expects array\|Countable, mixed given\.$#'
+			identifier: argument.type
+			count: 60
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$array of function array_map expects array, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$array of method PHPUnit\\Framework\\Assert\:\:assertArrayHasKey\(\) expects array\<mixed\>\|ArrayAccess\<\(int\|string\), mixed\>, Utopia\\Database\\Document\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$array of method PHPUnit\\Framework\\Assert\:\:assertArrayHasKey\(\) expects array\<mixed\>\|ArrayAccess\<\(int\|string\), mixed\>, mixed given\.$#'
+			identifier: argument.type
+			count: 28
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$array of method PHPUnit\\Framework\\Assert\:\:assertArrayNotHasKey\(\) expects array\<mixed\>\|ArrayAccess\<\(int\|string\), mixed\>, mixed given\.$#'
+			identifier: argument.type
+			count: 108
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$collection of method Utopia\\Database\\Database\:\:exists\(\) expects string\|null, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertContains\(\) expects iterable, mixed given\.$#'
+			identifier: argument.type
+			count: 12
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
+			identifier: argument.type
+			count: 92
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertNotContains\(\) expects iterable, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringContainsString\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringNotContainsString\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$id of method Utopia\\Database\\Database\:\:getDocument\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$max of class Utopia\\Validator\\Range constructor expects float\|int, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$string of method PHPUnit\\Framework\\Assert\:\:assertStringEndsWith\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$string of method PHPUnit\\Framework\\Assert\:\:assertStringStartsWith\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 6
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$string2 of function strcmp expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$subject of function preg_match expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 19
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method Utopia\\Query\\Query\:\:greaterThanEqual\(\) expects bool\|float\|int\|string, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Parameter \#2 \$values of static method Utopia\\Query\\Query\:\:equal\(\) expects array\<array\<mixed\>\|bool\|float\|int\|string\|null\>, array\<int, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$doc\-\>getId\(\) \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$finalQuantity \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$finalScore \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$finalTitle \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$lastNumber \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$name \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 7
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$num \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$text \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 2
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Part \$value \(mixed\) of encapsed string cannot be cast to string\.$#'
+			identifier: encapsedStringPart.nonString
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 24
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Property Tests\\E2E\\Adapter\\Base\:\:\$moviesFixtureData type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/e2e/Adapter/Base.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 2
+			path: tests/unit/Attributes/AttributeValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Attributes\\AttributeValidationTest\:\:setupCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Attributes/AttributeValidationTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Adapter\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 30
+			path: tests/unit/Authorization/PermissionCheckTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 8
+			path: tests/unit/Authorization/PermissionCheckTest.php
+
+		-
+			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 22
+			path: tests/unit/Authorization/PermissionCheckTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Authorization\\PermissionCheckTest\:\:buildCollectionDoc\(\) has parameter \$permissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Authorization/PermissionCheckTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Cache\\Cache\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: tests/unit/Cache/QueryCacheTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: tests/unit/Cache/QueryCacheTest.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/unit/CollectionModelTest.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
+			identifier: argument.type
+			count: 4
+			path: tests/unit/CollectionModelTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Adapter\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 6
+			path: tests/unit/CustomDocumentTypeTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/CustomDocumentTypeTest.php
+
+		-
+			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: tests/unit/CustomDocumentTypeTest.php
+
+		-
+			message: '#^Cannot access offset ''\$id'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/unit/DocumentAdvancedTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<Utopia\\Database\\Document\> will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/unit/Documents/AggregationErrorTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\AggregationErrorTest\:\:buildDatabase\(\) has parameter \$capabilities with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/AggregationErrorTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Documents/ConflictDetectionTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\ConflictDetectionTest\:\:setupCollectionAndDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/ConflictDetectionTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Documents/CreateDocumentLogicTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<string\> will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/unit/Documents/CreateDocumentLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\CreateDocumentLogicTest\:\:setupCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/CreateDocumentLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\CreateDocumentLogicTest\:\:setupCollection\(\) has parameter \$permissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/CreateDocumentLogicTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 3
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot access offset 1 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot access property \$value on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method expects\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method getMethod\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:buildDbWithCapabilities\(\) has parameter \$capabilities with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:collectionDoc\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:collectionDoc\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:collectionDoc\(\) has parameter \$permissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:setupCollectionLookup\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:setupCollectionLookup\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\FindLogicTest\:\:setupCollectionLookup\(\) has parameter \$permissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Offset ''\$sequence'' on array\{\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_count_values expects array, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of function in_array expects array, mixed given\.$#'
+			identifier: argument.type
+			count: 4
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 0 and 1 will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: tests/unit/Documents/FindLogicTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Documents/IncreaseDecreaseTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\IncreaseDecreaseTest\:\:setupCollectionWithDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/IncreaseDecreaseTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 2
+			path: tests/unit/Documents/SkipPermissionsTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Documents/UpdateDocumentLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\UpdateDocumentLogicTest\:\:setupCollectionAndDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/UpdateDocumentLogicTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Documents\\UpdateDocumentLogicTest\:\:setupCollectionAndDocument\(\) has parameter \$collectionPermissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Documents/UpdateDocumentLogicTest.php
+
+		-
+			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
+			identifier: classConstant.protected
+			count: 1
+			path: tests/unit/Indexes/IndexValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Indexes\\IndexValidationTest\:\:setupCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Indexes/IndexValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Indexes\\IndexValidationTest\:\:setupCollection\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Indexes/IndexValidationTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: tests/unit/Loading/LazyProxyTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: tests/unit/Loading/LazyProxyTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with false will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/unit/Loading/NPlusOneDetectorTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: tests/unit/Migration/MigrationRunnerTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/unit/Migration/MigrationRunnerTest.php
+
+		-
+			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 7
+			path: tests/unit/Migration/MigrationRunnerTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Migration\\MigrationRunnerTest\:\:createTrackerMock\(\) has parameter \$appliedVersions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Migration/MigrationRunnerTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Migration\\MigrationRunnerTest\:\:createTrackerMock\(\) has parameter \$batchDocs with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Migration/MigrationRunnerTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
+			identifier: method.notFound
+			count: 19
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 9
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 19
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 20
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 10
+			path: tests/unit/ORM/EntityManagerTest.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/unit/ORM/EntityMapperAdvancedTest.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/unit/ORM/EntityMapperAdvancedTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
+			identifier: method.notFound
+			count: 29
+			path: tests/unit/ORM/EntitySchemasSyncTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 29
+			path: tests/unit/ORM/EntitySchemasSyncTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 16
+			path: tests/unit/ORM/EntitySchemasSyncTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 18
+			path: tests/unit/ORM/EntitySchemasSyncTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 6
+			path: tests/unit/ORM/LifecycleCallbackTest.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\LifecycleEntity\:\:\$callLog type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/LifecycleCallbackTest.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\MultiCallbackEntity\:\:\$callLog type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/LifecycleCallbackTest.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\TestAllRelationsEntity\:\:\$posts type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/TestAllRelationsEntity.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\TestAllRelationsEntity\:\:\$tags type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/TestAllRelationsEntity.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\TestEntity\:\:\$permissions type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/TestEntity.php
+
+		-
+			message: '#^Property Tests\\Unit\\ORM\\TestEntity\:\:\$posts type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ORM/TestEntity.php
+
+		-
+			message: '#^Cannot access offset ''name'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Cannot access offset ''theme'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Cannot call method getId\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\ObjectAttribute\\ObjectAttributeValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\ObjectAttribute\\ObjectAttributeValidationTest\:\:setupCollections\(\) has parameter \$collections with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: tests/unit/ObjectAttribute/ObjectAttributeValidationTest.php
+
+		-
+			message: '#^Cannot call method toDocument\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Operator/OperatorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Operator\\OperatorValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Operator/OperatorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Operator\\OperatorValidationTest\:\:makeOperator\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Operator/OperatorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Operator\\OperatorValidationTest\:\:makeValidator\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Operator/OperatorValidationTest.php
+
+		-
+			message: '#^Cannot call method getMethod\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/OperatorTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with null will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/unit/Profiler/QueryProfilerAdvancedTest.php
+
+		-
+			message: '#^Cannot access property \$collection on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/unit/Profiler/QueryProfilerAdvancedTest.php
+
+		-
+			message: '#^Cannot access property \$durationMs on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/unit/Profiler/QueryProfilerAdvancedTest.php
+
+		-
+			message: '#^Cannot access property \$query on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/unit/Profiler/QueryProfilerAdvancedTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with false will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/unit/Profiler/QueryProfilerTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Utopia\\Database\\Document will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/unit/Relationships/RelationshipValidationTest.php
+
+		-
+			message: '#^Call to new Utopia\\Database\\Relationship\(\) on a separate line has no effect\.$#'
+			identifier: new.resultUnused
+			count: 1
+			path: tests/unit/Relationships/RelationshipValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Relationships\\RelationshipValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Relationships/RelationshipValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Relationships\\RelationshipValidationTest\:\:makeCollection\(\) has parameter \$permissions with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Relationships/RelationshipValidationTest.php
+
+		-
+			message: '#^Parameter \$type of class Utopia\\Database\\Relationship constructor expects Utopia\\Database\\RelationType, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/unit/Relationships/RelationshipValidationTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
+			identifier: method.notFound
+			count: 12
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot access property \$value on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot call method getMethod\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot call method getValues\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 12
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 13
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 12
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(mixed\)\: mixed\)\|null, Closure\(Utopia\\Database\\Query\)\: \(''and''\|''avg''\|''between''\|''bitAnd''\|''bitOr''\|''bitXor''\|''contains''\|''containsAll''\|''containsAny''\|''count''\|''countDistinct''\|''covers''\|''crosses''\|''crossJoin''\|''cursorAfter''\|''cursorBefore''\|''distanceEqual''\|''distanceGreaterThan''\|''distanceLessThan''\|''distanceNotEqual''\|''distinct''\|''elemMatch''\|''endsWith''\|''equal''\|''exists''\|''fullOuterJoin''\|''greaterThan''\|''greaterThanEqual''\|''groupBy''\|''having''\|''intersects''\|''isNotNull''\|''isNull''\|''join''\|''jsonContains''\|''jsonNotContains''\|''jsonOverlaps''\|''jsonPath''\|''leftJoin''\|''lessThan''\|''lessThanEqual''\|''limit''\|''max''\|''min''\|''naturalJoin''\|''notBetween''\|''notContains''\|''notCovers''\|''notCrosses''\|''notEndsWith''\|''notEqual''\|''notExists''\|''notIntersects''\|''notOverlaps''\|''notSearch''\|''notSpatialEquals''\|''notStartsWith''\|''notTouches''\|''offset''\|''or''\|''orderAsc''\|''orderDesc''\|''orderRandom''\|''orderVectorDistance''\|''overlaps''\|''raw''\|''regex''\|''rightJoin''\|''search''\|''select''\|''spatialEquals''\|''startsWith''\|''stddev''\|''stddevPop''\|''stddevSamp''\|''sum''\|''touches''\|''union''\|''unionAll''\|''variance''\|''varPop''\|''varSamp''\|''vectorCosine''\|''vectorDot''\|''vectorEuclidean''\) given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/unit/Repository/RepositoryTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
+			identifier: method.notFound
+			count: 12
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 12
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 12
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 12
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(mixed\)\: mixed\)\|null, Closure\(Utopia\\Database\\Query\)\: string given\.$#'
+			identifier: argument.type
+			count: 6
+			path: tests/unit/Repository/ScopeTest.php
+
+		-
+			message: '#^Cannot access property \$key on Utopia\\Database\\Attribute\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/unit/Schema/SchemaDiffTest.php
+
+		-
+			message: '#^Cannot access property \$key on Utopia\\Database\\Index\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/unit/Schema/SchemaDiffTest.php
+
+		-
+			message: '#^Cannot access property \$size on Utopia\\Database\\Attribute\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/unit/Schema/SchemaDiffTest.php
+
+		-
+			message: '#^Cannot call method getId\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Schemaless/SchemalessValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Schemaless\\SchemalessValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Schemaless/SchemalessValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Schemaless\\SchemalessValidationTest\:\:makeCollection\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Schemaless/SchemalessValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Schemaless\\SchemalessValidationTest\:\:setupCollections\(\) has parameter \$collections with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Schemaless/SchemalessValidationTest.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: tests/unit/Schemaless/SchemalessValidationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Faker\\Generator will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/unit/Seeder/FactoryTest.php
+
+		-
+			message: '#^Cannot call method email\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Seeder/FactoryTest.php
+
+		-
+			message: '#^Cannot call method name\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/unit/Seeder/FactoryTest.php
+
+		-
+			message: '#^Cannot call method numberBetween\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Seeder/FactoryTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
+			identifier: method.notFound
+			count: 6
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method method\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 7
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method willReturn\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 6
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method willReturnOnConsecutiveCalls\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method willThrowException\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Cannot call method with\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/unit/Seeder/FixtureTest.php
+
+		-
+			message: '#^Method Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:16\:\:__construct\(\) has parameter \$order with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Method Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:30\:\:__construct\(\) has parameter \$order with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Method Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:30\:\:dependencies\(\) should return array\<class\-string\<Utopia\\Database\\Seeder\\Seeder\>\> but returns array\<int, string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Property Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:16\:\:\$order is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Property Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:16\:\:\$order type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Property Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:30\:\:\$order is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Property Utopia\\Database\\Seeder\\Seeder@anonymous/tests/unit/Seeder/SeederRunnerTest\.php\:30\:\:\$order type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Seeder/SeederRunnerTest.php
+
+		-
+			message: '#^Cannot call method getId\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Spatial/SpatialValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Spatial\\SpatialValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Spatial/SpatialValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Spatial\\SpatialValidationTest\:\:makeCollection\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Spatial/SpatialValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Spatial\\SpatialValidationTest\:\:setupCollections\(\) has parameter \$collections with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Spatial/SpatialValidationTest.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: tests/unit/Spatial/SpatialValidationTest.php
+
+		-
+			message: '#^Binary operation "\*" between mixed and 100 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/unit/Type/TypeRegistryTest.php
+
+		-
+			message: '#^Binary operation "/" between mixed and 100 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/unit/Type/TypeRegistryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Cannot call method getId\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Vector\\VectorValidationTest\:\:makeCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Vector\\VectorValidationTest\:\:makeCollection\(\) has parameter \$indexes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Vector\\VectorValidationTest\:\:setupCollections\(\) has parameter \$collections with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Vector\\VectorValidationTest\:\:vectorCollection\(\) has parameter \$extraAttrs with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php
+
+		-
+			message: '#^Possibly invalid array key type mixed\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: tests/unit/Vector/VectorValidationTest.php

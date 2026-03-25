@@ -2,12 +2,17 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -17,8 +22,20 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
+use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema\Blueprint;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 
 /**
  * Differences between MariaDB and Postgres
@@ -28,11 +45,67 @@ use Utopia\Database\Query;
  * 3. DATETIME is TIMESTAMP
  * 4. Full-text search is different - to_tsvector() and to_tsquery()
  */
-class Postgres extends SQL
+class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationships, Feature\Spatial, Feature\Timeouts, Feature\Upserts
 {
     public const MAX_IDENTIFIER_NAME = 63;
+
     /**
-     * @inheritDoc
+     * Get the list of capabilities supported by the PostgreSQL adapter.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Vectors,
+            Capability::Objects,
+            Capability::SpatialIndexNull,
+            Capability::MultiDimensionDistance,
+            Capability::TrigramIndex,
+            Capability::POSIX,
+            Capability::ObjectIndexes,
+        ]);
+    }
+
+    /**
+     * Get the case-insensitive LIKE operator for PostgreSQL.
+     *
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'ILIKE';
+    }
+
+    /**
+     * Get the POSIX regex matching operator for PostgreSQL.
+     *
+     * @return string
+     */
+    public function getRegexOperator(): string
+    {
+        return '~';
+    }
+
+    /**
+     * Get the PostgreSQL backend process ID as the connection identifier.
+     *
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
+        $stmt = $this->getPDO()->query($result->query);
+        if ($stmt === false) {
+            return '';
+        }
+        $col = $stmt->fetchColumn();
+
+        return \is_scalar($col) ? (string) $col : '';
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public function startTransaction(): bool
     {
@@ -47,14 +120,14 @@ class Postgres extends SQL
 
                 $result = $this->getPDO()->beginTransaction();
             } else {
-                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
+                $this->getPDO()->exec('SAVEPOINT transaction'.$this->inTransaction);
                 $result = true;
             }
         } catch (PDOException $e) {
-            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
+        if (! $result) {
             throw new TransactionException('Failed to start transaction');
         }
 
@@ -64,7 +137,7 @@ class Postgres extends SQL
     }
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     public function rollbackTransaction(): bool
     {
@@ -74,8 +147,9 @@ class Postgres extends SQL
 
         try {
             if ($this->inTransaction > 1) {
-                $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->getPDO()->exec('ROLLBACK TO transaction'.($this->inTransaction - 1));
                 $this->inTransaction--;
+
                 return true;
             }
 
@@ -83,14 +157,1050 @@ class Postgres extends SQL
             $this->inTransaction = 0;
         } catch (PDOException $e) {
             $this->inTransaction = 0;
-            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new DatabaseException('Failed to rollback transaction: '.$e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
+        if (! $result) {
             throw new TransactionException('Failed to rollback transaction');
         }
 
         return $result;
+    }
+
+    /**
+     * Create Database
+     *
+     *
+     * @throws DatabaseException
+     */
+    public function create(string $name): bool
+    {
+        $name = $this->filter($name);
+
+        if ($this->exists($name)) {
+            return true;
+        }
+
+        $schema = $this->createSchemaBuilder();
+        $sql = $schema->createDatabase($name)->query;
+
+        $dbCreation = $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+
+        // Enable extensions — wrap in try-catch to handle concurrent creation race conditions
+        foreach (['postgis', 'vector', 'pg_trgm'] as $ext) {
+            try {
+                $this->getPDO()->prepare($schema->createExtension($ext)->query)->execute();
+            } catch (PDOException) {
+                // Extension may already exist due to concurrent worker
+            }
+        }
+
+        try {
+            $collation = $schema->createCollation('utf8_ci_ai', [
+                'provider' => 'icu',
+                'locale' => 'und-u-ks-level1',
+            ], deterministic: false);
+            $this->getPDO()->prepare($collation->query)->execute();
+        } catch (PDOException) {
+            // Collation may already exist due to concurrent worker
+        }
+
+        return $dbCreation;
+    }
+
+    /**
+     * Override to use lowercase catalog names for Postgres case sensitivity.
+     */
+    public function exists(string $database, ?string $collection = null): bool
+    {
+        $database = $this->filter($database);
+
+        if ($collection !== null) {
+            $collection = $this->filter($collection);
+            $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->bindValue(1, $database);
+            $stmt->bindValue(2, "{$this->getNamespace()}_{$collection}");
+        } else {
+            $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->bindValue(1, $database);
+        }
+
+        try {
+            $stmt->execute();
+            $document = $stmt->fetchAll();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return ! empty($document);
+    }
+
+    /**
+     * Create Collection
+     *
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     *
+     * @throws DuplicateException
+     */
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    {
+        $namespace = $this->getNamespace();
+        $id = $this->filter($name);
+        $tableRaw = $this->getSQLTableRaw($id);
+        $permsTableRaw = $this->getSQLTableRaw($id.'_perms');
+
+        $schema = $this->createSchemaBuilder();
+
+        // Build main collection table using schema builder
+        $collectionResult = $schema->create($tableRaw, function (Blueprint $table) use ($attributes) {
+            $table->id('_id');
+            $table->string('_uid', 255);
+
+            if ($this->sharedTables) {
+                $table->integer('_tenant')->nullable()->default(null);
+            }
+
+            $table->datetime('_createdAt', 3)->nullable()->default(null);
+            $table->datetime('_updatedAt', 3)->nullable()->default(null);
+
+            foreach ($attributes as $attribute) {
+                // Ignore relationships with virtual attributes
+                if ($attribute->type === ColumnType::Relationship) {
+                    $options = $attribute->options ?? [];
+                    $relationType = $options['relationType'] ?? null;
+                    $twoWay = $options['twoWay'] ?? false;
+                    $side = $options['side'] ?? null;
+
+                    if (
+                        $relationType === RelationType::ManyToMany->value
+                        || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
+                        || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
+                        || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
+                    ) {
+                        continue;
+                    }
+                }
+
+                $this->addBlueprintColumn(
+                    $table,
+                    $attribute->key,
+                    $attribute->type,
+                    $attribute->size,
+                    $attribute->signed,
+                    $attribute->array,
+                    $attribute->required
+                );
+            }
+
+            $table->text('_permissions')->nullable()->default(null);
+            $table->integer('_version')->nullable()->default(1);
+        });
+
+        // Build default indexes using schema builder
+        $indexStatements = [];
+
+        if ($this->sharedTables) {
+            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_uid");
+            $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
+            $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
+            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
+            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid', '_tenant'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_tenant', '_createdAt'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_tenant', '_updatedAt'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $tenantIdIndex, ['_tenant', '_id'])->query;
+        } else {
+            $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
+            $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
+            $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
+            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_createdAt'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_updatedAt'])->query;
+        }
+
+        $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
+
+        // Build permissions table using schema builder
+        $permsResult = $schema->create($permsTableRaw, function (Blueprint $table) {
+            $table->id('_id');
+            $table->integer('_tenant')->nullable()->default(null);
+            $table->string('_type', 12);
+            $table->string('_permission', 255);
+            $table->string('_document', 255);
+        });
+
+        // Build permission indexes using schema builder
+        $permsIndexStatements = [];
+
+        if ($this->sharedTables) {
+            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
+            $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, ['_tenant', '_document', '_type', '_permission'], unique: true, method: 'btree')->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, ['_tenant', '_permission', '_type'], method: 'btree')->query;
+        } else {
+            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
+            $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, ['_document', '_type', '_permission'], unique: true, method: 'btree', collations: ['_document' => 'utf8_ci_ai'])->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, ['_permission', '_type'], method: 'btree')->query;
+        }
+
+        $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
+
+        try {
+            $this->getPDO()->prepare($collectionSql)->execute();
+            $this->getPDO()->prepare($permsSql)->execute();
+
+            foreach ($indexes as $index) {
+                $indexId = $this->filter($index->key);
+                $indexType = $index->type;
+                $indexAttributes = $index->attributes;
+                $indexAttributesWithType = [];
+                foreach ($indexAttributes as $indexAttribute) {
+                    foreach ($attributes as $attribute) {
+                        if ($attribute->key === $indexAttribute) {
+                            $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
+                        }
+                    }
+                }
+                $indexOrders = $index->orders;
+                $indexTtl = $index->ttl;
+                if ($indexType === IndexType::Spatial && count($indexOrders)) {
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                }
+                $this->createIndex(
+                    $id,
+                    new Index(
+                        key: $indexId,
+                        type: $indexType,
+                        attributes: $indexAttributes,
+                        orders: $indexOrders,
+                        ttl: $indexTtl,
+                    ),
+                    $indexAttributesWithType,
+                );
+            }
+        } catch (DuplicateException $e) {
+            throw $e;
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
+
+            if (! ($e instanceof DuplicateException)) {
+                $dropSchema = $this->createSchemaBuilder();
+                $dropSql = $dropSchema->dropIfExists($tableRaw)->query.'; '.$dropSchema->dropIfExists($permsTableRaw)->query;
+                $this->execute($this->getPDO()->prepare($dropSql));
+            }
+
+            throw $e;
+        }
+
+        return true;
+    }
+
+    /**
+     * Get Collection Size on disk
+     *
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection.'_perms');
+
+        $builder = $this->createBuilder();
+
+        $collectionResult = $builder->fromNone()->selectRaw('pg_total_relation_size(?)', [$name])->build();
+        $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_total_relation_size(?)', [$permissions])->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
+
+        try {
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Get Collection Size of raw data
+     *
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection.'_perms');
+
+        $builder = $this->createBuilder();
+
+        $collectionResult = $builder->fromNone()->selectRaw('pg_relation_size(?)', [$name])->build();
+        $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_relation_size(?)', [$permissions])->build();
+
+        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
+        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+
+        foreach ($collectionResult->bindings as $i => $v) {
+            $collectionSize->bindValue($i + 1, $v);
+        }
+        foreach ($permissionsResult->bindings as $i => $v) {
+            $permissionsSize->bindValue($i + 1, $v);
+        }
+
+        try {
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Create Attribute
+     *
+     *
+     * @throws DatabaseException
+     */
+    public function createAttribute(string $collection, Attribute $attribute): bool
+    {
+        // Ensure pgvector extension is installed for vector types
+        if ($attribute->type === ColumnType::Vector) {
+            if ($attribute->size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($attribute->size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($attribute) {
+            $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        });
+
+        // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended
+        $sql = $result->query;
+
+        try {
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Update Attribute
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($attribute->key);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
+
+        if ($attribute->type === ColumnType::Vector) {
+            if ($attribute->size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($attribute->size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed '.Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
+        $schema = $this->createSchemaBuilder();
+
+        // Rename column first if needed
+        if (! empty($newKey) && $id !== $newKey) {
+            $newKey = $this->filter($newKey);
+
+            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id, $newKey) {
+                $table->renameColumn($id, $newKey);
+            });
+
+            $sql = $renameResult->query;
+
+            $result = $this->execute($this->getPDO()
+                ->prepare($sql));
+
+            if (! $result) {
+                return false;
+            }
+
+            $id = $newKey;
+        }
+
+        // Modify column type using schema builder's alterColumnType
+        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $tableRaw = $this->getSQLTableRaw($name);
+
+        if ($sqlType == 'TIMESTAMP(3)') {
+            $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3) without time zone', "TO_TIMESTAMP(\"{$id}\", 'YYYY-MM-DD HH24:MI:SS.MS')");
+        } else {
+            $result = $schema->alterColumnType($tableRaw, $id, $sqlType);
+        }
+
+        $sql = $result->query;
+
+        try {
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Delete Attribute
+     *
+     *
+     * @throws DatabaseException
+     */
+    public function deleteAttribute(string $collection, string $id): bool
+    {
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id) {
+            $table->dropColumn($this->filter($id));
+        });
+
+        $sql = $result->query;
+
+        try {
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
+        } catch (PDOException $e) {
+            if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+                return true;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $schema = $this->createSchemaBuilder();
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($old, $new) {
+            $table->renameColumn($this->filter($old), $this->filter($new));
+        });
+
+        $sql = $result->query;
+
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
+    }
+
+    /**
+     * Create Index
+     *
+     * @param  array<string,string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
+     */
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($index->key);
+        $type = $index->type;
+        $attributes = $index->attributes;
+        $orders = $index->orders;
+
+        // Validate index type
+        match ($type) {
+            IndexType::Key,
+            IndexType::Fulltext,
+            IndexType::Spatial,
+            IndexType::HnswEuclidean,
+            IndexType::HnswCosine,
+            IndexType::HnswDot,
+            IndexType::Object,
+            IndexType::Trigram,
+            IndexType::Unique => true,
+            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value),
+        };
+
+        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $tableRaw = $this->getSQLTableRaw($collection);
+        $schema = $this->createSchemaBuilder();
+
+        // Build column lists, separating regular columns from raw JSONB path expressions
+        $columnNames = [];
+        $columnOrders = [];
+        $rawExpressions = [];
+
+        foreach ($attributes as $i => $attr) {
+            $order = empty($orders[$i]) || $type === IndexType::Fulltext ? '' : $orders[$i];
+            $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === ColumnType::Object->value;
+
+            if ($isNestedPath) {
+                $rawExpressions[] = $this->buildJsonbPath($attr, true).($order ? " {$order}" : '');
+            } else {
+                $attr = match ($attr) {
+                    '$id' => '_uid',
+                    '$createdAt' => '_createdAt',
+                    '$updatedAt' => '_updatedAt',
+                    default => $this->filter($attr),
+                };
+                $columnNames[] = $attr;
+                if (! empty($order)) {
+                    $columnOrders[$attr] = $order;
+                }
+            }
+        }
+
+        if ($this->sharedTables && \in_array($type, [IndexType::Key, IndexType::Unique])) {
+            \array_unshift($columnNames, '_tenant');
+        }
+
+        $unique = $type === IndexType::Unique;
+
+        $method = match ($type) {
+            IndexType::Spatial => 'gist',
+            IndexType::Object => 'gin',
+            IndexType::Trigram => 'gin',
+            IndexType::HnswEuclidean,
+            IndexType::HnswCosine,
+            IndexType::HnswDot => 'hnsw',
+            default => '',
+        };
+
+        $operatorClass = match ($type) {
+            IndexType::HnswEuclidean => 'vector_l2_ops',
+            IndexType::HnswCosine => 'vector_cosine_ops',
+            IndexType::HnswDot => 'vector_ip_ops',
+            IndexType::Trigram => 'gin_trgm_ops',
+            default => '',
+        };
+
+        $sql = $schema->createIndex(
+            $tableRaw,
+            $keyName,
+            $columnNames,
+            unique: $unique,
+            method: $method,
+            operatorClass: $operatorClass,
+            orders: $columnOrders,
+            rawColumns: $rawExpressions,
+        )->query;
+
+
+        try {
+            return $this->getPDO()->prepare($sql)->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Delete Index
+     *
+     *
+     * @throws Exception
+     */
+    public function deleteIndex(string $collection, string $id): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+
+        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
+
+        $schema = $this->createSchemaBuilder();
+        $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $schemaQualifiedName)->query;
+        // Add IF EXISTS since the schema builder's dropIndex does not include it
+        $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
+
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
+    }
+
+    /**
+     * Rename Index
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $namespace = $this->getNamespace();
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $schemaName = $this->getDatabase();
+        $oldIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
+        $newIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
+
+        $schemaBuilder = $this->createSchemaBuilder();
+        $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
+        $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
+
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
+    }
+
+    /**
+     * Create Document
+     */
+    public function createDocument(Document $collection, Document $document): Document
+    {
+        try {
+            $this->syncWriteHooks();
+
+            $spatialAttributes = $this->getSpatialAttributes($collection);
+            $collection = $collection->getId();
+            $attributes = $document->getAttributes();
+            $attributes['_createdAt'] = $document->getCreatedAt();
+            $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
+
+            $name = $this->filter($collection);
+
+            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+
+            $row = ['_uid' => $document->getId()];
+            if (! empty($document->getSequence())) {
+                $row['_id'] = $document->getSequence();
+            }
+
+            foreach ($spatialAttributes as $spatialCol) {
+                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
+            }
+
+            foreach ($attributes as $attr => $value) {
+                $column = $this->filter($attr);
+
+                if (\in_array($attr, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                    $row[$column] = $value;
+                } else {
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $row[$column] = $value;
+                }
+            }
+
+            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $builder->set($row);
+            $result = $builder->insert();
+            $stmt = $this->executeResult($result, Event::DocumentCreate);
+
+            $this->execute($stmt);
+            $lastInsertedId = $this->getPDO()->lastInsertId();
+            $document['$sequence'] ??= $lastInsertedId;
+
+            $ctx = $this->buildWriteContext($name);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $document;
+    }
+
+    /**
+     * Update Document
+     *
+     *
+     * @throws DatabaseException
+     * @throws DuplicateException
+     */
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    {
+        try {
+            $this->syncWriteHooks();
+
+            $spatialAttributes = $this->getSpatialAttributes($collection);
+            $collection = $collection->getId();
+            $attributes = $document->getAttributes();
+            $attributes['_createdAt'] = $document->getCreatedAt();
+            $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_permissions'] = json_encode($document->getPermissions());
+
+            $version = $document->getVersion();
+            if ($version !== null) {
+                $attributes['_version'] = $version;
+            }
+
+            $name = $this->filter($collection);
+
+            $operators = [];
+            foreach ($attributes as $attribute => $value) {
+                if (Operator::isOperator($value)) {
+                    $operators[$attribute] = $value;
+                }
+            }
+
+            $builder = $this->newBuilder($name);
+            $row = ['_uid' => $document->getId()];
+
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
+
+                if (isset($operators[$attribute])) {
+                    $op = $operators[$attribute];
+                    if ($op instanceof Operator) {
+                        $opResult = $this->getOperatorBuilderExpression($column, $op);
+                        $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
+                    }
+                } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                } else {
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $row[$column] = $value;
+                }
+            }
+
+            $builder->set($row);
+            $builder->filter([BaseQuery::equal('_id', [$document->getSequence()])]);
+            $result = $builder->update();
+            $stmt = $this->executeResult($result, Event::DocumentUpdate);
+
+            $stmt->execute();
+
+            $ctx = $this->buildWriteContext($name);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $document;
+    }
+
+    /**
+     * Returns Max Execution Time
+     *
+     * @throws DatabaseException
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    /**
+     * Get the minimum supported datetime value for PostgreSQL.
+     *
+     * @return DateTime
+     */
+    public function getMinDateTime(): DateTime
+    {
+        return new DateTime('-4713-01-01 00:00:00');
+    }
+
+    /**
+     * Decode a WKB or WKT POINT into a coordinate array [x, y].
+     *
+     * @param string $wkb The WKB hex or WKT string
+     * @return array<float>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodePoint(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+
+            return [(float) $coords[0], (float) $coords[1]];
+        }
+
+        $bin = hex2bin($wkb);
+        if ($bin === false) {
+            throw new DatabaseException('Invalid hex WKB string');
+        }
+
+        if (strlen($bin) < 13) { // 1 byte endian + 4 bytes type + 8 bytes for X
+            throw new DatabaseException('WKB too short');
+        }
+
+        $isLE = ord($bin[0]) === 1;
+
+        // Type (4 bytes)
+        $typeBytes = substr($bin, 1, 4);
+        if (strlen($typeBytes) !== 4) {
+            throw new DatabaseException('Failed to extract type bytes from WKB');
+        }
+
+        $typeArr = unpack($isLE ? 'V' : 'N', $typeBytes);
+        if ($typeArr === false || ! isset($typeArr[1])) {
+            throw new DatabaseException('Failed to unpack type from WKB');
+        }
+        $type = \is_numeric($typeArr[1]) ? (int) $typeArr[1] : 0;
+
+        // Offset to coordinates (skip SRID if present)
+        $offset = 5 + (($type & 0x20000000) ? 4 : 0);
+
+        if (strlen($bin) < $offset + 16) { // 16 bytes for X,Y
+            throw new DatabaseException('WKB too short for coordinates');
+        }
+
+        $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
+
+        // X coordinate
+        $xArr = unpack($fmt, substr($bin, $offset, 8));
+        if ($xArr === false || ! isset($xArr[1])) {
+            throw new DatabaseException('Failed to unpack X coordinate');
+        }
+        $x = \is_numeric($xArr[1]) ? (float) $xArr[1] : 0.0;
+
+        // Y coordinate
+        $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
+        if ($yArr === false || ! isset($yArr[1])) {
+            throw new DatabaseException('Failed to unpack Y coordinate');
+        }
+        $y = \is_numeric($yArr[1]) ? (float) $yArr[1] : 0.0;
+
+        return [$x, $y];
+    }
+
+    /**
+     * Decode a WKB or WKT LINESTRING into an array of coordinate pairs.
+     *
+     * @param mixed $wkb The WKB binary or WKT string
+     * @return array<array<float>>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodeLinestring(mixed $wkb): array
+    {
+        $wkb = \is_string($wkb) ? $wkb : '';
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, (int) $end - $start);
+
+            $points = explode(',', $inside);
+
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+
+                return [(float) $coords[0], (float) $coords[1]];
+            }, $points);
+        }
+
+        if (ctype_xdigit($wkb)) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Failed to convert hex WKB to binary.');
+            }
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new DatabaseException('WKB too short to be a valid geometry');
+        }
+
+        $byteOrder = ord($wkb[0]);
+        if ($byteOrder === 0) {
+            throw new DatabaseException('Big-endian WKB not supported');
+        } elseif ($byteOrder !== 1) {
+            throw new DatabaseException('Invalid byte order in WKB');
+        }
+
+        // Type + SRID flag
+        $typeField = unpack('V', substr($wkb, 1, 4));
+        if ($typeField === false) {
+            throw new DatabaseException('Failed to unpack the type field from WKB.');
+        }
+
+        $typeField = \is_numeric($typeField[1]) ? (int) $typeField[1] : 0;
+        $geomType = $typeField & 0xFF;
+        $hasSRID = ($typeField & 0x20000000) !== 0;
+
+        if ($geomType !== 2) { // 2 = LINESTRING
+            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSRID) {
+            $offset += 4;
+        }
+
+        $numPoints = unpack('V', substr($wkb, $offset, 4));
+        if ($numPoints === false) {
+            throw new DatabaseException("Failed to unpack number of points at offset {$offset}.");
+        }
+
+        $numPoints = \is_numeric($numPoints[1]) ? (int) $numPoints[1] : 0;
+        $offset += 4;
+
+        $points = [];
+        for ($i = 0; $i < $numPoints; $i++) {
+            $x = unpack('e', substr($wkb, $offset, 8));
+            if ($x === false) {
+                throw new DatabaseException("Failed to unpack X coordinate at offset {$offset}.");
+            }
+
+            $x = \is_numeric($x[1]) ? (float) $x[1] : 0.0;
+
+            $offset += 8;
+
+            $y = unpack('e', substr($wkb, $offset, 8));
+            if ($y === false) {
+                throw new DatabaseException("Failed to unpack Y coordinate at offset {$offset}.");
+            }
+
+            $y = \is_numeric($y[1]) ? (float) $y[1] : 0.0;
+
+            $offset += 8;
+            $points[] = [$x, $y];
+        }
+
+        return $points;
+    }
+
+    /**
+     * Decode a WKB or WKT POLYGON into an array of rings, each containing coordinate pairs.
+     *
+     * @param string $wkb The WKB hex or WKT string
+     * @return array<array<array<float>>>
+     *
+     * @throws DatabaseException If the input is invalid.
+     */
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+
+                    return [(float) $coords[0], (float) $coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        // Convert hex string to binary if needed
+        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Invalid hex WKB');
+            }
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new DatabaseException('WKB too short');
+        }
+
+        $uInt32 = 'V'; // little-endian 32-bit unsigned
+        $uDouble = 'd'; // little-endian double
+
+        $typeInt = unpack($uInt32, substr($wkb, 1, 4));
+        if ($typeInt === false) {
+            throw new DatabaseException('Failed to unpack type field from WKB.');
+        }
+
+        $typeInt = \is_numeric($typeInt[1]) ? (int) $typeInt[1] : 0;
+        $hasSrid = ($typeInt & 0x20000000) !== 0;
+        $geomType = $typeInt & 0xFF;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSrid) {
+            $offset += 4;
+        }
+
+        // Number of rings
+        $numRings = unpack($uInt32, substr($wkb, $offset, 4));
+        if ($numRings === false) {
+            throw new DatabaseException('Failed to unpack number of rings from WKB.');
+        }
+
+        $numRings = \is_numeric($numRings[1]) ? (int) $numRings[1] : 0;
+        $offset += 4;
+
+        $rings = [];
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
+            if ($numPoints === false) {
+                throw new DatabaseException('Failed to unpack number of points from WKB.');
+            }
+
+            $numPoints = \is_numeric($numPoints[1]) ? (int) $numPoints[1] : 0;
+            $offset += 4;
+            $points = [];
+            for ($i = 0; $i < $numPoints; $i++) {
+                $x = unpack($uDouble, substr($wkb, $offset, 8));
+                if ($x === false) {
+                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
+                }
+
+                $x = \is_numeric($x[1]) ? (float) $x[1] : 0.0;
+
+                $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
+                if ($y === false) {
+                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
+                }
+
+                $y = \is_numeric($y[1]) ? (float) $y[1] : 0.0;
+
+                $points[] = [$x, $y];
+                $offset += 16;
+            }
+            $rings[] = $points;
+        }
+
+        return $rings; // array of rings, each ring is array of [x,y]
     }
 
     protected function execute(mixed $stmt): bool
@@ -105,1632 +1215,309 @@ class Postgres extends SQL
         // Apply timeout
         $pdo->exec($sql);
 
+        /** @var PDOStatement|PDOStatementProxy $stmt */
         try {
             return $stmt->execute();
         } finally {
             // Only reset the global timeout when not in a transaction
             if ($this->inTransaction === 0) {
-                $pdo->exec("RESET statement_timeout");
+                $pdo->exec('RESET statement_timeout');
             }
         }
     }
 
-
-
     /**
-     * Returns Max Execution Time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
-     * @throws DatabaseException
+     * {@inheritDoc}
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    protected function insertRequiresAlias(): bool
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
-        $this->timeout = $milliseconds;
-    }
-
-    /**
-     * Create Database
-     *
-     * @param string $name
-     *
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function create(string $name): bool
-    {
-        $name = $this->filter($name);
-
-        if ($this->exists($name)) {
-            return true;
-        }
-
-        $sql = "CREATE SCHEMA \"{$name}\"";
-        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
-
-        $dbCreation = $this->getPDO()
-            ->prepare($sql)
-            ->execute();
-
-        // Enable extensions
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS pg_trgm')->execute();
-
-        $collation = "
-            CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
-            provider = icu,
-            locale = 'und-u-ks-level1',
-            deterministic = false
-            )
-        ";
-        $this->getPDO()->prepare($collation)->execute();
-        return $dbCreation;
-    }
-
-    /**
-     * Delete Database
-     *
-     * @param string $name
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function delete(string $name): bool
-    {
-        $name = $this->filter($name);
-
-        $sql = "DROP SCHEMA IF EXISTS \"{$name}\" CASCADE";
-        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
-
-        return $this->getPDO()->prepare($sql)->execute();
-    }
-
-    /**
-     * Create Collection
-     *
-     * @param string $name
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
-     * @return bool
-     * @throws DuplicateException
-     */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
-    {
-        $namespace = $this->getNamespace();
-        $id = $this->filter($name);
-
-        /** @var array<string> $attributeStrings */
-        $attributeStrings = [];
-        foreach ($attributes as $attribute) {
-            $attrId = $this->filter($attribute->getId());
-
-            $attrType = $this->getSQLType(
-                $attribute->getAttribute('type'),
-                $attribute->getAttribute('size', 0),
-                $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false),
-                $attribute->getAttribute('required', false)
-            );
-
-            // Ignore relationships with virtual attributes
-            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
-                $options = $attribute->getAttribute('options', []);
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
-
-                if (
-                    $relationType === Database::RELATION_MANY_TO_MANY
-                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
-                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
-                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
-                ) {
-                    continue;
-                }
-            }
-
-            $attributeStrings[] = "\"{$attrId}\" {$attrType}, ";
-        }
-
-        $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
-        $collection = "
-            CREATE TABLE {$this->getSQLTable($id)} (
-                _id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                _uid VARCHAR(255) NOT NULL,
-                " . $sqlTenant . "
-                \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
-                \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
-                " . \implode(' ', $attributeStrings) . "
-                _permissions TEXT DEFAULT NULL
-            );
-        ";
-
-        if ($this->sharedTables) {
-            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_uid");
-            $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
-            $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
-            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
-            $collection .= "
-				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai, \"_tenant\");
-            	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
-            	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
-            	CREATE INDEX \"{$tenantIdIndex}\" ON {$this->getSQLTable($id)} (_tenant, _id);
-			";
-        } else {
-            $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
-            $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
-            $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
-            $collection .= "
-				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
-            	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (\"_createdAt\");
-            	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
-			";
-        }
-
-        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
-
-        $permissions = "
-            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                _tenant INTEGER DEFAULT NULL,
-                _type VARCHAR(12) NOT NULL,
-                _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL
-            );
-        ";
-
-        if ($this->sharedTables) {
-            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
-            $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
-            $permissions .= "
-                CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
-                CREATE INDEX \"{$permissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
-            ";
-        } else {
-            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
-            $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
-            $permissions .= "
-                CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
-                CREATE INDEX \"{$permissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
-            ";
-        }
-
-        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
-
-        try {
-            $this->getPDO()->prepare($collection)->execute();
-
-            $this->getPDO()->prepare($permissions)->execute();
-
-            foreach ($indexes as $index) {
-                $indexId = $this->filter($index->getId());
-                $indexType = $index->getAttribute('type');
-                $indexAttributes = $index->getAttribute('attributes', []);
-                $indexAttributesWithType = [];
-                foreach ($indexAttributes as $indexAttribute) {
-                    foreach ($attributes as $attribute) {
-                        if ($attribute->getId() === $indexAttribute) {
-                            $indexAttributesWithType[$indexAttribute] = $attribute->getAttribute('type');
-                        }
-                    }
-                }
-                $indexOrders = $index->getAttribute('orders', []);
-                $indexTtl = $index->getAttribute('ttl', 0);
-                if ($indexType === Database::INDEX_SPATIAL && count($indexOrders)) {
-                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
-                }
-                $this->createIndex(
-                    $id,
-                    $indexId,
-                    $indexType,
-                    $indexAttributes,
-                    [],
-                    $indexOrders,
-                    $indexAttributesWithType,
-                    [],
-                    $indexTtl
-                );
-            }
-        } catch (PDOException $e) {
-            $e = $this->processException($e);
-
-            if (!($e instanceof DuplicateException)) {
-                $this->execute($this->getPDO()
-                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};"));
-            }
-
-            throw $e;
-        }
-
         return true;
     }
 
     /**
-     * Get Collection Size on disk
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
+     * {@inheritDoc}
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    protected function getConflictTenantExpression(string $column): string
     {
-        $collection = $this->filter($collection);
-        $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable($collection . '_perms');
+        $quoted = $this->quote($this->filter($column));
 
-        $collectionSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:name);
-        ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:permissions);
-        ");
-
-        $collectionSize->bindParam(':name', $name);
-        $permissionsSize->bindParam(':permissions', $permissions);
-
-        try {
-            $this->execute($collectionSize);
-            $this->execute($permissionsSize);
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
-
-        return  $size;
+        return "CASE WHEN target._tenant = EXCLUDED._tenant THEN EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
     /**
-     * Get Collection Size of raw data
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     *
+     * {@inheritDoc}
      */
-    public function getSizeOfCollection(string $collection): int
+    protected function getConflictIncrementExpression(string $column): string
     {
-        $collection = $this->filter($collection);
-        $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable($collection . '_perms');
+        $quoted = $this->quote($this->filter($column));
 
-        $collectionSize = $this->getPDO()->prepare("
-             SELECT pg_relation_size(:name);
-        ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-             SELECT pg_relation_size(:permissions);
-        ");
-
-        $collectionSize->bindParam(':name', $name);
-        $permissionsSize->bindParam(':permissions', $permissions);
-
-        try {
-            $this->execute($collectionSize);
-            $this->execute($permissionsSize);
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
-
-        return  $size;
+        return "target.{$quoted} + EXCLUDED.{$quoted}";
     }
 
     /**
-     * Delete Collection
-     *
-     * @param string $id
-     * @return bool
+     * {@inheritDoc}
      */
-    public function deleteCollection(string $id): bool
+    protected function getConflictTenantIncrementExpression(string $column): string
     {
-        $id = $this->filter($id);
+        $quoted = $this->quote($this->filter($column));
 
-        $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')}";
-        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
-
-        try {
-            return $this->getPDO()->prepare($sql)->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
+        return "CASE WHEN target._tenant = EXCLUDED._tenant THEN target.{$quoted} + EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
+     * Get a builder-compatible operator expression for upsert conflict resolution.
      *
-     * @param string $collection
-     * @return bool
+     * Overrides the base implementation to use target-prefixed column references
+     * so that ON CONFLICT DO UPDATE SET expressions correctly reference the
+     * existing row via the target alias.
+     *
+     * @param  string  $column  The unquoted, filtered column name
+     * @param  Operator  $operator  The operator to convert
+     * @return array{expression: string, bindings: list<mixed>}
      */
-    public function analyzeCollection(string $collection): bool
+    protected function getOperatorUpsertExpression(string $column, Operator $operator): array
     {
-        return false;
-    }
-
-    /**
-     * Create Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     *
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
-    {
-        // Ensure pgvector extension is installed for vector types
-        if ($type === Database::VAR_VECTOR) {
-            if ($size <= 0) {
-                throw new DatabaseException('Vector dimensions must be a positive integer');
-            }
-            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
-            }
-        }
-
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			ADD COLUMN \"{$id}\" {$type}
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
-
-        try {
-            return $this->execute($this->getPDO()
-                ->prepare($sql));
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-    }
-
-    /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     *
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			DROP COLUMN \"{$id}\";
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
-
-        try {
-            return $this->execute($this->getPDO()
-                ->prepare($sql));
-        } catch (PDOException $e) {
-            if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
-                return true;
-            }
-
-            throw $e;
-        }
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($collection)} 
-			RENAME COLUMN \"{$old}\" TO \"{$new}\"
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * Update Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param string|null $newKey
-     * @param bool $required
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $newKey = empty($newKey) ? null : $this->filter($newKey);
-
-        if ($type === Database::VAR_VECTOR) {
-            if ($size <= 0) {
-                throw new DatabaseException('Vector dimensions must be a positive integer');
-            }
-            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
-            }
-        }
-
-        $type = $this->getSQLType(
-            $type,
-            $size,
-            $signed,
-            $array,
-            $required,
-        );
-
-        if ($type == 'TIMESTAMP(3)') {
-            $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
-        }
-
-        if (!empty($newKey) && $id !== $newKey) {
-            $newKey = $this->filter($newKey);
-
-            $sql = "
-                    ALTER TABLE {$this->getSQLTable($name)}
-                    RENAME COLUMN \"{$id}\" TO \"{$newKey}\"
-                ";
-
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-            $result = $this->execute($this->getPDO()
-                ->prepare($sql));
-
-            if (!$result) {
-                return false;
-            }
-
-            $id = $newKey;
-        }
-
-        $sql = "
-                ALTER TABLE {$this->getSQLTable($name)}
-                ALTER COLUMN \"{$id}\" TYPE {$type}
-            ";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        try {
-            $result = $this->execute($this->getPDO()
-                ->prepare($sql));
-
-            return $result;
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-    }
-
-    /**
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param string $relatedCollection
-     * @param bool $twoWay
-     * @param string $twoWayKey
-     * @return bool
-     * @throws Exception
-     */
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        string $id = '',
-        string $twoWayKey = ''
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($id);
-        $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
-
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                return true;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function updateRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-
-        if (!\is_null($newKey)) {
-            $newKey = $this->filter($newKey);
-        }
-        if (!\is_null($newTwoWayKey)) {
-            $newTwoWayKey = $this->filter($newTwoWayKey);
-        }
-
-        $sql = '';
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($key !== $newKey) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
-                }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
-                    }
-                } else {
-                    if ($key !== $newKey) {
-                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
-                    }
-                }
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
-                    }
-                } else {
-                    if ($key !== $newKey) {
-                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
-                    }
-                }
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
-
-                if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$junction} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
-                }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
-                }
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        if (empty($sql)) {
-            return true;
-        }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function deleteRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay,
-        string $key,
-        string $twoWayKey,
-        string $side
-    ): bool {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-
-        $sql = '';
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                    if ($twoWay) {
-                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
-                    }
-                } elseif ($side === Database::RELATION_SIDE_CHILD) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
-                    if ($twoWay) {
-                        $sql .= "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                    }
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
-                } else {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                }
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
-                } else {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                }
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
-                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence());
-
-                $perms = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence() . '_perms')
-                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence() . '_perms');
-
-                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        if (empty($sql)) {
-            return true;
-        }
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * Create Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     * @param array<string,string> $indexAttributeTypes
-
-     * @return bool
-     */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
-    {
-        $collection = $this->filter($collection);
-        $id = $this->filter($id);
-
-        foreach ($attributes as $i => $attr) {
-            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
-            $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === Database::VAR_OBJECT;
-            if ($isNestedPath) {
-                $attributes[$i] = $this->buildJsonbPath($attr, true) . ($order ? " {$order}" : '');
-            } else {
-                $attr = match ($attr) {
-                    '$id' => '_uid',
-                    '$createdAt' => '_createdAt',
-                    '$updatedAt' => '_updatedAt',
-                    default => $this->filter($attr),
-                };
-
-                $attributes[$i] = "\"{$attr}\" {$order}";
-            }
-        }
-
-        $sqlType = match ($type) {
-            Database::INDEX_KEY,
-            Database::INDEX_FULLTEXT,
-            Database::INDEX_SPATIAL,
-            Database::INDEX_HNSW_EUCLIDEAN,
-            Database::INDEX_HNSW_COSINE,
-            Database::INDEX_HNSW_DOT,
-            Database::INDEX_OBJECT,
-            Database::INDEX_TRIGRAM => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
-        };
-
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
-        $attributes = \implode(', ', $attributes);
-
-        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
-            // Add tenant as first index column for best performance
-            $attributes = "_tenant, {$attributes}";
-        }
-
-        $sql = "CREATE {$sqlType} \"{$keyName}\" ON {$this->getSQLTable($collection)}";
-
-        // Add USING clause for special index types
-        $sql .= match ($type) {
-            Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
-            Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
-            Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
-            Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
-            Database::INDEX_OBJECT => " USING GIN ({$attributes})",
-            Database::INDEX_TRIGRAM =>
-                " USING GIN (" . implode(', ', array_map(
-                    fn ($attr) => "$attr gin_trgm_ops",
-                    array_map(fn ($attr) => trim($attr), explode(',', $attributes))
-                )) . ")",
-            default => " ({$attributes})",
-        };
-
-        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
-
-        try {
-            return $this->getPDO()->prepare($sql)->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-    }
-    /**
-     * Delete Index
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
-     * @throws Exception
-     */
-    public function deleteIndex(string $collection, string $id): bool
-    {
-        $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $schemaName = $this->getDatabase();
-
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
-
-        $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".\"{$keyName}\"";
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * Rename Index
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-        $schema = $this->getDatabase();
-        $oldIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
-        $newIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
-
-        $sql = "ALTER INDEX \"{$schema}\".\"{$oldIndexName}\" RENAME TO \"{$newIndexName}\"";
-        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * Create Document
-     *
-     * @param Document $collection
-     * @param Document $document
-     *
-     * @return Document
-     */
-    public function createDocument(Document $collection, Document $document): Document
-    {
-        $collection = $collection->getId();
-        $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = \json_encode($document->getPermissions());
-
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $document->getTenant();
-        }
-
-        $name = $this->filter($collection);
-        $columns = '';
-        $columnNames = '';
-
-        // Insert internal id if set
-        if (!empty($document->getSequence())) {
-            $bindKey = '_id';
-            $columns .= "\"_id\", ";
-            $columnNames .= ':' . $bindKey . ', ';
-        }
-
         $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "\"{$column}\", ";
-            $columnNames .= ':' . $bindKey . ', ';
-            $bindIndex++;
+        $fullExpression = $this->getOperatorSQL($column, $operator, $bindIndex, useTargetPrefix: true);
+
+        if ($fullExpression === null) {
+            throw new DatabaseException('Operator cannot be expressed in SQL: '.$operator->getMethod()->value);
         }
 
-        $sql = "
-			INSERT INTO {$this->getSQLTable($name)} ({$columns} \"_uid\")
-			VALUES ({$columnNames} :_uid)
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        if (!empty($document->getSequence())) {
-            $stmt->bindValue(':_id', $document->getSequence(), PDO::PARAM_STR);
+        // Strip the "quotedColumn = " prefix to get just the RHS expression
+        $quotedColumn = $this->quote($column);
+        $prefix = $quotedColumn.' = ';
+        $expression = $fullExpression;
+        if (str_starts_with($expression, $prefix)) {
+            $expression = substr($expression, strlen($prefix));
         }
 
-        $attributeIndex = 0;
-        foreach ($attributes as $value) {
-            if (\is_array($value)) {
-                $value = \json_encode($value);
-            }
+        // Collect the named binding keys and their values in order
+        /** @var array<string, mixed> $namedBindings */
+        $namedBindings = [];
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+        $idx = 0;
 
-            $bindKey = 'key_' . $attributeIndex;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
-        }
-
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', :_uid {$sqlTenant})";
-            }
-        }
-
-
-        if (!empty($permissions)) {
-            $permissions = \implode(', ', $permissions);
-            $sqlTenant = $this->sharedTables ? ', _tenant' : '';
-
-            $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
-				VALUES {$permissions}
-			";
-
-            $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            $stmtPermissions->bindValue(':_uid', $document->getId());
-            if ($sqlTenant) {
-                $stmtPermissions->bindValue(':_tenant', $document->getTenant());
-            }
-        }
-
-        try {
-            $this->execute($stmt);
-            $lastInsertedId = $this->getPDO()->lastInsertId();
-            // Sequence can be manually set as well
-            $document['$sequence'] ??= $lastInsertedId;
-
-            if (isset($stmtPermissions)) {
-                $this->execute($stmtPermissions);
-            }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        return $document;
-    }
-
-    /**
-     * Update Document
-     *
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     * @return Document
-     * @throws DatabaseException
-     * @throws DuplicateException
-     */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
-    {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
-        $collection = $collection->getId();
-        $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
-
-        $name = $this->filter($collection);
-        $columns = '';
-
-        if (!$skipPermissions) {
-            $sql = "
-			SELECT _type, _permission
-			FROM {$this->getSQLTable($name . '_perms')}
-			WHERE _document = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
-
-            /**
-             * Get current permissions from the database
-             */
-            $permissionsStmt = $this->getPDO()->prepare($sql);
-            $permissionsStmt->bindValue(':_uid', $document->getId());
-
-            if ($this->sharedTables) {
-                $permissionsStmt->bindValue(':_tenant', $this->tenant);
-            }
-
-            $this->execute($permissionsStmt);
-            $permissions = $permissionsStmt->fetchAll();
-            $permissionsStmt->closeCursor();
-
-            $initial = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $initial[$type] = [];
-            }
-
-            $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                $carry[$item['_type']][] = $item['_permission'];
-
-                return $carry;
-            }, $initial);
-
-            /**
-             * Get removed Permissions
-             */
-            $removals = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                if (!empty($diff)) {
-                    $removals[$type] = $diff;
+        switch ($method) {
+            case OperatorType::Increment:
+            case OperatorType::Decrement:
+            case OperatorType::Multiply:
+            case OperatorType::Divide:
+                $namedBindings["op_{$idx}"] = $values[0] ?? 1;
+                $idx++;
+                if (isset($values[1])) {
+                    $namedBindings["op_{$idx}"] = $values[1];
+                    $idx++;
                 }
-            }
+                break;
 
-            /**
-             * Get added Permissions
-             */
-            $additions = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                if (!empty($diff)) {
-                    $additions[$type] = $diff;
+            case OperatorType::Modulo:
+                $namedBindings["op_{$idx}"] = $values[0] ?? 1;
+                $idx++;
+                break;
+
+            case OperatorType::Power:
+                $namedBindings["op_{$idx}"] = $values[0] ?? 1;
+                $idx++;
+                if (isset($values[1])) {
+                    $namedBindings["op_{$idx}"] = $values[1];
+                    $idx++;
                 }
-            }
+                break;
 
-            /**
-             * Query to remove permissions
-             */
-            $removeQuery = '';
-            if (!empty($removals)) {
-                $removeQuery = ' AND (';
-                foreach ($removals as $type => $permissions) {
-                    $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                    if ($type !== \array_key_last($removals)) {
-                        $removeQuery .= ' OR ';
-                    }
-                }
-            }
-            if (!empty($removeQuery)) {
-                $removeQuery .= ')';
+            case OperatorType::StringConcat:
+                $namedBindings["op_{$idx}"] = $values[0] ?? '';
+                $idx++;
+                break;
 
-                $sql = "
-				DELETE
-                FROM {$this->getSQLTable($name . '_perms')}
-                WHERE _document = :_uid
-                {$this->getTenantQuery($collection)}
-			";
+            case OperatorType::StringReplace:
+                $namedBindings["op_{$idx}"] = $values[0] ?? '';
+                $idx++;
+                $namedBindings["op_{$idx}"] = $values[1] ?? '';
+                $idx++;
+                break;
 
-                $removeQuery = $sql . $removeQuery;
+            case OperatorType::Toggle:
+                // No bindings
+                break;
 
-                $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-                $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+            case OperatorType::DateAddDays:
+            case OperatorType::DateSubDays:
+                $namedBindings["op_{$idx}"] = $values[0] ?? 0;
+                $idx++;
+                break;
 
-                if ($this->sharedTables) {
-                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                }
+            case OperatorType::DateSetNow:
+                // No bindings
+                break;
 
-                foreach ($removals as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                    }
-                }
-            }
+            case OperatorType::ArrayAppend:
+            case OperatorType::ArrayPrepend:
+                $namedBindings["op_{$idx}"] = json_encode($values);
+                $idx++;
+                break;
 
-            /**
-             * Query to add permissions
-             */
-            if (!empty($additions)) {
-                $values = [];
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $_) {
-                        $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    }
-                }
+            case OperatorType::ArrayRemove:
+                $value = $values[0] ?? null;
+                $namedBindings["op_{$idx}"] = json_encode($value);
+                $idx++;
+                break;
 
-                $sqlTenant = $this->sharedTables ? ', _tenant' : '';
+            case OperatorType::ArrayUnique:
+                // No bindings
+                break;
 
-                $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
-				VALUES" . \implode(', ', $values);
+            case OperatorType::ArrayInsert:
+                $namedBindings["op_{$idx}"] = $values[0] ?? 0;
+                $idx++;
+                $namedBindings["op_{$idx}"] = json_encode($values[1] ?? null);
+                $idx++;
+                break;
 
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+            case OperatorType::ArrayIntersect:
+            case OperatorType::ArrayDiff:
+                $namedBindings["op_{$idx}"] = json_encode($values);
+                $idx++;
+                break;
 
-                $stmtAddPermissions = $this->getPDO()->prepare($sql);
-                $stmtAddPermissions->bindValue(":_uid", $document->getId());
-                if ($this->sharedTables) {
-                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
-                }
-
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                    }
-                }
-            }
+            case OperatorType::ArrayFilter:
+                $condition = $values[0] ?? 'equal';
+                $filterValue = $values[1] ?? null;
+                $namedBindings["op_{$idx}"] = $condition;
+                $idx++;
+                $namedBindings["op_{$idx}"] = $filterValue !== null ? json_encode($filterValue) : null;
+                $idx++;
+                break;
         }
 
-        /**
-         * Update Attributes
-         */
+        // Replace each named binding occurrence with ? and collect positional bindings
+        $positionalBindings = [];
+        $keys = array_keys($namedBindings);
+        usort($keys, fn ($a, $b) => strlen($b) - strlen($a));
 
-        $keyIndex = 0;
-        $opIndex = 0;
-        $operators = [];
-
-        // Separate regular attributes from operators
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
+        $replacements = [];
+        foreach ($keys as $key) {
+            $search = ':'.$key;
+            $offset = 0;
+            while (($pos = strpos($expression, $search, $offset)) !== false) {
+                $replacements[] = ['pos' => $pos, 'len' => strlen($search), 'key' => $key];
+                $offset = $pos + strlen($search);
             }
         }
 
-        foreach ($attributes as $attribute => $value) {
-            $column = $this->filter($attribute);
+        usort($replacements, fn ($a, $b) => $a['pos'] - $b['pos']);
 
-            // Check if this is an operator, spatial attribute, or regular attribute
-            if (isset($operators[$attribute])) {
-                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
-                $columns .= $operatorSQL . ',';
-            } elseif (\in_array($attribute, $spatialAttributes, true)) {
-                $bindKey = 'key_' . $keyIndex;
-                $columns .= "\"{$column}\" = " . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
-                $keyIndex++;
-            } else {
-                $bindKey = 'key_' . $keyIndex;
-                $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
-                $keyIndex++;
-            }
+        $result = $expression;
+        for ($i = count($replacements) - 1; $i >= 0; $i--) {
+            $r = $replacements[$i];
+            $result = substr_replace($result, '?', $r['pos'], $r['len']);
         }
 
-        $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_newUid 
-			WHERE _id=:_sequence
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_sequence', $document->getSequence());
-        $stmt->bindValue(':_newUid', $document->getId());
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
+        foreach ($replacements as $r) {
+            $positionalBindings[] = $namedBindings[$r['key']];
         }
 
-        $keyIndex = 0;
-        $opIndexForBinding = 0;
-        foreach ($attributes as $attribute => $value) {
-            // Handle operators separately
-            if (isset($operators[$attribute])) {
-                $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
-            } else {
-                // Convert spatial arrays to WKT, json_encode non-spatial arrays
-                if (\in_array($attribute, $spatialAttributes, true)) {
-                    if (\is_array($value)) {
-                        $value = $this->convertArrayToWKT($value);
-                    }
-                } elseif (is_array($value)) {
-                    $value = json_encode($value);
-                }
-
-                $bindKey = 'key_' . $keyIndex;
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $keyIndex++;
-            }
-        }
-
-        try {
-            $this->execute($stmt);
-            if (isset($stmtRemovePermissions)) {
-                $this->execute($stmtRemovePermissions);
-            }
-            if (isset($stmtAddPermissions)) {
-                $this->execute($stmtAddPermissions);
-            }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        return $document;
-    }
-
-    /**
-     * @param string $tableName
-     * @param string $columns
-     * @param array<string> $batchKeys
-     * @param array<string> $attributes
-     * @param array<mixed> $bindValues
-     * @param string $attribute
-     * @param array<Operator> $operators
-     * @return mixed
-     */
-    protected function getUpsertStatement(
-        string $tableName,
-        string $columns,
-        array $batchKeys,
-        array $attributes,
-        array $bindValues,
-        string $attribute = '',
-        array $operators = [],
-    ): mixed {
-        $getUpdateClause = function (string $attribute, bool $increment = false): string {
-            $attribute = $this->quote($this->filter($attribute));
-            if ($increment) {
-                $new = "target.{$attribute} + EXCLUDED.{$attribute}";
-            } else {
-                $new = "EXCLUDED.{$attribute}";
-            }
-
-            if ($this->sharedTables) {
-                return "{$attribute} = CASE WHEN target._tenant = EXCLUDED._tenant THEN {$new} ELSE target.{$attribute} END";
-            }
-
-            return "{$attribute} = {$new}";
-        };
-
-        $opIndex = 0;
-
-        if (!empty($attribute)) {
-            // Increment specific column by its new value in place
-            $updateColumns = [
-                $getUpdateClause($attribute, increment: true),
-                $getUpdateClause('_updatedAt'),
-            ];
-        } else {
-            // Update all columns and apply operators
-            $updateColumns = [];
-            foreach (array_keys($attributes) as $attr) {
-                /**
-                 * @var string $attr
-                 */
-                $filteredAttr = $this->filter($attr);
-
-                // Check if this attribute has an operator
-                if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex, useTargetPrefix: true);
-                    if ($operatorSQL !== null) {
-                        $updateColumns[] = $operatorSQL;
-                    }
-                } else {
-                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
-                        $updateColumns[] = $getUpdateClause($filteredAttr);
-                    }
-                }
-            }
-        }
-
-        $conflictKeys = $this->sharedTables ? '("_uid", _tenant)' : '("_uid")';
-
-        $stmt = $this->getPDO()->prepare(
-            "
-            INSERT INTO {$this->getSQLTable($tableName)} AS target {$columns}
-            VALUES " . implode(', ', $batchKeys) . "
-            ON CONFLICT {$conflictKeys} DO UPDATE
-                SET " . implode(', ', $updateColumns)
-        );
-
-        foreach ($bindValues as $key => $binding) {
-            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
-        }
-
-        $opIndexForBinding = 0;
-
-        // Bind operator parameters in the same order used to build SQL
-        foreach (array_keys($attributes) as $attr) {
-            if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
-            }
-        }
-
-        return $stmt;
-    }
-
-    /**
-     * Increase or decrease an attribute value
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param string $updatedAt
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
-    {
-        $name = $this->filter($collection);
-        $attribute = $this->filter($attribute);
-
-        $sqlMax = $max !== null ? " AND \"{$attribute}\" <= :max" : "";
-        $sqlMin = $min !== null ? " AND \"{$attribute}\" >= :min" : "";
-
-        $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET
-			    \"{$attribute}\" = \"{$attribute}\" + :val,
-                \"_updatedAt\" = :updatedAt
-			WHERE _uid = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql .= $sqlMax . $sqlMin;
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-        $stmt->bindValue(':_uid', $id);
-        $stmt->bindValue(':val', $value);
-        $stmt->bindValue(':updatedAt', $updatedAt);
-
-        if ($max !== null) {
-            $stmt->bindValue(':max', $max);
-        }
-        if ($min !== null) {
-            $stmt->bindValue(':min', $min);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        $this->execute($stmt) || throw new DatabaseException('Failed to update attribute');
-        return true;
-    }
-
-    /**
-     * Delete Document
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
-     */
-    public function deleteDocument(string $collection, string $id): bool
-    {
-        $name = $this->filter($collection);
-
-        $sql = "
-			DELETE FROM {$this->getSQLTable($name)} 
-			WHERE _uid = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
-        $stmt = $this->getPDO()->prepare($sql);
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        $sql = "
-			DELETE FROM {$this->getSQLTable($name . '_perms')} 
-			WHERE _document = :_uid
-			{$this->getTenantQuery($collection)}
-		";
-
-        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-        $stmtPermissions = $this->getPDO()->prepare($sql);
-        $stmtPermissions->bindValue(':_uid', $id);
-
-        if ($this->sharedTables) {
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
-        }
-
-        $deleted = false;
-
-        try {
-            if (!$this->execute($stmt)) {
-                throw new DatabaseException('Failed to delete document');
-            }
-
-            $deleted = $stmt->rowCount();
-
-            if (!$this->execute($stmtPermissions)) {
-                throw new DatabaseException('Failed to delete permissions');
-            }
-        } catch (\Throwable $th) {
-            throw new DatabaseException($th->getMessage());
-        }
-
-        return $deleted;
-    }
-
-    /**
-     * @return string
-     */
-    public function getConnectionId(): string
-    {
-        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
-        return $stmt->fetchColumn();
+        return ['expression' => $result, 'bindings' => $positionalBindings];
     }
 
     /**
      * Handle distance spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
-    */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+     * @param  array<string, mixed>  $binds
+     */
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
+        /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($geomArray);
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $meters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
-        switch ($query->getMethod()) {
-            case Query::TYPE_DISTANCE_EQUAL:
-                $operator = '=';
-                break;
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $operator = '!=';
-                break;
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-                $operator = '>';
-                break;
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                $operator = '<';
-                break;
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        $operator = match ($query->getMethod()) {
+            Method::DistanceEqual => '=',
+            Method::DistanceNotEqual => '!=',
+            Method::DistanceGreaterThan => '>',
+            Method::DistanceLessThan => '<',
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
+        };
 
         if ($meters) {
             $attr = "({$alias}.{$attribute}::geography)";
-            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::DEFAULT_SRID . ")::geography";
+            $geom = 'ST_SetSRID('.$this->getSpatialGeomFromText(":{$placeholder}_0", null).', '.Database::DEFAULT_SRID.')::geography';
+
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
         // Without meters, use the original SRID (e.g., 4326)
-        return "ST_Distance({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ") {$operator} :{$placeholder}_1";
+        return "ST_Distance({$alias}.{$attribute}, ".$this->getSpatialGeomFromText(":{$placeholder}_0").") {$operator} :{$placeholder}_1";
     }
-
 
     /**
      * Handle spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
+     * @param  array<string, mixed>  $binds
      */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
-        switch ($query->getMethod()) {
-            case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
+        $spatialGeomRaw = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT(\is_array($spatialGeomRaw) ? $spatialGeomRaw : []);
+        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0");
 
-            case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_DISTANCE_EQUAL:
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
-            case Query::TYPE_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_NOT_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_NOT_CONTAINS:
-                // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
-                // postgis st_contains excludes matching the boundary
-                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return $isNot
-                    ? "NOT ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")"
-                    : "ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
-
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        return match ($query->getMethod()) {
+            Method::Crosses => "ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::NotCrosses => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
+            Method::DistanceEqual,
+            Method::DistanceNotEqual,
+            Method::DistanceGreaterThan,
+            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
+            Method::Equal => "ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::NotEqual => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
+            Method::Intersects => "ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::NotIntersects => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
+            Method::Overlaps => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::NotOverlaps => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
+            Method::Touches => "ST_Touches({$alias}.{$attribute}, {$geom})",
+            Method::NotTouches => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
+            // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
+            // postgis st_contains excludes matching the boundary
+            Method::Contains => "ST_Covers({$alias}.{$attribute}, {$geom})",
+            Method::NotContains => "NOT ST_Covers({$alias}.{$attribute}, {$geom})",
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
+        };
     }
 
     /**
      * Handle JSONB queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
+     * @param  array<string, mixed>  $binds
      */
     protected function handleObjectQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
         switch ($query->getMethod()) {
-            case Query::TYPE_EQUAL:
-            case Query::TYPE_NOT_EQUAL: {
-                $isNot = $query->getMethod() === Query::TYPE_NOT_EQUAL;
+            case Method::Equal:
+            case Method::NotEqual:
+                $isNot = $query->getMethod() === Method::NotEqual;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
                     $binds[":{$placeholder}_{$key}"] = json_encode($value);
                     $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
-                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
+                    $conditions[] = $isNot ? 'NOT ('.$fragment.')' : $fragment;
                 }
                 $separator = $isNot ? ' AND ' : ' OR ';
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
-            }
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_CONTAINS_ALL:
-            case Query::TYPE_NOT_CONTAINS: {
-                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
+
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::ContainsAll:
+            case Method::NotContains:
+                $isNot = $query->getMethod() === Method::NotContains;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    if (count($value) === 1) {
+                    if (\is_array($value) && count($value) === 1) {
                         $jsonKey = array_key_first($value);
                         $jsonValue = $value[$jsonKey];
 
@@ -1738,29 +1525,28 @@ class Postgres extends SQL
                         // wrap it to express array containment: {"skills": ["typescript"]}
                         // If it's already an object/associative array (e.g. "config" => ["lang" => "en"]),
                         // keep as-is to express object containment.
-                        if (!\is_array($jsonValue)) {
+                        if (! \is_array($jsonValue)) {
                             $value[$jsonKey] = [$jsonValue];
                         }
                     }
                     $binds[":{$placeholder}_{$key}"] = json_encode($value);
                     $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
-                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
+                    $conditions[] = $isNot ? 'NOT ('.$fragment.')' : $fragment;
                 }
                 $separator = $isNot ? ' AND ' : ' OR ';
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
-            }
+
+                return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
 
             default:
-                throw new DatabaseException('Query method ' . $query->getMethod() . ' not supported for object attributes');
+                throw new DatabaseException('Query method '.$query->getMethod()->value.' not supported for object attributes');
         }
     }
 
     /**
      * Get SQL Condition
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @return string
+     * @param  array<string, mixed>  $binds
+     *
      * @throws Exception
      */
     protected function getSQLCondition(Query $query, array &$binds): string
@@ -1780,62 +1566,71 @@ class Postgres extends SQL
         $operator = null;
 
         if ($query->isSpatialAttribute()) {
-            return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+            return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
         }
 
-        if ($query->isObjectAttribute() && !$isNestedObjectAttribute) {
+        if ($query->isObjectAttribute() && ! $isNestedObjectAttribute) {
             return $this->handleObjectQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {
-            case Query::TYPE_OR:
-            case Query::TYPE_AND:
+            case Method::Or:
+            case Method::And:
                 $conditions = [];
-                /* @var $q Query */
-                foreach ($query->getValue() as $q) {
+                /** @var iterable<Query> $nestedQueries */
+                $nestedQueries = $query->getValue();
+                foreach ($nestedQueries as $q) {
                     $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
-                $method = strtoupper($query->getMethod());
-                return empty($conditions) ? '' : ' ' . $method . ' (' . implode(' AND ', $conditions) . ')';
+                $method = strtoupper($query->getMethod()->value);
 
-            case Query::TYPE_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+                return empty($conditions) ? '' : ' '.$method.' ('.implode(' AND ', $conditions).')';
+
+            case Method::Search:
+                $searchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
-            case Query::TYPE_NOT_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+            case Method::NotSearch:
+                $notSearchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
-            case Query::TYPE_VECTOR_DOT:
-            case Query::TYPE_VECTOR_COSINE:
-            case Query::TYPE_VECTOR_EUCLIDEAN:
+            case Method::VectorDot:
+            case Method::VectorCosine:
+            case Method::VectorEuclidean:
                 return ''; // Handled in ORDER BY clause
 
-            case Query::TYPE_BETWEEN:
+            case Method::Between:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::NotBetween:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
                 return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNull:
+            case Method::IsNotNull:
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 if ($query->onArray()) {
                     // @> checks the array contains ALL specified values
                     $binds[":{$placeholder}_0"] = \json_encode($query->getValues());
+
                     return "{$alias}.{$attribute} @> :{$placeholder}_0::jsonb";
                 }
                 // no break
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::NotContains:
                 if ($query->onArray()) {
                     $operator = '@>';
                 }
@@ -1845,19 +1640,20 @@ class Postgres extends SQL
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());
                 $isNotQuery = in_array($query->getMethod(), [
-                    Query::TYPE_NOT_STARTS_WITH,
-                    Query::TYPE_NOT_ENDS_WITH,
-                    Query::TYPE_NOT_CONTAINS
+                    Method::NotStartsWith,
+                    Method::NotEndsWith,
+                    Method::NotContains,
                 ]);
 
                 foreach ($query->getValues() as $key => $value) {
+                    $strValue = \is_string($value) ? $value : '';
                     $value = match ($query->getMethod()) {
-                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Method::StartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::NotStartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::EndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::NotEndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
+                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
                         default => $value
                     };
 
@@ -1866,7 +1662,7 @@ class Postgres extends SQL
                     if ($isNotQuery && $query->onArray()) {
                         // For array NOT queries, wrap the entire condition in NOT()
                         $conditions[] = "NOT ({$alias}.{$attribute} {$operator} :{$placeholder}_{$key})";
-                    } elseif ($isNotQuery && !$query->onArray()) {
+                    } elseif ($isNotQuery && ! $query->onArray()) {
                         $conditions[] = "{$alias}.{$attribute} NOT {$operator} :{$placeholder}_{$key}";
                     } else {
                         $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
@@ -1874,17 +1670,85 @@ class Postgres extends SQL
                 }
 
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+
+                return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
         }
+    }
+
+    /**
+     * Get SQL Type
+     */
+    protected function createBuilder(): SQLBuilder
+    {
+        return new PostgreSQLBuilder();
+    }
+
+    protected function createSchemaBuilder(): PostgreSQLSchema
+    {
+        return new PostgreSQLSchema();
+    }
+
+    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        if ($array === true) {
+            return 'JSONB';
+        }
+
+        return match ($type) {
+            ColumnType::Id => 'BIGINT',
+            ColumnType::String => $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
+            ColumnType::Varchar => "VARCHAR({$size})",
+            ColumnType::Text,
+            ColumnType::MediumText,
+            ColumnType::LongText => 'TEXT',
+            ColumnType::Integer => $size >= 8 ? 'BIGINT' : 'INTEGER',
+            ColumnType::Double => 'DOUBLE PRECISION',
+            ColumnType::Boolean => 'BOOLEAN',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'TIMESTAMP(3)',
+            ColumnType::Object => 'JSONB',
+            ColumnType::Point => 'GEOMETRY(POINT,'.Database::DEFAULT_SRID.')',
+            ColumnType::Linestring => 'GEOMETRY(LINESTRING,'.Database::DEFAULT_SRID.')',
+            ColumnType::Polygon => 'GEOMETRY(POLYGON,'.Database::DEFAULT_SRID.')',
+            ColumnType::Vector => "VECTOR({$size})",
+            default => throw new DatabaseException('Unknown Type: '.$type->value.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value.', '.ColumnType::Object->value.', '.ColumnType::Point->value.', '.ColumnType::Linestring->value.', '.ColumnType::Polygon->value),
+        };
+    }
+
+    /**
+     * Get SQL schema
+     */
+    protected function getSQLSchema(): string
+    {
+        if (! $this->supports(Capability::Schemas)) {
+            return '';
+        }
+
+        return "\"{$this->getDatabase()}\".";
+    }
+
+    /**
+     * Get PDO Type
+     *
+     *
+     * @throws DatabaseException
+     */
+    protected function getPDOType(mixed $value): int
+    {
+        return match (\gettype($value)) {
+            'string', 'double' => PDO::PARAM_STR,
+            'boolean' => PDO::PARAM_BOOL,
+            'integer' => PDO::PARAM_INT,
+            'NULL' => PDO::PARAM_NULL,
+            default => throw new DatabaseException('Unknown PDO Type for '.\gettype($value)),
+        };
     }
 
     /**
      * Get vector distance calculation for ORDER BY clause
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $alias
-     * @return string|null
+     * @param  array<string, mixed>  $binds
+     *
      * @throws DatabaseException
      */
     protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
@@ -1897,253 +1761,70 @@ class Postgres extends SQL
         $placeholder = ID::unique();
 
         $values = $query->getValues();
-        $vectorArray = $values[0] ?? [];
-        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
+        $vectorArrayRaw = $values[0] ?? [];
+        $vectorArray = \is_array($vectorArrayRaw) ? $vectorArrayRaw : [];
+        $vector = \json_encode(\array_map(fn (mixed $v): float => \is_numeric($v) ? (float) $v : 0.0, $vectorArray));
         $binds[":vector_{$placeholder}"] = $vector;
 
         return match ($query->getMethod()) {
-            Query::TYPE_VECTOR_DOT => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
-            Query::TYPE_VECTOR_COSINE => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
-            Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
+            Method::VectorDot => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
+            Method::VectorCosine => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
+            Method::VectorEuclidean => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
             default => null,
         };
     }
 
     /**
-     * @param string $value
-     * @return string
+     * {@inheritDoc}
      */
-    protected function getFulltextValue(string $value): string
+    protected function getVectorOrderRaw(Query $query, string $alias): ?array
     {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
-        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
-        $value = trim($value);
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
-        if (!$exact) {
-            $value = str_replace(' ', ' or ', $value);
-        }
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $quotedAlias = $this->quote($alias);
 
-        return "'" . $value . "'";
-    }
+        $values = $query->getValues();
+        $vectorArrayRaw2 = $values[0] ?? [];
+        $vectorArray2 = \is_array($vectorArrayRaw2) ? $vectorArrayRaw2 : [];
+        $vector = \json_encode(\array_map(fn (mixed $v): float => \is_numeric($v) ? (float) $v : 0.0, $vectorArray2));
 
-    /**
-     * Get SQL Type
-     *
-     * @param string $type
-     * @param int $size in chars
-     * @param bool $signed
-     * @param bool $array
-     * @param bool $required
-     * @return string
-     * @throws DatabaseException
-     */
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        if ($array === true) {
-            return 'JSONB';
-        }
-
-        switch ($type) {
-            case Database::VAR_ID:
-                return 'BIGINT';
-
-            case Database::VAR_STRING:
-                // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > $this->getMaxVarcharLength()) {
-                    return 'TEXT';
-                }
-
-                return "VARCHAR({$size})";
-
-            case Database::VAR_VARCHAR:
-                return "VARCHAR({$size})";
-
-            case Database::VAR_TEXT:
-            case Database::VAR_MEDIUMTEXT:
-            case Database::VAR_LONGTEXT:
-                return 'TEXT';  // PostgreSQL doesn't have MEDIUMTEXT/LONGTEXT, use TEXT
-
-            case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
-
-                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
-                    return 'BIGINT';
-                }
-
-                return 'INTEGER';
-
-            case Database::VAR_FLOAT:
-                return 'DOUBLE PRECISION';
-
-            case Database::VAR_BOOLEAN:
-                return 'BOOLEAN';
-
-            case Database::VAR_RELATIONSHIP:
-                return 'VARCHAR(255)';
-
-            case Database::VAR_DATETIME:
-                return 'TIMESTAMP(3)';
-
-            case Database::VAR_OBJECT:
-                return 'JSONB';
-
-            case Database::VAR_POINT:
-                return 'GEOMETRY(POINT,' . Database::DEFAULT_SRID . ')';
-
-            case Database::VAR_LINESTRING:
-                return 'GEOMETRY(LINESTRING,' . Database::DEFAULT_SRID . ')';
-
-            case Database::VAR_POLYGON:
-                return 'GEOMETRY(POLYGON,' . Database::DEFAULT_SRID . ')';
-
-            case Database::VAR_VECTOR:
-                return "VECTOR({$size})";
-
-            default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
-        }
-    }
-
-    /**
-     * Get SQL schema
-     *
-     * @return string
-     */
-    protected function getSQLSchema(): string
-    {
-        if (!$this->getSupportForSchemas()) {
-            return '';
-        }
-
-        return "\"{$this->getDatabase()}\".";
-    }
-
-    /**
-     * Get PDO Type
-     *
-     * @param mixed $value
-     *
-     * @return int
-     * @throws DatabaseException
-     */
-    protected function getPDOType(mixed $value): int
-    {
-        return match (\gettype($value)) {
-            'string', 'double' => PDO::PARAM_STR,
-            'boolean' => PDO::PARAM_BOOL,
-            'integer' => PDO::PARAM_INT,
-            'NULL' => PDO::PARAM_NULL,
-            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
+        $expression = match ($query->getMethod()) {
+            Method::VectorDot => "({$quotedAlias}.{$attribute} <#> ?::vector)",
+            Method::VectorCosine => "({$quotedAlias}.{$attribute} <=> ?::vector)",
+            Method::VectorEuclidean => "({$quotedAlias}.{$attribute} <-> ?::vector)",
+            default => null,
         };
-    }
 
-    /**
-     * Get the SQL function for random ordering
-     *
-     * @return string
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
+        if ($expression === null) {
+            return null;
+        }
+
+        return ['expression' => $expression, 'bindings' => [$vector]];
     }
 
     /**
      * Size of POINT spatial type
-     *
-     * @return int
-    */
+     */
     protected function getMaxPointSize(): int
     {
         // https://stackoverflow.com/questions/30455025/size-of-data-type-geographypoint-4326-in-postgis
         return 32;
     }
 
-
-    /**
-     * Encode array
-     *
-     * @param string $value
-     *
-     * @return array<string>
-     */
-    protected function encodeArray(string $value): array
+    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
     {
-        $string = substr($value, 1, -1);
-        if (empty($string)) {
-            return [];
-        } else {
-            return explode(',', $string);
-        }
-    }
+        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
+        $attribute = $this->quote($attribute);
+        $searchVal = $query->getValue();
+        $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
 
-    /**
-     * Decode array
-     *
-     * @param array<string> $value
-     *
-     * @return string
-     */
-    protected function decodeArray(array $value): string
-    {
-        if (empty($value)) {
-            return '{}';
-        }
-
-        foreach ($value as &$item) {
-            $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
-        }
-
-        return '{' . implode(",", $value) . '}';
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('-4713-01-01 00:00:00');
-    }
-
-    /**
-     * Is fulltext Wildcard index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter handle Query Array Overlaps?
-     *
-     * @return bool
-     */
-    public function getSupportForJSONOverlaps(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return false; // Postgres has native boolean type
-    }
-
-    /**
-     * Is get schema attributes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return false;
+        return [
+            'expression' => "ts_rank(to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')), websearch_to_tsquery(?)) AS \"_relevance\"",
+            'order' => '"_relevance" DESC',
+            'bindings' => [$term],
+        ];
     }
 
     public function getSupportForSchemaIndexes(): bool
@@ -2151,53 +1832,7 @@ class Postgres extends SQL
         return false;
     }
 
-    public function getSupportForUpserts(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is vector type supported?
-     *
-     * @return bool
-     */
-    public function getSupportForVectors(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * @return string
-     */
-    public function getLikeOperator(): string
-    {
-        return 'ILIKE';
-    }
-
-    /**
-     * @return string
-     */
-    public function getRegexOperator(): string
-    {
-        return '~';
-    }
-
-    protected function processException(PDOException $e): \Exception
+    protected function processException(PDOException $e): Exception
     {
         // Timeout
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
@@ -2217,9 +1852,10 @@ class Postgres extends SQL
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
+            if (! \str_contains($message, '_uid')) {
                 return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
+
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
@@ -2244,357 +1880,25 @@ class Postgres extends SQL
         }
 
         // Unknown column
-        if ($e->getCode() === "42703" && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+        if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
         return $e;
     }
 
-    /**
-     * @param string $string
-     * @return string
-     */
     protected function quote(string $string): string
     {
         return "\"{$string}\"";
     }
 
-    /**
-     * Is spatial attributes supported?
-     *
-     * @return bool
-    */
-    public function getSupportForSpatialAttributes(): bool
+    protected function getIdentifierQuoteChar(): string
     {
-        return true;
-    }
-
-    /**
-     * Are object (JSONB) attributes supported?
-     *
-     * @return bool
-    */
-    public function getSupportForObject(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Are object (JSONB) indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForObjectIndexes(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support null values in spatial indexes?
-     *
-     * @return bool
-    */
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-    */
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-    */
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    public function decodePoint(string $wkb): array
-    {
-        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
-            $start = strpos($wkb, '(') + 1;
-            $end = strrpos($wkb, ')');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $coords = explode(' ', trim($inside));
-            return [(float)$coords[0], (float)$coords[1]];
-        }
-
-        $bin = hex2bin($wkb);
-        if ($bin === false) {
-            throw new DatabaseException('Invalid hex WKB string');
-        }
-
-        if (strlen($bin) < 13) { // 1 byte endian + 4 bytes type + 8 bytes for X
-            throw new DatabaseException('WKB too short');
-        }
-
-        $isLE = ord($bin[0]) === 1;
-
-        // Type (4 bytes)
-        $typeBytes = substr($bin, 1, 4);
-        if (strlen($typeBytes) !== 4) {
-            throw new DatabaseException('Failed to extract type bytes from WKB');
-        }
-
-        $typeArr = unpack($isLE ? 'V' : 'N', $typeBytes);
-        if ($typeArr === false || !isset($typeArr[1])) {
-            throw new DatabaseException('Failed to unpack type from WKB');
-        }
-        $type = $typeArr[1];
-
-        // Offset to coordinates (skip SRID if present)
-        $offset = 5 + (($type & 0x20000000) ? 4 : 0);
-
-        if (strlen($bin) < $offset + 16) { // 16 bytes for X,Y
-            throw new DatabaseException('WKB too short for coordinates');
-        }
-
-        $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
-
-        // X coordinate
-        $xArr = unpack($fmt, substr($bin, $offset, 8));
-        if ($xArr === false || !isset($xArr[1])) {
-            throw new DatabaseException('Failed to unpack X coordinate');
-        }
-        $x = (float)$xArr[1];
-
-        // Y coordinate
-        $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
-        if ($yArr === false || !isset($yArr[1])) {
-            throw new DatabaseException('Failed to unpack Y coordinate');
-        }
-        $y = (float)$yArr[1];
-
-        return [$x, $y];
-    }
-
-    public function decodeLinestring(mixed $wkb): array
-    {
-        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
-            $start = strpos($wkb, '(') + 1;
-            $end = strrpos($wkb, ')');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $points = explode(',', $inside);
-            return array_map(function ($point) {
-                $coords = explode(' ', trim($point));
-                return [(float)$coords[0], (float)$coords[1]];
-            }, $points);
-        }
-
-        if (ctype_xdigit($wkb)) {
-            $wkb = hex2bin($wkb);
-            if ($wkb === false) {
-                throw new DatabaseException("Failed to convert hex WKB to binary.");
-            }
-        }
-
-        if (strlen($wkb) < 9) {
-            throw new DatabaseException("WKB too short to be a valid geometry");
-        }
-
-        $byteOrder = ord($wkb[0]);
-        if ($byteOrder === 0) {
-            throw new DatabaseException("Big-endian WKB not supported");
-        } elseif ($byteOrder !== 1) {
-            throw new DatabaseException("Invalid byte order in WKB");
-        }
-
-        // Type + SRID flag
-        $typeField = unpack('V', substr($wkb, 1, 4));
-        if ($typeField === false) {
-            throw new DatabaseException('Failed to unpack the type field from WKB.');
-        }
-
-        $typeField = $typeField[1];
-        $geomType = $typeField & 0xFF;
-        $hasSRID = ($typeField & 0x20000000) !== 0;
-
-        if ($geomType !== 2) { // 2 = LINESTRING
-            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
-        }
-
-        $offset = 5;
-        if ($hasSRID) {
-            $offset += 4;
-        }
-
-        $numPoints = unpack('V', substr($wkb, $offset, 4));
-        if ($numPoints === false) {
-            throw new DatabaseException("Failed to unpack number of points at offset {$offset}.");
-        }
-
-        $numPoints = $numPoints[1];
-        $offset += 4;
-
-        $points = [];
-        for ($i = 0; $i < $numPoints; $i++) {
-            $x = unpack('e', substr($wkb, $offset, 8));
-            if ($x === false) {
-                throw new DatabaseException("Failed to unpack X coordinate at offset {$offset}.");
-            }
-
-            $x = (float) $x[1];
-
-            $offset += 8;
-
-            $y = unpack('e', substr($wkb, $offset, 8));
-            if ($y === false) {
-                throw new DatabaseException("Failed to unpack Y coordinate at offset {$offset}.");
-            }
-
-            $y = (float) $y[1];
-
-            $offset += 8;
-            $points[] = [$x, $y];
-        }
-
-        return $points;
-    }
-
-    public function decodePolygon(string $wkb): array
-    {
-        // POLYGON((x1,y1),(x2,y2))
-        if (str_starts_with($wkb, 'POLYGON((')) {
-            $start = strpos($wkb, '((') + 2;
-            $end = strrpos($wkb, '))');
-            $inside = substr($wkb, $start, $end - $start);
-
-            $rings = explode('),(', $inside);
-            return array_map(function ($ring) {
-                $points = explode(',', $ring);
-                return array_map(function ($point) {
-                    $coords = explode(' ', trim($point));
-                    return [(float)$coords[0], (float)$coords[1]];
-                }, $points);
-            }, $rings);
-        }
-
-        // Convert hex string to binary if needed
-        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
-            $wkb = hex2bin($wkb);
-            if ($wkb === false) {
-                throw new DatabaseException("Invalid hex WKB");
-            }
-        }
-
-        if (strlen($wkb) < 9) {
-            throw new DatabaseException("WKB too short");
-        }
-
-        $uInt32 = 'V'; // little-endian 32-bit unsigned
-        $uDouble = 'd'; // little-endian double
-
-        $typeInt = unpack($uInt32, substr($wkb, 1, 4));
-        if ($typeInt === false) {
-            throw new DatabaseException('Failed to unpack type field from WKB.');
-        }
-
-        $typeInt = (int) $typeInt[1];
-        $hasSrid = ($typeInt & 0x20000000) !== 0;
-        $geomType = $typeInt & 0xFF;
-
-        if ($geomType !== 3) { // 3 = POLYGON
-            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
-        }
-
-        $offset = 5;
-        if ($hasSrid) {
-            $offset += 4;
-        }
-
-        // Number of rings
-        $numRings = unpack($uInt32, substr($wkb, $offset, 4));
-        if ($numRings === false) {
-            throw new DatabaseException('Failed to unpack number of rings from WKB.');
-        }
-
-        $numRings = (int) $numRings[1];
-        $offset += 4;
-
-        $rings = [];
-        for ($r = 0; $r < $numRings; $r++) {
-            $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
-            if ($numPoints === false) {
-                throw new DatabaseException('Failed to unpack number of points from WKB.');
-            }
-
-            $numPoints = (int) $numPoints[1];
-            $offset += 4;
-            $points = [];
-            for ($i = 0; $i < $numPoints; $i++) {
-                $x = unpack($uDouble, substr($wkb, $offset, 8));
-                if ($x === false) {
-                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
-                }
-
-                $x = (float) $x[1];
-
-                $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
-                if ($y === false) {
-                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
-                }
-
-                $y = (float) $y[1];
-
-                $points[] = [$x, $y];
-                $offset += 16;
-            }
-            $rings[] = $points;
-        }
-
-        return $rings; // array of rings, each ring is array of [x,y]
+        return '"';
     }
 
     /**
      * Get SQL expression for operator
-     *
-     * @param string $column
-     * @param Operator $operator
-     * @param int &$bindIndex
-     * @return ?string
      */
     protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
     {
@@ -2605,40 +1909,45 @@ class Postgres extends SQL
 
         switch ($method) {
             // Numeric operators
-            case Operator::TYPE_INCREMENT:
+            case OperatorType::Increment:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
                         WHEN COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) - CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
                         ELSE COALESCE({$columnRef}, 0) + CAST(:$bindKey AS NUMERIC)
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) + :$bindKey";
 
-            case Operator::TYPE_DECREMENT:
+            case OperatorType::Decrement:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$columnRef}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
                         WHEN COALESCE({$columnRef}, 0) < CAST(:$minKey AS NUMERIC) + CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
                         ELSE COALESCE({$columnRef}, 0) - CAST(:$bindKey AS NUMERIC)
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) - :$bindKey";
 
-            case Operator::TYPE_MULTIPLY:
+            case OperatorType::Multiply:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
                         WHEN CAST(:$bindKey AS NUMERIC) > 0 AND COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
@@ -2646,32 +1955,37 @@ class Postgres extends SQL
                         ELSE COALESCE({$columnRef}, 0) * CAST(:$bindKey AS NUMERIC)
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) * :$bindKey";
 
-            case Operator::TYPE_DIVIDE:
+            case OperatorType::Divide:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
                         ELSE COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC)
                     END";
                 }
+
                 return "{$quotedColumn} = COALESCE({$columnRef}, 0) / :$bindKey";
 
-            case Operator::TYPE_MODULO:
+            case OperatorType::Modulo:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
-            case Operator::TYPE_POWER:
+            case OperatorType::Power:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$columnRef}, 0) >= :$maxKey THEN :$maxKey
                         WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
@@ -2679,56 +1993,63 @@ class Postgres extends SQL
                         ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
                     END";
                 }
+
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
                 // String operators
-            case Operator::TYPE_STRING_CONCAT:
+            case OperatorType::StringConcat:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = CONCAT(COALESCE({$columnRef}, ''), :$bindKey)";
 
-            case Operator::TYPE_STRING_REPLACE:
+            case OperatorType::StringReplace:
                 $searchKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
 
                 // Boolean operators
-            case Operator::TYPE_TOGGLE:
+            case OperatorType::Toggle:
                 return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
 
                 // Array operators
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE({$columnRef}, '[]'::jsonb) || :$bindKey::jsonb";
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique:
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(DISTINCT value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                 ), '[]'::jsonb)";
 
-            case Operator::TYPE_ARRAY_REMOVE:
+            case OperatorType::ArrayRemove:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                     WHERE value != :$bindKey::jsonb
                 ), '[]'::jsonb)";
 
-            case Operator::TYPE_ARRAY_INSERT:
+            case OperatorType::ArrayInsert:
                 $indexKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = (
                     SELECT jsonb_agg(value ORDER BY idx)
                     FROM (
@@ -2744,29 +2065,32 @@ class Postgres extends SQL
                     ) AS combined
                 )";
 
-            case Operator::TYPE_ARRAY_INTERSECT:
+            case OperatorType::ArrayIntersect:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                     WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
                 ), '[]'::jsonb)";
 
-            case Operator::TYPE_ARRAY_DIFF:
+            case OperatorType::ArrayDiff:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                     WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
                 ), '[]'::jsonb)";
 
-            case Operator::TYPE_ARRAY_FILTER:
+            case OperatorType::ArrayFilter:
                 $conditionKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
@@ -2784,60 +2108,57 @@ class Postgres extends SQL
                 ), '[]'::jsonb)";
 
                 // Date operators
-            case Operator::TYPE_DATE_ADD_DAYS:
+            case OperatorType::DateAddDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = {$columnRef} + (:$bindKey || ' days')::INTERVAL";
 
-            case Operator::TYPE_DATE_SUB_DAYS:
+            case OperatorType::DateSubDays:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = {$columnRef} - (:$bindKey || ' days')::INTERVAL";
 
-            case Operator::TYPE_DATE_SET_NOW:
+            case OperatorType::DateSetNow:
                 return "{$quotedColumn} = NOW()";
 
             default:
-                throw new OperatorException("Invalid operator: {$method}");
+                throw new OperatorException('Invalid operator');
         }
     }
 
     /**
      * Bind operator parameters to statement
      * Override to handle PostgreSQL-specific JSON binding
-     *
-     * @param \PDOStatement|PDOStatementProxy $stmt
-     * @param Operator $operator
-     * @param int &$bindIndex
-     * @return void
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();
 
         switch ($method) {
-            case Operator::TYPE_ARRAY_APPEND:
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayAppend:
+            case OperatorType::ArrayPrepend:
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
-            case Operator::TYPE_ARRAY_REMOVE:
+            case OperatorType::ArrayRemove:
                 $value = $values[0] ?? null;
                 $bindKey = "op_{$bindIndex}";
                 // Always JSON encode for PostgreSQL jsonb comparison
-                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, json_encode($value), PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
-            case Operator::TYPE_ARRAY_INTERSECT:
-            case Operator::TYPE_ARRAY_DIFF:
+            case OperatorType::ArrayIntersect:
+            case OperatorType::ArrayDiff:
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -2848,16 +2169,72 @@ class Postgres extends SQL
         }
     }
 
-    public function getSupportNonUtfCharacters(): bool
+    protected function getFulltextValue(string $value): string
     {
-        return false;
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value ?? '');
+
+        if (! $exact) {
+            $value = str_replace(' ', ' or ', $value);
+        }
+
+        return "'".$value."'";
+    }
+
+    protected function getOperatorBuilderExpression(string $column, Operator $operator): array
+    {
+        if ($operator->getMethod() === OperatorType::ArrayRemove) {
+            $result = parent::getOperatorBuilderExpression($column, $operator);
+            $values = $operator->getValues();
+            $value = $values[0] ?? null;
+            if (! is_array($value)) {
+                $result['bindings'] = [json_encode($value)];
+            }
+
+            return $result;
+        }
+
+        return parent::getOperatorBuilderExpression($column, $operator);
+    }
+
+    /**
+     * Encode array
+     *
+     *
+     * @return array<string>
+     */
+    protected function encodeArray(string $value): array
+    {
+        $string = substr($value, 1, -1);
+        if (empty($string)) {
+            return [];
+        } else {
+            return explode(',', $string);
+        }
+    }
+
+    /**
+     * Decode array
+     *
+     * @param  array<string>  $value
+     */
+    protected function decodeArray(array $value): string
+    {
+        if (empty($value)) {
+            return '{}';
+        }
+
+        foreach ($value as &$item) {
+            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
+        }
+
+        return '{'.implode(',', $value).'}';
     }
 
     /**
      * Ensure index key length stays within PostgreSQL's 63 character limit.
-     *
-     * @param string $key
-     * @return string
      */
     protected function getShortKey(string $key): string
     {
@@ -2891,21 +2268,18 @@ class Postgres extends SQL
         return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
     }
 
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
-    }
     protected function buildJsonbPath(string $path, bool $asText = false): string
     {
         $parts = \explode('.', $path);
 
         foreach ($parts as $part) {
-            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
-                throw new DatabaseException('Invalid JSON key ' . $part);
+            if (! preg_match('/^[a-zA-Z0-9_\-]+$/', $part)) {
+                throw new DatabaseException('Invalid JSON key '.$part);
             }
         }
         if (\count($parts) === 1) {
             $column = $this->filter($parts[0]);
+
             return $this->quote($column);
         }
 

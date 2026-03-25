@@ -14,7 +14,6 @@
  * The --seed parameter allows you to pre-populate the collection with a specified
  * number of documents to test how operators perform with varying amounts of existing data.
  */
-
 global $cli;
 
 use Utopia\Cache\Adapter\None as NoCache;
@@ -41,14 +40,14 @@ $cli
     ->param('adapter', '', new Text(0), 'Database adapter (mariadb, postgres, sqlite)')
     ->param('iterations', 1000, new Integer(true), 'Number of iterations per test', true)
     ->param('seed', 0, new Integer(true), 'Number of documents to pre-seed the collection with', true)
-    ->param('name', 'operator_benchmark_' . uniqid(), new Text(0), 'Name of test database', true)
+    ->param('name', 'operator_benchmark_'.uniqid(), new Text(0), 'Name of test database', true)
     ->action(function (string $adapter, int $iterations, int $seed, string $name) {
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
-        Console::info("=============================================================");
-        Console::info("  OPERATOR PERFORMANCE BENCHMARK");
-        Console::info("=============================================================");
+        Console::info('=============================================================');
+        Console::info('  OPERATOR PERFORMANCE BENCHMARK');
+        Console::info('=============================================================');
         Console::info("Adapter: {$adapter}");
         Console::info("Iterations: {$iterations}");
         Console::info("Seed Documents: {$seed}");
@@ -91,14 +90,15 @@ $cli
                 'port' => 0,
                 'user' => '',
                 'pass' => '',
-                'dsn' => static fn (string $host, int $port) => "sqlite::memory:",
+                'dsn' => static fn (string $host, int $port) => 'sqlite::memory:',
                 'adapter' => SQLite::class,
                 'attrs' => [],
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported. Available: mariadb, postgres, sqlite");
+
             return;
         }
 
@@ -128,8 +128,9 @@ $cli
             Console::success("\nBenchmark completed successfully!");
 
         } catch (\Throwable $e) {
-            Console::error("Error: " . $e->getMessage());
-            Console::error("Trace: " . $e->getTraceAsString());
+            Console::error('Error: '.$e->getMessage());
+            Console::error('Trace: '.$e->getTraceAsString());
+
             return;
         }
     });
@@ -139,7 +140,7 @@ $cli
  */
 function setupTestEnvironment(Database $database, string $name, int $seed): void
 {
-    Console::info("Setting up test environment...");
+    Console::info('Setting up test environment...');
 
     // Delete database if it exists
     if ($database->exists($name)) {
@@ -210,7 +211,7 @@ function seedDocuments(Database $database, int $count): void
         for ($i = 0; $i < $remaining; $i++) {
             $docNum = ($batch * $batchSize) + $i;
             $docs[] = new Document([
-                '$id' => 'seed_' . $docNum,
+                '$id' => 'seed_'.$docNum,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
@@ -221,13 +222,13 @@ function seedDocuments(Database $database, int $count): void
                 'divider' => round(rand(5000, 15000) / 100, 2),
                 'modulo_val' => rand(50, 200),
                 'power_val' => round(rand(100, 300) / 100, 2),
-                'name' => 'seed_doc_' . $docNum,
-                'text' => 'Seed text for document ' . $docNum,
-                'description' => 'This is seed document ' . $docNum . ' with some foo bar baz content',
+                'name' => 'seed_doc_'.$docNum,
+                'text' => 'Seed text for document '.$docNum,
+                'description' => 'This is seed document '.$docNum.' with some foo bar baz content',
                 'active' => (bool) rand(0, 1),
-                'tags' => ['seed', 'tag' . ($docNum % 10), 'category' . ($docNum % 5)],
+                'tags' => ['seed', 'tag'.($docNum % 10), 'category'.($docNum % 5)],
                 'numbers' => [rand(1, 10), rand(11, 20), rand(21, 30)],
-                'items' => ['item' . ($docNum % 3), 'item' . ($docNum % 7)],
+                'items' => ['item'.($docNum % 3), 'item'.($docNum % 7)],
                 'created_at' => DateTime::now(),
                 'updated_at' => DateTime::now(),
             ]);
@@ -243,7 +244,7 @@ function seedDocuments(Database $database, int $count): void
     }
 
     $seedTime = microtime(true) - $seedStart;
-    Console::success("Seeding completed in " . number_format($seedTime, 2) . "s\n");
+    Console::success('Seeding completed in '.number_format($seedTime, 2)."s\n");
 }
 
 /**
@@ -262,7 +263,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $results[$name] = $benchmark();
         } catch (\Throwable $e) {
             $failed[$name] = $e->getMessage();
-            Console::warning("  ⚠️  {$name} failed: " . $e->getMessage());
+            Console::warning("  ⚠️  {$name} failed: ".$e->getMessage());
         }
     };
 
@@ -343,6 +344,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::increment(1),
         function ($doc) {
             $doc->setAttribute('counter', $doc->getAttribute('counter', 0) + 1);
+
             return $doc;
         },
         ['counter' => 0]
@@ -356,6 +358,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::decrement(1),
         function ($doc) {
             $doc->setAttribute('counter', $doc->getAttribute('counter', 100) - 1);
+
             return $doc;
         },
         ['counter' => 100]
@@ -369,6 +372,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::multiply(1.1),
         function ($doc) {
             $doc->setAttribute('multiplier', $doc->getAttribute('multiplier', 1.0) * 1.1);
+
             return $doc;
         },
         ['multiplier' => 1.0]
@@ -382,6 +386,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::divide(1.1),
         function ($doc) {
             $doc->setAttribute('divider', $doc->getAttribute('divider', 100.0) / 1.1);
+
             return $doc;
         },
         ['divider' => 100.0]
@@ -396,6 +401,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         function ($doc) {
             $val = $doc->getAttribute('modulo_val', 100);
             $doc->setAttribute('modulo_val', $val % 7);
+
             return $doc;
         },
         ['modulo_val' => 100]
@@ -409,6 +415,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::power(1.001),
         function ($doc) {
             $doc->setAttribute('power_val', pow($doc->getAttribute('power_val', 2.0), 1.001));
+
             return $doc;
         },
         ['power_val' => 2.0]
@@ -422,7 +429,8 @@ function runAllBenchmarks(Database $database, int $iterations): array
         'text',
         Operator::stringConcat('x'),
         function ($doc) {
-            $doc->setAttribute('text', $doc->getAttribute('text', 'initial') . 'x');
+            $doc->setAttribute('text', $doc->getAttribute('text', 'initial').'x');
+
             return $doc;
         },
         ['text' => 'initial']
@@ -436,6 +444,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::stringReplace('foo', 'bar'),
         function ($doc) {
             $doc->setAttribute('description', str_replace('foo', 'bar', $doc->getAttribute('description', 'foo bar baz')));
+
             return $doc;
         },
         ['description' => 'foo bar baz']
@@ -449,7 +458,8 @@ function runAllBenchmarks(Database $database, int $iterations): array
         'active',
         Operator::toggle(),
         function ($doc) {
-            $doc->setAttribute('active', !$doc->getAttribute('active', true));
+            $doc->setAttribute('active', ! $doc->getAttribute('active', true));
+
             return $doc;
         },
         ['active' => true]
@@ -466,6 +476,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $tags = $doc->getAttribute('tags', ['initial']);
             $tags[] = 'new';
             $doc->setAttribute('tags', $tags);
+
             return $doc;
         },
         ['tags' => ['initial']]
@@ -481,6 +492,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $tags = $doc->getAttribute('tags', ['initial']);
             array_unshift($tags, 'first');
             $doc->setAttribute('tags', $tags);
+
             return $doc;
         },
         ['tags' => ['initial']]
@@ -496,6 +508,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $numbers = $doc->getAttribute('numbers', [1, 2, 3]);
             array_splice($numbers, 1, 0, [99]);
             $doc->setAttribute('numbers', $numbers);
+
             return $doc;
         },
         ['numbers' => [1, 2, 3]]
@@ -511,6 +524,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $tags = $doc->getAttribute('tags', ['keep', 'unwanted', 'also']);
             $tags = array_values(array_filter($tags, fn ($t) => $t !== 'unwanted'));
             $doc->setAttribute('tags', $tags);
+
             return $doc;
         },
         ['tags' => ['keep', 'unwanted', 'also']]
@@ -525,6 +539,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         function ($doc) {
             $tags = $doc->getAttribute('tags', ['a', 'b', 'a', 'c', 'b']);
             $doc->setAttribute('tags', array_values(array_unique($tags)));
+
             return $doc;
         },
         ['tags' => ['a', 'b', 'a', 'c', 'b']]
@@ -539,6 +554,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         function ($doc) {
             $tags = $doc->getAttribute('tags', ['keep', 'remove', 'this']);
             $doc->setAttribute('tags', array_values(array_intersect($tags, ['keep', 'this'])));
+
             return $doc;
         },
         ['tags' => ['keep', 'remove', 'this']]
@@ -553,6 +569,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         function ($doc) {
             $tags = $doc->getAttribute('tags', ['keep', 'remove', 'this']);
             $doc->setAttribute('tags', array_values(array_diff($tags, ['remove'])));
+
             return $doc;
         },
         ['tags' => ['keep', 'remove', 'this']]
@@ -567,6 +584,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         function ($doc) {
             $numbers = $doc->getAttribute('numbers', [1, 3, 5, 7, 9]);
             $doc->setAttribute('numbers', array_values(array_filter($numbers, fn ($n) => $n > 5)));
+
             return $doc;
         },
         ['numbers' => [1, 3, 5, 7, 9]]
@@ -583,6 +601,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $date = new \DateTime($doc->getAttribute('created_at', DateTime::now()));
             $date->modify('+1 day');
             $doc->setAttribute('created_at', DateTime::format($date));
+
             return $doc;
         },
         ['created_at' => DateTime::now()]
@@ -598,6 +617,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
             $date = new \DateTime($doc->getAttribute('updated_at', DateTime::now()));
             $date->modify('-1 day');
             $doc->setAttribute('updated_at', DateTime::format($date));
+
             return $doc;
         },
         ['updated_at' => DateTime::now()]
@@ -611,16 +631,17 @@ function runAllBenchmarks(Database $database, int $iterations): array
         Operator::dateSetNow(),
         function ($doc) {
             $doc->setAttribute('updated_at', DateTime::now());
+
             return $doc;
         },
         ['updated_at' => DateTime::now()]
     ));
 
     // Report any failures
-    if (!empty($failed)) {
+    if (! empty($failed)) {
         Console::warning("\n⚠️  Some benchmarks failed:");
         foreach ($failed as $name => $error) {
-            Console::warning("  - {$name}: " . substr($error, 0, 100));
+            Console::warning("  - {$name}: ".substr($error, 0, 100));
         }
     }
 
@@ -637,10 +658,10 @@ function benchmarkOperation(
     bool $isBulk,
     bool $useOperators
 ): array {
-    $displayName = strtoupper($operation) . ($useOperators ? ' (with ops)' : ' (no ops)');
+    $displayName = strtoupper($operation).($useOperators ? ' (with ops)' : ' (no ops)');
     Console::info("Benchmarking {$displayName}...");
 
-    $docId = 'bench_op_' . strtolower($operation) . '_' . ($useOperators ? 'ops' : 'noops');
+    $docId = 'bench_op_'.strtolower($operation).'_'.($useOperators ? 'ops' : 'noops');
 
     // Create initial document
     $baseData = [
@@ -650,7 +671,7 @@ function benchmarkOperation(
         ],
         'counter' => 0,
         'name' => 'test',
-        'score' => 100.0
+        'score' => 100.0,
     ];
 
     $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
@@ -662,11 +683,11 @@ function benchmarkOperation(
         if ($operation === 'updateDocument') {
             if ($useOperators) {
                 $database->updateDocument('operators_test', $docId, new Document([
-                    'counter' => Operator::increment(1)
+                    'counter' => Operator::increment(1),
                 ]));
             } else {
                 $database->updateDocument('operators_test', $docId, new Document([
-                    'counter' => $i + 1
+                    'counter' => $i + 1,
                 ]));
             }
         } elseif ($operation === 'updateDocuments') {
@@ -680,7 +701,7 @@ function benchmarkOperation(
                 // because updateDocuments with queries would apply the same value to all matching docs
                 $doc = $database->getDocument('operators_test', $docId);
                 $database->updateDocument('operators_test', $docId, new Document([
-                    'counter' => $i + 1
+                    'counter' => $i + 1,
                 ]));
             }
         } elseif ($operation === 'upsertDocument') {
@@ -689,24 +710,24 @@ function benchmarkOperation(
                     '$id' => $docId,
                     'counter' => Operator::increment(1),
                     'name' => 'test',
-                    'score' => 100.0
+                    'score' => 100.0,
                 ]));
             } else {
                 $database->upsertDocument('operators_test', new Document([
                     '$id' => $docId,
                     'counter' => $i + 1,
                     'name' => 'test',
-                    'score' => 100.0
+                    'score' => 100.0,
                 ]));
             }
         } elseif ($operation === 'upsertDocuments') {
             if ($useOperators) {
                 $database->upsertDocuments('operators_test', [
-                    new Document(['$id' => $docId, 'counter' => Operator::increment(1), 'name' => 'test', 'score' => 100.0])
+                    new Document(['$id' => $docId, 'counter' => Operator::increment(1), 'name' => 'test', 'score' => 100.0]),
                 ]);
             } else {
                 $database->upsertDocuments('operators_test', [
-                    new Document(['$id' => $docId, 'counter' => $i + 1, 'name' => 'test', 'score' => 100.0])
+                    new Document(['$id' => $docId, 'counter' => $i + 1, 'name' => 'test', 'score' => 100.0]),
                 ]);
             }
         }
@@ -718,7 +739,7 @@ function benchmarkOperation(
     // Cleanup
     $database->deleteDocument('operators_test', $docId);
 
-    Console::success("  Time: {$timeOp}s | Memory: " . formatBytes($memOp));
+    Console::success("  Time: {$timeOp}s | Memory: ".formatBytes($memOp));
 
     return [
         'operation' => $operation,
@@ -753,8 +774,9 @@ function benchmarkOperatorAcrossOperations(
 
     foreach ($operationTypes as $opType => $method) {
         // Skip upsert operations if not supported
-        if (str_contains($method, 'upsert') && !$database->getAdapter()->getSupportForUpserts()) {
+        if (str_contains($method, 'upsert') && ! $database->getAdapter()->getSupportForUpserts()) {
             Console::warning("  Skipping {$opType} (not supported by adapter)");
+
             continue;
         }
 
@@ -772,7 +794,7 @@ function benchmarkOperatorAcrossOperations(
         // Create documents for with-operator test
         $docIdsWith = [];
         for ($i = 0; $i < $docCount; $i++) {
-            $docId = 'bench_with_' . strtolower($operatorName) . '_' . strtolower($opType) . '_' . $i;
+            $docId = 'bench_with_'.strtolower($operatorName).'_'.strtolower($opType).'_'.$i;
             $docIdsWith[] = $docId;
             $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
         }
@@ -780,7 +802,7 @@ function benchmarkOperatorAcrossOperations(
         // Create documents for without-operator test
         $docIdsWithout = [];
         for ($i = 0; $i < $docCount; $i++) {
-            $docId = 'bench_without_' . strtolower($operatorName) . '_' . strtolower($opType) . '_' . $i;
+            $docId = 'bench_without_'.strtolower($operatorName).'_'.strtolower($opType).'_'.$i;
             $docIdsWithout[] = $docId;
             $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
         }
@@ -792,7 +814,7 @@ function benchmarkOperatorAcrossOperations(
         for ($i = 0; $i < $iterations; $i++) {
             if ($method === 'updateDocument') {
                 $database->updateDocument('operators_test', $docIdsWith[0], new Document([
-                    $attribute => $operator
+                    $attribute => $operator,
                 ]));
             } elseif ($method === 'updateDocuments') {
                 $updates = new Document([$attribute => $operator]);
@@ -915,8 +937,8 @@ function benchmarkOperatorAcrossOperations(
 function displayResults(array $results, string $adapter, int $iterations, int $seed): void
 {
     Console::info("\n=============================================================");
-    Console::info("  BENCHMARK RESULTS");
-    Console::info("=============================================================");
+    Console::info('  BENCHMARK RESULTS');
+    Console::info('=============================================================');
     Console::info("Adapter: {$adapter}");
     Console::info("Iterations per test: {$iterations}");
     Console::info("Seeded documents: {$seed}");
@@ -931,8 +953,8 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
     $opTypes = ['UPDATE_SINGLE', 'UPDATE_BULK', 'UPSERT_SINGLE', 'UPSERT_BULK'];
 
     foreach ($opTypes as $opType) {
-        $noOpsKey = $opType . '_NO_OPS';
-        $withOpsKey = $opType . '_WITH_OPS';
+        $noOpsKey = $opType.'_NO_OPS';
+        $withOpsKey = $opType.'_WITH_OPS';
 
         if (isset($results[$noOpsKey]) && isset($results[$withOpsKey])) {
             $noOps = $results[$noOpsKey];
@@ -941,10 +963,10 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
             $timeNoOps = number_format($noOps['time'], 4);
             $timeWithOps = number_format($withOps['time'], 4);
 
-            Console::info(str_pad($opType, 20) . ":");
+            Console::info(str_pad($opType, 20).':');
             Console::info("  NO operators:   {$timeNoOps}s");
             Console::info("  WITH operators: {$timeWithOps}s");
-            Console::info("");
+            Console::info('');
         }
     }
 
@@ -990,7 +1012,7 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
         Console::info("\n{$categoryName} Operators:");
 
         foreach ($operators as $operatorName) {
-            if (!isset($results[$operatorName])) {
+            if (! isset($results[$operatorName])) {
                 continue;
             }
 
@@ -998,8 +1020,9 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
 
             Console::info("\n  {$operatorName}:");
 
-            if (!isset($result['operations'])) {
-                Console::warning("    No results (benchmark failed)");
+            if (! isset($result['operations'])) {
+                Console::warning('    No results (benchmark failed)');
+
                 continue;
             }
 
@@ -1040,14 +1063,14 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
     // Summary statistics
     $avgSpeedup = $totalCount > 0 ? $totalSpeedup / $totalCount : 0;
 
-    Console::info("\n" . str_repeat('=', array_sum($colWidths) + 5));
-    Console::info("SUMMARY:");
+    Console::info("\n".str_repeat('=', array_sum($colWidths) + 5));
+    Console::info('SUMMARY:');
     Console::info("  Total operators tested: {$totalCount}");
-    Console::info("  Average speedup: " . number_format($avgSpeedup, 2) . "x");
+    Console::info('  Average speedup: '.number_format($avgSpeedup, 2).'x');
 
     // Performance insights
-    Console::info("\n" . str_repeat('=', array_sum($colWidths) + 5));
-    Console::info("PERFORMANCE INSIGHTS:");
+    Console::info("\n".str_repeat('=', array_sum($colWidths) + 5));
+    Console::info('PERFORMANCE INSIGHTS:');
 
     // Flatten results for fastest/slowest calculation
     $flattenedResults = [];
@@ -1063,25 +1086,23 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
         }
     }
 
-    if (!empty($flattenedResults)) {
+    if (! empty($flattenedResults)) {
         $fastest = array_reduce(
             $flattenedResults,
-            fn ($carry, $item) =>
-            $carry === null || $item['speedup'] > $carry['speedup'] ? $item : $carry
+            fn ($carry, $item) => $carry === null || $item['speedup'] > $carry['speedup'] ? $item : $carry
         );
 
         $slowest = array_reduce(
             $flattenedResults,
-            fn ($carry, $item) =>
-            $carry === null || $item['speedup'] < $carry['speedup'] ? $item : $carry
+            fn ($carry, $item) => $carry === null || $item['speedup'] < $carry['speedup'] ? $item : $carry
         );
 
         if ($fastest) {
-            Console::success("  Fastest: {$fastest['operator']} ({$fastest['operation']}) - " . number_format($fastest['speedup'], 2) . "x speedup");
+            Console::success("  Fastest: {$fastest['operator']} ({$fastest['operation']}) - ".number_format($fastest['speedup'], 2).'x speedup');
         }
 
         if ($slowest) {
-            Console::warning("  Slowest: {$slowest['operator']} ({$slowest['operation']}) - " . number_format($slowest['speedup'], 2) . "x speedup");
+            Console::warning("  Slowest: {$slowest['operator']} ({$slowest['operation']}) - ".number_format($slowest['speedup'], 2).'x speedup');
         }
     }
 
@@ -1104,7 +1125,7 @@ function formatBytes(int $bytes): string
     $power = floor(log($bytes, 1024));
     $power = min($power, count($units) - 1);
 
-    return $sign . round($bytes / pow(1024, $power), 2) . ' ' . $units[$power];
+    return $sign.round($bytes / pow(1024, $power), 2).' '.$units[$power];
 }
 
 /**
@@ -1112,14 +1133,14 @@ function formatBytes(int $bytes): string
  */
 function cleanup(Database $database, string $name): void
 {
-    Console::info("Cleaning up test environment...");
+    Console::info('Cleaning up test environment...');
 
     try {
         if ($database->exists($name)) {
             $database->delete($name);
         }
-        Console::success("Cleanup complete.");
+        Console::success('Cleanup complete.');
     } catch (\Throwable $e) {
-        Console::warning("Cleanup failed: " . $e->getMessage());
+        Console::warning('Cleanup failed: '.$e->getMessage());
     }
 }

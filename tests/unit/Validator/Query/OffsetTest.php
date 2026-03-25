@@ -8,7 +8,7 @@ use Utopia\Database\Validator\Query\Offset;
 
 class OffsetTest extends TestCase
 {
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
         $validator = new Offset(5000);
 
@@ -17,7 +17,7 @@ class OffsetTest extends TestCase
         $this->assertTrue($validator->isValid(Query::offset(5000)));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $validator = new Offset(5000);
 

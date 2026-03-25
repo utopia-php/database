@@ -3,9 +3,12 @@
 namespace Utopia\Database\Helpers;
 
 use Exception;
-use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\PermissionType;
 
+/**
+ * Represents a database permission binding a permission type to a role.
+ */
 class Permission
 {
     private Role $role;
@@ -15,12 +18,18 @@ class Permission
      */
     private static array $aggregates = [
         'write' => [
-            Database::PERMISSION_CREATE,
-            Database::PERMISSION_UPDATE,
-            Database::PERMISSION_DELETE,
-        ]
+            PermissionType::Create->value,
+            PermissionType::Update->value,
+            PermissionType::Delete->value,
+        ],
     ];
 
+    /**
+     * @param string $permission The permission type (e.g. read, create, update, delete, write)
+     * @param string $role The role name
+     * @param string $identifier The role identifier
+     * @param string $dimension The role dimension
+     */
     public function __construct(
         private string $permission,
         string $role,
@@ -31,16 +40,17 @@ class Permission
     }
 
     /**
-     * Create a permission string from this Permission instance
+     * Create a permission string from this Permission instance.
      *
-     * @return string
+     * @return string The formatted permission string (e.g. 'read("user:123")')
      */
     public function toString(): string
     {
-        return $this->permission . '("' . $this->role->toString() . '")';
+        return $this->permission.'("'.$this->role->toString().'")';
     }
 
     /**
+     * Get the permission type string.
      *
      * @return string
      */
@@ -50,6 +60,8 @@ class Permission
     }
 
     /**
+     * Get the role name associated with this permission.
+     *
      * @return string
      */
     public function getRole(): string
@@ -58,6 +70,8 @@ class Permission
     }
 
     /**
+     * Get the role identifier associated with this permission.
+     *
      * @return string
      */
     public function getIdentifier(): string
@@ -66,6 +80,8 @@ class Permission
     }
 
     /**
+     * Get the role dimension associated with this permission.
+     *
      * @return string
      */
     public function getDimension(): string
@@ -74,24 +90,24 @@ class Permission
     }
 
     /**
-     * Parse a permission string into a Permission object
+     * Parse a permission string into a Permission object.
      *
-     * @param string $permission
+     * @param string $permission The permission string to parse (e.g. 'read("user:123")')
      * @return self
-     * @throws Exception
+     * @throws DatabaseException If the permission string format or type is invalid
      */
     public static function parse(string $permission): self
     {
         $permissionParts = \explode('("', $permission);
 
         if (\count($permissionParts) !== 2) {
-            throw new DatabaseException('Invalid permission string format: "' . $permission . '".');
+            throw new DatabaseException('Invalid permission string format: "'.$permission.'".');
         }
 
         $permission = $permissionParts[0];
 
-        if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
-            throw new DatabaseException('Invalid permission type: "' . $permission . '".');
+        if (! \in_array($permission, array_column(PermissionType::cases(), 'value'))) {
+            throw new DatabaseException('Invalid permission type: "'.$permission.'".');
         }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
         $roleParts = \explode(':', $fullRole);
@@ -100,16 +116,17 @@ class Permission
         $hasIdentifier = \count($roleParts) > 1;
         $hasDimension = \str_contains($fullRole, '/');
 
-        if (!$hasIdentifier && !$hasDimension) {
+        if (! $hasIdentifier && ! $hasDimension) {
             return new self($permission, $role);
         }
 
-        if ($hasIdentifier && !$hasDimension) {
+        if ($hasIdentifier && ! $hasDimension) {
             $identifier = $roleParts[1];
+
             return new self($permission, $role, $identifier);
         }
 
-        if (!$hasIdentifier) {
+        if (! $hasIdentifier) {
             $dimensionParts = \explode('/', $fullRole);
             if (\count($dimensionParts) !== 2) {
                 throw new DatabaseException('Only one dimension can be provided');
@@ -121,6 +138,7 @@ class Permission
             if (empty($dimension)) {
                 throw new DatabaseException('Dimension must not be empty');
             }
+
             return new self($permission, $role, '', $dimension);
         }
 
@@ -143,12 +161,13 @@ class Permission
     /**
      * Map aggregate permissions into the set of individual permissions they represent.
      *
-     * @param array<string>|null $permissions
-     * @param array<string> $allowed
+     * @param  array<string>|null  $permissions
+     * @param  array<string>  $allowed
      * @return array<string>|null
+     *
      * @throws Exception
      */
-    public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
+    public static function aggregate(?array $permissions, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value]): ?array
     {
         if (\is_null($permissions)) {
             return null;
@@ -159,10 +178,11 @@ class Permission
             foreach (self::$aggregates as $type => $subTypes) {
                 if ($permission->getPermission() != $type) {
                     $mutated[] = $permission->toString();
+
                     continue;
                 }
                 foreach ($subTypes as $subType) {
-                    if (!\in_array($subType, $allowed)) {
+                    if (! \in_array($subType, $allowed)) {
                         continue;
                     }
                     $mutated[] = (new self(
@@ -174,14 +194,15 @@ class Permission
                 }
             }
         }
+
         return \array_values(\array_unique($mutated));
     }
 
     /**
-     * Create a read permission string from the given Role
+     * Create a read permission string from the given Role.
      *
-     * @param Role $role
-     * @return string
+     * @param Role $role The role to grant read permission to
+     * @return string The formatted permission string
      */
     public static function read(Role $role): string
     {
@@ -191,14 +212,15 @@ class Permission
             $role->getIdentifier(),
             $role->getDimension()
         );
+
         return $permission->toString();
     }
 
     /**
-     * Create a create permission string from the given Role
+     * Create a create permission string from the given Role.
      *
-     * @param Role $role
-     * @return string
+     * @param Role $role The role to grant create permission to
+     * @return string The formatted permission string
      */
     public static function create(Role $role): string
     {
@@ -208,14 +230,15 @@ class Permission
             $role->getIdentifier(),
             $role->getDimension()
         );
+
         return $permission->toString();
     }
 
     /**
-     * Create an update permission string from the given Role
+     * Create an update permission string from the given Role.
      *
-     * @param Role $role
-     * @return string
+     * @param Role $role The role to grant update permission to
+     * @return string The formatted permission string
      */
     public static function update(Role $role): string
     {
@@ -225,14 +248,15 @@ class Permission
             $role->getIdentifier(),
             $role->getDimension()
         );
+
         return $permission->toString();
     }
 
     /**
-     * Create a delete permission string from the given Role
+     * Create a delete permission string from the given Role.
      *
-     * @param Role $role
-     * @return string
+     * @param Role $role The role to grant delete permission to
+     * @return string The formatted permission string
      */
     public static function delete(Role $role): string
     {
@@ -242,14 +266,15 @@ class Permission
             $role->getIdentifier(),
             $role->getDimension()
         );
+
         return $permission->toString();
     }
 
     /**
-     * Create a write permission string from the given Role
+     * Create a write permission string from the given Role.
      *
-     * @param Role $role
-     * @return string
+     * @param Role $role The role to grant write permission to
+     * @return string The formatted permission string
      */
     public static function write(Role $role): string
     {
@@ -259,6 +284,7 @@ class Permission
             $role->getIdentifier(),
             $role->getDimension()
         );
+
         return $permission->toString();
     }
 }

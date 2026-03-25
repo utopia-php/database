@@ -3,31 +3,33 @@
 namespace Tests\Unit\Validator;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
+use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Attribute;
+use Utopia\Database\Validator\Structure;
+use Utopia\Query\Schema\ColumnType;
 
 class AttributeTest extends TestCase
 {
-    public function testDuplicateAttributeId(): void
+    public function test_duplicate_attribute_id(): void
     {
         $validator = new Attribute(
             attributes: [
                 new Document([
                     '$id' => ID::custom('title'),
                     'key' => 'title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 255,
                     'required' => false,
                     'default' => null,
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -37,7 +39,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -51,7 +53,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidStringAttribute(): void
+    public function test_valid_string_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -63,7 +65,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -75,7 +77,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testStringSizeTooLarge(): void
+    public function test_string_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -87,7 +89,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 2000,
             'required' => false,
             'default' => null,
@@ -101,7 +103,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVarcharSizeTooLarge(): void
+    public function test_varchar_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -113,7 +115,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_VARCHAR,
+            'type' => ColumnType::Varchar->value,
             'size' => 2000,
             'required' => false,
             'default' => null,
@@ -127,7 +129,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testTextSizeTooLarge(): void
+    public function test_text_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -139,7 +141,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_TEXT,
+            'type' => ColumnType::Text->value,
             'size' => 70000,
             'required' => false,
             'default' => null,
@@ -153,7 +155,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testMediumtextSizeTooLarge(): void
+    public function test_mediumtext_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -165,7 +167,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_MEDIUMTEXT,
+            'type' => ColumnType::MediumText->value,
             'size' => 20000000,
             'required' => false,
             'default' => null,
@@ -179,7 +181,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testIntegerSizeTooLarge(): void
+    public function test_integer_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -191,7 +193,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 200,
             'required' => false,
             'default' => null,
@@ -205,7 +207,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testUnknownType(): void
+    public function test_unknown_type(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -231,7 +233,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testRequiredFiltersForDatetime(): void
+    public function test_required_filters_for_datetime(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -243,7 +245,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('created'),
             'key' => 'created',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -257,7 +259,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidDatetimeWithFilter(): void
+    public function test_valid_datetime_with_filter(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -269,7 +271,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('created'),
             'key' => 'created',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -281,7 +283,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testDefaultValueOnRequiredAttribute(): void
+    public function test_default_value_on_required_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -293,7 +295,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => true,
             'default' => 'default value',
@@ -307,7 +309,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDefaultValueTypeMismatch(): void
+    public function test_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -319,7 +321,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 4,
             'required' => false,
             'default' => 'not_an_integer',
@@ -329,11 +331,11 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_an_integer does not match given type integer');
+        $this->expectExceptionMessage('Default value "not_an_integer" does not match given type integer');
         $validator->isValid($attribute);
     }
 
-    public function testVectorNotSupported(): void
+    public function test_vector_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -346,7 +348,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 128,
             'required' => false,
             'default' => null,
@@ -360,7 +362,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorCannotBeArray(): void
+    public function test_vector_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -373,7 +375,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embeddings'),
             'key' => 'embeddings',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 128,
             'required' => false,
             'default' => null,
@@ -387,7 +389,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorInvalidDimensions(): void
+    public function test_vector_invalid_dimensions(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -400,7 +402,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -414,7 +416,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDimensionsExceedsMax(): void
+    public function test_vector_dimensions_exceeds_max(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -427,7 +429,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 20000,
             'required' => false,
             'default' => null,
@@ -441,7 +443,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialNotSupported(): void
+    public function test_spatial_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -454,7 +456,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('location'),
             'key' => 'location',
-            'type' => Database::VAR_POINT,
+            'type' => ColumnType::Point->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -468,7 +470,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialCannotBeArray(): void
+    public function test_spatial_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -481,7 +483,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('locations'),
             'key' => 'locations',
-            'type' => Database::VAR_POINT,
+            'type' => ColumnType::Point->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -495,7 +497,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSpatialMustHaveEmptySize(): void
+    public function test_spatial_must_have_empty_size(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -508,7 +510,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('location'),
             'key' => 'location',
-            'type' => Database::VAR_POINT,
+            'type' => ColumnType::Point->value,
             'size' => 100,
             'required' => false,
             'default' => null,
@@ -522,7 +524,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectNotSupported(): void
+    public function test_object_not_supported(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -535,7 +537,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('metadata'),
             'key' => 'metadata',
-            'type' => Database::VAR_OBJECT,
+            'type' => ColumnType::Object->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -549,7 +551,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectCannotBeArray(): void
+    public function test_object_cannot_be_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -562,7 +564,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('metadata'),
             'key' => 'metadata',
-            'type' => Database::VAR_OBJECT,
+            'type' => ColumnType::Object->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -576,7 +578,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testObjectMustHaveEmptySize(): void
+    public function test_object_must_have_empty_size(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -589,7 +591,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('metadata'),
             'key' => 'metadata',
-            'type' => Database::VAR_OBJECT,
+            'type' => ColumnType::Object->value,
             'size' => 100,
             'required' => false,
             'default' => null,
@@ -603,7 +605,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testAttributeLimitExceeded(): void
+    public function test_attribute_limit_exceeded(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -619,7 +621,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -633,7 +635,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testRowWidthLimitExceeded(): void
+    public function test_row_width_limit_exceeded(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -649,7 +651,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -663,7 +665,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueNotArray(): void
+    public function test_vector_default_value_not_array(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -676,7 +678,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 3,
             'required' => false,
             'default' => 'not_an_array',
@@ -690,7 +692,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueWrongElementCount(): void
+    public function test_vector_default_value_wrong_element_count(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -703,7 +705,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 3,
             'required' => false,
             'default' => [1.0, 2.0],
@@ -717,7 +719,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testVectorDefaultValueNonNumericElements(): void
+    public function test_vector_default_value_non_numeric_elements(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -730,7 +732,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 3,
             'required' => false,
             'default' => [1.0, 'not_a_number', 3.0],
@@ -744,7 +746,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testLongtextSizeTooLarge(): void
+    public function test_longtext_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -756,7 +758,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_LONGTEXT,
+            'type' => ColumnType::LongText->value,
             'size' => 5000000000,
             'required' => false,
             'default' => null,
@@ -770,7 +772,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidVarcharAttribute(): void
+    public function test_valid_varchar_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -782,7 +784,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('name'),
             'key' => 'name',
-            'type' => Database::VAR_VARCHAR,
+            'type' => ColumnType::Varchar->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -794,7 +796,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidTextAttribute(): void
+    public function test_valid_text_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -806,7 +808,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_TEXT,
+            'type' => ColumnType::Text->value,
             'size' => 65535,
             'required' => false,
             'default' => null,
@@ -818,7 +820,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidMediumtextAttribute(): void
+    public function test_valid_mediumtext_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -830,7 +832,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_MEDIUMTEXT,
+            'type' => ColumnType::MediumText->value,
             'size' => 16777215,
             'required' => false,
             'default' => null,
@@ -842,7 +844,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidLongtextAttribute(): void
+    public function test_valid_longtext_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -854,7 +856,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_LONGTEXT,
+            'type' => ColumnType::LongText->value,
             'size' => 4294967295,
             'required' => false,
             'default' => null,
@@ -866,7 +868,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidFloatAttribute(): void
+    public function test_valid_float_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -878,7 +880,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('price'),
             'key' => 'price',
-            'type' => Database::VAR_FLOAT,
+            'type' => ColumnType::Double->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -890,7 +892,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidBooleanAttribute(): void
+    public function test_valid_boolean_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -902,7 +904,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('active'),
             'key' => 'active',
-            'type' => Database::VAR_BOOLEAN,
+            'type' => ColumnType::Boolean->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -914,7 +916,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testFloatDefaultValueTypeMismatch(): void
+    public function test_float_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -926,7 +928,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('price'),
             'key' => 'price',
-            'type' => Database::VAR_FLOAT,
+            'type' => ColumnType::Double->value,
             'size' => 0,
             'required' => false,
             'default' => 'not_a_float',
@@ -936,11 +938,11 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_a_float does not match given type double');
+        $this->expectExceptionMessage('Default value "not_a_float" does not match given type double');
         $validator->isValid($attribute);
     }
 
-    public function testBooleanDefaultValueTypeMismatch(): void
+    public function test_boolean_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -952,7 +954,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('active'),
             'key' => 'active',
-            'type' => Database::VAR_BOOLEAN,
+            'type' => ColumnType::Boolean->value,
             'size' => 0,
             'required' => false,
             'default' => 'not_a_boolean',
@@ -962,11 +964,11 @@ class AttributeTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Default value not_a_boolean does not match given type boolean');
+        $this->expectExceptionMessage('Default value "not_a_boolean" does not match given type boolean');
         $validator->isValid($attribute);
     }
 
-    public function testStringDefaultValueTypeMismatch(): void
+    public function test_string_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -978,7 +980,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => 123,
@@ -992,7 +994,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidStringWithDefaultValue(): void
+    public function test_valid_string_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1004,7 +1006,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => 'default title',
@@ -1016,7 +1018,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidIntegerWithDefaultValue(): void
+    public function test_valid_integer_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1028,7 +1030,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 4,
             'required' => false,
             'default' => 42,
@@ -1040,7 +1042,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidFloatWithDefaultValue(): void
+    public function test_valid_float_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1052,7 +1054,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('price'),
             'key' => 'price',
-            'type' => Database::VAR_FLOAT,
+            'type' => ColumnType::Double->value,
             'size' => 0,
             'required' => false,
             'default' => 19.99,
@@ -1064,7 +1066,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidBooleanWithDefaultValue(): void
+    public function test_valid_boolean_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1076,7 +1078,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('active'),
             'key' => 'active',
-            'type' => Database::VAR_BOOLEAN,
+            'type' => ColumnType::Boolean->value,
             'size' => 0,
             'required' => false,
             'default' => true,
@@ -1088,7 +1090,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testUnsignedIntegerSizeLimit(): void
+    public function test_unsigned_integer_size_limit(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1101,7 +1103,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 80,
             'required' => false,
             'default' => null,
@@ -1113,7 +1115,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testUnsignedIntegerSizeTooLarge(): void
+    public function test_unsigned_integer_size_too_large(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1125,7 +1127,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 150,
             'required' => false,
             'default' => null,
@@ -1139,21 +1141,21 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDuplicateAttributeIdCaseInsensitive(): void
+    public function test_duplicate_attribute_id_case_insensitive(): void
     {
         $validator = new Attribute(
             attributes: [
                 new Document([
                     '$id' => ID::custom('Title'),
                     'key' => 'Title',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 255,
                     'required' => false,
                     'default' => null,
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1163,7 +1165,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -1177,7 +1179,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDuplicateInSchema(): void
+    public function test_duplicate_in_schema(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1185,9 +1187,9 @@ class AttributeTest extends TestCase
                 new Document([
                     '$id' => ID::custom('existing_column'),
                     'key' => 'existing_column',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 255,
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1198,7 +1200,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('existing_column'),
             'key' => 'existing_column',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -1212,7 +1214,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testSchemaCheckSkippedWhenMigrating(): void
+    public function test_schema_check_skipped_when_migrating(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1220,9 +1222,9 @@ class AttributeTest extends TestCase
                 new Document([
                     '$id' => ID::custom('existing_column'),
                     'key' => 'existing_column',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'size' => 255,
-                ])
+                ]),
             ],
             maxStringLength: 16777216,
             maxVarcharLength: 65535,
@@ -1235,7 +1237,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('existing_column'),
             'key' => 'existing_column',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -1247,7 +1249,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidLinestringAttribute(): void
+    public function test_valid_linestring_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1260,7 +1262,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('route'),
             'key' => 'route',
-            'type' => Database::VAR_LINESTRING,
+            'type' => ColumnType::Linestring->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1272,7 +1274,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidPolygonAttribute(): void
+    public function test_valid_polygon_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1285,7 +1287,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('area'),
             'key' => 'area',
-            'type' => Database::VAR_POLYGON,
+            'type' => ColumnType::Polygon->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1297,7 +1299,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidPointAttribute(): void
+    public function test_valid_point_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1310,7 +1312,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('location'),
             'key' => 'location',
-            'type' => Database::VAR_POINT,
+            'type' => ColumnType::Point->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1322,7 +1324,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidVectorAttribute(): void
+    public function test_valid_vector_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1335,7 +1337,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 128,
             'required' => false,
             'default' => null,
@@ -1347,7 +1349,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidVectorWithDefaultValue(): void
+    public function test_valid_vector_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1360,7 +1362,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('embedding'),
             'key' => 'embedding',
-            'type' => Database::VAR_VECTOR,
+            'type' => ColumnType::Vector->value,
             'size' => 3,
             'required' => false,
             'default' => [1.0, 2.0, 3.0],
@@ -1372,7 +1374,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidObjectAttribute(): void
+    public function test_valid_object_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1385,7 +1387,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('metadata'),
             'key' => 'metadata',
-            'type' => Database::VAR_OBJECT,
+            'type' => ColumnType::Object->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1397,7 +1399,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayStringAttribute(): void
+    public function test_array_string_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1409,7 +1411,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('tags'),
             'key' => 'tags',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -1421,7 +1423,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayWithDefaultValues(): void
+    public function test_array_with_default_values(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1433,7 +1435,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('tags'),
             'key' => 'tags',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => ['tag1', 'tag2', 'tag3'],
@@ -1445,7 +1447,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayDefaultValueTypeMismatch(): void
+    public function test_array_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1457,7 +1459,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('tags'),
             'key' => 'tags',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => ['tag1', 123, 'tag3'],
@@ -1471,7 +1473,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testDatetimeDefaultValueMustBeString(): void
+    public function test_datetime_default_value_must_be_string(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1483,7 +1485,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('created'),
             'key' => 'created',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'required' => false,
             'default' => 12345,
@@ -1497,7 +1499,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidDatetimeWithDefaultValue(): void
+    public function test_valid_datetime_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1509,7 +1511,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('created'),
             'key' => 'created',
-            'type' => Database::VAR_DATETIME,
+            'type' => ColumnType::Datetime->value,
             'size' => 0,
             'required' => false,
             'default' => '2024-01-01T00:00:00.000Z',
@@ -1521,7 +1523,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testVarcharDefaultValueTypeMismatch(): void
+    public function test_varchar_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1533,7 +1535,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('name'),
             'key' => 'name',
-            'type' => Database::VAR_VARCHAR,
+            'type' => ColumnType::Varchar->value,
             'size' => 255,
             'required' => false,
             'default' => 123,
@@ -1547,7 +1549,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testTextDefaultValueTypeMismatch(): void
+    public function test_text_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1559,7 +1561,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_TEXT,
+            'type' => ColumnType::Text->value,
             'size' => 65535,
             'required' => false,
             'default' => 123,
@@ -1573,7 +1575,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testMediumtextDefaultValueTypeMismatch(): void
+    public function test_mediumtext_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1585,7 +1587,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_MEDIUMTEXT,
+            'type' => ColumnType::MediumText->value,
             'size' => 16777215,
             'required' => false,
             'default' => 123,
@@ -1599,7 +1601,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testLongtextDefaultValueTypeMismatch(): void
+    public function test_longtext_default_value_type_mismatch(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1611,7 +1613,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_LONGTEXT,
+            'type' => ColumnType::LongText->value,
             'size' => 4294967295,
             'required' => false,
             'default' => 123,
@@ -1625,7 +1627,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testValidVarcharWithDefaultValue(): void
+    public function test_valid_varchar_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1637,7 +1639,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('name'),
             'key' => 'name',
-            'type' => Database::VAR_VARCHAR,
+            'type' => ColumnType::Varchar->value,
             'size' => 255,
             'required' => false,
             'default' => 'default name',
@@ -1649,7 +1651,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidTextWithDefaultValue(): void
+    public function test_valid_text_with_default_value(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1661,7 +1663,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('content'),
             'key' => 'content',
-            'type' => Database::VAR_TEXT,
+            'type' => ColumnType::Text->value,
             'size' => 65535,
             'required' => false,
             'default' => 'default content',
@@ -1673,7 +1675,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testValidIntegerAttribute(): void
+    public function test_valid_integer_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1685,7 +1687,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('count'),
             'key' => 'count',
-            'type' => Database::VAR_INTEGER,
+            'type' => ColumnType::Integer->value,
             'size' => 4,
             'required' => false,
             'default' => null,
@@ -1697,7 +1699,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testNullDefaultValueAllowed(): void
+    public function test_null_default_value_allowed(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1709,7 +1711,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => null,
@@ -1721,7 +1723,7 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
-    public function testArrayDefaultOnNonArrayAttribute(): void
+    public function test_array_default_on_non_array_attribute(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1733,7 +1735,7 @@ class AttributeTest extends TestCase
         $attribute = new Document([
             '$id' => ID::custom('title'),
             'key' => 'title',
-            'type' => Database::VAR_STRING,
+            'type' => ColumnType::String->value,
             'size' => 255,
             'required' => false,
             'default' => ['not', 'allowed'],
@@ -1745,5 +1747,330 @@ class AttributeTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Cannot set an array default value for a non-array attribute');
         $validator->isValid($attribute);
+    }
+
+    public function test_get_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertEquals('object', $validator->getType());
+    }
+
+    public function test_get_description(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertEquals('Invalid attribute', $validator->getDescription());
+    }
+
+    public function test_is_array(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $this->assertFalse($validator->isArray());
+    }
+
+    public function test_is_valid_with_attribute_vo_directly(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'directAttr',
+            type: ColumnType::String,
+            size: 255,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_attribute_does_not_collide_with_schema(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('existing_column'),
+                    'key' => 'existing_column',
+                    'type' => ColumnType::String->value,
+                    'size' => 255,
+                ]),
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('new_column'),
+            'key' => 'new_column',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function test_invalid_format_for_type(): void
+    {
+        Structure::addFormat('testformat', function (mixed $attribute) {
+            return new \Utopia\Validator\Text(100);
+        }, ColumnType::Integer->value);
+
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('formatted'),
+            'key' => 'formatted',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'format' => 'testformat',
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Format ("testformat") not available for this attribute type ("string")');
+        $validator->isValid($attribute);
+    }
+
+    public function test_id_type_attribute_validation(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'myId',
+            type: ColumnType::Id,
+            size: 0,
+            required: false,
+            default: null,
+            signed: false,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_unknown_column_type_in_check_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'badtype',
+            type: ColumnType::Enum,
+            size: 0,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Unknown attribute type: enum');
+        $validator->isValid($attrVO);
+    }
+
+    public function test_null_default_value_in_validate_default_types(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'nullableField',
+            type: ColumnType::String,
+            size: 255,
+            required: false,
+            default: null,
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+    }
+
+    public function test_vector_component_non_numeric_default_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'vec',
+            type: ColumnType::Vector,
+            size: 3,
+            required: false,
+            default: [1.0, 2.0, 3.0],
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
+
+        $validator2 = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForVectors: true,
+        );
+
+        $attrVO2 = new AttributeVO(
+            key: 'vec2',
+            type: ColumnType::Vector,
+            size: 3,
+            required: false,
+            default: [1.0, 'notANumber', 3.0],
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Vector default value must contain only numeric elements');
+        $validator2->isValid($attrVO2);
+    }
+
+    public function test_unknown_column_type_with_default_value(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'baddefault',
+            type: ColumnType::Enum,
+            size: 0,
+            required: false,
+            default: 'somevalue',
+            signed: true,
+            array: false,
+            filters: [],
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Unknown attribute type: enum');
+        $validator->isValid($attrVO);
+    }
+
+    public function test_schema_duplicate_check_with_filter_callback(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            schemaAttributes: [
+                new Document([
+                    '$id' => ID::custom('_prefix_column'),
+                    'key' => '_prefix_column',
+                    'type' => ColumnType::String->value,
+                    'size' => 255,
+                ]),
+            ],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            supportForSchemaAttributes: true,
+            filterCallback: fn (string $key) => str_replace('_prefix_', '', $key),
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('column'),
+            'key' => 'column',
+            'type' => ColumnType::String->value,
+            'size' => 255,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Attribute already exists in schema');
+        $validator->isValid($attribute);
+    }
+
+    public function test_relationship_type_passes_check_type(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attrVO = new AttributeVO(
+            key: 'parent',
+            type: ColumnType::Relationship,
+            size: 0,
+            required: false,
+            default: null,
+            signed: false,
+            array: false,
+            filters: [],
+        );
+
+        $this->assertTrue($validator->isValid($attrVO));
     }
 }

@@ -2,71 +2,112 @@
 
 namespace Utopia\Database\Adapter;
 
+use Exception;
 use PDOException;
+use PDOStatement;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
+use Utopia\Query\Builder\MySQL as MySQLBuilder;
+use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
+/**
+ * Database adapter for MySQL, extending MariaDB with MySQL-specific behavior and overrides.
+ */
 class MySQL extends MariaDB
 {
     /**
+     * Get the list of capabilities supported by the MySQL adapter.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        $remove = [
+            Capability::BoundaryInclusive,
+            Capability::SpatialIndexOrder,
+            Capability::OptionalSpatial,
+        ];
+
+        return array_values(array_filter(
+            array_merge(parent::capabilities(), [
+                Capability::SpatialAxisOrder,
+                Capability::MultiDimensionDistance,
+                Capability::CastIndexArray,
+            ]),
+            fn (Capability $c) => ! in_array($c, $remove, true)
+        ));
+    }
+
+    /**
      * Set max execution time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
+     *
      * @throws DatabaseException
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    private bool $timeoutDirty = false;
+
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
         $this->timeout = $milliseconds;
+        $this->timeoutDirty = true;
+    }
 
-        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return \preg_replace(
-                pattern: '/SELECT/',
-                replacement: "SELECT /*+ max_execution_time({$milliseconds}) */",
-                subject: $sql,
-                limit: 1
-            );
-        });
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        if ($this->timeout > 0) {
+            $this->timeoutDirty = true;
+        }
+        $this->timeout = 0;
+    }
+
+    protected function execute(mixed $stmt): bool
+    {
+        if ($this->timeoutDirty) {
+            $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
+            $this->timeoutDirty = false;
+        }
+        /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
+        return $stmt->execute();
     }
 
     /**
      * Get size of collection on disk
-     * @param string $collection
-     * @return int
+     *
      * @throws DatabaseException
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
-        $collection = $this->getNamespace() . '_' . $collection;
+        $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
-        $name = $database . '/' . $collection;
-        $permissions = $database . '/' . $collection . '_perms';
+        $name = $database.'/'.$collection;
+        $permissions = $database.'/'.$collection.'_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
+        $collectionSize = $this->getPDO()->prepare('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :name
-        ");
+        ');
 
-        $permissionsSize = $this->getPDO()->prepare("
+        $permissionsSize = $this->getPDO()->prepare('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :permissions
-        ");
+        ');
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);
@@ -74,9 +115,11 @@ class MySQL extends MariaDB
         try {
             $collectionSize->execute();
             $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $collVal = $collectionSize->fetchColumn();
+            $permVal = $permissionsSize->fetchColumn();
+            $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
         return $size;
@@ -85,68 +128,40 @@ class MySQL extends MariaDB
     /**
      * Handle distance spatial queries
      *
-     * @param Query $query
-     * @param array<string, mixed> $binds
-     * @param string $attribute
-     * @param string $type
-     * @param string $alias
-     * @param string $placeholder
-     * @return string
-    */
+     * @param  array<string, mixed>  $binds
+     */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
+        /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($geomArray);
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
-        switch ($query->getMethod()) {
-            case Query::TYPE_DISTANCE_EQUAL:
-                $operator = '=';
-                break;
-            case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $operator = '!=';
-                break;
-            case Query::TYPE_DISTANCE_GREATER_THAN:
-                $operator = '>';
-                break;
-            case Query::TYPE_DISTANCE_LESS_THAN:
-                $operator = '<';
-                break;
-            default:
-                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
-        }
+        $operator = match ($query->getMethod()) {
+            Method::DistanceEqual => '=',
+            Method::DistanceNotEqual => '!=',
+            Method::DistanceGreaterThan => '>',
+            Method::DistanceLessThan => '<',
+            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
+        };
 
         if ($useMeters) {
-            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::DEFAULT_SRID . ")";
+            $attr = "ST_SRID({$alias}.{$attribute}, ".Database::DEFAULT_SRID.')';
             $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
+
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
         // need to use srid 0 because of geometric distance
-        $attr = "ST_SRID({$alias}.{$attribute}, " . 0 . ")";
+        $attr = "ST_SRID({$alias}.{$attribute}, ". 0 .')';
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
+
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
     }
 
-    public function getSupportForIndexArray(): bool
-    {
-        /**
-         * @link https://bugs.mysql.com/bug.php?id=111037
-         */
-        return true;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        if (!$this->getSupportForIndexArray()) {
-            return false;
-        }
-
-        return true;
-    }
-
-    protected function processException(PDOException $e): \Exception
+    protected function processException(PDOException $e): Exception
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1366) {
             return new CharacterException('Invalid character', $e->getCode(), $e);
@@ -173,98 +188,65 @@ class MySQL extends MariaDB
 
         return parent::processException($e);
     }
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-    public function getSupportForBoundaryInclusiveContains(): bool
+
+    protected function createBuilder(): SQLBuilder
     {
-        return false;
-    }
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-    */
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
+        return new MySQLBuilder();
     }
 
     /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     * Get the MySQL SQL type definition for spatial column types with SRID support.
      *
-     * @return bool
+     * @param string $type The spatial type (point, linestring, polygon)
+     * @param bool $required Whether the column is NOT NULL
+     * @return string
      */
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Spatial type attribute
-    */
     public function getSpatialSQLType(string $type, bool $required): string
     {
         switch ($type) {
-            case Database::VAR_POINT:
+            case ColumnType::Point->value:
                 $type = 'POINT SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
+
                 return $type;
 
-            case Database::VAR_LINESTRING:
+            case ColumnType::Linestring->value:
                 $type = 'LINESTRING SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
+
                 return $type;
 
-
-            case Database::VAR_POLYGON:
+            case ColumnType::Polygon->value:
                 $type = 'POLYGON SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
+                if (! $this->supports(Capability::SpatialIndexNull)) {
                     if ($required) {
                         $type .= ' NOT NULL';
                     } else {
                         $type .= ' NULL';
                     }
                 }
+
                 return $type;
         }
+
         return '';
-    }
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
     }
 
     /**
      * Get the spatial axis order specification string for MySQL
      * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
-     *
-     * @return string
      */
     protected function getSpatialAxisOrderSpec(): string
     {
@@ -272,41 +254,28 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    /**
      * Get SQL expression for operator
      * Override for MySQL-specific operator implementations
-     *
-     * @param string $column
-     * @param \Utopia\Database\Operator $operator
-     * @param int &$bindIndex
-     * @return ?string
      */
-    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
 
         switch ($method) {
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique:
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM (
@@ -318,10 +287,5 @@ class MySQL extends MariaDB
 
         // For all other operators, use parent implementation
         return parent::getOperatorSQL($column, $operator, $bindIndex);
-    }
-
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
     }
 }

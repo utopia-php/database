@@ -3,54 +3,55 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
 class FilterTest extends TestCase
 {
-    protected Filter|null $validator = null;
+    protected Filter $validator;
 
     /**
      * @throws \Utopia\Database\Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $attributes = [
             new Document([
                 '$id' => 'string',
                 'key' => 'string',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => false,
             ]),
             new Document([
                 '$id' => 'string_array',
                 'key' => 'string_array',
-                'type' => Database::VAR_STRING,
+                'type' => ColumnType::String->value,
                 'array' => true,
             ]),
             new Document([
                 '$id' => 'integer_array',
                 'key' => 'integer_array',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'array' => true,
             ]),
             new Document([
                 '$id' => 'integer',
                 'key' => 'integer',
-                'type' => Database::VAR_INTEGER,
+                'type' => ColumnType::Integer->value,
                 'array' => false,
             ]),
         ];
 
         $this->validator = new Filter(
             $attributes,
-            Database::VAR_INTEGER
+            ColumnType::Integer->value
         );
     }
 
-    public function testSuccess(): void
+    public function test_success(): void
     {
         $this->assertTrue($this->validator->isValid(Query::between('string', '1975-12-06', '2050-12-06')));
         $this->assertTrue($this->validator->isValid(Query::isNotNull('string')));
@@ -58,12 +59,12 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::startsWith('string', 'super')));
         $this->assertTrue($this->validator->isValid(Query::endsWith('string', 'man')));
         $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['super'])));
-        $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100,10,-1])));
-        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ["1","10","-1"])));
+        $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100, 10, -1])));
+        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['1', '10', '-1'])));
         $this->assertTrue($this->validator->isValid(Query::contains('string', ['super'])));
     }
 
-    public function testFailure(): void
+    public function test_failure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::select(['attr'])));
         $this->assertEquals('Invalid query', $this->validator->getDescription());
@@ -81,14 +82,14 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('', ['v'])));
         $this->assertFalse($this->validator->isValid(Query::orderAsc('string')));
         $this->assertFalse($this->validator->isValid(Query::orderDesc('string')));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::CursorAfter, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::CursorBefore, values: ['asdf'])));
         $this->assertFalse($this->validator->isValid(Query::contains('integer', ['super'])));
-        $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100,-1])));
+        $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100, -1])));
         $this->assertFalse($this->validator->isValid(Query::contains('integer_array', [10.6])));
     }
 
-    public function testTypeMismatch(): void
+    public function test_type_mismatch(): void
     {
         $this->assertFalse($this->validator->isValid(Query::equal('string', [false])));
         $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
@@ -97,7 +98,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
     }
 
-    public function testEmptyValues(): void
+    public function test_empty_values(): void
     {
         $this->assertFalse($this->validator->isValid(Query::contains('string', [])));
         $this->assertEquals('Contains queries require at least one value.', $this->validator->getDescription());
@@ -106,7 +107,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
     }
 
-    public function testMaxValuesCount(): void
+    public function test_max_values_count(): void
     {
         $max = $this->validator->getMaxValuesCount();
         $values = [];
@@ -118,7 +119,7 @@ class FilterTest extends TestCase
         $this->assertEquals('Query on attribute has greater than '.$max.' values: integer', $this->validator->getDescription());
     }
 
-    public function testNotContains(): void
+    public function test_not_contains(): void
     {
         // Test valid notContains queries
         $this->assertTrue($this->validator->isValid(Query::notContains('string', ['unwanted'])));
@@ -130,7 +131,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotContains queries require at least one value.', $this->validator->getDescription());
     }
 
-    public function testNotSearch(): void
+    public function test_not_search(): void
     {
         // Test valid notSearch queries
         $this->assertTrue($this->validator->isValid(Query::notSearch('string', 'unwanted')));
@@ -140,11 +141,11 @@ class FilterTest extends TestCase
         $this->assertEquals('Cannot query notSearch on attribute "string_array" because it is an array.', $this->validator->getDescription());
 
         // Test multiple values not allowed
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_SEARCH, 'string', ['word1', 'word2'])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::NotSearch, 'string', ['word1', 'word2'])));
         $this->assertEquals('NotSearch queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotStartsWith(): void
+    public function test_not_starts_with(): void
     {
         // Test valid notStartsWith queries
         $this->assertTrue($this->validator->isValid(Query::notStartsWith('string', 'temp')));
@@ -154,11 +155,11 @@ class FilterTest extends TestCase
         $this->assertEquals('Cannot query notStartsWith on attribute "string_array" because it is an array.', $this->validator->getDescription());
 
         // Test multiple values not allowed
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_STARTS_WITH, 'string', ['prefix1', 'prefix2'])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::NotStartsWith, 'string', ['prefix1', 'prefix2'])));
         $this->assertEquals('NotStartsWith queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotEndsWith(): void
+    public function test_not_ends_with(): void
     {
         // Test valid notEndsWith queries
         $this->assertTrue($this->validator->isValid(Query::notEndsWith('string', '.tmp')));
@@ -168,11 +169,11 @@ class FilterTest extends TestCase
         $this->assertEquals('Cannot query notEndsWith on attribute "string_array" because it is an array.', $this->validator->getDescription());
 
         // Test multiple values not allowed
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_ENDS_WITH, 'string', ['suffix1', 'suffix2'])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::NotEndsWith, 'string', ['suffix1', 'suffix2'])));
         $this->assertEquals('NotEndsWith queries require exactly one value.', $this->validator->getDescription());
     }
 
-    public function testNotBetween(): void
+    public function test_not_between(): void
     {
         // Test valid notBetween queries
         $this->assertTrue($this->validator->isValid(Query::notBetween('integer', 0, 50)));
@@ -182,10 +183,10 @@ class FilterTest extends TestCase
         $this->assertEquals('Cannot query notBetween on attribute "integer_array" because it is an array.', $this->validator->getDescription());
 
         // Test wrong number of values
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_BETWEEN, 'integer', [10])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::NotBetween, 'integer', [10])));
         $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
 
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_BETWEEN, 'integer', [10, 20, 30])));
+        $this->assertFalse($this->validator->isValid(new Query(Method::NotBetween, 'integer', [10, 20, 30])));
         $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
     }
 }

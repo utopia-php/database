@@ -398,7 +398,7 @@ trait GeneralTests
 
         // Restart Redis containers
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
-        $this->waitForRedis();
+        sleep(2);
         $this->reconnectCache();
 
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
@@ -416,8 +416,7 @@ trait GeneralTests
             return;
         }
 
-        // Wait for Redis to be fully healthy after previous test
-        $this->waitForRedis();
+        sleep(2);
         $this->reconnectCache();
 
         $database->getAuthorization()->cleanRoles();
@@ -450,7 +449,7 @@ trait GeneralTests
 
             // Restart Redis containers
             Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
-            $this->waitForRedis();
+            sleep(2);
             $this->reconnectCache();
 
             // Cache should reconnect - read should work
@@ -470,7 +469,7 @@ trait GeneralTests
             $stdout = '';
             $stderr = '';
             Console::execute('docker ps -a --filter "name=utopia-redis" --filter "status=exited" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
-            $this->waitForRedis();
+            sleep(2);
             $this->reconnectCache();
 
             // Cleanup collection if it exists
@@ -710,24 +709,4 @@ trait GeneralTests
         $this->getDatabase()->setCache(new \Utopia\Cache\Cache($adapter));
     }
 
-    private function waitForRedis(int $maxRetries = 60, int $delayMs = 500): void
-    {
-        $consecutive = 0;
-        $required = 5;
-        for ($i = 0; $i < $maxRetries; $i++) {
-            usleep($delayMs * 1000);
-            try {
-                $redis = new \Redis();
-                $redis->connect('redis', 6379, 1.0);
-                $redis->ping();
-                $redis->close();
-                $consecutive++;
-                if ($consecutive >= $required) {
-                    return;
-                }
-            } catch (\RedisException $e) {
-                $consecutive = 0;
-            }
-        }
-    }
 }

@@ -37,7 +37,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
-use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Builder\BuildResult;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\CursorDirection;
@@ -51,6 +50,7 @@ use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\MySQL as MySQLSchema;
 
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).

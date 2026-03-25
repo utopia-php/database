@@ -26,7 +26,6 @@ use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
@@ -1427,7 +1426,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @param  array<string, mixed>  $binds
      */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         /** @var array<mixed> $distanceParams */
         $distanceParams = $query->getValues()[0];
@@ -1461,7 +1460,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @param  array<string, mixed>  $binds
      */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $spatialGeomRaw = $query->getValues()[0];
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT(\is_array($spatialGeomRaw) ? $spatialGeomRaw : []);
@@ -1473,7 +1472,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             Method::DistanceEqual,
             Method::DistanceNotEqual,
             Method::DistanceGreaterThan,
-            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder),
+            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
             Method::Equal => "ST_Equals({$alias}.{$attribute}, {$geom})",
             Method::NotEqual => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
             Method::Intersects => "ST_Intersects({$alias}.{$attribute}, {$geom})",
@@ -1567,7 +1566,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $operator = null;
 
         if ($query->isSpatialAttribute()) {
-            return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+            return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
         }
 
         if ($query->isObjectAttribute() && ! $isNestedObjectAttribute) {

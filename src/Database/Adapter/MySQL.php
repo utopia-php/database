@@ -58,9 +58,6 @@ class MySQL extends MariaDB
 
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        if (! ($this instanceof Feature\Timeouts)) {
-            return;
-        }
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }

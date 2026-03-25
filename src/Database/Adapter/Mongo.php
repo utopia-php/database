@@ -134,10 +134,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        if (! ($this instanceof Feature\Timeouts)) {
-            return;
-        }
-
         $this->timeout = $milliseconds;
     }
 
@@ -2482,10 +2478,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        if (! ($this instanceof Feature\InternalCasting)) {
-            return $document;
-        }
-
         if ($document->isEmpty()) {
             return $document;
         }
@@ -2590,10 +2582,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        if (! ($this instanceof Feature\InternalCasting)) {
-            return $document;
-        }
-
         if ($document->isEmpty()) {
             return $document;
         }

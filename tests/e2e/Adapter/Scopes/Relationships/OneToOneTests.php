@@ -3,8 +3,8 @@
 namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
-use Utopia\Database\Attribute;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;

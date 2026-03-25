@@ -4,8 +4,8 @@ namespace Utopia\Database\Traits;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Attribute;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Event;

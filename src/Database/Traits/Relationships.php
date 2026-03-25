@@ -4,8 +4,8 @@ namespace Utopia\Database\Traits;
 
 use Throwable;
 use Utopia\Console;
-use Utopia\Database\Attribute;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -137,6 +137,10 @@ trait Relationships
     public function createRelationship(
         Relationship $relationship
     ): bool {
+        if (! ($this->adapter instanceof Feature\Relationships)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($relationship->collection));
         $relatedCollection = $this->silent(fn () => $this->getCollection($relationship->relatedCollection));
 
@@ -434,6 +438,10 @@ trait Relationships
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
+        if (! ($this->adapter instanceof Feature\Relationships)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+
         if (
             $newKey === null
             && $newTwoWayKey === null
@@ -770,6 +778,10 @@ trait Relationships
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
+        if (! ($this->adapter instanceof Feature\Relationships)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         /** @var array<int|string, Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);

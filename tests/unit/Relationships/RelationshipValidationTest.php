@@ -26,7 +26,9 @@ use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 
 /** @internal */
-abstract class RelationshipsAdapter extends Adapter implements Feature\Relationships {}
+abstract class RelationshipsAdapter extends Adapter implements Feature\Relationships
+{
+}
 
 class RelationshipValidationTest extends TestCase
 {

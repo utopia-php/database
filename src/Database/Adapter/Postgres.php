@@ -8,7 +8,6 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
-use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;

@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -297,6 +298,11 @@ trait AttributeTests
 
     public function testAttributeNamesWithDots(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         /** @var Database $database */
         $database = $this->getDatabase();
 

@@ -1005,6 +1005,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsCreateThrowsException(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
 
@@ -1027,6 +1032,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsDeleteThrowsException(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
         $docId = $data['docId'];
@@ -1047,6 +1057,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsCreateWorks(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
 
@@ -1100,6 +1115,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsDeleteWorks(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
         $docId = $data['docId'];
@@ -1174,6 +1194,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsGetThrowsException(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
         $docId = $data['docId'];
@@ -1194,6 +1219,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsGetWorks(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
         $docId = $data['docId'];
@@ -1203,11 +1233,6 @@ trait PermissionTests
 
         /** @var Database $database */
         $database = $this->getDatabase();
-
-        if (!($database->getAdapter() instanceof Feature\Relationships)) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $document = $database->getDocument(
             $collectionId,
@@ -1237,6 +1262,11 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsUpdateThrowsException(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $data = $this->initRelationshipPermissionFixture();
         $collectionId = $data['collectionId'];
         $docId = $data['docId'];

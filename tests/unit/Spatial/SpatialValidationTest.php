@@ -24,7 +24,9 @@ use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 /** @internal */
-abstract class SpatialAdapter extends Adapter implements Feature\Spatial {}
+abstract class SpatialAdapter extends Adapter implements Feature\Spatial
+{
+}
 
 class SpatialValidationTest extends TestCase
 {

@@ -69,6 +69,8 @@ class Pool extends Adapter
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
+            } else {
+                $adapter->clearTimeout();
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
@@ -224,6 +226,8 @@ class Pool extends Adapter
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
+            } else {
+                $adapter->clearTimeout();
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {

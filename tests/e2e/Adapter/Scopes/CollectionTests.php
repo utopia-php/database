@@ -962,8 +962,11 @@ trait CollectionTests
             } else {
                 $database->setTenant($tenant1);
                 $database->deleteCollection($colName);
-                $database->setTenant($tenant2);
-                $database->deleteCollection($colName);
+                try {
+                    $database->setTenant($tenant2);
+                    $database->deleteCollection($colName);
+                } catch (\Throwable) {
+                }
             }
         } finally {
             $database

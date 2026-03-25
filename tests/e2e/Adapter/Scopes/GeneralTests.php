@@ -373,7 +373,7 @@ trait GeneralTests
         // Bring down Redis
         $stdout = '';
         $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker kill', '', $stdout, $stderr);
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', '', $stdout, $stderr);
 
         // Check we can read data still
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
@@ -443,7 +443,7 @@ trait GeneralTests
             // Bring down Redis
             $stdout = '';
             $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker kill', '', $stdout, $stderr);
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', '', $stdout, $stderr);
             sleep(1);
 
             // Restart Redis containers

@@ -21,8 +21,12 @@ use Utopia\Query\CursorDirection;
 
 /**
  * Connection pool adapter that delegates database operations to pooled adapter instances.
+ *
+ * Pool implements all Feature interfaces because it is a complete proxy — every method
+ * call is delegated to the underlying pooled adapter. If the pooled adapter does not
+ * actually support a feature, the delegated call will throw at runtime.
  */
-class Pool extends Adapter
+class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCasting, Feature\Relationships, Feature\SchemaAttributes, Feature\Spatial, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
 {
     /**
      * @var UtopiaPool<covariant Adapter>

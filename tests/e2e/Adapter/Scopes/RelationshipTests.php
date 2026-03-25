@@ -3611,6 +3611,11 @@ trait RelationshipTests
      */
     public function testOrderAndCursorWithRelationshipQueries(): void
     {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         /** @var Database $database */
         $database = $this->getDatabase();
 

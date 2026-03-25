@@ -92,6 +92,17 @@ trait DocumentTests
 
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
         $this->assertEquals((string)$sequence, $document->getSequence());
+
+        /**
+         * Query with int $sequence value (supported by SQL adapters, rejected by MongoDB)
+         */
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_INTEGER) {
+            var_dump('===================================================================');
+            $this->assertTrue($sequence === 5_000_000_000_000_000);
+            $document = $database->find(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
+            var_dump($document);
+            $this->assertTrue(false);
+        }
     }
 
     public function testCreateDocument(): Document

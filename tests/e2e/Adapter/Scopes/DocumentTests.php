@@ -86,13 +86,13 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         /**
          * Query with int $sequence value (supported by SQL adapters, rejected by MongoDB)
@@ -100,7 +100,7 @@ trait DocumentTests
         if ($database->getAdapter()->getIdAttributeType() == Database::VAR_INTEGER) {
             $this->assertTrue($sequence === 5_000_000_000_000_000);
             $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
-            var_dump($document);
+            $this->assertSame((string)$sequence, $document->getSequence());
         }
     }
 

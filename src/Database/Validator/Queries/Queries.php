@@ -104,7 +104,7 @@ class Queries extends Validator
             $attributes[] = new Document([
                 '$id' => '$sequence',
                 'key' => '$sequence',
-                'type' => Database::VAR_STRING,
+                'type' => Database::VAR_ID,
                 'array' => false,
             ]);
 

@@ -17,7 +17,7 @@ trait AggregationTests
     private function createProducts(Database $database, string $collection = 'agg_products'): void
     {
         if ($database->exists($database->getDatabase(), $collection)) {
-            $database->deleteCollection($collection);
+            return;
         }
 
         $database->createCollection($collection);
@@ -1262,8 +1262,6 @@ trait AggregationTests
         } else {
             $this->assertEquals($expected, $results[0]->getAttribute($alias));
         }
-
-        $database->deleteCollection($col);
     }
 
     /**
@@ -1299,7 +1297,6 @@ trait AggregationTests
         ]);
         $results = $database->find($col, $queries);
         $this->assertCount($expectedGroups, $results);
-        $database->deleteCollection($col);
     }
 
     /**

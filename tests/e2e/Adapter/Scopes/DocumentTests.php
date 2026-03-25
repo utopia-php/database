@@ -33,12 +33,42 @@ use Utopia\Query\Schema\IndexType;
 
 trait DocumentTests
 {
+    private static string $moviesCollection = '';
+
+    private static string $documentsCollection = '';
+
+    private static string $incDecCollection = '';
+
+    protected function getMoviesCollection(): string
+    {
+        if (self::$moviesCollection === '') {
+            self::$moviesCollection = 'movies_' . uniqid();
+        }
+        return self::$moviesCollection;
+    }
+
+    protected function getDocumentsCollection(): string
+    {
+        if (self::$documentsCollection === '') {
+            self::$documentsCollection = 'documents_' . uniqid();
+        }
+        return self::$documentsCollection;
+    }
+
+    protected function getIncDecCollection(): string
+    {
+        if (self::$incDecCollection === '') {
+            self::$incDecCollection = 'increase_decrease_' . uniqid();
+        }
+        return self::$incDecCollection;
+    }
+
     private static bool $documentsFixtureInit = false;
 
     private static ?Document $documentsFixtureDoc = null;
 
     /**
-     * Create the 'documents' collection with standard attributes and a test document.
+     * Create the $this->getDocumentsCollection() collection with standard attributes and a test document.
      * Cached for non-functional mode backward compatibility.
      */
     protected function initDocumentsFixture(): Document
@@ -48,60 +78,56 @@ trait DocumentTests
         }
 
         $database = $this->getDatabase();
+        $collection = $this->getDocumentsCollection();
 
-        try {
-            $database->createCollection('documents');
+        $database->createCollection($collection);
 
-            $database->createAttribute('documents', new Attribute(key: 'string', type: ColumnType::String, size: 128, required: true));
-            $database->createAttribute('documents', new Attribute(key: 'integer_signed', type: ColumnType::Integer, size: 0, required: true));
-            $database->createAttribute('documents', new Attribute(key: 'integer_unsigned', type: ColumnType::Integer, size: 4, required: true, signed: false));
-            $database->createAttribute('documents', new Attribute(key: 'bigint_signed', type: ColumnType::Integer, size: 8, required: true));
-            $database->createAttribute('documents', new Attribute(key: 'bigint_unsigned', type: ColumnType::Integer, size: 9, required: true, signed: false));
-            $database->createAttribute('documents', new Attribute(key: 'float_signed', type: ColumnType::Double, size: 0, required: true));
-            $database->createAttribute('documents', new Attribute(key: 'float_unsigned', type: ColumnType::Double, size: 0, required: true, signed: false));
-            $database->createAttribute('documents', new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true));
-            $database->createAttribute('documents', new Attribute(key: 'colors', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
-            $database->createAttribute('documents', new Attribute(key: 'empty', type: ColumnType::String, size: 32, required: false, default: null, signed: true, array: true));
-            $database->createAttribute('documents', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: false, default: null));
-            $database->createAttribute('documents', new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: false, default: null));
+        $database->createAttribute($collection, new Attribute(key: 'string', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'integer_signed', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'integer_unsigned', type: ColumnType::Integer, size: 4, required: true, signed: false));
+        $database->createAttribute($collection, new Attribute(key: 'bigint_signed', type: ColumnType::Integer, size: 8, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'bigint_unsigned', type: ColumnType::Integer, size: 9, required: true, signed: false));
+        $database->createAttribute($collection, new Attribute(key: 'float_signed', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'float_unsigned', type: ColumnType::Double, size: 0, required: true, signed: false));
+        $database->createAttribute($collection, new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'colors', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
+        $database->createAttribute($collection, new Attribute(key: 'empty', type: ColumnType::String, size: 32, required: false, default: null, signed: true, array: true));
+        $database->createAttribute($collection, new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: false, default: null));
+        $database->createAttribute($collection, new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: false, default: null));
 
-            $sequence = '1000000';
-            if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
-                $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
-            }
-
-            $document = $database->createDocument('documents', new Document([
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::read(Role::user(ID::custom('1'))),
-                    Permission::read(Role::user(ID::custom('2'))),
-                    Permission::create(Role::any()),
-                    Permission::create(Role::user(ID::custom('1x'))),
-                    Permission::create(Role::user(ID::custom('2x'))),
-                    Permission::update(Role::any()),
-                    Permission::update(Role::user(ID::custom('1x'))),
-                    Permission::update(Role::user(ID::custom('2x'))),
-                    Permission::delete(Role::any()),
-                    Permission::delete(Role::user(ID::custom('1x'))),
-                    Permission::delete(Role::user(ID::custom('2x'))),
-                ],
-                'string' => 'text📝',
-                'integer_signed' => -Database::MAX_INT,
-                'integer_unsigned' => Database::MAX_INT,
-                'bigint_signed' => -Database::MAX_BIG_INT,
-                'bigint_unsigned' => Database::MAX_BIG_INT,
-                'float_signed' => -5.55,
-                'float_unsigned' => 5.55,
-                'boolean' => true,
-                'colors' => ['pink', 'green', 'blue'],
-                'empty' => [],
-                'with-dash' => 'Works',
-                'id' => $sequence,
-            ]));
-        } catch (DuplicateException) {
-            $documents = $database->find('documents', [Query::limit(1)]);
-            $document = $documents[0];
+        $sequence = '1000000';
+        if ($database->getAdapter()->getIdAttributeType() == ColumnType::Uuid7->value) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
+
+        $document = $database->createDocument($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
+            'string' => 'text📝',
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
+            'with-dash' => 'Works',
+            'id' => $sequence,
+        ]));
 
         self::$documentsFixtureInit = true;
         self::$documentsFixtureDoc = $document;
@@ -114,7 +140,7 @@ trait DocumentTests
     private static ?array $moviesFixtureData = null;
 
     /**
-     * Create the 'movies' collection with standard test data.
+     * Create the movies collection with standard test data.
      * Returns ['$sequence' => ...].
      */
     protected function initMoviesFixture(): array
@@ -128,26 +154,96 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $this->getDatabase()->getAuthorization()->addRole('user:x');
         $database = $this->getDatabase();
+        $collection = $this->getMoviesCollection();
 
-        try {
-            $database->createCollection('movies', permissions: [
-                Permission::create(Role::any()),
-                Permission::update(Role::users()),
-            ]);
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users()),
+        ]);
 
-            $database->createAttribute('movies', new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'director', type: ColumnType::String, size: 128, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'year', type: ColumnType::Integer, size: 0, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'genres', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
-            $database->createAttribute('movies', new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: true));
-            $database->createAttribute('movies', new Attribute(key: 'nullable', type: ColumnType::String, size: 128, required: false));
+        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'director', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'year', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'genres', type: ColumnType::String, size: 32, required: true, default: null, signed: true, array: true));
+        $database->createAttribute($collection, new Attribute(key: 'with-dash', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'nullable', type: ColumnType::String, size: 128, required: false));
 
-            $permissions = [
-                Permission::read(Role::any()),
-                Permission::read(Role::user('1')),
-                Permission::read(Role::user('2')),
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::read(Role::user('1')),
+            Permission::read(Role::user('2')),
+            Permission::create(Role::any()),
+            Permission::create(Role::user('1x')),
+            Permission::create(Role::user('2x')),
+            Permission::update(Role::any()),
+            Permission::update(Role::user('1x')),
+            Permission::update(Role::user('2x')),
+            Permission::delete(Role::any()),
+            Permission::delete(Role::user('1x')),
+            Permission::delete(Role::user('2x')),
+        ];
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => ID::custom('frozen'),
+            '$permissions' => $permissions,
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'genres' => ['animation', 'kids'],
+            'with-dash' => 'Works',
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => $permissions,
+            'name' => 'Frozen II',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2019,
+            'price' => 39.50,
+            'active' => true,
+            'genres' => ['animation', 'kids'],
+            'with-dash' => 'Works',
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => $permissions,
+            'name' => 'Captain America: The First Avenger',
+            'director' => 'Joe Johnston',
+            'year' => 2011,
+            'price' => 25.94,
+            'active' => true,
+            'genres' => ['science fiction', 'action', 'comics'],
+            'with-dash' => 'Works2',
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => $permissions,
+            'name' => 'Captain Marvel',
+            'director' => 'Anna Boden & Ryan Fleck',
+            'year' => 2019,
+            'price' => 25.99,
+            'active' => true,
+            'genres' => ['science fiction', 'action', 'comics'],
+            'with-dash' => 'Works2',
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => $permissions,
+            'name' => 'Work in Progress',
+            'director' => 'TBD',
+            'year' => 2025,
+            'price' => 0.0,
+            'active' => false,
+            'genres' => [],
+            'with-dash' => 'Works3',
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::user('x')),
                 Permission::create(Role::any()),
                 Permission::create(Role::user('1x')),
                 Permission::create(Role::user('2x')),
@@ -157,90 +253,16 @@ trait DocumentTests
                 Permission::delete(Role::any()),
                 Permission::delete(Role::user('1x')),
                 Permission::delete(Role::user('2x')),
-            ];
-
-            $document = $database->createDocument('movies', new Document([
-                '$id' => ID::custom('frozen'),
-                '$permissions' => $permissions,
-                'name' => 'Frozen',
-                'director' => 'Chris Buck & Jennifer Lee',
-                'year' => 2013,
-                'price' => 39.50,
-                'active' => true,
-                'genres' => ['animation', 'kids'],
-                'with-dash' => 'Works',
-            ]));
-
-            $database->createDocument('movies', new Document([
-                '$permissions' => $permissions,
-                'name' => 'Frozen II',
-                'director' => 'Chris Buck & Jennifer Lee',
-                'year' => 2019,
-                'price' => 39.50,
-                'active' => true,
-                'genres' => ['animation', 'kids'],
-                'with-dash' => 'Works',
-            ]));
-
-            $database->createDocument('movies', new Document([
-                '$permissions' => $permissions,
-                'name' => 'Captain America: The First Avenger',
-                'director' => 'Joe Johnston',
-                'year' => 2011,
-                'price' => 25.94,
-                'active' => true,
-                'genres' => ['science fiction', 'action', 'comics'],
-                'with-dash' => 'Works2',
-            ]));
-
-            $database->createDocument('movies', new Document([
-                '$permissions' => $permissions,
-                'name' => 'Captain Marvel',
-                'director' => 'Anna Boden & Ryan Fleck',
-                'year' => 2019,
-                'price' => 25.99,
-                'active' => true,
-                'genres' => ['science fiction', 'action', 'comics'],
-                'with-dash' => 'Works2',
-            ]));
-
-            $database->createDocument('movies', new Document([
-                '$permissions' => $permissions,
-                'name' => 'Work in Progress',
-                'director' => 'TBD',
-                'year' => 2025,
-                'price' => 0.0,
-                'active' => false,
-                'genres' => [],
-                'with-dash' => 'Works3',
-            ]));
-
-            $database->createDocument('movies', new Document([
-                '$permissions' => [
-                    Permission::read(Role::user('x')),
-                    Permission::create(Role::any()),
-                    Permission::create(Role::user('1x')),
-                    Permission::create(Role::user('2x')),
-                    Permission::update(Role::any()),
-                    Permission::update(Role::user('1x')),
-                    Permission::update(Role::user('2x')),
-                    Permission::delete(Role::any()),
-                    Permission::delete(Role::user('1x')),
-                    Permission::delete(Role::user('2x')),
-                ],
-                'name' => 'Work in Progress 2',
-                'director' => 'TBD',
-                'year' => 2026,
-                'price' => 0.0,
-                'active' => false,
-                'genres' => [],
-                'with-dash' => 'Works3',
-                'nullable' => 'Not null',
-            ]));
-
-        } catch (DuplicateException) {
-            $document = $database->getDocument('movies', 'frozen');
-        }
+            ],
+            'name' => 'Work in Progress 2',
+            'director' => 'TBD',
+            'year' => 2026,
+            'price' => 0.0,
+            'active' => false,
+            'genres' => [],
+            'with-dash' => 'Works3',
+            'nullable' => 'Not null',
+        ]));
 
         self::$moviesFixtureInit = true;
         self::$moviesFixtureData = ['$sequence' => $document->getSequence()];
@@ -253,7 +275,7 @@ trait DocumentTests
     private static ?Document $incDecFixtureDoc = null;
 
     /**
-     * Create the 'increase_decrease' collection and perform initial operations.
+     * Create the increase_decrease collection and perform initial operations.
      */
     protected function initIncreaseDecreaseFixture(): Document
     {
@@ -262,41 +284,36 @@ trait DocumentTests
         }
 
         $database = $this->getDatabase();
-        $collection = 'increase_decrease';
+        $collection = $this->getIncDecCollection();
 
-        try {
-            $database->createCollection($collection);
+        $database->createCollection($collection);
 
-            $database->createAttribute($collection, new Attribute(key: 'increase', type: ColumnType::Integer, size: 0, required: true));
-            $database->createAttribute($collection, new Attribute(key: 'decrease', type: ColumnType::Integer, size: 0, required: true));
-            $database->createAttribute($collection, new Attribute(key: 'increase_text', type: ColumnType::String, size: 255, required: true));
-            $database->createAttribute($collection, new Attribute(key: 'increase_float', type: ColumnType::Double, size: 0, required: true));
-            $database->createAttribute($collection, new Attribute(key: 'sizes', type: ColumnType::Integer, size: 8, required: false, array: true));
+        $database->createAttribute($collection, new Attribute(key: 'increase', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'decrease', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'increase_text', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'increase_float', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'sizes', type: ColumnType::Integer, size: 8, required: false, array: true));
 
-            $document = $database->createDocument($collection, new Document([
-                'increase' => 100,
-                'decrease' => 100,
-                'increase_float' => 100,
-                'increase_text' => 'some text',
-                'sizes' => [10, 20, 30],
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]));
+        $document = $database->createDocument($collection, new Document([
+            'increase' => 100,
+            'decrease' => 100,
+            'increase_float' => 100,
+            'increase_text' => 'some text',
+            'sizes' => [10, 20, 30],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
 
-            $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
-            $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
-            $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
-            $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
+        $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
+        $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
+        $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
+        $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
 
-            $document = $database->getDocument($collection, $document->getId());
-        } catch (DuplicateException) {
-            $documents = $database->find($collection, [Query::limit(1)]);
-            $document = $documents[0];
-        }
+        $document = $database->getDocument($collection, $document->getId());
 
         self::$incDecFixtureInit = true;
         self::$incDecFixtureDoc = $document;
@@ -374,7 +391,7 @@ trait DocumentTests
         }
 
         // Test create document with manual internal id
-        $manualIdDocument = $database->createDocument('documents', new Document([
+        $manualIdDocument = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$id' => '56000',
             '$sequence' => $sequence,
             '$permissions' => [
@@ -428,7 +445,7 @@ trait DocumentTests
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
         $this->assertEquals(null, $manualIdDocument->getAttribute('id'));
 
-        $manualIdDocument = $database->getDocument('documents', '56000');
+        $manualIdDocument = $database->getDocument($this->getDocumentsCollection(), '56000');
 
         $this->assertEquals($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty($manualIdDocument->getId());
@@ -454,7 +471,7 @@ trait DocumentTests
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
 
         try {
-            $database->createDocument('documents', new Document([
+            $database->createDocument($this->getDocumentsCollection(), new Document([
                 'string' => '',
                 'integer_signed' => 0,
                 'integer_unsigned' => 0,
@@ -475,7 +492,7 @@ trait DocumentTests
         }
 
         try {
-            $database->createDocument('documents', new Document([
+            $database->createDocument($this->getDocumentsCollection(), new Document([
                 'string' => '',
                 'integer_signed' => 0,
                 'integer_unsigned' => 0,
@@ -496,7 +513,7 @@ trait DocumentTests
         }
 
         try {
-            $database->createDocument('documents', new Document([
+            $database->createDocument($this->getDocumentsCollection(), new Document([
                 '$sequence' => '0',
                 '$permissions' => [],
                 'string' => '',
@@ -522,7 +539,7 @@ trait DocumentTests
         /**
          * Insert ID attribute with NULL
          */
-        $documentIdNull = $database->createDocument('documents', new Document([
+        $documentIdNull = $database->createDocument($this->getDocumentsCollection(), new Document([
             'id' => null,
             '$permissions' => [Permission::read(Role::any())],
             'string' => '',
@@ -540,11 +557,11 @@ trait DocumentTests
         $this->assertNotEmpty($documentIdNull->getSequence());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
-        $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
+        $documentIdNull = $database->getDocument($this->getDocumentsCollection(), $documentIdNull->getId());
         $this->assertNotEmpty($documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
-        $documentIdNull = $database->findOne('documents', [
+        $documentIdNull = $database->findOne($this->getDocumentsCollection(), [
             query::isNull('id'),
         ]);
         $this->assertNotEmpty($documentIdNull->getId());
@@ -558,7 +575,7 @@ trait DocumentTests
         /**
          * Insert ID attribute with '0'
          */
-        $documentId0 = $database->createDocument('documents', new Document([
+        $documentId0 = $database->createDocument($this->getDocumentsCollection(), new Document([
             'id' => $sequence,
             '$permissions' => [Permission::read(Role::any())],
             'string' => '',
@@ -578,12 +595,12 @@ trait DocumentTests
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
-        $documentId0 = $database->getDocument('documents', $documentId0->getId());
+        $documentId0 = $database->getDocument($this->getDocumentsCollection(), $documentId0->getId());
         $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
-        $documentId0 = $database->findOne('documents', [
+        $documentId0 = $database->findOne($this->getDocumentsCollection(), [
             query::equal('id', [$sequence]),
         ]);
         $this->assertNotEmpty($documentId0->getSequence());
@@ -1115,7 +1132,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->getDocument('documents', $document->getId());
+        $document = $database->getDocument($this->getDocumentsCollection(), $document->getId());
 
         $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
@@ -1141,7 +1158,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $database->createDocument('movies', new Document(['$id' => ['id_as_array']]));
+            $database->createDocument($this->getMoviesCollection(), new Document(['$id' => ['id_as_array']]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertEquals('$id must be of type string', $e->getMessage());
@@ -1158,13 +1175,13 @@ trait DocumentTests
         /**
          * Query with dash attribute
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('with-dash', ['Works']),
         ]);
 
         $this->assertEquals(2, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('with-dash', ['Works2', 'Works3']),
         ]);
 
@@ -1173,7 +1190,7 @@ trait DocumentTests
         /**
          * Check an Integer condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('year', [2019]),
         ]);
 
@@ -1191,7 +1208,7 @@ trait DocumentTests
         /**
          * Boolean condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('active', [true]),
         ]);
 
@@ -1207,7 +1224,7 @@ trait DocumentTests
         /**
          * Float condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::lessThan('price', 26.00),
             Query::greaterThan('price', 25.98),
         ]);
@@ -1227,7 +1244,7 @@ trait DocumentTests
             return;
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::contains('genres', ['comics']),
         ]);
 
@@ -1236,20 +1253,20 @@ trait DocumentTests
         /**
          * Array contains OR condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::contains('genres', ['comics', 'kids']),
         ]);
 
         $this->assertEquals(4, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::contains('genres', ['non-existent']),
         ]);
 
         $this->assertEquals(0, count($documents));
 
         try {
-            $database->find('movies', [
+            $database->find($this->getMoviesCollection(), [
                 Query::contains('price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
@@ -1269,10 +1286,10 @@ trait DocumentTests
          * Fulltext search
          */
         if ($this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
-            $success = $database->createIndex('movies', new Index(key: 'name', type: IndexType::Fulltext, attributes: ['name']));
+            $success = $database->createIndex($this->getMoviesCollection(), new Index(key: 'name', type: IndexType::Fulltext, attributes: ['name']));
             $this->assertEquals(true, $success);
 
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::search('name', 'captain'),
             ]);
 
@@ -1286,7 +1303,7 @@ trait DocumentTests
             // TODO: I think this needs a changes? how do we distinguish between regular full text and wildcard?
 
             if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcard)) {
-                $documents = $database->find('movies', [
+                $documents = $database->find($this->getMoviesCollection(), [
                     Query::search('name', 'cap'),
                 ]);
 
@@ -1374,7 +1391,7 @@ trait DocumentTests
         /**
          * $id condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('$id', ['frozen']),
         ]);
 
@@ -1391,7 +1408,7 @@ trait DocumentTests
         /**
          * Test that internal ID queries are handled correctly
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('$sequence', [$data['$sequence']]),
         ]);
 
@@ -1405,7 +1422,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $database->find('movies', [
+            $database->find($this->getMoviesCollection(), [
                 Query::or([
                     Query::equal('active', [true]),
                 ]),
@@ -1428,8 +1445,8 @@ trait DocumentTests
                 Query::equal('name', ['Frozen II']),
             ]),
         ];
-        $this->assertCount(4, $database->find('movies', $queries));
-        $this->assertEquals(4, $database->count('movies', $queries));
+        $this->assertCount(4, $database->find($this->getMoviesCollection(), $queries));
+        $this->assertEquals(4, $database->count($this->getMoviesCollection(), $queries));
 
         $queries = [
             Query::equal('active', [true]),
@@ -1440,8 +1457,8 @@ trait DocumentTests
             ]),
         ];
 
-        $this->assertCount(3, $database->find('movies', $queries));
-        $this->assertEquals(3, $database->count('movies', $queries));
+        $this->assertCount(3, $database->find($this->getMoviesCollection(), $queries));
+        $this->assertEquals(3, $database->count($this->getMoviesCollection(), $queries));
     }
 
     public function testOrNested(): void
@@ -1462,11 +1479,11 @@ trait DocumentTests
             ]),
         ];
 
-        $documents = $database->find('movies', $queries);
+        $documents = $database->find($this->getMoviesCollection(), $queries);
         $this->assertCount(1, $documents);
         $this->assertArrayNotHasKey('name', $documents[0]);
 
-        $count = $database->count('movies', $queries);
+        $count = $database->count($this->getMoviesCollection(), $queries);
         $this->assertEquals(1, $count);
     }
 
@@ -1477,7 +1494,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $database->find('movies', [
+            $database->find($this->getMoviesCollection(), [
                 Query::and([
                     Query::equal('active', [true]),
                 ]),
@@ -1500,8 +1517,8 @@ trait DocumentTests
                 Query::equal('name', ['Frozen II']),
             ]),
         ];
-        $this->assertCount(1, $database->find('movies', $queries));
-        $this->assertEquals(1, $database->count('movies', $queries));
+        $this->assertCount(1, $database->find($this->getMoviesCollection(), $queries));
+        $this->assertEquals(1, $database->count($this->getMoviesCollection(), $queries));
     }
 
     public function testAndNested(): void
@@ -1520,10 +1537,10 @@ trait DocumentTests
             ]),
         ];
 
-        $documents = $database->find('movies', $queries);
+        $documents = $database->find($this->getMoviesCollection(), $queries);
         $this->assertCount(3, $documents);
 
-        $count = $database->count('movies', $queries);
+        $count = $database->count($this->getMoviesCollection(), $queries);
         $this->assertEquals(3, $count);
     }
 
@@ -1533,7 +1550,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::isNull('nullable'),
         ]);
 
@@ -1546,7 +1563,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::isNotNull('nullable'),
         ]);
 
@@ -1559,18 +1576,18 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::startsWith('name', 'Work'),
         ]);
 
         $this->assertEquals(2, count($documents));
 
         if ($this->getDatabase()->getAdapter() instanceof SQL) {
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::startsWith('name', '%ork'),
             ]);
         } else {
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::startsWith('name', '.*ork'),
             ]);
         }
@@ -1584,7 +1601,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::startsWith('name', 'Work in Progress'),
         ]);
 
@@ -1597,7 +1614,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::endsWith('name', 'Marvel'),
         ]);
 
@@ -1617,48 +1634,48 @@ trait DocumentTests
         }
 
         // Test notContains with array attributes - should return documents that don't contain specified genres
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['comics']),
         ]);
 
         $this->assertEquals(4, count($documents)); // 6 readable movies (user:x role added earlier) minus 2 with 'comics' genre
 
         // Test notContains with multiple values (AND logic - exclude documents containing ANY of these)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['comics', 'kids']),
         ]);
 
         $this->assertEquals(2, count($documents)); // Only 'Work in Progress' and 'Work in Progress 2' have neither 'comics' nor 'kids'
 
         // Test notContains with non-existent genre - should return all readable documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['non-existent']),
         ]);
 
         $this->assertEquals(6, count($documents));
 
         // Test notContains with string attribute (substring search)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('name', ['Captain']),
         ]);
         $this->assertEquals(4, count($documents)); // 6 readable movies minus 2 containing 'Captain'
 
         // Test notContains combined with other queries (AND logic)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['comics']),
             Query::greaterThan('year', 2000),
         ]);
         $this->assertLessThanOrEqual(4, count($documents)); // Subset of readable movies without 'comics' and after 2000
 
         // Test notContains with case sensitivity
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notContains('genres', ['COMICS']), // Different case
         ]);
         $this->assertEquals(6, count($documents)); // All readable movies since case doesn't match
 
         // Test error handling for invalid attribute type
         try {
-            $database->find('movies', [
+            $database->find($this->getMoviesCollection(), [
                 Query::notContains('price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
@@ -1678,7 +1695,7 @@ trait DocumentTests
         if ($this->getDatabase()->getAdapter()->supports(Capability::Fulltext)) {
             // Ensure fulltext index exists (may already exist from previous tests)
             try {
-                $database->createIndex('movies', new Index(key: 'name', type: IndexType::Fulltext, attributes: ['name']));
+                $database->createIndex($this->getMoviesCollection(), new Index(key: 'name', type: IndexType::Fulltext, attributes: ['name']));
             } catch (Throwable $e) {
                 // Index may already exist, ignore duplicate error
                 if (! str_contains($e->getMessage(), 'already exists')) {
@@ -1687,14 +1704,14 @@ trait DocumentTests
             }
 
             // Test notSearch - should return documents that don't match the search term
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notSearch('name', 'captain'),
             ]);
 
             $this->assertEquals(4, count($documents)); // 6 readable movies (user:x role added earlier) minus 2 with 'captain' in name
 
             // Test notSearch with term that doesn't exist - should return all readable documents
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notSearch('name', 'nonexistent'),
             ]);
 
@@ -1702,7 +1719,7 @@ trait DocumentTests
 
             // Test notSearch with partial term
             if ($this->getDatabase()->getAdapter()->supports(Capability::FulltextWildcard)) {
-                $documents = $database->find('movies', [
+                $documents = $database->find($this->getMoviesCollection(), [
                     Query::notSearch('name', 'cap'),
                 ]);
 
@@ -1710,20 +1727,20 @@ trait DocumentTests
             }
 
             // Test notSearch with empty string - should return all readable documents
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notSearch('name', ''),
             ]);
             $this->assertEquals(6, count($documents)); // All readable movies since empty search matches nothing
 
             // Test notSearch combined with other filters
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notSearch('name', 'captain'),
                 Query::lessThan('year', 2010),
             ]);
             $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-captain movies before 2010
 
             // Test notSearch with special characters
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notSearch('name', '@#$%'),
             ]);
             $this->assertEquals(6, count($documents)); // All readable movies since special chars don't match
@@ -1739,14 +1756,14 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // Test notStartsWith - should return documents that don't start with 'Work'
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', 'Work'),
         ]);
 
         $this->assertEquals(4, count($documents)); // All movies except the 2 starting with 'Work'
 
         // Test notStartsWith with non-existent prefix - should return all documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', 'NonExistent'),
         ]);
 
@@ -1754,11 +1771,11 @@ trait DocumentTests
 
         // Test notStartsWith with wildcard characters (should treat them literally)
         if ($this->getDatabase()->getAdapter() instanceof SQL) {
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notStartsWith('name', '%ork'),
             ]);
         } else {
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::notStartsWith('name', '.*ork'),
             ]);
         }
@@ -1766,25 +1783,25 @@ trait DocumentTests
         $this->assertEquals(6, count($documents)); // Should return all since no movie starts with these patterns
 
         // Test notStartsWith with empty string - should return no documents (all strings start with empty)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', ''),
         ]);
         $this->assertEquals(0, count($documents)); // No documents since all strings start with empty string
 
         // Test notStartsWith with single character
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', 'C'),
         ]);
         $this->assertGreaterThanOrEqual(4, count($documents)); // Movies not starting with 'C'
 
         // Test notStartsWith with case sensitivity (may be case-insensitive depending on DB)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', 'work'), // lowercase vs 'Work'
         ]);
         $this->assertGreaterThanOrEqual(4, count($documents)); // May match case-insensitively
 
         // Test notStartsWith combined with other queries
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notStartsWith('name', 'Work'),
             Query::equal('year', [2006]),
         ]);
@@ -1798,46 +1815,46 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // Test notEndsWith - should return documents that don't end with 'Marvel'
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'Marvel'),
         ]);
 
         $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'Marvel'
 
         // Test notEndsWith with non-existent suffix - should return all documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'NonExistent'),
         ]);
 
         $this->assertEquals(6, count($documents));
 
         // Test notEndsWith with partial suffix
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'vel'),
         ]);
 
         $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'vel' (from 'Marvel')
 
         // Test notEndsWith with empty string - should return no documents (all strings end with empty)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', ''),
         ]);
         $this->assertEquals(0, count($documents)); // No documents since all strings end with empty string
 
         // Test notEndsWith with single character
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'l'),
         ]);
         $this->assertGreaterThanOrEqual(5, count($documents)); // Movies not ending with 'l'
 
         // Test notEndsWith with case sensitivity (may be case-insensitive depending on DB)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'marvel'), // lowercase vs 'Marvel'
         ]);
         $this->assertGreaterThanOrEqual(5, count($documents)); // May match case-insensitively
 
         // Test notEndsWith combined with limit
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEndsWith('name', 'Marvel'),
             Query::limit(3),
         ]);
@@ -1858,7 +1875,7 @@ trait DocumentTests
         }
 
         // Test orderRandom with default limit
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
             Query::limit(1),
         ]);
@@ -1866,18 +1883,18 @@ trait DocumentTests
         $this->assertNotEmpty($documents[0]['name']); // Ensure we got a valid document
 
         // Test orderRandom with multiple documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
             Query::limit(3),
         ]);
         $this->assertEquals(3, count($documents));
 
         // Test that orderRandom returns different results (not guaranteed but highly likely)
-        $firstSet = $database->find('movies', [
+        $firstSet = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
             Query::limit(3),
         ]);
-        $secondSet = $database->find('movies', [
+        $secondSet = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
             Query::limit(3),
         ]);
@@ -1893,14 +1910,14 @@ trait DocumentTests
         $this->assertEquals(3, count($secondIds));
 
         // Test orderRandom with more than available documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
             Query::limit(10), // We only have 6 movies
         ]);
         $this->assertLessThanOrEqual(6, count($documents)); // Should return all available documents
 
         // Test orderRandom with filters
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::greaterThan('price', 10),
             Query::orderRandom(),
             Query::limit(2),
@@ -1911,7 +1928,7 @@ trait DocumentTests
         }
 
         // Test orderRandom without explicit limit (should use default)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::orderRandom(),
         ]);
         $this->assertGreaterThan(0, count($documents));
@@ -1926,27 +1943,27 @@ trait DocumentTests
 
         $this->getDatabase()->getAuthorization()->addRole('user:x');
 
-        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'year', [Query::equal('year', [2019])]);
         $this->assertEquals(2019 + 2019, $sum);
-        $sum = $database->sum('movies', 'year');
+        $sum = $database->sum($this->getMoviesCollection(), 'year');
         $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
 
-        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])], 1);
+        $sum = $database->sum($this->getMoviesCollection(), 'year', [Query::equal('year', [2019])], 1);
         $this->assertEquals(2019, $sum);
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
 
-        $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'year', [Query::equal('year', [2019])]);
         $this->assertEquals(2019 + 2019, $sum);
-        $sum = $database->sum('movies', 'year');
+        $sum = $database->sum($this->getMoviesCollection(), 'year');
         $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025, $sum);
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
-        $sum = $database->sum('movies', 'price', [Query::equal('year', [2019])]);
+        $sum = $database->sum($this->getMoviesCollection(), 'price', [Query::equal('year', [2019])]);
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
 
         $this->getDatabase()->getAuthorization()->addRole('user:x');
@@ -1958,7 +1975,7 @@ trait DocumentTests
 
         /** @var Database $database */
         $database = $this->getDatabase();
-        $document = $database->getDocument('documents', $document->getId());
+        $document = $database->getDocument($this->getDocumentsCollection(), $document->getId());
 
         $document
             ->setAttribute('string', 'text📝 updated')
@@ -2042,7 +2059,7 @@ trait DocumentTests
         $this->assertEquals(true, $deleted->isEmpty());
 
         // Re-create the fixture document so subsequent tests can use it
-        $recreated = $this->getDatabase()->createDocument('documents', $document);
+        $recreated = $this->getDatabase()->createDocument($this->getDocumentsCollection(), $document);
         self::$documentsFixtureDoc = $recreated;
     }
 
@@ -2306,7 +2323,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument('documents', new Document([
+        $document = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2343,7 +2360,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $this->expectException(AuthorizationException::class);
-        $database->createDocument('documents', new Document([
+        $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2373,7 +2390,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument('documents', new Document([
+        $document = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2393,7 +2410,7 @@ trait DocumentTests
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
 
-        $document = $database->updateDocument('documents', $document->getId(), new Document([
+        $document = $database->updateDocument($this->getDocumentsCollection(), $document->getId(), new Document([
             '$id' => ID::custom($document->getId()),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2419,10 +2436,10 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex($this->getMoviesCollection(), new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value])));
 
         try {
-            $database->createDocument('movies', new Document([
+            $database->createDocument($this->getMoviesCollection(), new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::read(Role::user('1')),
@@ -2461,14 +2478,14 @@ trait DocumentTests
 
         // Ensure the unique index exists (created in testUniqueIndexDuplicate)
         try {
-            $database->createIndex('movies', new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+            $database->createIndex($this->getMoviesCollection(), new Index(key: 'uniqueIndex', type: IndexType::Unique, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
         } catch (\Throwable) {
             // Index may already exist
         }
 
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
         // create document then update to conflict with index
-        $document = $database->createDocument('movies', new Document([
+        $document = $database->createDocument($this->getMoviesCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user('1')),
@@ -2493,14 +2510,14 @@ trait DocumentTests
         ]));
 
         try {
-            $database->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
+            $database->updateDocument($this->getMoviesCollection(), $document->getId(), $document->setAttribute('name', 'Frozen'));
 
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
-        $database->deleteDocument('movies', $document->getId());
+        $database->deleteDocument($this->getMoviesCollection(), $document->getId());
     }
 
     public function propagateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
@@ -2539,7 +2556,7 @@ trait DocumentTests
                 $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
             }
 
-            $database->createIndex('documents', new Index(key: 'fulltext_integer', type: IndexType::Fulltext, attributes: ['string', 'integer_signed']));
+            $database->createIndex($this->getDocumentsCollection(), new Index(key: 'fulltext_integer', type: IndexType::Fulltext, attributes: ['string', 'integer_signed']));
         } else {
             $this->expectNotToPerformAssertions();
 
@@ -2653,7 +2670,7 @@ trait DocumentTests
 
         if ($database->getAdapter()->getSharedTables()) {
             $documents = $database->find(
-                'documents',
+                $this->getDocumentsCollection(),
                 [Query::select(['*'])] // Mongo bug with Integer UID
             );
 
@@ -2664,7 +2681,7 @@ trait DocumentTests
             return;
         }
 
-        $doc = $database->createDocument('documents', new Document([
+        $doc = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -2686,15 +2703,15 @@ trait DocumentTests
         $this->assertArrayHasKey('$id', $doc);
         $this->assertArrayNotHasKey('$tenant', $doc);
 
-        $document = $database->getDocument('documents', $doc->getId());
+        $document = $database->getDocument($this->getDocumentsCollection(), $doc->getId());
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
-        $document = $database->updateDocument('documents', $document->getId(), $document);
+        $document = $database->updateDocument($this->getDocumentsCollection(), $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
-        $database->deleteDocument('documents', $document->getId());
+        $database->deleteDocument($this->getDocumentsCollection(), $document->getId());
     }
 
     public function testDateTimeDocument(): void
@@ -4670,7 +4687,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $collection = 'increase_decrease';
+        $collection = $this->getIncDecCollection();
         $database->createCollection($collection);
 
         $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'increase', type: ColumnType::Integer, size: 0, required: true)));
@@ -4716,6 +4733,9 @@ trait DocumentTests
         $this->assertEquals(104.4, $doc->getAttribute('increase_float'));
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
+
+        self::$incDecFixtureInit = true;
+        self::$incDecFixtureDoc = $document;
     }
 
     public function testIncreaseLimitMax(): void
@@ -4726,7 +4746,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $this->expectException(Exception::class);
-        $this->assertEquals(true, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
+        $this->assertEquals(true, $database->increaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'increase', 10.5, 102.4));
     }
     public function testDecreaseLimitMin(): void
     {
@@ -4737,7 +4757,7 @@ trait DocumentTests
 
         try {
             $database->decreaseDocumentAttribute(
-                'increase_decrease',
+                $this->getIncDecCollection(),
                 $document->getId(),
                 'decrease',
                 10,
@@ -4750,7 +4770,7 @@ trait DocumentTests
 
         try {
             $database->decreaseDocumentAttribute(
-                'increase_decrease',
+                $this->getIncDecCollection(),
                 $document->getId(),
                 'decrease',
                 1000,
@@ -4769,7 +4789,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+            $this->assertEquals(false, $database->increaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'increase_text'));
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e, $e->getMessage());
@@ -4783,7 +4803,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'sizes'));
+            $this->assertEquals(false, $database->increaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'sizes'));
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e);
@@ -4799,20 +4819,20 @@ trait DocumentTests
         $database->setPreserveDates(true);
 
         try {
-            $before = $database->getDocument('increase_decrease', $document->getId());
+            $before = $database->getDocument($this->getIncDecCollection(), $document->getId());
             $updatedAt = $before->getUpdatedAt();
             $increase = $before->getAttribute('increase');
             $decrease = $before->getAttribute('decrease');
 
-            $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1);
+            $database->increaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'increase', 1);
 
-            $after = $database->getDocument('increase_decrease', $document->getId());
+            $after = $database->getDocument($this->getIncDecCollection(), $document->getId());
             $this->assertSame($increase + 1, $after->getAttribute('increase'));
             $this->assertSame($updatedAt, $after->getUpdatedAt());
 
-            $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1);
+            $database->decreaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'decrease', 1);
 
-            $after = $database->getDocument('increase_decrease', $document->getId());
+            $after = $database->getDocument($this->getIncDecCollection(), $document->getId());
             $this->assertSame($decrease - 1, $after->getAttribute('decrease'));
             $this->assertSame($updatedAt, $after->getUpdatedAt());
         } finally {
@@ -4828,7 +4848,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->getDocument('documents', $documentId, [
+        $document = $database->getDocument($this->getDocumentsCollection(), $documentId, [
             Query::select(['string', 'integer_signed']),
         ]);
 
@@ -4847,7 +4867,7 @@ trait DocumentTests
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
 
-        $document = $database->getDocument('documents', $documentId, [
+        $document = $database->getDocument($this->getDocumentsCollection(), $documentId, [
             Query::select(['string', 'integer_signed', '$id']),
         ]);
 
@@ -4869,7 +4889,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->findOne('movies', [
+        $document = $database->findOne($this->getMoviesCollection(), [
             Query::offset(2),
             Query::orderAsc('name')
         ]);
@@ -4877,7 +4897,7 @@ trait DocumentTests
         $this->assertFalse($document->isEmpty());
         $this->assertEquals('Frozen', $document->getAttribute('name'));
 
-        $document = $database->findOne('movies', [
+        $document = $database->findOne($this->getMoviesCollection(), [
             Query::offset(10)
         ]);
         $this->assertTrue($document->isEmpty());
@@ -4893,12 +4913,12 @@ trait DocumentTests
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
 
         try {
-            $documents = $database->find('movies');
+            $documents = $database->find($this->getMoviesCollection());
             $movieDocuments = $documents;
 
             $this->assertEquals(5, count($documents));
             $this->assertNotEmpty($documents[0]->getId());
-            $this->assertEquals('movies', $documents[0]->getCollection());
+            $this->assertEquals($this->getMoviesCollection(), $documents[0]->getCollection());
             $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getRead());
             $this->assertEquals(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
             $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
@@ -4926,13 +4946,13 @@ trait DocumentTests
             /**
              * Check $id: Notice, this orders ID names alphabetically, not by internal numeric ID
              */
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::limit(25),
                 Query::offset(0),
                 Query::orderDesc('$id'),
             ]);
             $this->assertEquals($lastDocumentId, $documents[0]->getId());
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::limit(25),
                 Query::offset(0),
                 Query::orderAsc('$id'),
@@ -4942,13 +4962,13 @@ trait DocumentTests
             /**
              * Check internal numeric ID sorting
              */
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::limit(25),
                 Query::offset(0),
                 Query::orderDesc(''),
             ]);
             $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
-            $documents = $database->find('movies', [
+            $documents = $database->find($this->getMoviesCollection(), [
                 Query::limit(25),
                 Query::offset(0),
                 Query::orderAsc(''),
@@ -4971,7 +4991,7 @@ trait DocumentTests
          * Check Permissions
          */
         $this->getDatabase()->getAuthorization()->addRole('user:x');
-        $documents = $database->find('movies');
+        $documents = $database->find($this->getMoviesCollection());
 
         $this->assertEquals(6, count($documents));
     }
@@ -4986,13 +5006,13 @@ trait DocumentTests
         /**
          * String condition
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('director', ['TBD']),
         ]);
 
         $this->assertEquals(2, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('director', ['']),
         ]);
 
@@ -5009,7 +5029,7 @@ trait DocumentTests
         /**
          * Not Equal query
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEqual('director', 'TBD'),
         ]);
 
@@ -5019,11 +5039,11 @@ trait DocumentTests
             $this->assertTrue($document['director'] !== 'TBD');
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notEqual('director', ''),
         ]);
 
-        $total = $database->count('movies');
+        $total = $database->count($this->getMoviesCollection());
 
         $this->assertEquals($total, count($documents));
     }
@@ -5035,22 +5055,22 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::between('price', 25.94, 25.99),
         ]);
         $this->assertEquals(2, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::between('price', 30, 35),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::between('$createdAt', '1975-12-06', '2050-12-06'),
         ]);
         $this->assertEquals(6, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::between('$updatedAt', '1975-12-06T07:08:49.733+02:00', '2050-02-05T10:15:21.825+00:00'),
         ]);
         $this->assertEquals(6, count($documents));
@@ -5066,7 +5086,7 @@ trait DocumentTests
         /**
          * Multiple conditions
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('director', ['TBD']),
             Query::equal('year', [2026]),
         ]);
@@ -5076,7 +5096,7 @@ trait DocumentTests
         /**
          * Multiple conditions and OR values
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('name', ['Frozen II', 'Captain Marvel']),
         ]);
 
@@ -5095,7 +5115,7 @@ trait DocumentTests
         /**
          * ORDER BY
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5121,11 +5141,11 @@ trait DocumentTests
         /**
          * ORDER BY natural
          */
-        $base = array_reverse($database->find('movies', [
+        $base = array_reverse($database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
         ]));
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5150,7 +5170,7 @@ trait DocumentTests
         /**
          * ORDER BY - Multiple attributes
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5176,12 +5196,12 @@ trait DocumentTests
         /**
          * ORDER BY - After
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[1])
@@ -5190,7 +5210,7 @@ trait DocumentTests
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[3])
@@ -5199,7 +5219,7 @@ trait DocumentTests
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[4])
@@ -5207,7 +5227,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($movies[5])
@@ -5217,7 +5237,7 @@ trait DocumentTests
         /**
          * Multiple order by, Test tie-break on year 2019
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::orderAsc('year'),
             Query::orderAsc('price'),
         ]);
@@ -5249,7 +5269,7 @@ trait DocumentTests
         $this->assertEquals($movies[5]['price'], 0);
 
         $pos = 2;
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::orderAsc('year'),
             Query::orderAsc('price'),
             Query::cursorAfter($movies[$pos])
@@ -5274,12 +5294,12 @@ trait DocumentTests
         /**
          * ORDER BY - Before
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[5])
@@ -5288,7 +5308,7 @@ trait DocumentTests
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[3])
@@ -5297,7 +5317,7 @@ trait DocumentTests
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[2])
@@ -5306,7 +5326,7 @@ trait DocumentTests
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[1])
@@ -5314,7 +5334,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::cursorBefore($movies[0])
@@ -5332,12 +5352,12 @@ trait DocumentTests
         /**
          * ORDER BY - After by natural order
          */
-        $movies = array_reverse($database->find('movies', [
+        $movies = array_reverse($database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
         ]));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5347,7 +5367,7 @@ trait DocumentTests
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5357,7 +5377,7 @@ trait DocumentTests
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5366,7 +5386,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5385,13 +5405,13 @@ trait DocumentTests
         /**
          * ORDER BY - Before by natural order
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc(''),
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5401,7 +5421,7 @@ trait DocumentTests
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5411,7 +5431,7 @@ trait DocumentTests
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5421,7 +5441,7 @@ trait DocumentTests
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5430,7 +5450,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
@@ -5449,13 +5469,13 @@ trait DocumentTests
         /**
          * ORDER BY - Single Attribute After
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('year')
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5466,7 +5486,7 @@ trait DocumentTests
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5476,7 +5496,7 @@ trait DocumentTests
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5485,7 +5505,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5504,13 +5524,13 @@ trait DocumentTests
         /**
          * ORDER BY - Single Attribute Before
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('year')
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5520,7 +5540,7 @@ trait DocumentTests
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5530,7 +5550,7 @@ trait DocumentTests
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5540,7 +5560,7 @@ trait DocumentTests
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5549,7 +5569,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
@@ -5568,14 +5588,14 @@ trait DocumentTests
         /**
          * ORDER BY - Multiple Attribute After
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year')
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5586,7 +5606,7 @@ trait DocumentTests
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5597,7 +5617,7 @@ trait DocumentTests
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5607,7 +5627,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5627,14 +5647,14 @@ trait DocumentTests
         /**
          * ORDER BY - Multiple Attribute Before
          */
-        $movies = $database->find('movies', [
+        $movies = $database->find($this->getMoviesCollection(), [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year')
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5646,7 +5666,7 @@ trait DocumentTests
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5657,7 +5677,7 @@ trait DocumentTests
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5668,7 +5688,7 @@ trait DocumentTests
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5678,7 +5698,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5698,12 +5718,12 @@ trait DocumentTests
         /**
          * ORDER BY + CURSOR
          */
-        $documentsTest = $database->find('movies', [
+        $documentsTest = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('price'),
         ]);
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('price'),
@@ -5723,12 +5743,12 @@ trait DocumentTests
         /**
          * ORDER BY ID + CURSOR
          */
-        $documentsTest = $database->find('movies', [
+        $documentsTest = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('$id'),
         ]);
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$id'),
@@ -5748,13 +5768,13 @@ trait DocumentTests
         /**
          * ORDER BY CREATE DATE + CURSOR
          */
-        $documentsTest = $database->find('movies', [
+        $documentsTest = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('$createdAt'),
         ]);
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$createdAt'),
@@ -5774,12 +5794,12 @@ trait DocumentTests
         /**
          * ORDER BY UPDATE DATE + CURSOR
          */
-        $documentsTest = $database->find('movies', [
+        $documentsTest = $database->find($this->getMoviesCollection(), [
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('$updatedAt'),
         ]);
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$updatedAt'),
@@ -5802,14 +5822,14 @@ trait DocumentTests
         $futureDate = '2050-01-01T00:00:00.000Z';
         $pastDate = '1900-01-01T00:00:00.000Z';
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBefore($futureDate),
             Query::limit(1)
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBefore($pastDate),
             Query::limit(1)
         ]);
@@ -5830,14 +5850,14 @@ trait DocumentTests
         $futureDate = '2050-01-01T00:00:00.000Z';
         $pastDate = '1900-01-01T00:00:00.000Z';
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdAfter($pastDate),
             Query::limit(1)
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdAfter($futureDate),
             Query::limit(1)
         ]);
@@ -5858,14 +5878,14 @@ trait DocumentTests
         $futureDate = '2050-01-01T00:00:00.000Z';
         $pastDate = '1900-01-01T00:00:00.000Z';
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBefore($futureDate),
             Query::limit(1)
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBefore($pastDate),
             Query::limit(1)
         ]);
@@ -5886,14 +5906,14 @@ trait DocumentTests
         $futureDate = '2050-01-01T00:00:00.000Z';
         $pastDate = '1900-01-01T00:00:00.000Z';
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedAfter($pastDate),
             Query::limit(1)
         ]);
 
         $this->assertGreaterThan(0, count($documents));
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedAfter($futureDate),
             Query::limit(1)
         ]);
@@ -5917,7 +5937,7 @@ trait DocumentTests
         $nearFutureDate = '2025-01-01T00:00:00.000Z';
 
         // All documents should be between past and future
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBetween($pastDate, $futureDate),
             Query::limit(25)
         ]);
@@ -5925,7 +5945,7 @@ trait DocumentTests
         $this->assertGreaterThan(0, count($documents));
 
         // No documents should exist in this range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBetween($pastDate, $pastDate),
             Query::limit(25)
         ]);
@@ -5933,7 +5953,7 @@ trait DocumentTests
         $this->assertEquals(0, count($documents));
 
         // Documents created between recent past and near future
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBetween($recentPastDate, $nearFutureDate),
             Query::limit(25)
         ]);
@@ -5941,7 +5961,7 @@ trait DocumentTests
         $count = count($documents);
 
         // Same count should be returned with expanded range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::createdBetween($pastDate, $nearFutureDate),
             Query::limit(25)
         ]);
@@ -5965,7 +5985,7 @@ trait DocumentTests
         $nearFutureDate = '2025-01-01T00:00:00.000Z';
 
         // All documents should be between past and future
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBetween($pastDate, $futureDate),
             Query::limit(25)
         ]);
@@ -5973,7 +5993,7 @@ trait DocumentTests
         $this->assertGreaterThan(0, count($documents));
 
         // No documents should exist in this range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBetween($pastDate, $pastDate),
             Query::limit(25)
         ]);
@@ -5981,7 +6001,7 @@ trait DocumentTests
         $this->assertEquals(0, count($documents));
 
         // Documents updated between recent past and near future
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBetween($recentPastDate, $nearFutureDate),
             Query::limit(25)
         ]);
@@ -5989,7 +6009,7 @@ trait DocumentTests
         $count = count($documents);
 
         // Same count should be returned with expanded range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::updatedBetween($pastDate, $nearFutureDate),
             Query::limit(25)
         ]);
@@ -6007,7 +6027,7 @@ trait DocumentTests
         /**
          * Limit
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(4),
             Query::offset(0),
             Query::orderAsc('name')
@@ -6030,7 +6050,7 @@ trait DocumentTests
         /**
          * Limit + Offset
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::limit(4),
             Query::offset(2),
             Query::orderAsc('name')
@@ -6053,7 +6073,7 @@ trait DocumentTests
         /**
          * Test that OR queries are handled correctly
          */
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::equal('director', ['TBD', 'Joe Johnston']),
             Query::equal('year', [2025]),
         ]);
@@ -6197,55 +6217,55 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         // Test notBetween with price range - should return documents outside the range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('price', 25.94, 25.99),
         ]);
         $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
 
         // Test notBetween with range that includes no documents - should return all documents
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('price', 30, 35),
         ]);
         $this->assertEquals(6, count($documents));
 
         // Test notBetween with date range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
         ]);
         $this->assertEquals(0, count($documents)); // No movies outside this wide date range
 
         // Test notBetween with narrower date range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
         ]);
         $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
 
         // Test notBetween with updated date range
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
         ]);
         $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
 
         // Test notBetween with year range (integer values)
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('year', 2005, 2007),
         ]);
         $this->assertLessThanOrEqual(6, count($documents)); // Movies outside 2005-2007 range
 
         // Test notBetween with reversed range (start > end) - should still work
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('price', 25.99, 25.94), // Note: reversed order
         ]);
         $this->assertGreaterThanOrEqual(4, count($documents)); // Should handle reversed range gracefully
 
         // Test notBetween with same start and end values
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('year', 2006, 2006),
         ]);
         $this->assertGreaterThanOrEqual(5, count($documents)); // All movies except those from exactly 2006
 
         // Test notBetween combined with other filters
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('price', 25.94, 25.99),
             Query::orderDesc('year'),
             Query::limit(2)
@@ -6253,13 +6273,13 @@ trait DocumentTests
         $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
 
         // Test notBetween with extreme ranges
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('year', -1000, 1000), // Very wide range
         ]);
         $this->assertLessThanOrEqual(6, count($documents)); // Movies outside this range
 
         // Test notBetween with float precision
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::notBetween('price', 25.945, 25.955), // Very narrow range
         ]);
         $this->assertGreaterThanOrEqual(4, count($documents)); // Most movies should be outside this narrow range
@@ -6272,7 +6292,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year'])
         ]);
 
@@ -6290,7 +6310,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$id'])
         ]);
 
@@ -6308,7 +6328,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$sequence'])
         ]);
 
@@ -6326,7 +6346,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$collection'])
         ]);
 
@@ -6344,7 +6364,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$createdAt'])
         ]);
 
@@ -6362,7 +6382,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$updatedAt'])
         ]);
 
@@ -6380,7 +6400,7 @@ trait DocumentTests
             $this->assertArrayHasKey('$permissions', $document);
         }
 
-        $documents = $database->find('movies', [
+        $documents = $database->find($this->getMoviesCollection(), [
             Query::select(['name', 'year', '$permissions'])
         ]);
 
@@ -6422,7 +6442,7 @@ trait DocumentTests
          * Test, foreach generator
          */
         $documents = [];
-        foreach ($database->iterate('movies', queries: [Query::limit(2)]) as $document) {
+        foreach ($database->iterate($this->getMoviesCollection(), queries: [Query::limit(2)]) as $document) {
             $documents[] = $document;
         }
         $this->assertEquals(6, count($documents));
@@ -6431,7 +6451,7 @@ trait DocumentTests
          * Test, foreach goes through all the documents
          */
         $documents = [];
-        $database->foreach('movies', queries: [Query::limit(2)], callback: function ($document) use (&$documents) {
+        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(6, count($documents));
@@ -6442,7 +6462,7 @@ trait DocumentTests
 
         $first = $documents[0];
         $documents = [];
-        $database->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
+        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(5, count($documents));
@@ -6452,7 +6472,7 @@ trait DocumentTests
          */
 
         $documents = [];
-        $database->foreach('movies', queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
+        $database->foreach($this->getMoviesCollection(), queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(4, count($documents));
@@ -6461,7 +6481,7 @@ trait DocumentTests
          * Test, cursor before throws error
          */
         try {
-            $database->foreach('movies', queries: [Query::cursorBefore($documents[0]), Query::offset(2)], callback: function ($document) use (&$documents) {
+            $database->foreach($this->getMoviesCollection(), queries: [Query::cursorBefore($documents[0]), Query::offset(2)], callback: function ($document) use (&$documents) {
                 $documents[] = $document;
             });
 
@@ -6478,28 +6498,28 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $count = $database->count('movies');
+        $count = $database->count($this->getMoviesCollection());
         $this->assertEquals(6, $count);
-        $count = $database->count('movies', [Query::equal('year', [2019])]);
+        $count = $database->count($this->getMoviesCollection(), [Query::equal('year', [2019])]);
 
         $this->assertEquals(2, $count);
-        $count = $database->count('movies', [Query::equal('with-dash', ['Works'])]);
+        $count = $database->count($this->getMoviesCollection(), [Query::equal('with-dash', ['Works'])]);
         $this->assertEquals(2, $count);
-        $count = $database->count('movies', [Query::equal('with-dash', ['Works2', 'Works3'])]);
+        $count = $database->count($this->getMoviesCollection(), [Query::equal('with-dash', ['Works2', 'Works3'])]);
         $this->assertEquals(4, $count);
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
-        $count = $database->count('movies');
+        $count = $database->count($this->getMoviesCollection());
         $this->assertEquals(5, $count);
         $this->getDatabase()->getAuthorization()->addRole('user:x');
 
         $this->getDatabase()->getAuthorization()->disable();
-        $count = $database->count('movies');
+        $count = $database->count($this->getMoviesCollection());
         $this->assertEquals(6, $count);
         $this->getDatabase()->getAuthorization()->reset();
 
         $this->getDatabase()->getAuthorization()->disable();
-        $count = $database->count('movies', [], 3);
+        $count = $database->count($this->getMoviesCollection(), [], 3);
         $this->assertEquals(3, $count);
         $this->getDatabase()->getAuthorization()->reset();
 
@@ -6507,7 +6527,7 @@ trait DocumentTests
          * Test that OR queries are handled correctly
          */
         $this->getDatabase()->getAuthorization()->disable();
-        $count = $database->count('movies', [
+        $count = $database->count($this->getMoviesCollection(), [
             Query::equal('director', ['TBD', 'Joe Johnston']),
             Query::equal('year', [2025]),
         ]);
@@ -7268,7 +7288,7 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         try {
-            $database->findOne('documents', [
+            $database->findOne($this->getDocumentsCollection(), [
                 Query::equal('string', []),
             ]);
             $this->fail('Failed to throw exception');
@@ -7278,7 +7298,7 @@ trait DocumentTests
         }
 
         try {
-            $database->findOne('documents', [
+            $database->findOne($this->getDocumentsCollection(), [
                 Query::contains('string', []),
             ]);
             $this->fail('Failed to throw exception');

@@ -1562,7 +1562,11 @@ trait OneToManyTests
 
             return;
         }
-        $database->createCollection('one', [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection($one, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1570,7 +1574,7 @@ trait OneToManyTests
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]);
-        $database->createCollection('two', [
+        $database->createCollection($two, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1579,16 +1583,16 @@ trait OneToManyTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany));
+        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany));
 
-        $database->deleteRelationship('two', 'one');
+        $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany));
+        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testRecreateOneToManyTwoWayRelationshipFromParent(): void
@@ -1601,7 +1605,11 @@ trait OneToManyTests
 
             return;
         }
-        $database->createCollection('one', [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection($one, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1609,7 +1617,7 @@ trait OneToManyTests
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]);
-        $database->createCollection('two', [
+        $database->createCollection($two, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1618,16 +1626,16 @@ trait OneToManyTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany, twoWay: true));
 
-        $database->deleteRelationship('one', 'two');
+        $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany, twoWay: true));
+        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany, twoWay: true));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testRecreateOneToManyTwoWayRelationshipFromChild(): void
@@ -1640,7 +1648,11 @@ trait OneToManyTests
 
             return;
         }
-        $database->createCollection('one', [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection($one, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1648,7 +1660,7 @@ trait OneToManyTests
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]);
-        $database->createCollection('two', [
+        $database->createCollection($two, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1657,16 +1669,16 @@ trait OneToManyTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany, twoWay: true));
+        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany, twoWay: true));
 
-        $database->deleteRelationship('two', 'one');
+        $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany, twoWay: true));
+        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany, twoWay: true));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testRecreateOneToManyOneWayRelationshipFromParent(): void
@@ -1679,7 +1691,11 @@ trait OneToManyTests
 
             return;
         }
-        $database->createCollection('one', [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection($one, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1687,7 +1703,7 @@ trait OneToManyTests
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ]);
-        $database->createCollection('two', [
+        $database->createCollection($two, [
             new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: null, signed: true, array: false, format: '', filters: []),
         ], [], [
             Permission::read(Role::any()),
@@ -1696,16 +1712,16 @@ trait OneToManyTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany));
+        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany));
 
-        $database->deleteRelationship('one', 'two');
+        $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(new Relationship(collection: 'one', relatedCollection: 'two', type: RelationType::OneToMany));
+        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToMany));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testDeleteBulkDocumentsOneToManyRelationship(): void

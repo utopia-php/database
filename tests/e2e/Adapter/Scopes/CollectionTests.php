@@ -30,6 +30,16 @@ use Utopia\Query\Schema\IndexType;
 
 trait CollectionTests
 {
+    private static string $createdAtCollection = '';
+
+    protected function getCreatedAtCollection(): string
+    {
+        if (self::$createdAtCollection === '') {
+            self::$createdAtCollection = 'created_at_' . uniqid();
+        }
+        return self::$createdAtCollection;
+    }
+
     public function testCreateExistsDelete(): void
     {
         /** @var Database $database */
@@ -1153,9 +1163,9 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('created_at'));
-        $database->createAttribute('created_at', new Attribute(key: 'title', type: ColumnType::String, size: 100, required: false));
-        $document = $database->createDocument('created_at', new Document([
+        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection($this->getCreatedAtCollection()));
+        $database->createAttribute($this->getCreatedAtCollection(), new Attribute(key: 'title', type: ColumnType::String, size: 100, required: false));
+        $document = $database->createDocument($this->getCreatedAtCollection(), new Document([
             '$id' => ID::custom('uid123'),
 
             '$permissions' => [
@@ -1176,17 +1186,17 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->getDocument('created_at', 'uid123');
+        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
         $this->assertEquals(true, ! $document->isEmpty());
         sleep(1);
         $document->setAttribute('title', 'new title');
-        $database->updateDocument('created_at', 'uid123', $document);
-        $document = $database->getDocument('created_at', 'uid123');
+        $database->updateDocument($this->getCreatedAtCollection(), 'uid123', $document);
+        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
 
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
 
-        $database->createCollection('created_at');
+        $database->createCollection($this->getCreatedAtCollection());
     }
 
     public function testTransformations(): void

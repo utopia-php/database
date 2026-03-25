@@ -149,28 +149,36 @@ trait IndexTests
     public function testRenameIndex(): void
     {
         $database = $this->getDatabase();
+        $collection = $this->getNumbersCollection();
 
-        $numbers = $database->createCollection('numbers');
-        $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
+        $numbers = $database->createCollection($collection);
+        $database->createAttribute($collection, new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
 
-        $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
-        $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
 
-        $index = $database->renameIndex('numbers', 'index1', 'index3');
+        $index = $database->renameIndex($collection, 'index1', 'index3');
 
         $this->assertTrue($index);
 
-        $numbers = $database->getCollection('numbers');
+        $numbers = $database->getCollection($collection);
 
         $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
         $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
         $this->assertCount(2, $numbers->getAttribute('indexes'));
     }
 
-    /**
-     * Sets up the 'numbers' collection with renamed indexes as testRenameIndex would.
-     */
+    private static string $numbersCollection = '';
+
+    protected function getNumbersCollection(): string
+    {
+        if (self::$numbersCollection === '') {
+            self::$numbersCollection = 'numbers_' . uniqid();
+        }
+        return self::$numbersCollection;
+    }
+
     private static bool $renameIndexFixtureInit = false;
 
     protected function initRenameIndexFixture(): void
@@ -180,16 +188,14 @@ trait IndexTests
         }
 
         $database = $this->getDatabase();
+        $collection = $this->getNumbersCollection();
 
-        try {
-            $database->createCollection('numbers');
-            $database->createAttribute('numbers', new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
-            $database->createAttribute('numbers', new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
-            $database->createIndex('numbers', new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
-            $database->createIndex('numbers', new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
-            $database->renameIndex('numbers', 'index1', 'index3');
-        } catch (DuplicateException) {
-        }
+        $database->createCollection($collection);
+        $database->createAttribute($collection, new Attribute(key: 'verbose', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, new Attribute(key: 'symbol', type: ColumnType::Integer, size: 0, required: true));
+        $database->createIndex($collection, new Index(key: 'index1', type: IndexType::Key, attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, new Index(key: 'index2', type: IndexType::Key, attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
+        $database->renameIndex($collection, 'index1', 'index3');
 
         self::$renameIndexFixtureInit = true;
     }
@@ -208,8 +214,8 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createIndex('documents', new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
-        $database->createDocument('documents', new Document([
+        $database->createIndex($this->getDocumentsCollection(), new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
+        $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -231,7 +237,7 @@ trait IndexTests
         /**
          * Allow reserved keywords for search
          */
-        $documents = $database->find('documents', [
+        $documents = $database->find($this->getDocumentsCollection(), [
             Query::search('string', '*test+alias@email-provider.com'),
         ]);
 
@@ -254,22 +260,22 @@ trait IndexTests
 
         // Create fulltext index if it doesn't exist (was created by testListDocumentSearch in sequential mode)
         try {
-            $database->createIndex('documents', new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
+            $database->createIndex($this->getDocumentsCollection(), new Index(key: 'string', type: IndexType::Fulltext, attributes: ['string']));
         } catch (\Exception $e) {
             // Already exists
         }
 
-        $documents = $database->find('documents', [
+        $documents = $database->find($this->getDocumentsCollection(), [
             Query::search('string', ''),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = $database->find('documents', [
+        $documents = $database->find($this->getDocumentsCollection(), [
             Query::search('string', '*'),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = $database->find('documents', [
+        $documents = $database->find($this->getDocumentsCollection(), [
             Query::search('string', '<>'),
         ]);
         $this->assertEquals(0, count($documents));

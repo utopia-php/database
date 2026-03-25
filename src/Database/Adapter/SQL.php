@@ -22,6 +22,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\PermissionWrite;
 use Utopia\Database\Hook\TenantFilter;
@@ -33,6 +34,10 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
+use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Builder\BuildResult;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\CursorDirection;
@@ -2048,7 +2053,277 @@ abstract class SQL extends Adapter
      */
     public function getInternalIndexesKeys(): array
     {
-        return [];
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+    }
+
+    /**
+     * Get the minimum supported datetime value.
+     *
+     * @return \DateTime
+     */
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('1000-01-01 00:00:00');
+    }
+
+    /**
+     * Analyze a collection, updating its metadata on the database engine.
+     *
+     * @throws DatabaseException
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
+    }
+
+    /**
+     * Delete a database schema.
+     *
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function delete(string $name): bool
+    {
+        $name = $this->filter($name);
+
+        $result = $this->createSchemaBuilder()->dropDatabase($name);
+        $sql = $result->query;
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * Delete a collection and its permissions table.
+     *
+     * @throws DatabaseException
+     */
+    public function deleteCollection(string $id): bool
+    {
+        $id = $this->filter($id);
+
+        $schema = $this->createSchemaBuilder();
+        $mainResult = $schema->drop($this->getSQLTableRaw($id));
+        $permsResult = $schema->drop($this->getSQLTableRaw($id . '_perms'));
+
+        $sql = $mainResult->query . '; ' . $permsResult->query;
+
+        return $this->getPDO()->prepare($sql)->execute();
+    }
+
+    /**
+     * Create a relationship between collections by adding foreign key columns.
+     *
+     * @throws DatabaseException
+     */
+    public function createRelationship(Relationship $relationship): bool
+    {
+        $name = $this->filter($relationship->collection);
+        $relatedName = $this->filter($relationship->relatedCollection);
+        $id = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
+
+        $schema = $this->createSchemaBuilder();
+        $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+                $table->string($columnId, 255)->nullable()->default(null);
+            });
+
+            return $result->query;
+        };
+
+        $sql = match ($type) {
+            RelationType::OneToOne => $addRelColumn($name, $id) . ';' . ($twoWay ? $addRelColumn($relatedName, $twoWayKey) . ';' : ''),
+            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey) . ';',
+            RelationType::ManyToOne => $addRelColumn($name, $id) . ';',
+            RelationType::ManyToMany => null,
+        };
+
+        if ($sql === null) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * Update a relationship, optionally renaming its keys.
+     *
+     * @throws DatabaseException
+     */
+    public function updateRelationship(
+        Relationship $relationship,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool {
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
+        $side = $relationship->side;
+
+        if ($newKey !== null) {
+            $newKey = $this->filter($newKey);
+        }
+        if ($newTwoWayKey !== null) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $schema = $this->createSchemaBuilder();
+        $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
+                $table->renameColumn($from, $to);
+            });
+
+            return $result->query;
+        };
+
+        $sql = '';
+
+        switch ($type) {
+            case RelationType::OneToOne:
+                if ($key !== $newKey && \is_string($newKey)) {
+                    $sql = $renameCol($name, $key, $newKey) . ';';
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                }
+                break;
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    }
+                } else {
+                    if ($key !== $newKey && \is_string($newKey)) {
+                        $sql = $renameCol($name, $key, $newKey) . ';';
+                    }
+                }
+                break;
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Child) {
+                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
+                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    }
+                } else {
+                    if ($key !== $newKey && \is_string($newKey)) {
+                        $sql = $renameCol($name, $key, $newKey) . ';';
+                    }
+                }
+                break;
+            case RelationType::ManyToMany:
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                $junctionName = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+
+                if ($newKey !== null) {
+                    $sql = $renameCol($junctionName, $key, $newKey) . ';';
+                }
+                if ($twoWay && $newTwoWayKey !== null) {
+                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey) . ';';
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        if ($sql === '') {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * Delete a relationship between collections.
+     *
+     * @throws DatabaseException
+     */
+    public function deleteRelationship(Relationship $relationship): bool
+    {
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $type = $relationship->type;
+        $twoWay = $relationship->twoWay;
+        $side = $relationship->side;
+
+        $schema = $this->createSchemaBuilder();
+        $dropCol = function (string $tableName, string $columnId) use ($schema): string {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+                $table->dropColumn($columnId);
+            });
+
+            return $result->query;
+        };
+
+        $sql = '';
+
+        switch ($type) {
+            case RelationType::OneToOne:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($name, $key) . ';';
+                    if ($twoWay) {
+                        $sql .= $dropCol($relatedName, $twoWayKey) . ';';
+                    }
+                } elseif ($side === RelationSide::Child) {
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                    if ($twoWay) {
+                        $sql .= $dropCol($name, $key) . ';';
+                    }
+                }
+                break;
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                } else {
+                    $sql = $dropCol($name, $key) . ';';
+                }
+                break;
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Parent) {
+                    $sql = $dropCol($name, $key) . ';';
+                } else {
+                    $sql = $dropCol($relatedName, $twoWayKey) . ';';
+                }
+                break;
+            case RelationType::ManyToMany:
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                $junctionName = $side === RelationSide::Parent
+                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+
+                $junctionResult = $schema->drop($this->getSQLTableRaw($junctionName));
+                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName . '_perms'));
+
+                $sql = $junctionResult->query . '; ' . $permsResult->query;
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -2073,13 +2348,89 @@ abstract class SQL extends Adapter
         return $this->getSQLType($columnType, $size, $signed, $array, $required);
     }
 
-    abstract protected function getSQLType(
-        ColumnType $type,
-        int $size,
-        bool $signed = true,
-        bool $array = false,
-        bool $required = false
-    ): string;
+    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            return $this->getSpatialSQLType($type->value, $required);
+        }
+        if ($array === true) {
+            return 'JSON';
+        }
+
+        if ($type === ColumnType::String) {
+            if ($size > 16777215) {
+                return 'LONGTEXT';
+            }
+            if ($size > 65535) {
+                return 'MEDIUMTEXT';
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                return 'TEXT';
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Varchar) {
+            if ($size <= 0) {
+                throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Integer) {
+            $suffix = $signed ? '' : ' UNSIGNED';
+
+            return ($size >= 8 ? 'BIGINT' : 'INT') . $suffix;
+        }
+
+        if ($type === ColumnType::Double) {
+            return 'DOUBLE' . ($signed ? '' : ' UNSIGNED');
+        }
+
+        return match ($type) {
+            ColumnType::Id => 'BIGINT UNSIGNED',
+            ColumnType::Text => 'TEXT',
+            ColumnType::MediumText => 'MEDIUMTEXT',
+            ColumnType::LongText => 'LONGTEXT',
+            ColumnType::Boolean => 'TINYINT(1)',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'DATETIME(3)',
+            default => throw new DatabaseException('Unknown type: ' . $type->value . '. Must be one of ' . ColumnType::String->value . ', ' . ColumnType::Varchar->value . ', ' . ColumnType::Text->value . ', ' . ColumnType::MediumText->value . ', ' . ColumnType::LongText->value . ', ' . ColumnType::Integer->value . ', ' . ColumnType::Double->value . ', ' . ColumnType::Boolean->value . ', ' . ColumnType::Datetime->value . ', ' . ColumnType::Relationship->value . ', ' . ColumnType::Point->value . ', ' . ColumnType::Linestring->value . ', ' . ColumnType::Polygon->value),
+        };
+    }
+
+    /**
+     * Get the SQL type definition for spatial column types.
+     *
+     * @param string $type The spatial type (point, linestring, polygon)
+     * @param bool $required Whether the column is NOT NULL
+     * @return string
+     */
+    protected function getSpatialSQLType(string $type, bool $required): string
+    {
+        $srid = Database::DEFAULT_SRID;
+        $nullability = '';
+
+        if (! $this->supports(Capability::SpatialIndexNull)) {
+            if ($required) {
+                $nullability = ' NOT NULL';
+            } else {
+                $nullability = ' NULL';
+            }
+        }
+
+        return match ($type) {
+            ColumnType::Point->value => "POINT($srid)$nullability",
+            ColumnType::Linestring->value => "LINESTRING($srid)$nullability",
+            ColumnType::Polygon->value => "POLYGON($srid)$nullability",
+            default => '',
+        };
+    }
 
     /**
      * Get SQL Index Type
@@ -2438,7 +2789,10 @@ abstract class SQL extends Adapter
     /**
      * Create a new schema builder instance for this adapter's SQL dialect.
      */
-    abstract protected function createSchemaBuilder(): Schema;
+    protected function createSchemaBuilder(): Schema
+    {
+        return new MySQLSchema();
+    }
 
     /**
      * Create and configure a new query builder for a given table.
@@ -3377,13 +3731,24 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Quote an identifier (table name, column name) with the appropriate quoting character.
+     */
+    protected function quote(string $string): string
+    {
+        return "`{$string}`";
+    }
+
+    /**
      * Whether the adapter requires an alias on INSERT for conflict resolution.
      *
      * PostgreSQL needs INSERT INTO table AS target so that the ON CONFLICT
      * clause can reference the existing row via target.column. MariaDB does
      * not need this because it uses VALUES(column) syntax.
      */
-    abstract protected function insertRequiresAlias(): bool;
+    protected function insertRequiresAlias(): bool
+    {
+        return false;
+    }
 
     /**
      * Get the conflict-resolution expression for a regular column in shared-tables mode.
@@ -3425,12 +3790,23 @@ abstract class SQL extends Adapter
      *
      * @throws Exception
      */
-    abstract protected function getPDOType(mixed $value): int;
+    protected function getPDOType(mixed $value): int
+    {
+        return match (gettype($value)) {
+            'string', 'double' => \PDO::PARAM_STR,
+            'integer', 'boolean' => \PDO::PARAM_INT,
+            'NULL' => \PDO::PARAM_NULL,
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
+        };
+    }
 
     /**
      * Get the SQL function for random ordering
      */
-    abstract protected function getRandomOrder(): string;
+    protected function getRandomOrder(): string
+    {
+        return 'RANDOM()';
+    }
 
     /**
      * Get SQL Operator
@@ -3467,11 +3843,142 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Handle spatial queries. Adapters that support spatial types should override this.
+     *
+     * @param  array<string, mixed>  $binds
+     *
+     * @throws DatabaseException
+     */
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
+    {
+        throw new DatabaseException('Spatial queries not supported');
+    }
+
+    /**
+     * Handle distance-based spatial queries. Adapters that support spatial types should override this.
+     *
+     * @param  array<string, mixed>  $binds
+     *
+     * @throws DatabaseException
+     */
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
+    {
+        throw new DatabaseException('Spatial queries not supported');
+    }
+
+    /**
      * @param  array<string, mixed>  $binds
      *
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    protected function getSQLCondition(Query $query, array &$binds): string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $query->getAttribute();
+        $attribute = $this->filter($attribute);
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
+
+        if ($query->isSpatialAttribute()) {
+            return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
+        }
+
+        switch ($query->getMethod()) {
+            case Method::Or:
+            case Method::And:
+                $conditions = [];
+                /** @var iterable<Query> $nestedQueries */
+                $nestedQueries = $query->getValue();
+                foreach ($nestedQueries as $q) {
+                    $conditions[] = $this->getSQLCondition($q, $binds);
+                }
+
+                $method = strtoupper($query->getMethod()->value);
+
+                return empty($conditions) ? '' : ' ' . $method . ' (' . implode(' AND ', $conditions) . ')';
+
+            case Method::Search:
+                $searchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+
+                return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+
+            case Method::NotSearch:
+                $notSearchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+
+                return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
+
+            case Method::Between:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Method::NotBetween:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Method::IsNull:
+            case Method::IsNotNull:
+
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+            case Method::ContainsAll:
+                if ($query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+
+                    return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
+            case Method::Contains:
+            case Method::ContainsAny:
+            case Method::NotContains:
+                if ($this->supports(Capability::JSONOverlaps) && $query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                    $isNot = $query->getMethod() === Method::NotContains;
+
+                    return $isNot
+                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
+            default:
+                $conditions = [];
+                $isNotQuery = in_array($query->getMethod(), [
+                    Method::NotStartsWith,
+                    Method::NotEndsWith,
+                    Method::NotContains,
+                ]);
+
+                foreach ($query->getValues() as $key => $value) {
+                    $strValue = \is_string($value) ? $value : '';
+                    $value = match ($query->getMethod()) {
+                        Method::StartsWith => $this->escapeWildcards($strValue) . '%',
+                        Method::NotStartsWith => $this->escapeWildcards($strValue) . '%',
+                        Method::EndsWith => '%' . $this->escapeWildcards($strValue),
+                        Method::NotEndsWith => '%' . $this->escapeWildcards($strValue),
+                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($strValue) . '%',
+                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($strValue) . '%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+                    if ($isNotQuery) {
+                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    } else {
+                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    }
+                }
+
+                $separator = $isNotQuery ? ' AND ' : ' OR ';
+
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+        }
+    }
 
     /**
      * Build a combined SQL WHERE clause from multiple query objects.

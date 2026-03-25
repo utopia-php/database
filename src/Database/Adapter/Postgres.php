@@ -242,22 +242,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     }
 
     /**
-     * Delete Database
-     *
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function delete(string $name): bool
-    {
-        $name = $this->filter($name);
-
-        $schema = $this->createSchemaBuilder();
-        $sql = $schema->dropDatabase($name)->query;
-
-        return $this->getPDO()->prepare($sql)->execute();
-    }
-
-    /**
      * Create Collection
      *
      * @param  array<Attribute>  $attributes
@@ -416,30 +400,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         return true;
-    }
-
-    /**
-     * Delete Collection
-     */
-    public function deleteCollection(string $id): bool
-    {
-        $id = $this->filter($id);
-
-        $schema = $this->createSchemaBuilder();
-        $mainResult = $schema->drop($this->getSQLTableRaw($id));
-        $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
-
-        $sql = $mainResult->query.'; '.$permsResult->query;
-
-        return $this->getPDO()->prepare($sql)->execute();
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 
     /**
@@ -658,214 +618,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         });
 
         $sql = $result->query;
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * @throws Exception
-     */
-    public function createRelationship(Relationship $relationship): bool
-    {
-        $name = $this->filter($relationship->collection);
-        $relatedName = $this->filter($relationship->relatedCollection);
-        $id = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-
-        $schema = $this->createSchemaBuilder();
-        $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
-                $table->string($columnId, 255)->nullable()->default(null);
-            });
-
-            return $result->query;
-        };
-
-        $sql = match ($type) {
-            RelationType::OneToOne => $addRelColumn($name, $id).';'.($twoWay ? $addRelColumn($relatedName, $twoWayKey).';' : ''),
-            RelationType::OneToMany => $addRelColumn($relatedName, $twoWayKey).';',
-            RelationType::ManyToOne => $addRelColumn($name, $id).';',
-            RelationType::ManyToMany => null,
-        };
-
-        if ($sql === null) {
-            return true;
-        }
-
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * @throws DatabaseException
-     */
-    public function updateRelationship(
-        Relationship $relationship,
-        ?string $newKey = null,
-        ?string $newTwoWayKey = null,
-    ): bool {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
-
-        if ($newKey !== null) {
-            $newKey = $this->filter($newKey);
-        }
-        if ($newTwoWayKey !== null) {
-            $newTwoWayKey = $this->filter($newTwoWayKey);
-        }
-
-        $schema = $this->createSchemaBuilder();
-        $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
-                $table->renameColumn($from, $to);
-            });
-
-            return $result->query;
-        };
-
-        $sql = '';
-
-        switch ($type) {
-            case RelationType::OneToOne:
-                if ($key !== $newKey && \is_string($newKey)) {
-                    $sql = $renameCol($name, $key, $newKey).';';
-                }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                    $sql .= $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
-                }
-                break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
-                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
-                    }
-                } else {
-                    if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameCol($name, $key, $newKey).';';
-                    }
-                }
-                break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
-                    if ($twoWayKey !== $newTwoWayKey && \is_string($newTwoWayKey)) {
-                        $sql = $renameCol($relatedName, $twoWayKey, $newTwoWayKey).';';
-                    }
-                } else {
-                    if ($key !== $newKey && \is_string($newKey)) {
-                        $sql = $renameCol($name, $key, $newKey).';';
-                    }
-                }
-                break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionName = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
-
-                if ($newKey !== null) {
-                    $sql = $renameCol($junctionName, $key, $newKey).';';
-                }
-                if ($twoWay && $newTwoWayKey !== null) {
-                    $sql .= $renameCol($junctionName, $twoWayKey, $newTwoWayKey).';';
-                }
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        if ($sql === '') {
-            return true;
-        }
-
-
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
-    }
-
-    /**
-     * @throws DatabaseException
-     */
-    public function deleteRelationship(Relationship $relationship): bool
-    {
-        $collection = $relationship->collection;
-        $relatedCollection = $relationship->relatedCollection;
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $key = $this->filter($relationship->key);
-        $twoWayKey = $this->filter($relationship->twoWayKey);
-        $type = $relationship->type;
-        $twoWay = $relationship->twoWay;
-        $side = $relationship->side;
-
-        $schema = $this->createSchemaBuilder();
-        $dropCol = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
-                $table->dropColumn($columnId);
-            });
-
-            return $result->query;
-        };
-
-        $sql = '';
-
-        switch ($type) {
-            case RelationType::OneToOne:
-                if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($name, $key).';';
-                    if ($twoWay) {
-                        $sql .= $dropCol($relatedName, $twoWayKey).';';
-                    }
-                } elseif ($side === RelationSide::Child) {
-                    $sql = $dropCol($relatedName, $twoWayKey).';';
-                    if ($twoWay) {
-                        $sql .= $dropCol($name, $key).';';
-                    }
-                }
-                break;
-            case RelationType::OneToMany:
-                if ($side === RelationSide::Parent) {
-                    $sql = $dropCol($relatedName, $twoWayKey).';';
-                } else {
-                    $sql = $dropCol($name, $key).';';
-                }
-                break;
-            case RelationType::ManyToOne:
-                if ($side === RelationSide::Child) {
-                    $sql = $dropCol($relatedName, $twoWayKey).';';
-                } else {
-                    $sql = $dropCol($name, $key).';';
-                }
-                break;
-            case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
-                $collection = $this->getDocument($metadataCollection, $collection);
-                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
-
-                $junctionName = $side === RelationSide::Parent
-                    ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
-                    : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
-
-                $junctionResult = $schema->drop($this->getSQLTableRaw($junctionName));
-                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName.'_perms'));
-
-                $sql = $junctionResult->query.'; '.$permsResult->query;
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
 
         return $this->execute($this->getPDO()
             ->prepare($sql));
@@ -2054,14 +1806,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     }
 
     /**
-     * Get the SQL function for random ordering
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
-    }
-
-    /**
      * Size of POINT spatial type
      */
     protected function getMaxPointSize(): int
@@ -2454,16 +2198,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         return parent::getOperatorBuilderExpression($column, $operator);
-    }
-
-    /**
-     * Check whether the adapter supports storing non-UTF characters. PostgreSQL does not.
-     *
-     * @return bool
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     /**

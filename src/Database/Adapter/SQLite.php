@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use DateTime;
 use Exception;
 use PDO;
 use PDOException;
@@ -31,10 +30,8 @@ use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\SQLite as SQLiteBuilder;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
-use Utopia\Query\Schema as BaseSchema;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
-use Utopia\Query\Schema\MySQL as MySQLSchema;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -87,16 +84,6 @@ class SQLite extends SQL
     {
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();
-    }
-
-    /**
-     * Check whether the adapter supports storing non-UTF characters. SQLite does not.
-     *
-     * @return bool
-     */
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
     }
 
     /**
@@ -310,14 +297,6 @@ class SQLite extends SQL
             ->execute();
 
         return true;
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 
     /**
@@ -867,11 +846,6 @@ class SQLite extends SQL
         return new SQLiteBuilder();
     }
 
-    protected function createSchemaBuilder(): BaseSchema
-    {
-        return new MySQLSchema();
-    }
-
     protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
@@ -928,44 +902,9 @@ class SQLite extends SQL
         };
     }
 
-    protected function getPDOType(mixed $value): int
-    {
-        return match (gettype($value)) {
-            'string','double' => \PDO::PARAM_STR,
-            'integer', 'boolean' => \PDO::PARAM_INT,
-            'NULL' => \PDO::PARAM_NULL,
-            default => throw new DatabaseException('Unknown PDO Type for '.\gettype($value)),
-        };
-    }
-
-    protected function quote(string $string): string
-    {
-        return "`{$string}`";
-    }
-
-    protected function insertRequiresAlias(): bool
-    {
-        return false;
-    }
-
     protected function getMaxPointSize(): int
     {
         return 0;
-    }
-
-    public function getMinDateTime(): DateTime
-    {
-        return new DateTime('1000-01-01 00:00:00');
-    }
-
-    public function getMaxDateTime(): DateTime
-    {
-        return new DateTime('9999-12-31 23:59:59');
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
     }
 
     /**
@@ -1141,14 +1080,6 @@ class SQLite extends SQL
     protected function getSQLTableRaw(string $name): string
     {
         return $this->getNamespace().'_'.$this->filter($name);
-    }
-
-    /**
-     * Get the SQL function for random ordering
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
     }
 
     /**

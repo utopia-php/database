@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use PHPUnit\Framework\Attributes\Depends;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -306,7 +307,7 @@ trait CollectionTests
 
     public function testSchemaAttributes(): void
     {
-        if (! $this->getDatabase()->getAdapter()->supports(Capability::SchemaAttributes)) {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\SchemaAttributes)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -415,7 +416,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::ConnectionId)) {
+        if (! ($database->getAdapter() instanceof Feature\ConnectionId)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -521,7 +522,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -558,7 +559,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;

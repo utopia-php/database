@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -22,15 +23,18 @@ use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
+/** @internal */
+abstract class SpatialAdapter extends Adapter implements Feature\Spatial {}
+
 class SpatialValidationTest extends TestCase
 {
-    private Adapter&Stub $adapter;
+    private SpatialAdapter&Stub $adapter;
 
     private Database $database;
 
     protected function setUp(): void
     {
-        $this->adapter = self::createStub(Adapter::class);
+        $this->adapter = self::createStub(SpatialAdapter::class);
         $this->adapter->method('getSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
@@ -57,7 +61,6 @@ class SpatialValidationTest extends TestCase
                 Capability::IndexArray,
                 Capability::UniqueIndex,
                 Capability::DefinedAttributes,
-                Capability::Spatial,
             ]);
         });
         $this->adapter->method('castingBefore')->willReturnArgument(1);

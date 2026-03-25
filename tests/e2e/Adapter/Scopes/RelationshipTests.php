@@ -7,6 +7,7 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -33,7 +34,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -380,7 +381,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -446,7 +447,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -559,7 +560,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -992,7 +993,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1052,7 +1053,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1340,7 +1341,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1401,7 +1402,7 @@ trait RelationshipTests
 
     public function testUpdateDocumentsRelationships(): void
     {
-        if (! $this->getDatabase()->getAdapter()->supports(Capability::BatchOperations) || ! $this->getDatabase()->getAdapter()->supports(Capability::Relationships)) {
+        if (! $this->getDatabase()->getAdapter()->supports(Capability::BatchOperations) || ! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1497,7 +1498,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1687,7 +1688,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1896,7 +1897,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2018,7 +2019,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2234,7 +2235,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2522,7 +2523,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2683,13 +2684,13 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
         }
 
-        if (! $database->getAdapter()->supports(Capability::Spatial)) {
+        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2932,7 +2933,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3035,7 +3036,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3134,7 +3135,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3229,7 +3230,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3458,7 +3459,7 @@ trait RelationshipTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter()->supports(Capability::Relationships)) {
+        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
 
             return;

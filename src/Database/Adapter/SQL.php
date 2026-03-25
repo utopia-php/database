@@ -50,7 +50,7 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
  */
-abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Relationships, Feature\SchemaAttributes, Feature\Spatial, Feature\Upserts
+abstract class SQL extends Adapter
 {
     protected DatabasePDO $pdo;
 
@@ -112,11 +112,6 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
             Capability::Hostname,
             Capability::AttributeResizing,
             Capability::DefinedAttributes,
-            Capability::SchemaAttributes,
-            Capability::Spatial,
-            Capability::Relationships,
-            Capability::Upserts,
-            Capability::ConnectionId,
             Capability::Joins,
             Capability::Aggregations,
         ]);
@@ -928,6 +923,70 @@ abstract class SQL extends Adapter implements Feature\ConnectionId, Feature\Rela
         }
 
         return $documents;
+    }
+
+    public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool {
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+
+        $builder = $this->newBuilder($name);
+        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
+        $builder->set(['_updatedAt' => $updatedAt]);
+
+        $filters = [BaseQuery::equal('_uid', [$id])];
+        if ($max !== null) {
+            $filters[] = BaseQuery::lessThanEqual($attribute, $max);
+        }
+        if ($min !== null) {
+            $filters[] = BaseQuery::greaterThanEqual($attribute, $min);
+        }
+        $builder->filter($filters);
+
+        $result = $builder->update();
+        $stmt = $this->executeResult($result, Event::DocumentUpdate);
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return true;
+    }
+
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        try {
+            $this->syncWriteHooks();
+
+            $name = $this->filter($collection);
+
+            $builder = $this->newBuilder($name);
+            $builder->filter([BaseQuery::equal('_uid', [$id])]);
+            $result = $builder->delete();
+            $stmt = $this->executeResult($result, Event::DocumentDelete);
+
+            if (! $stmt->execute()) {
+                throw new DatabaseException('Failed to delete document');
+            }
+
+            $deleted = $stmt->rowCount();
+
+            $ctx = $this->buildWriteContext($name);
+            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
+        } catch (\Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $deleted > 0;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
 use Exception;
 use PDO;
 use PDOException;
@@ -11,7 +12,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
-use Utopia\Database\DateTime;
+use Utopia\Database\DateTime as DatabaseDateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -28,8 +29,12 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\Query;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\SQLite as SQLiteBuilder;
+use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
+use Utopia\Query\Schema as BaseSchema;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\MySQL as MySQLSchema;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -45,7 +50,7 @@ use Utopia\Query\Schema\IndexType;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MariaDB
+class SQLite extends SQL
 {
     /**
      * Get the list of capabilities supported by the SQLite adapter.
@@ -59,27 +64,23 @@ class SQLite extends MariaDB
             Capability::Fulltext,
             Capability::MultipleFulltextIndexes,
             Capability::Regex,
-            Capability::PCRE,
             Capability::UpdateLock,
-            Capability::AlterLock,
             Capability::BatchCreateAttributes,
             Capability::QueryContains,
             Capability::Hostname,
             Capability::AttributeResizing,
-            Capability::SpatialIndexOrder,
-            Capability::OptionalSpatial,
-            Capability::SchemaAttributes,
-            Capability::Spatial,
-            Capability::Relationships,
-            Capability::Upserts,
-            Capability::Timeouts,
-            Capability::ConnectionId,
         ];
 
-        return array_values(array_filter(
-            parent::capabilities(),
-            fn (Capability $c) => ! in_array($c, $remove, true)
-        ));
+        return array_merge(
+            array_values(array_filter(
+                parent::capabilities(),
+                fn (Capability $c) => ! in_array($c, $remove, true)
+            )),
+            [
+                Capability::IntegerBooleans,
+                Capability::NumericCasting,
+            ]
+        );
     }
 
     protected function execute(mixed $stmt): bool
@@ -662,7 +663,7 @@ class SQLite extends MariaDB
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif ($this->supports(Capability::Spatial) && \in_array($attribute, $spatialAttributes, true)) {
+                } elseif ($this instanceof Feature\Spatial && \in_array($attribute, $spatialAttributes, true)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -864,6 +865,205 @@ class SQLite extends MariaDB
     protected function createBuilder(): SQLBuilder
     {
         return new SQLiteBuilder();
+    }
+
+    protected function createSchemaBuilder(): BaseSchema
+    {
+        return new MySQLSchema();
+    }
+
+    protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            return '';
+        }
+        if ($array === true) {
+            return 'JSON';
+        }
+
+        if ($type === ColumnType::String) {
+            if ($size > 16777215) {
+                return 'LONGTEXT';
+            }
+            if ($size > 65535) {
+                return 'MEDIUMTEXT';
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                return 'TEXT';
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Varchar) {
+            if ($size <= 0) {
+                throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+            if ($size > $this->getMaxVarcharLength()) {
+                throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+            }
+
+            return "VARCHAR({$size})";
+        }
+
+        if ($type === ColumnType::Integer) {
+            $suffix = $signed ? '' : ' UNSIGNED';
+
+            return ($size >= 8 ? 'BIGINT' : 'INT').$suffix;
+        }
+
+        if ($type === ColumnType::Double) {
+            return 'DOUBLE'.($signed ? '' : ' UNSIGNED');
+        }
+
+        return match ($type) {
+            ColumnType::Id => 'BIGINT UNSIGNED',
+            ColumnType::Text => 'TEXT',
+            ColumnType::MediumText => 'MEDIUMTEXT',
+            ColumnType::LongText => 'LONGTEXT',
+            ColumnType::Boolean => 'TINYINT(1)',
+            ColumnType::Relationship => 'VARCHAR(255)',
+            ColumnType::Datetime => 'DATETIME(3)',
+            default => throw new DatabaseException('Unknown type: '.$type->value.'. Must be one of '.ColumnType::String->value.', '.ColumnType::Varchar->value.', '.ColumnType::Text->value.', '.ColumnType::MediumText->value.', '.ColumnType::LongText->value.', '.ColumnType::Integer->value.', '.ColumnType::Double->value.', '.ColumnType::Boolean->value.', '.ColumnType::Datetime->value.', '.ColumnType::Relationship->value),
+        };
+    }
+
+    protected function getPDOType(mixed $value): int
+    {
+        return match (gettype($value)) {
+            'string','double' => \PDO::PARAM_STR,
+            'integer', 'boolean' => \PDO::PARAM_INT,
+            'NULL' => \PDO::PARAM_NULL,
+            default => throw new DatabaseException('Unknown PDO Type for '.\gettype($value)),
+        };
+    }
+
+    protected function quote(string $string): string
+    {
+        return "`{$string}`";
+    }
+
+    protected function insertRequiresAlias(): bool
+    {
+        return false;
+    }
+
+    protected function getMaxPointSize(): int
+    {
+        return 0;
+    }
+
+    public function getMinDateTime(): DateTime
+    {
+        return new DateTime('1000-01-01 00:00:00');
+    }
+
+    public function getMaxDateTime(): DateTime
+    {
+        return new DateTime('9999-12-31 23:59:59');
+    }
+
+    public function getInternalIndexesKeys(): array
+    {
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $binds
+     *
+     * @throws Exception
+     */
+    protected function getSQLCondition(Query $query, array &$binds): string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $query->getAttribute();
+        $attribute = $this->filter($attribute);
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
+
+        switch ($query->getMethod()) {
+            case Method::Or:
+            case Method::And:
+                $conditions = [];
+                /** @var iterable<Query> $nestedQueries */
+                $nestedQueries = $query->getValue();
+                foreach ($nestedQueries as $q) {
+                    $conditions[] = $this->getSQLCondition($q, $binds);
+                }
+
+                $method = strtoupper($query->getMethod()->value);
+
+                return empty($conditions) ? '' : ' '.$method.' ('.implode(' AND ', $conditions).')';
+
+            case Method::Search:
+                $searchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+
+                return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+
+            case Method::NotSearch:
+                $notSearchVal = $query->getValue();
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+
+                return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
+
+            case Method::Between:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Method::NotBetween:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Method::IsNull:
+            case Method::IsNotNull:
+
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+            case Method::ContainsAll:
+                if ($query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+
+                    return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
+            default:
+                $conditions = [];
+                $isNotQuery = in_array($query->getMethod(), [
+                    Method::NotStartsWith,
+                    Method::NotEndsWith,
+                    Method::NotContains,
+                ]);
+
+                foreach ($query->getValues() as $key => $value) {
+                    $strValue = \is_string($value) ? $value : '';
+                    $value = match ($query->getMethod()) {
+                        Method::StartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::NotStartsWith => $this->escapeWildcards($strValue).'%',
+                        Method::EndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::NotEndsWith => '%'.$this->escapeWildcards($strValue),
+                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
+                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%'.$this->escapeWildcards($strValue).'%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+                    if ($isNotQuery) {
+                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    } else {
+                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    }
+                }
+
+                $separator = $isNotQuery ? ' AND ' : ' OR ';
+
+                return empty($conditions) ? '' : '('.implode($separator, $conditions).')';
+        }
     }
 
     /**
@@ -1473,8 +1673,7 @@ class SQLite extends MariaDB
                 return "{$quotedColumn} = datetime('now')";
 
             default:
-                // Fall back to parent implementation for other operators
-                return parent::getOperatorSQL($column, $operator, $bindIndex);
+                return null;
         }
     }
 
@@ -1558,8 +1757,8 @@ class SQLite extends MariaDB
             } else {
                 $currentRegularAttributes = $document->getAttributes();
                 $currentRegularAttributes['_uid'] = $document->getId();
-                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
-                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
+                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
+                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
             }
 
             $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());

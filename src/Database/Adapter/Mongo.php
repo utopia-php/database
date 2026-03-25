@@ -122,11 +122,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::BatchCreateAttributes,
             Capability::Hostname,
             Capability::PCRE,
-            Capability::Relationships,
-            Capability::Upserts,
-            Capability::Timeouts,
-            Capability::InternalCasting,
-            Capability::UTCCasting,
         ]);
     }
 
@@ -139,7 +134,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        if (! $this->supports(Capability::Timeouts)) {
+        if (! ($this instanceof Feature\Timeouts)) {
             return;
         }
 
@@ -2487,7 +2482,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        if (! $this->supports(Capability::InternalCasting)) {
+        if (! ($this instanceof Feature\InternalCasting)) {
             return $document;
         }
 
@@ -2595,7 +2590,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        if (! $this->supports(Capability::InternalCasting)) {
+        if (! ($this instanceof Feature\InternalCasting)) {
             return $document;
         }
 

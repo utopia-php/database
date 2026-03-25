@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -23,6 +24,9 @@ use Utopia\Database\Operator;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
+
+/** @internal */
+abstract class RelationshipsAdapter extends Adapter implements Feature\Relationships {}
 
 class RelationshipValidationTest extends TestCase
 {
@@ -79,7 +83,7 @@ class RelationshipValidationTest extends TestCase
      */
     private function buildDatabase(array $collections, array $documents = [], bool $withRelationshipHook = false): Database
     {
-        $adapter = self::createStub(Adapter::class);
+        $adapter = self::createStub(RelationshipsAdapter::class);
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);
@@ -106,7 +110,6 @@ class RelationshipValidationTest extends TestCase
                 Capability::IndexArray,
                 Capability::UniqueIndex,
                 Capability::DefinedAttributes,
-                Capability::Relationships,
                 Capability::Operators,
             ]);
         });

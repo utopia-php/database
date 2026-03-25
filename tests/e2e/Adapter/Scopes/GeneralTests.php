@@ -2,6 +2,7 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -32,7 +33,7 @@ trait GeneralTests
      */
     public function testQueryTimeout(): void
     {
-        if (! $this->getDatabase()->getAdapter()->supports(Capability::Timeouts)) {
+        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Timeouts)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -221,7 +222,7 @@ trait GeneralTests
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
-        if ($database->getAdapter()->supports(Capability::Upserts)) {
+        if ($database->getAdapter() instanceof Feature\Upserts) {
             // Test upsert with tenant per doc
             $doc3Id = ID::unique();
             $database

@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Attribute;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -148,7 +149,7 @@ trait Collections
                 $this->adapter->supports(Capability::IdenticalIndexes),
                 $this->adapter->supports(Capability::ObjectIndexes),
                 $this->adapter->supports(Capability::TrigramIndex),
-                $this->adapter->supports(Capability::Spatial),
+                $this->adapter instanceof Feature\Spatial,
                 $this->adapter->supports(Capability::Index),
                 $this->adapter->supports(Capability::UniqueIndex),
                 $this->adapter->supports(Capability::Fulltext),

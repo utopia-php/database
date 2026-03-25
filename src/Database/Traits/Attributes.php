@@ -5,6 +5,7 @@ namespace Utopia\Database\Traits;
 use Exception;
 use Throwable;
 use Utopia\Database\Attribute;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -71,7 +72,7 @@ trait Attributes
 
         $existsInSchema = false;
 
-        $schemaAttributes = $this->adapter->supports(Capability::SchemaAttributes)
+        $schemaAttributes = $this->adapter instanceof Feature\SchemaAttributes
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -209,7 +210,7 @@ trait Attributes
             throw new NotFoundException('Collection not found');
         }
 
-        $schemaAttributes = $this->adapter->supports(Capability::SchemaAttributes)
+        $schemaAttributes = $this->adapter instanceof Feature\SchemaAttributes
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -386,7 +387,7 @@ trait Attributes
         $existingAttributes = $collection->getAttribute('attributes', []);
         $typedExistingAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $existingAttributes);
 
-        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter->supports(Capability::SchemaAttributes)
+        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter instanceof Feature\SchemaAttributes
             ? $this->getSchemaAttributes($collection->getId())
             : []);
         $typedSchemaAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $resolvedSchemaAttributes);
@@ -399,9 +400,9 @@ trait Attributes
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
-            supportForSchemaAttributes: $this->adapter->supports(Capability::SchemaAttributes),
+            supportForSchemaAttributes: $this->adapter instanceof Feature\SchemaAttributes,
             supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapter->supports(Capability::Spatial),
+            supportForSpatialAttributes: $this->adapter instanceof Feature\Spatial,
             supportForObject: $this->adapter->supports(Capability::Objects),
             attributeCountCallback: fn (Document $attrDoc) => $this->adapter->getCountOfAttributes($collectionClone),
             attributeWidthCallback: fn (Document $attrDoc) => $this->adapter->getAttributeWidth($collectionClone),
@@ -505,7 +506,7 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
                 }
-                if ($this->adapter->supports(Capability::Spatial)) {
+                if ($this->adapter instanceof Feature\Spatial) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
                 throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
@@ -809,7 +810,7 @@ trait Attributes
             case ColumnType::Point->value:
             case ColumnType::Linestring->value:
             case ColumnType::Polygon->value:
-                if (! $this->adapter->supports(Capability::Spatial)) {
+                if (! ($this->adapter instanceof Feature\Spatial)) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
                 if (! empty($size)) {
@@ -862,7 +863,7 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
                 }
-                if ($this->adapter->supports(Capability::Spatial)) {
+                if ($this->adapter instanceof Feature\Spatial) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
                 throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
@@ -993,7 +994,7 @@ trait Attributes
                     $this->adapter->supports(Capability::IdenticalIndexes),
                     $this->adapter->supports(Capability::ObjectIndexes),
                     $this->adapter->supports(Capability::TrigramIndex),
-                    $this->adapter->supports(Capability::Spatial),
+                    $this->adapter instanceof Feature\Spatial,
                     $this->adapter->supports(Capability::Index),
                     $this->adapter->supports(Capability::UniqueIndex),
                     $this->adapter->supports(Capability::Fulltext),
@@ -1292,7 +1293,7 @@ trait Attributes
             // partial failure where rename succeeded but metadata update failed).
             // We verified $new doesn't exist in metadata (above), so if $new
             // exists in schema, it must be from a prior rename.
-            if ($this->adapter->supports(Capability::SchemaAttributes)) {
+            if ($this->adapter instanceof Feature\SchemaAttributes) {
                 $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                 $filteredNew = $this->adapter->filter($new);
                 $newExistsInSchema = false;

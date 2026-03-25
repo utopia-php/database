@@ -5,7 +5,7 @@ namespace Utopia\Database\Traits;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -513,7 +513,7 @@ trait Relationships
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
-                if ($this->adapter->supports(Capability::SchemaAttributes)) {
+                if ($this->adapter instanceof Feature\SchemaAttributes) {
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;

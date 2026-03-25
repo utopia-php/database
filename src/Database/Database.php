@@ -9,6 +9,7 @@ use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Console;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -427,7 +428,7 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                if ($this->adapter->supports(Capability::Spatial)) {
+                if ($this->adapter instanceof Feature\Spatial) {
                     return $this->adapter->decodePoint($value);
                 }
 
@@ -457,7 +458,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter->supports(Capability::Spatial)) {
+                if ($this->adapter instanceof Feature\Spatial) {
                     return $this->adapter->decodeLinestring($value);
                 }
 
@@ -487,7 +488,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter->supports(Capability::Spatial)) {
+                if ($this->adapter instanceof Feature\Spatial) {
                     return $this->adapter->decodePolygon($value);
                 }
 
@@ -1753,7 +1754,7 @@ class Database
                 foreach ($values as $valueIndex => $value) {
                     try {
                         /** @var string $value */
-                        $values[$valueIndex] = $this->adapter->supports(Capability::UTCCasting)
+                        $values[$valueIndex] = $this->adapter instanceof Feature\UTCCasting
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (Throwable $e) {

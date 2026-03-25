@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -1126,7 +1127,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (!($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1203,7 +1204,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (!($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1429,7 +1430,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->supports(Capability::Relationships)) {
+        if (!($database->getAdapter() instanceof Feature\Relationships)) {
             $this->expectNotToPerformAssertions();
             return;
         }

@@ -3,7 +3,10 @@
 namespace Utopia\Database;
 
 /**
- * Defines the set of optional capabilities that a database adapter may support.
+ * Defines the set of optional behavioral capabilities that a database adapter may support.
+ *
+ * Feature availability (method contracts) is expressed via Feature interfaces
+ * on the adapter class and checked with instanceof, not capabilities.
  */
 enum Capability
 {
@@ -15,7 +18,6 @@ enum Capability
     case CacheSkipOnFailure;
     case CastIndexArray;
     case Casting;
-    case ConnectionId;
     case DefinedAttributes;
     case Fulltext;
     case FulltextWildcard;
@@ -24,7 +26,6 @@ enum Capability
     case Index;
     case IndexArray;
     case IntegerBooleans;
-    case InternalCasting;
     case JSONOverlaps;
     case MultiDimensionDistance;
     case MultipleFulltextIndexes;
@@ -40,21 +41,15 @@ enum Capability
     case QueryContains;
     case Reconnection;
     case Regex;
-    case Relationships;
-    case SchemaAttributes;
     case Schemas;
-    case Spatial;
     case SpatialAxisOrder;
     case SpatialIndexNull;
     case SpatialIndexOrder;
     case TTLIndexes;
-    case Timeouts;
     case TransactionRetries;
     case TrigramIndex;
-    case UTCCasting;
     case UniqueIndex;
     case UpdateLock;
-    case Upserts;
     case Vectors;
     case Joins;
     case Aggregations;

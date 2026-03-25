@@ -8,7 +8,7 @@ use Exception;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;

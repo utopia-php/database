@@ -3,7 +3,7 @@
 namespace Utopia\Database\Traits;
 
 use Throwable;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;

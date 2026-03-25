@@ -169,18 +169,6 @@ parameters:
 			path: src/Database/Database.php
 
 		-
-			message: '#^Call to static method error\(\) on an unknown class Utopia\\CLI\\Console\.$#'
-			identifier: class.notFound
-			count: 9
-			path: src/Database/Database.php
-
-		-
-			message: '#^Call to static method warning\(\) on an unknown class Utopia\\CLI\\Console\.$#'
-			identifier: class.notFound
-			count: 2
-			path: src/Database/Database.php
-
-		-
 			message: '#^Parameter \#4 \$tenant of method Utopia\\Database\\Cache\\QueryCache\:\:buildQueryKey\(\) expects int\|null, int\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1

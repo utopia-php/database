@@ -7,7 +7,7 @@ use Exception;
 use Generator;
 use InvalidArgumentException;
 use Throwable;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -659,8 +659,14 @@ trait Documents
                     }
                 }
 
+                $internalKeys = ['$id', '$internalId', '$collection', '$createdAt', '$updatedAt', '$tenant', '$sequence', '$version'];
+
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
+                    if (\in_array($key, $internalKeys, true)) {
+                        continue;
+                    }
+
                     if (\array_key_exists($key, $relationships)) {
                         if ($this->relationshipHook !== null && $this->relationshipHook->getWriteStackCount() >= Database::RELATION_MAX_DEPTH - 1) {
                             continue;

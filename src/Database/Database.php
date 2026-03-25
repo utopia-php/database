@@ -213,6 +213,8 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
+    public const EVENT_CACHE_PURGE_FAILURE = 'cache_purge_failure';
+
     public const INSERT_BATCH_SIZE = 1_000;
     public const DELETE_BATCH_SIZE = 1_000;
 
@@ -1636,7 +1638,12 @@ class Database
             // Ignore
         }
 
-        $this->cache->flush();
+        try {
+            $this->cache->flush();
+        } catch (\Throwable $e) {
+            Console::warning('Failed to flush cache on database delete: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+        }
 
         return $deleted;
     }
@@ -2228,8 +2235,8 @@ class Database
             operationDescription: "attribute creation '{$id}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
@@ -2432,8 +2439,8 @@ class Database
             rollbackReturnsErrors: true
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
@@ -3149,9 +3156,9 @@ class Database
         );
 
         if ($altering) {
-            $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+            $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection));
         }
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
@@ -3291,8 +3298,8 @@ class Database
             silentRollback: true
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         try {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
@@ -3418,7 +3425,7 @@ class Database
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
@@ -3995,7 +4002,7 @@ class Database
                     $junctionAttribute->setAttribute('key', $actualNewTwoWayKey);
                 });
 
-                $this->withRetries(fn () => $this->purgeCachedCollection($junction));
+                $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($junction));
             }
         } catch (\Throwable $e) {
             if ($adapterUpdated) {
@@ -4164,8 +4171,8 @@ class Database
             throw new DatabaseException("Failed to update relationship indexes for '{$id}': " . $e->getMessage(), previous: $e);
         }
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
         return true;
     }
@@ -4364,8 +4371,8 @@ class Database
             );
         }
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
         try {
             $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
@@ -4447,7 +4454,7 @@ class Database
             operationDescription: "index rename '{$old}' to '{$new}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+        $this->withRetriesOrWarn(fn () => $this->purgeCachedCollection($collection->getId()));
 
         try {
             $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
@@ -4785,8 +4792,9 @@ class Database
 
         try {
             $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
             $cached = null;
         }
 
@@ -4864,8 +4872,9 @@ class Database
             try {
                 $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
             }
         }
 
@@ -8214,12 +8223,30 @@ class Database
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        $documentKeys = $this->cache->list($collectionKey);
-        foreach ($documentKeys as $documentKey) {
-            $this->cache->purge($documentKey);
+        try {
+            $documentKeys = $this->cache->list($collectionKey);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to list collection cache keys: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            return false;
         }
 
-        $this->cache->purge($collectionKey);
+        foreach ($documentKeys as $documentKey) {
+            try {
+                $this->cache->purge($documentKey);
+            } catch (\Throwable $e) {
+                Console::warning('Failed to purge document cache key: ' . $e->getMessage());
+                $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            }
+        }
+
+        try {
+            $this->cache->purge($collectionKey);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to purge collection cache key: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            return false;
+        }
 
         return true;
     }
@@ -8241,10 +8268,25 @@ class Database
 
         [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
 
-        $this->cache->purge($collectionKey, $documentKey);
-        $this->cache->purge($documentKey);
+        $success = true;
 
-        return true;
+        try {
+            $this->cache->purge($collectionKey, $documentKey);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to purge document reference from collection cache: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            $success = false;
+        }
+
+        try {
+            $this->cache->purge($documentKey);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to purge document cache key: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            $success = false;
+        }
+
+        return $success;
     }
 
     /**
@@ -8260,7 +8302,13 @@ class Database
      */
     public function purgeCachedDocument(string $collectionId, ?string $id): bool
     {
-        $result = $this->purgeCachedDocumentInternal($collectionId, $id);
+        try {
+            $result = $this->purgeCachedDocumentInternal($collectionId, $id);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to purge document cache: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+            return false;
+        }
 
         if ($id !== null) {
             $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
@@ -10058,6 +10106,23 @@ class Database
         }
 
         throw $lastException;
+    }
+
+    /**
+     * Retries an operation up to maxAttempts times, and on final failure emits
+     * EVENT_CACHE_PURGE_FAILURE and logs a warning instead of throwing.
+     *
+     * @param callable $operation The cache purge/invalidation operation to retry
+     * @return void
+     */
+    private function withRetriesOrWarn(callable $operation): void
+    {
+        try {
+            $this->withRetries($operation);
+        } catch (\Throwable $e) {
+            Console::warning('Failed to purge cache after retries: ' . $e->getMessage());
+            $this->trigger(self::EVENT_CACHE_PURGE_FAILURE, $e);
+        }
     }
 
     /**

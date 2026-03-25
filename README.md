@@ -881,6 +881,21 @@ $database->purgeCachedDocument(
 
 Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP version whenever possible.
 
+## Testing
+
+### E2E
+
+`docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/e2e`
+
+### Resources
+
+`docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/resources`
+
+### Unit
+
+`docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit`
+
+
 ## Contributing
 
 Thank you for considering contributing to the Utopia Framework! 

@@ -127,7 +127,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenOnRead(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -146,7 +146,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenOnCreate(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -168,7 +168,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenOnUpdate(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -189,7 +189,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenOnDelete(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -213,7 +213,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenPurgeCachedDocument(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -231,7 +231,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailOpenPurgeCachedCollection(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -249,7 +249,7 @@ class MariaDBTest extends Base
 
     public function testCacheFailureEmitsPurgeFailureEvent(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -275,7 +275,7 @@ class MariaDBTest extends Base
 
     public function testCacheReadFailureEmitsReadFailureEvent(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -307,7 +307,7 @@ class MariaDBTest extends Base
 
     public function testThrowingCachePurgeFailureListenerDoesNotPropagate(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -336,7 +336,7 @@ class MariaDBTest extends Base
 
     public function testThrowingCacheReadFailureListenerDoesNotPropagate(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -360,7 +360,7 @@ class MariaDBTest extends Base
 
     public function testThrowingDocumentPurgeListenerDoesNotPropagate(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
 
         $database->on(Database::EVENT_DOCUMENT_PURGE, 'throwing-listener', function () {
@@ -379,7 +379,7 @@ class MariaDBTest extends Base
 
     public function testUpdateDocumentPersistsDespiteBrokenCachePurge(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 
@@ -407,7 +407,7 @@ class MariaDBTest extends Base
 
     public function testDeleteDocumentPersistsDespiteBrokenCachePurge(): void
     {
-        $collection = __FUNCTION__;
+        $collection = substr(__FUNCTION__, 4, 34);
         $database = $this->seedCacheFailOpenCollection($collection);
         $originalCache = $database->getCache();
 

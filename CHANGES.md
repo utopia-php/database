@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `getDocument` no longer emits `EVENT_CACHE_PURGE_FAILURE` when the cache is unavailable for a read. It now correctly emits `EVENT_CACHE_READ_FAILURE`, so callers that distinguish the two events receive the right signal.
 - A broken or unavailable cache can no longer cause `updateDocument` or `deleteDocument` to surface an exception to the caller. Both operations are now fully fail-open with respect to the cache layer.
 - A throwing `EVENT_CACHE_PURGE_FAILURE` or `EVENT_CACHE_READ_FAILURE` listener can no longer abort an in-progress database operation.
+- Fixed 6 `MariaDBTest` E2E tests that failed with `Incorrect table name` due to collection IDs derived from long method names exceeding MariaDB's 64-character identifier limit.
 
 [Unreleased]: https://github.com/utopia-php/database/compare/6.0.0...HEAD
 [6.0.0]: https://github.com/utopia-php/database/compare/5.3.17...6.0.0

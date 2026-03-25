@@ -399,6 +399,7 @@ trait GeneralTests
         // Restart Redis containers
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
         $this->waitForRedis();
+        $this->reconnectCache();
 
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
@@ -417,6 +418,7 @@ trait GeneralTests
 
         // Wait for Redis to be fully healthy after previous test
         $this->waitForRedis();
+        $this->reconnectCache();
 
         $database->getAuthorization()->cleanRoles();
         $database->getAuthorization()->addRole(Role::any()->toString());
@@ -449,6 +451,7 @@ trait GeneralTests
             // Restart Redis containers
             Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
             $this->waitForRedis();
+            $this->reconnectCache();
 
             // Cache should reconnect - read should work
             $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
@@ -468,6 +471,7 @@ trait GeneralTests
             $stderr = '';
             Console::execute('docker ps -a --filter "name=utopia-redis" --filter "status=exited" --format "{{.Names}}" | xargs -r docker start', '', $stdout, $stderr);
             $this->waitForRedis();
+            $this->reconnectCache();
 
             // Cleanup collection if it exists
             if ($database->exists() && ! $database->getCollection('testCacheReconnect')->isEmpty()) {
@@ -696,6 +700,16 @@ trait GeneralTests
     /**
      * Wait for Redis to be ready with a readiness probe
      */
+    private function reconnectCache(): void
+    {
+        $redis = new \Redis();
+        $redis->connect('redis', 6379, 2.0);
+        $redis->select(0);
+        $adapter = new \Utopia\Cache\Adapter\Redis($redis);
+        $adapter->setMaxRetries(3);
+        $this->getDatabase()->setCache(new \Utopia\Cache\Cache($adapter));
+    }
+
     private function waitForRedis(int $maxRetries = 60, int $delayMs = 500): void
     {
         $consecutive = 0;

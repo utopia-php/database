@@ -14,6 +14,7 @@ use Utopia\Query\Schema\ColumnType;
 
 trait AggregationTests
 {
+    /** @var array<string, bool> */
     private static array $createdProductCollections = [];
     private static string $aggWorkerSuffix = '';
 

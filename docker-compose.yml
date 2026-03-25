@@ -15,7 +15,6 @@ services:
       - ./tests:/usr/src/code/tests
       - ./dev:/usr/src/code/dev
       - ./phpunit.xml:/usr/src/code/phpunit.xml
-      - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
     environment:
@@ -179,7 +178,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3307", "-u", "root", "-ppassword"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -202,7 +201,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u $$MYSQL_USER", "-p $$MYSQL_PASSWORD"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3307", "-u", "root", "-ppassword"]
       interval: 10s
       timeout: 5s
       retries: 5

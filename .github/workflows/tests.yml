@@ -61,7 +61,7 @@ jobs:
           docker compose up -d --wait
 
       - name: Run Unit Tests
-        run: docker compose exec tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/unit
+        run: docker compose exec -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/unit
 
   adapter_test:
     name: "Adapter Tests (${{ matrix.adapter }})"
@@ -115,4 +115,4 @@ jobs:
           docker compose ${{ matrix.profiles }} up -d --wait
 
       - name: Run Tests
-        run: docker compose exec -T tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php
+        run: docker compose exec -T -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php

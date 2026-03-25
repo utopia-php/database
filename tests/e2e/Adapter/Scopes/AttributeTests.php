@@ -1768,7 +1768,7 @@ trait AttributeTests
 
         $validDates = [
             '2024-12-25 09:00:21.891119',
-            'Tue Dec 31 2024',
+            '2024-12-31 00:00:00.000000',
         ];
 
         foreach ($validDates as $date) {

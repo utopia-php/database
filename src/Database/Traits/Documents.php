@@ -372,7 +372,6 @@ trait Documents
         $createdAt = $document->getCreatedAt();
         $updatedAt = $document->getUpdatedAt();
 
-        $document
         $id = $document->getId();
         $document
             ->setAttribute('$id', (empty($id) || $id === 'unique()') ? ID::unique() : $id)
@@ -510,7 +509,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', (empty($id = $document->getId()) || $id === 'unique()') ? ID::unique() : $id)
+                ->setAttribute('$id', (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
@@ -1357,7 +1356,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', (empty($id = $document->getId()) || $id === 'unique()') ? ID::unique() : $id)
+                ->setAttribute('$id', (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 

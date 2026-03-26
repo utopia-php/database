@@ -71,12 +71,12 @@ class Permissions extends Interceptor
         /** @var array<string, list<string>> $additions */
         $additions = [];
         foreach (self::PERM_TYPES as $type) {
-            $removed = \array_values(\array_diff($permissions[$type->value], $document->getPermissionsByType($type->value)));
+            $removed = \array_values(\array_diff($permissions[$type->value], $document->getPermissionsByType($type)));
             if (! empty($removed)) {
                 $removals[$type->value] = $removed;
             }
 
-            $added = \array_values(\array_diff($document->getPermissionsByType($type->value), $permissions[$type->value]));
+            $added = \array_values(\array_diff($document->getPermissionsByType($type), $permissions[$type->value]));
             if (! empty($added)) {
                 $additions[$type->value] = $added;
             }
@@ -112,7 +112,7 @@ class Permissions extends Interceptor
             $permissions = $this->readCurrentPermissions($collection, $document, $context);
 
             foreach (self::PERM_TYPES as $type) {
-                $diff = \array_diff($permissions[$type->value], $updates->getPermissionsByType($type->value));
+                $diff = \array_diff($permissions[$type->value], $updates->getPermissionsByType($type));
                 if (! empty($diff)) {
                     $removeConditions[] = Query::and([
                         Query::equal('_document', [$document->getId()]),
@@ -124,7 +124,7 @@ class Permissions extends Interceptor
 
             $metadata = $this->documentMetadata($document);
             foreach (self::PERM_TYPES as $type) {
-                $diff = \array_diff($updates->getPermissionsByType($type->value), $permissions[$type->value]);
+                $diff = \array_diff($updates->getPermissionsByType($type), $permissions[$type->value]);
                 if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = ($context->decorateRow)([
@@ -175,11 +175,11 @@ class Permissions extends Interceptor
 
             $current = [];
             foreach (self::PERM_TYPES as $type) {
-                $current[$type->value] = $old->getPermissionsByType($type->value);
+                $current[$type->value] = $old->getPermissionsByType($type);
             }
 
             foreach (self::PERM_TYPES as $type) {
-                $toRemove = \array_diff($current[$type->value], $document->getPermissionsByType($type->value));
+                $toRemove = \array_diff($current[$type->value], $document->getPermissionsByType($type));
                 if (! empty($toRemove)) {
                     $removeConditions[] = Query::and([
                         Query::equal('_document', [$document->getId()]),
@@ -190,7 +190,7 @@ class Permissions extends Interceptor
             }
 
             foreach (self::PERM_TYPES as $type) {
-                $toAdd = \array_diff($document->getPermissionsByType($type->value), $current[$type->value]);
+                $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type->value]);
                 foreach ($toAdd as $permission) {
                     $row = ($context->decorateRow)([
                         '_document' => $document->getId(),
@@ -343,7 +343,7 @@ class Permissions extends Interceptor
         $metadata = $this->documentMetadata($document);
 
         foreach (self::PERM_TYPES as $type) {
-            foreach ($document->getPermissionsByType($type->value) as $permission) {
+            foreach ($document->getPermissionsByType($type) as $permission) {
                 $row = [
                     '_document' => $document->getId(),
                     '_type' => $type->value,

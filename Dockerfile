@@ -1,4 +1,4 @@
-FROM composer:2.8 AS composer
+FROM composer:2 AS composer
 
 WORKDIR /usr/local/src/
 
@@ -12,12 +12,8 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-FROM php:8.4.18-cli-alpine3.22 AS compile
+FROM appwrite/utopia-base:php-8.4-1.0.0 AS compile
 
-ENV PHP_REDIS_VERSION="6.3.0" \
-    PHP_SWOOLE_VERSION="v6.1.6" \
-    PHP_XDEBUG_VERSION="3.4.2" \
-    PHP_MONGODB_VERSION="2.1.1"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && apk add --no-cache \
@@ -33,38 +29,10 @@ RUN apk update && apk add --no-cache \
     linux-headers \
     docker-cli \
     docker-cli-compose \
- && (pecl install mongodb-$PHP_MONGODB_VERSION \
-    || (git clone --depth 1 --branch $PHP_MONGODB_VERSION --recurse-submodules https://github.com/mongodb/mongo-php-driver.git /tmp/mongodb \
-      && cd /tmp/mongodb \
-      && git submodule update --init --recursive \
-      && phpize \
-      && ./configure \
-      && make \
-      && make install \
-      && cd / \
-      && rm -rf /tmp/mongodb)) \
- && docker-php-ext-enable mongodb \
  && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 
-# Redis Extension
-FROM compile AS redis
-RUN \
-  git clone --depth 1 --branch $PHP_REDIS_VERSION https://github.com/phpredis/phpredis.git \
-  && cd phpredis \
-  && phpize \
-  && ./configure \
-  && make && make install
-
-## Swoole Extension
-FROM compile AS swoole
-RUN \
-  git clone --depth 1 --branch $PHP_SWOOLE_VERSION https://github.com/swoole/swoole-src.git \
-  && cd swoole-src \
-  && phpize \
-  && ./configure --enable-http2 \
-  && make && make install
 
 ## PCOV Extension
 FROM compile AS pcov
@@ -75,14 +43,6 @@ RUN \
    && ./configure --enable-pcov \
    && make && make install
 
-## XDebug Extension
-FROM compile AS xdebug
-RUN \
-  git clone --depth 1 --branch $PHP_XDEBUG_VERSION https://github.com/xdebug/xdebug && \
-  cd xdebug && \
-  phpize && \
-  ./configure && \
-  make && make install
 
 FROM compile AS final
 
@@ -93,8 +53,6 @@ ENV DEBUG=$DEBUG
 
 WORKDIR /usr/src/code
 
-RUN echo extension=redis.so >> /usr/local/etc/php/conf.d/redis.ini
-RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 RUN echo extension=pcov.so >> /usr/local/etc/php/conf.d/pcov.ini
 RUN echo extension=xdebug.so >> /usr/local/etc/php/conf.d/xdebug.ini
 
@@ -105,10 +63,6 @@ RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
-COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20240924/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
-COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20240924/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
-COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20240924/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
-COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20240924/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20240924/
 
 COPY ./bin /usr/src/code/bin
 COPY ./src /usr/src/code/src

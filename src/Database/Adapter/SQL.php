@@ -29,7 +29,6 @@ use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -121,7 +120,7 @@ abstract class SQL extends Adapter
     /**
      * Returns the current PDO object
      */
-    protected function getPDO(): DatabasePDO
+    protected function getPDO(): object
     {
         return $this->pdo;
     }

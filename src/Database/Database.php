@@ -636,15 +636,29 @@ class Database
      */
     public function from(string $collection): \Utopia\Query\Builder
     {
-        return $this->adapter->getBuilder($collection);
+        $builder = $this->adapter->getBuilder($collection);
+        $builder->setExecutor(fn (\Utopia\Query\Builder\Plan $plan) => $this->execute($plan));
+
+        return $builder;
+    }
+
+    /**
+     * Get a utopia-php/query Schema builder for DDL operations.
+     */
+    public function schema(): \Utopia\Query\Schema
+    {
+        $schema = $this->adapter->getSchema();
+        $schema->setExecutor(fn (\Utopia\Query\Builder\Plan $plan) => $this->execute($plan));
+
+        return $schema;
     }
 
     /**
      * @return array<Document>|int
      */
-    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\BuildResult $query): array|int
+    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Plan $query): array|int
     {
-        $result = $query instanceof \Utopia\Query\Builder\BuildResult ? $query : $query->build();
+        $result = $query instanceof \Utopia\Query\Builder\Plan ? $query : $query->build();
 
         if ($result->readOnly) {
             return $this->adapter->rawQuery($result->query, $result->bindings);

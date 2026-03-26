@@ -37,7 +37,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
-use Utopia\Query\Builder\BuildResult;
+use Utopia\Query\Builder\Plan;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Exception\ValidationException;
@@ -2816,6 +2816,9 @@ abstract class SQL extends Adapter
         if ($this->sharedTables && $this->tenant !== null) {
             $builder->addHook(new TenantFilter($this->tenant, Database::METADATA));
         }
+        if ($this->authorization->getStatus()) {
+            $builder->addHook($this->newPermissionHook($table, $this->authorization->getRoles()));
+        }
 
         return $builder;
     }
@@ -2841,6 +2844,11 @@ abstract class SQL extends Adapter
     public function getBuilder(string $collection): SQLBuilder
     {
         return $this->newBuilder($this->filter($collection));
+    }
+
+    public function getSchema(): Schema
+    {
+        return $this->createSchemaBuilder();
     }
 
     protected function getIdentifierQuoteChar(): string
@@ -2895,7 +2903,7 @@ abstract class SQL extends Adapter
 
         return new WriteContext(
             newBuilder: fn (string $table, string $alias = '') => $this->newBuilder($table, $alias),
-            executeResult: fn (BuildResult $result, ?Event $event = null) => $this->executeResult($result, $event),
+            executeResult: fn (Plan $result, ?Event $event = null) => $this->executeResult($result, $event),
             execute: fn (mixed $stmt) => $this->execute($stmt),
             decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
             createBuilder: fn () => $this->createBuilder(),
@@ -2904,15 +2912,15 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Execute a BuildResult through the transformation system with positional bindings.
+     * Execute a Plan through the transformation system with positional bindings.
      *
-     * Prepares the SQL statement and binds positional parameters from the BuildResult.
+     * Prepares the SQL statement and binds positional parameters from the Plan.
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  Event|null  $event  Optional event to run through transformation system
      * @return PDOStatement|PDOStatementProxy
      */
-    protected function executeResult(BuildResult $result, ?Event $event = null): PDOStatement|PDOStatementProxy
+    protected function executeResult(Plan $result, ?Event $event = null): PDOStatement|PDOStatementProxy
     {
         $sql = $result->query;
         if ($event !== null) {

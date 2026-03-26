@@ -1092,6 +1092,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         throw new DatabaseException('Query builder is not supported by this adapter');
     }
 
+    public function getSchema(): \Utopia\Query\Schema
+    {
+        throw new DatabaseException('Schema builder is not supported by this adapter');
+    }
+
     /**
      * Filter Keys
      *

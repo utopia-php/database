@@ -948,4 +948,12 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
     }
+
+    public function getSchema(): \Utopia\Query\Schema
+    {
+        /** @var \Utopia\Query\Schema $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
 }

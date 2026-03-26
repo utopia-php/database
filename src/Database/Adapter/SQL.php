@@ -1675,6 +1675,7 @@ abstract class SQL extends Adapter
                     }
                     break;
 
+                case ColumnType::Float->value:
                 case ColumnType::Double->value:
                     $total += 8; // DOUBLE 8 bytes
                     break;

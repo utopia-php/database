@@ -55,7 +55,7 @@ use Utopia\Query\Schema\MySQL as MySQLSchema;
  */
 abstract class SQL extends Adapter
 {
-    protected DatabasePDO $pdo;
+    protected DatabasePDO|object $pdo;
 
     /**
      * Maximum array size for array operations to prevent memory exhaustion.
@@ -78,11 +78,9 @@ abstract class SQL extends Adapter
     protected int $floatPrecision = 17;
 
     /**
-     * Constructor.
-     *
-     * Set connection and settings
+     * Accepts Utopia\Database\PDO or any PDO-compatible proxy (e.g. Swoole\Database\PDOProxy).
      */
-    public function __construct(DatabasePDO $pdo)
+    public function __construct(DatabasePDO|object $pdo)
     {
         $this->pdo = $pdo;
     }

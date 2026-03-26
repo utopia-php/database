@@ -1702,7 +1702,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             ColumnType::MediumText,
             ColumnType::LongText => 'TEXT',
             ColumnType::Integer => $size >= 8 ? 'BIGINT' : 'INTEGER',
-            ColumnType::Double => 'DOUBLE PRECISION',
+            ColumnType::Float, ColumnType::Double => 'DOUBLE PRECISION',
             ColumnType::Boolean => 'BOOLEAN',
             ColumnType::Relationship => 'VARCHAR(255)',
             ColumnType::Datetime => 'TIMESTAMP(3)',

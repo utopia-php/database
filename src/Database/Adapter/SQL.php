@@ -2394,7 +2394,7 @@ abstract class SQL extends Adapter
             return ($size >= 8 ? 'BIGINT' : 'INT') . $suffix;
         }
 
-        if ($type === ColumnType::Double) {
+        if ($type === ColumnType::Float || $type === ColumnType::Double) {
             return 'DOUBLE' . ($signed ? '' : ' UNSIGNED');
         }
 
@@ -3211,7 +3211,7 @@ abstract class SQL extends Adapter
             ColumnType::Integer => $size >= 8
                 ? $table->bigInteger($filteredId)
                 : $table->integer($filteredId),
-            ColumnType::Double => $table->float($filteredId),
+            ColumnType::Float, ColumnType::Double => $table->float($filteredId),
             ColumnType::Boolean => $table->boolean($filteredId),
             ColumnType::Datetime => $table->datetime($filteredId, 3),
             ColumnType::Relationship => $table->string($filteredId, 255),
@@ -3226,7 +3226,7 @@ abstract class SQL extends Adapter
         };
 
         // Apply unsigned for types that support it
-        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::Double])) {
+        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::Float, ColumnType::Double])) {
             $col->unsigned();
         }
 

@@ -24,9 +24,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionFilter;
-use Utopia\Database\Hook\PermissionWrite;
 use Utopia\Database\Hook\TenantFilter;
-use Utopia\Database\Hook\TenantWrite;
 use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -1131,10 +1129,20 @@ abstract class SQL extends Adapter
         // Pass all queries (filters, aggregations, joins, groupBy, having) to the builder
         $builder->filter($queries);
 
-        // Permission subquery (qualify document column with table alias when joins are present to avoid ambiguity)
+        // Permission subquery for primary table
         if ($this->authorization->getStatus()) {
             $docCol = $hasJoins ? $alias . '._uid' : '_uid';
             $builder->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $docCol));
+
+            // Permission subquery for each joined table
+            foreach ($joinTablePrefixes as $joinTable => $joinAlias) {
+                $builder->addHook($this->newPermissionHook(
+                    $this->filter($joinTable),
+                    $roles,
+                    $forPermission->value,
+                    $joinAlias . '._uid'
+                ));
+            }
         }
 
         // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
@@ -2813,10 +2821,10 @@ abstract class SQL extends Adapter
             '$updatedAt' => '_updatedAt',
             '$permissions' => '_permissions',
         ]));
-        if ($this->sharedTables && $this->tenant !== null) {
-            $builder->addHook(new TenantFilter($this->tenant, Database::METADATA));
+        if ($this->hasTenantHook()) {
+            $builder->addHook(new TenantFilter($this->getTenantHook()->getTenant(), Database::METADATA));
         }
-        if ($this->authorization->getStatus()) {
+        if ($this->hasPermissionHook() && $this->authorization->getStatus()) {
             $builder->addHook($this->newPermissionHook($table, $this->authorization->getRoles()));
         }
 
@@ -2869,7 +2877,7 @@ abstract class SQL extends Adapter
             permDocumentColumn: '_document',
             permRoleColumn: '_permission',
             permTypeColumn: '_type',
-            subqueryFilter: ($this->sharedTables && $this->tenant !== null) ? new TenantFilter($this->tenant) : null,
+            subqueryFilter: $this->hasTenantHook() ? new TenantFilter($this->getTenantHook()->getTenant()) : null,
             quoteChar: $this->getIdentifierQuoteChar(),
         );
     }
@@ -2877,19 +2885,11 @@ abstract class SQL extends Adapter
     /**
      * Synchronize write hooks with current adapter configuration.
      *
-     * Ensures PermissionWrite is always registered and TenantWrite is registered
+     * Ensures Permission is always registered and Tenant is registered
      * when shared tables with a tenant are active.
      */
     protected function syncWriteHooks(): void
     {
-        if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof PermissionWrite))) {
-            $this->addWriteHook(new PermissionWrite());
-        }
-
-        $this->removeWriteHook(TenantWrite::class);
-        if ($this->sharedTables && ($this->tenant !== null || $this->tenantPerDocument)) {
-            $this->addWriteHook(new TenantWrite($this->tenant ?? 0));
-        }
     }
 
     /**

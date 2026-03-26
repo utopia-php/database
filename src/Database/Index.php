@@ -49,6 +49,26 @@ class Index
      * @param Document $document The document to convert
      * @return self
      */
+    /**
+     * Create from an associative array (used by collection config files).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        /** @var IndexType|string $type */
+        $type = $data['type'] ?? 'key';
+
+        return new self(
+            key: $data['$id'] ?? $data['key'] ?? '',
+            type: $type instanceof IndexType ? $type : IndexType::from((string) $type),
+            attributes: $data['attributes'] ?? [],
+            lengths: $data['lengths'] ?? [],
+            orders: $data['orders'] ?? [],
+            ttl: $data['ttl'] ?? 1,
+        );
+    }
+
     public static function fromDocument(Document $document): self
     {
         /** @var string $key */

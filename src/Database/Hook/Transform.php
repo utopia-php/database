@@ -2,16 +2,18 @@
 
 namespace Utopia\Database\Hook;
 
+use Utopia\Query\Hook;
+
 use Utopia\Database\Event;
 
 /**
  * Hook for transforming SQL queries before execution.
  *
  * Implementations receive the raw SQL string and return a modified version.
- * Registered via Adapter::addQueryTransform() and applied in the
- * centralized executeResult() path.
+ * Registered via Database::addHook() and applied in the adapter's
+ * executeResult() path.
  */
-interface QueryTransform
+interface Transform extends Hook
 {
     /**
      * Transform a raw SQL query string before it is executed.

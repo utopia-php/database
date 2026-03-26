@@ -141,20 +141,20 @@ class Structure extends Validator
      * @param  Closure  $callback  Callback that accepts $params in order and returns Validator
      * @param  string  $type  Primitive data type for validation
      */
-    public static function addFormat(string $name, Closure $callback, string $type): void
+    public static function addFormat(string $name, Closure $callback, ColumnType $type): void
     {
         self::$formats[$name] = [
             'callback' => $callback,
-            'type' => $type,
+            'type' => $type->value,
         ];
     }
 
     /**
      * Check if validator has been added
      */
-    public static function hasFormat(string $name, string $type): bool
+    public static function hasFormat(string $name, ColumnType $type): bool
     {
-        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
+        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type->value) {
             return true;
         }
 
@@ -169,11 +169,11 @@ class Structure extends Validator
      *
      * @throws Exception
      */
-    public static function getFormat(string $name, string $type): array
+    public static function getFormat(string $name, ColumnType $type): array
     {
         if (isset(self::$formats[$name])) {
-            if (self::$formats[$name]['type'] !== $type) {
-                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type.'"');
+            if (self::$formats[$name]['type'] !== $type->value) {
+                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type->value.'"');
             }
 
             return self::$formats[$name];
@@ -422,7 +422,7 @@ class Structure extends Validator
 
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
-                $formatDef = self::getFormat($format, $type);
+                $formatDef = self::getFormat($format, ColumnType::from($type));
                 /** @var Validator $formatValidator */
                 $formatValidator = $formatDef['callback']($attribute);
                 $validators[] = $formatValidator;

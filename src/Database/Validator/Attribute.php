@@ -227,7 +227,7 @@ class Attribute extends Validator
      */
     public function checkFormat(AttributeVO $attribute): bool
     {
-        if ($attribute->format && ! Structure::hasFormat($attribute->format, $attribute->type->value)) {
+        if ($attribute->format && ! Structure::hasFormat($attribute->format, $attribute->type)) {
             $this->message = 'Format ("'.$attribute->format.'") not available for this attribute type ("'.$attribute->type->value.'")';
             throw new DatabaseException($this->message);
         }

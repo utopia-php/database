@@ -10,7 +10,7 @@ use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationship as RelationshipHook;
-use Utopia\Database\Hook\RelationshipHandler;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
@@ -1284,18 +1284,13 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function setRelationshipHook(?RelationshipHook $hook): self
+    public function addHook(\Utopia\Query\Hook $hook): static
     {
-        parent::setRelationshipHook($hook);
+        parent::addHook($hook);
 
-        $this->source->setRelationshipHook(
-            $hook !== null ? new RelationshipHandler($this->source) : null
-        );
-
-        if ($this->destination !== null) {
-            $this->destination->setRelationshipHook(
-                $hook !== null ? new RelationshipHandler($this->destination) : null
-            );
+        if ($hook instanceof RelationshipHook) {
+            $this->source->addHook(new Relationships($this->source));
+            $this->destination?->addHook(new Relationships($this->destination));
         }
 
         return $this;

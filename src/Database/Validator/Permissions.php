@@ -24,12 +24,12 @@ class Permissions extends Roles
      * Permissions constructor.
      *
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
-     * @param  array<string>  $allowed  allowed permissions. Defaults to all available.
+     * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value, PermissionType::Write->value])
+    public function __construct(int $length = 0, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete, PermissionType::Write])
     {
         $this->length = $length;
-        $this->allowed = $allowed;
+        $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
     }
 
     /**

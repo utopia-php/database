@@ -8,6 +8,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -16,7 +17,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Hook\QueryTransform;
+use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
@@ -52,7 +53,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     protected array $debug = [];
 
     /**
-     * @var array<string, QueryTransform>
+     * @var array<string, Transform>
      */
     protected array $queryTransforms = [];
 
@@ -403,6 +404,33 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return $this;
     }
 
+    public function hasPermissionHook(): bool
+    {
+        foreach ($this->writeHooks as $hook) {
+            if ($hook instanceof Hook\Permissions) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasTenantHook(): bool
+    {
+        return $this->getTenantHook() !== null;
+    }
+
+    public function getTenantHook(): ?Hook\Tenancy
+    {
+        foreach ($this->writeHooks as $hook) {
+            if ($hook instanceof Hook\Tenancy) {
+                return $hook;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Remove a write hook by its class name.
      *
@@ -433,10 +461,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Register a named query transform hook that modifies queries before execution.
      *
      * @param string $name Unique name for the transform.
-     * @param QueryTransform $transform The query transform hook to add.
+     * @param Transform $transform The query transform hook to add.
      * @return $this
      */
-    public function addQueryTransform(string $name, QueryTransform $transform): static
+    public function addTransform(string $name, Transform $transform): static
     {
         $this->queryTransforms[$name] = $transform;
 
@@ -449,7 +477,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @param string $name The name of the transform to remove.
      * @return $this
      */
-    public function removeQueryTransform(string $name): static
+    public function removeTransform(string $name): static
     {
         unset($this->queryTransforms[$name]);
 
@@ -461,7 +489,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      *
      * @return $this
      */
-    public function resetQueryTransforms(): static
+    public function resetTransforms(): static
     {
         $this->queryTransforms = [];
 

@@ -167,11 +167,19 @@ class Permission
      *
      * @throws Exception
      */
-    public static function aggregate(?array $permissions, array $allowed = [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value]): ?array
+    /**
+     * @param  array<string>|null  $permissions
+     * @param  array<PermissionType>  $allowed
+     * @return array<string>|null
+     *
+     * @throws Exception
+     */
+    public static function aggregate(?array $permissions, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete]): ?array
     {
         if (\is_null($permissions)) {
             return null;
         }
+        $allowedValues = \array_map(fn (PermissionType $p) => $p->value, $allowed);
         $mutated = [];
         foreach ($permissions as $i => $permission) {
             $permission = self::parse($permission);
@@ -182,7 +190,7 @@ class Permission
                     continue;
                 }
                 foreach ($subTypes as $subType) {
-                    if (! \in_array($subType, $allowed)) {
+                    if (! \in_array($subType, $allowedValues)) {
                         continue;
                     }
                     $mutated[] = (new self(

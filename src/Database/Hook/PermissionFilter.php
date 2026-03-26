@@ -98,11 +98,9 @@ class PermissionFilter implements Filter, JoinFilter
     }
 
     /**
-     * Permission filtering for joined tables is not applied here because this hook
-     * already covers the main table via filter(). The generated condition references
-     * the main table's document column and permissions table, so duplicating it on
-     * join ON/WHERE clauses is redundant for inner joins and semantically incorrect
-     * for outer joins. Per-join-table permission checks should use separate hooks.
+     * Per-join-table permission checks are applied via separate PermissionFilter hooks
+     * registered by the SQL adapter for each joined table. This hook only handles the
+     * primary table's WHERE clause, so filterJoin returns null.
      */
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {

@@ -30,7 +30,7 @@ use Utopia\Query\Schema\ForeignKeyAction;
  * populates nested relationships on read, and converts relationship filter queries
  * into adapter-compatible subqueries.
  */
-class RelationshipHandler implements Relationship
+class Relationships implements Relationship
 {
     private bool $enabled = true;
 

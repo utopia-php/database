@@ -11,7 +11,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Hook\QueryTransform;
+use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
@@ -85,9 +85,9 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
                 $adapter->setMetadata($key, $value);
             }
             $adapter->setProfiler($this->profiler);
-            $adapter->resetQueryTransforms();
+            $adapter->resetTransforms();
             foreach ($this->queryTransforms as $tName => $tTransform) {
-                $adapter->addQueryTransform($tName, $tTransform);
+                $adapter->addTransform($tName, $tTransform);
             }
 
             return $adapter->{$method}(...$args);
@@ -123,10 +123,10 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      * Register a named query transform hook on the pooled adapter.
      *
      * @param string $name The transform name
-     * @param QueryTransform $transform The transform instance
+     * @param Transform $transform The transform instance
      * @return static
      */
-    public function addQueryTransform(string $name, QueryTransform $transform): static
+    public function addTransform(string $name, Transform $transform): static
     {
         $this->queryTransforms[$name] = $transform;
 
@@ -139,7 +139,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      * @param string $name The transform name to remove
      * @return static
      */
-    public function removeQueryTransform(string $name): static
+    public function removeTransform(string $name): static
     {
         unset($this->queryTransforms[$name]);
 
@@ -243,9 +243,9 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
                 $adapter->setMetadata($key, $value);
             }
             $adapter->setProfiler($this->profiler);
-            $adapter->resetQueryTransforms();
+            $adapter->resetTransforms();
             foreach ($this->queryTransforms as $tName => $tTransform) {
-                $adapter->addQueryTransform($tName, $tTransform);
+                $adapter->addTransform($tName, $tTransform);
             }
 
             $this->pinnedAdapter = $adapter;

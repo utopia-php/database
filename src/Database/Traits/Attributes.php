@@ -589,10 +589,9 @@ trait Attributes
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             $rawType = $attribute->getAttribute('type');
-            /** @var string $attrType */
-            $attrType = \is_string($rawType) ? $rawType : '';
+            $attrType = $rawType instanceof ColumnType ? $rawType : ColumnType::from($rawType);
             if (! Structure::hasFormat($format, $attrType)) {
-                throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType.'"');
+                throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType->value.'"');
             }
 
             $attribute->setAttribute('format', $format);
@@ -876,7 +875,7 @@ trait Attributes
         }
 
         if ($format) {
-            if (! Structure::hasFormat($format, $type)) {
+            if (! Structure::hasFormat($format, ColumnType::from($type))) {
                 throw new DatabaseException('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         }

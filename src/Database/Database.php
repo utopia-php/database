@@ -18,7 +18,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
-use Utopia\Database\Hook\QueryTransform;
+use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\Relationship;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Type\TypeRegistry;
@@ -259,6 +259,11 @@ class Database
      * @var array<Lifecycle>
      */
     protected array $lifecycleHooks = [];
+
+    /**
+     * @var array<Hook\Decorator>
+     */
+    protected array $decorators = [];
 
     /**
      * When true, lifecycle hooks are not fired.
@@ -889,19 +894,6 @@ class Database
     }
 
     /**
-     * Set the relationship hook used to resolve related documents during reads and writes.
-     *
-     * @param Relationship|null $hook The relationship hook, or null to disable.
-     * @return $this
-     */
-    public function setRelationshipHook(?Relationship $hook): self
-    {
-        $this->relationshipHook = $hook;
-
-        return $this;
-    }
-
-    /**
      * Get the current relationship hook.
      *
      * @return Relationship|null The relationship hook, or null if not set.
@@ -1189,31 +1181,78 @@ class Database
     }
 
     /**
-     * Register a lifecycle hook to receive database events.
+     * Register a hook into the database pipeline.
+     *
+     * Dispatches by type:
+     * - {@see Hook\Lifecycle} — fire-and-forget side effects (auditing, logging)
+     * - {@see Hook\Decorator} — document transformation on read/write results
+     * - {@see Hook\Relationship} — relationship resolution and mutation
+     * - {@see Hook\Write} — row-level write interception (permissions, tenant)
+     * - {@see Hook\Transform} — raw SQL transformation before execution
      */
-    public function addLifecycleHook(Lifecycle $hook): static
+    public function addHook(\Utopia\Query\Hook $hook): static
     {
-        $this->lifecycleHooks[] = $hook;
+        if ($hook instanceof Lifecycle) {
+            $this->lifecycleHooks[] = $hook;
+        }
+
+        if ($hook instanceof Hook\Decorator) {
+            $this->decorators[] = $hook;
+        }
+
+        if ($hook instanceof Relationship) {
+            $this->relationshipHook = $hook;
+        }
+
+        if ($hook instanceof Hook\Write) {
+            $this->adapter->addWriteHook($hook);
+        }
+
+        if ($hook instanceof Transform) {
+            $this->adapter->addTransform($hook::class, $hook);
+        }
 
         return $this;
     }
 
     /**
-     * Register a query transform hook on the adapter.
+     * Apply all registered decorators to a single document.
      */
-    public function addQueryTransform(string $name, QueryTransform $transform): static
+    protected function decorateDocument(Event $event, Document $collection, Document $document): Document
     {
-        $this->adapter->addQueryTransform($name, $transform);
+        foreach ($this->decorators as $decorator) {
+            $document = $decorator->decorate($event, $collection, $document);
+        }
 
-        return $this;
+        return $document;
     }
+
+    /**
+     * Apply all registered document decorators to an array of documents.
+     *
+     * @param  array<Document>  $documents
+     * @return array<Document>
+     */
+    protected function decorateDocuments(Event $event, Document $collection, array $documents): array
+    {
+        if (empty($this->decorators)) {
+            return $documents;
+        }
+
+        foreach ($documents as $i => $document) {
+            $documents[$i] = $this->decorateDocument($event, $collection, $document);
+        }
+
+        return $documents;
+    }
+
 
     /**
      * Remove a query transform hook from the adapter.
      */
-    public function removeQueryTransform(string $name): static
+    public function removeTransform(string $name): static
     {
-        $this->adapter->removeQueryTransform($name);
+        $this->adapter->removeTransform($name);
 
         return $this;
     }

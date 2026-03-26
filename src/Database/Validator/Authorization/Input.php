@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Validator\Authorization;
 
+use Utopia\Database\PermissionType;
+
 /**
  * Encapsulates the action and permissions used as input for authorization validation.
  */
@@ -17,13 +19,13 @@ class Input
     /**
      * Create a new authorization input.
      *
-     * @param string $action The action being authorized (e.g., read, write)
+     * @param PermissionType $action The action being authorized (e.g., read, write)
      * @param string[] $permissions List of permission strings to check against
      */
-    public function __construct(string $action, array $permissions)
+    public function __construct(PermissionType $action, array $permissions)
     {
         $this->permissions = $permissions;
-        $this->action = $action;
+        $this->action = $action->value;
     }
 
     /**
@@ -42,12 +44,12 @@ class Input
     /**
      * Set the action being authorized.
      *
-     * @param string $action The action name
+     * @param PermissionType $action The action name
      * @return self
      */
-    public function setAction(string $action): self
+    public function setAction(PermissionType $action): self
     {
-        $this->action = $action;
+        $this->action = $action->value;
 
         return $this;
     }

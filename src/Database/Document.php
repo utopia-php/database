@@ -138,7 +138,7 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return $this->getPermissionsByType(PermissionType::Read->value);
+        return $this->getPermissionsByType(PermissionType::Read);
     }
 
     /**
@@ -148,7 +148,7 @@ class Document extends ArrayObject
      */
     public function getCreate(): array
     {
-        return $this->getPermissionsByType(PermissionType::Create->value);
+        return $this->getPermissionsByType(PermissionType::Create);
     }
 
     /**
@@ -158,7 +158,7 @@ class Document extends ArrayObject
      */
     public function getUpdate(): array
     {
-        return $this->getPermissionsByType(PermissionType::Update->value);
+        return $this->getPermissionsByType(PermissionType::Update);
     }
 
     /**
@@ -168,7 +168,7 @@ class Document extends ArrayObject
      */
     public function getDelete(): array
     {
-        return $this->getPermissionsByType(PermissionType::Delete->value);
+        return $this->getPermissionsByType(PermissionType::Delete);
     }
 
     /**
@@ -191,7 +191,7 @@ class Document extends ArrayObject
      * @param string $type The permission type (e.g., 'read', 'create', 'update', 'delete').
      * @return array<string>
      */
-    public function getPermissionsByType(string $type): array
+    public function getPermissionsByType(PermissionType $type): array
     {
         if ($this->parsedPermissions === null) {
             $this->parsedPermissions = [];
@@ -207,7 +207,7 @@ class Document extends ArrayObject
                 $roles = \array_values(\array_unique($roles));
             }
         }
-        return $this->parsedPermissions[$type] ?? [];
+        return $this->parsedPermissions[$type->value] ?? [];
     }
 
     /**

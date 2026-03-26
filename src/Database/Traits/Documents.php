@@ -168,6 +168,8 @@ trait Documents
                 }
             }
 
+            $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
+
             $this->trigger(Event::DocumentRead, $document);
 
             if ($this->isTtlExpired($collection, $document)) {
@@ -240,6 +242,8 @@ trait Documents
                 Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
         }
+
+        $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
         $this->trigger(Event::DocumentRead, $document);
 
@@ -369,7 +373,9 @@ trait Documents
         $updatedAt = $document->getUpdatedAt();
 
         $document
-            ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+        $id = $document->getId();
+        $document
+            ->setAttribute('$id', (empty($id) || $id === 'unique()') ? ID::unique() : $id)
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
@@ -443,6 +449,8 @@ trait Documents
             $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
         }
 
+        $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
+
         $this->trigger(Event::DocumentCreate, $document);
 
         return $document;
@@ -502,7 +510,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$id', (empty($id = $document->getId()) || $id === 'unique()') ? ID::unique() : $id)
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
@@ -571,6 +579,8 @@ trait Documents
                 ),
                 $batch
             );
+
+            $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
 
             foreach ($batch as $document) {
                 try {
@@ -868,6 +878,8 @@ trait Documents
             $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
         }
 
+        $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
+
         $this->trigger(Event::DocumentUpdate, $document);
 
         return $document;
@@ -1099,6 +1111,8 @@ trait Documents
                 ),
                 $batch
             );
+
+            $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
                 $doc->removeAttribute('$skipPermissionsUpdate');
@@ -1343,7 +1357,7 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$id', (empty($id = $document->getId()) || $id === 'unique()') ? ID::unique() : $id)
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
@@ -1495,6 +1509,8 @@ trait Documents
                 : $this->decode($collection, $this->adapter->castingAfter($collection, $doc)),
                 $batch
             );
+
+            $batch = $this->decorateDocuments(Event::DocumentsUpsert, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -2123,6 +2139,22 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
+        // Enforce collection-level read permission on each joined collection
+        if (! empty($joins)) {
+            foreach ($joins as $joinQuery) {
+                $joinCollectionId = $joinQuery->getAttribute();
+                $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+
+                if ($joinCollection->isEmpty()) {
+                    throw new QueryException("Joined collection '{$joinCollectionId}' not found");
+                }
+
+                if (! $this->authorization->isValid(new Input($forPermission->value, $joinCollection->getPermissionsByType($forPermission->value)))) {
+                    throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
+                }
+            }
+        }
+
         if (! $isAggregation) {
             $uniqueOrderBy = false;
             foreach ($orderAttributes as $order) {
@@ -2268,6 +2300,8 @@ trait Documents
 
             $results[$index] = $node;
         }
+
+        $results = $this->decorateDocuments(Event::DocumentFind, $collection, $results);
 
         $this->trigger(Event::DocumentFind, $results);
 

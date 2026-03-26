@@ -6,6 +6,11 @@ use Closure;
 
 /**
  * MongoDB read hook that injects tenant isolation filters into queries for shared-table configurations.
+ *
+ * Unlike SQL adapters which use separate TenantFilter (read) and Tenant (write) hooks,
+ * MongoDB stores the tenant identifier as an embedded `_tenant` field directly on the document.
+ * The Mongo adapter sets this field during document creation without a separate write hook.
+ * Read filtering is sufficient because tenant isolation only requires query-time filtering.
  */
 class MongoTenantFilter implements Read
 {

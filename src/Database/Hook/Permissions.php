@@ -10,12 +10,12 @@ use Utopia\Database\PermissionType;
 use Utopia\Query\Query;
 
 /**
- * Write hook that manages permission rows in the side table during document CRUD operations.
+ * Permission hook that handles both read-side query filtering and write-side side-table management.
  *
- * Handles inserting, updating, and deleting permission entries (create/read/update/delete)
- * in the corresponding _perms table whenever documents are modified.
+ * On reads: The SQL adapter generates permission-checking subquery conditions when this hook is registered.
+ * On writes: Manages inserting, updating, and deleting permission entries in the _perms side table.
  */
-class PermissionWrite implements Write
+class Permissions extends Interceptor
 {
     private const PERM_TYPES = [
         PermissionType::Create,
@@ -23,42 +23,6 @@ class PermissionWrite implements Write
         PermissionType::Update,
         PermissionType::Delete,
     ];
-
-    /**
-     * {@inheritDoc}
-     */
-    public function decorateRow(array $row, array $metadata = []): array
-    {
-        return $row;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function afterCreate(string $table, array $metadata, mixed $context): void
-    {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function afterUpdate(string $table, array $metadata, mixed $context): void
-    {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function afterBatchUpdate(string $table, array $updateData, array $metadata, mixed $context): void
-    {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function afterDelete(string $table, array $ids, mixed $context): void
-    {
-    }
 
     /**
      * Insert permission rows for all newly created documents.

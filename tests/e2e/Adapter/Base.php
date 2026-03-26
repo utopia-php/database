@@ -50,6 +50,11 @@ abstract class Base extends TestCase
     abstract protected function getDatabase(): Database;
 
     /**
+     * @return \Utopia\Database\PDO|\PDO|null
+     */
+    abstract protected function getPDO(): mixed;
+
+    /**
      * @param string $collection
      * @param string $column
      *

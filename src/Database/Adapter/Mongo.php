@@ -3233,6 +3233,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForGinIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForUpserts(): bool
     {
         return true;

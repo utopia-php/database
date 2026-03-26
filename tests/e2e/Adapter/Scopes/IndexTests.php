@@ -1048,4 +1048,161 @@ trait IndexTests
         // Cleanup
         $database->deleteCollection($col);
     }
+
+    /**
+     * Verifies that array attributes backed by JSON columns are created as
+     * NOT NULL DEFAULT (empty array). This is required because:
+     *
+     * 1. MySQL bug #111037: the optimizer can skip functional indexes
+     *    (CAST ... AS ARRAY) on nullable columns in complex query plans.
+     * 2. Correctness: JSON_CONTAINS(NULL, ...) returns NULL, not FALSE,
+     *    so rows with NULL array columns are invisible to both positive
+     *    and negative array queries (containsAny / notContains).
+     *
+     * @link https://bugs.mysql.com/bug.php?id=111037
+     */
+    public function testArrayAttributeNotNullSchema(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (!$adapter->getSupportForSchemaAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'arrayNotNull';
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        $database->createAttribute($collection, 'tags', Database::VAR_STRING, 255, false, array: true);
+
+        // Verify the physical column is NOT NULL via INFORMATION_SCHEMA
+        $pdo = $this->getPDO();
+
+        $ns = $database->getNamespace();
+        $db = $database->getDatabase();
+        $tableName = "{$ns}_{$collection}";
+
+        $stmt = $pdo->prepare(
+            'SELECT IS_NULLABLE, COLUMN_DEFAULT '
+            . 'FROM INFORMATION_SCHEMA.COLUMNS '
+            . 'WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+        );
+        $stmt->execute([$db, $tableName, 'tags']);
+        $col = $stmt->fetch(\PDO::FETCH_ASSOC);
+        // PostgreSQL returns lowercase keys from INFORMATION_SCHEMA
+        $col = $col ? \array_change_key_case($col, CASE_UPPER) : false;
+
+        $this->assertNotFalse($col, 'Column "tags" should exist in INFORMATION_SCHEMA');
+        $this->assertEquals(
+            'NO',
+            $col['IS_NULLABLE'],
+            'Array (JSON) column must be NOT NULL so the optimizer can use multi-valued indexes '
+            . 'and JSON_CONTAINS/JSON_OVERLAPS never encounter NULL'
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * Verifies that the index on an array attribute is picked by the
+     * optimizer and that queries return correct results.
+     */
+    public function testArrayIndexUsedInQuery(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (!$adapter->getSupportForCastIndexArray()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'arrayIndexExplain';
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        $database->createAttribute($collection, 'tags', Database::VAR_STRING, 255, false, array: true);
+        $database->createIndex($collection, 'idx_tags', Database::INDEX_KEY, ['tags'], [255]);
+
+        // PostgreSQL's planner needs a larger dataset to choose a GIN index over a sequential scan.
+        $total = $adapter->getSupportForGinIndex() ? 5000 : 500;
+        $documents = [];
+        for ($i = 0; $i < $total; $i++) {
+            $documents[] = new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [Permission::read(Role::any())],
+                'tags' => ['tag_' . ($i % 50), 'common'],
+            ]);
+        }
+
+        foreach (\array_chunk($documents, 100) as $chunk) {
+            $database->createDocuments($collection, $chunk);
+        }
+
+        $pdo = $this->getPDO();
+        $ns = $database->getNamespace();
+        $db = $database->getDatabase();
+
+        if ($adapter->getSupportForGinIndex()) {
+            $table = "\"{$db}\".\"{$ns}_{$collection}\"";
+
+            // Verify GIN index exists
+            $stmt = $pdo->prepare(
+                "SELECT indexdef FROM pg_indexes WHERE tablename = ? AND indexname LIKE ?"
+            );
+            $stmt->execute(["{$ns}_{$collection}", '%idx_tags%']);
+            $indexDef = $stmt->fetchColumn();
+            $this->assertNotFalse($indexDef, 'GIN index should exist for array column');
+            $this->assertStringContainsString('gin', \strtolower($indexDef), 'Index on array column should be a GIN index');
+
+            // Update planner statistics and verify the GIN index is chosen
+            $pdo->prepare("ANALYZE {$table}")->execute();
+            $stmt = $pdo->prepare("EXPLAIN SELECT * FROM {$table} WHERE \"tags\" @> '[\"tag_1\"]'::jsonb");
+            $stmt->execute();
+            $plan = \implode("\n", $stmt->fetchAll(\PDO::FETCH_COLUMN));
+            $this->assertMatchesRegularExpression(
+                '/Bitmap Heap Scan|Index Scan/i',
+                $plan,
+                "PostgreSQL should use the GIN index for @> containment query. EXPLAIN output:\n" . $plan
+            );
+        } else {
+            $table = "`{$db}`.`{$ns}_{$collection}`";
+
+            $pdo->prepare("ANALYZE TABLE {$table}")->execute();
+
+            $sql = "EXPLAIN SELECT * FROM {$table} WHERE JSON_CONTAINS(`tags`, '[\"tag_1\"]')";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute();
+            $explain = $stmt->fetchAll();
+
+            $usedKey = $explain[0]['key'] ?? null;
+            $this->assertNotNull(
+                $usedKey,
+                'MySQL should use an index for JSON_CONTAINS on a NOT NULL JSON column. '
+                . "EXPLAIN output:\n" . \print_r($explain, true)
+            );
+            $this->assertStringContainsString(
+                'idx_tags',
+                $usedKey,
+                "Expected the 'idx_tags' index to be used. EXPLAIN output:\n" . \print_r($explain, true)
+            );
+        }
+
+        // Verify the query also returns correct functional results
+        $expectedCount = $total / 50; // each tag_N appears once per 50 documents
+        $results = $database->find($collection, [
+            Query::containsAny('tags', ['tag_1']),
+        ]);
+        $this->assertCount($expectedCount, $results);
+
+        $database->deleteCollection($collection);
+    }
 }

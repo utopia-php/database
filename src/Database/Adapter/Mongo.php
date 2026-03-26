@@ -25,6 +25,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\MongoPermissionFilter;
 use Utopia\Database\Hook\MongoTenantFilter;
+use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Hook\Tenant;
 use Utopia\Database\Index;
@@ -163,6 +164,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected function syncWriteHooks(): void
     {
+        $this->removeWriteHook(Tenancy::class);
+        if ($this->sharedTables && $this->tenant !== null) {
+            $this->addWriteHook(new Tenancy($this->tenant));
+        }
     }
 
     protected function syncReadHooks(): void

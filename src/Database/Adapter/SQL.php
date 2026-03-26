@@ -24,6 +24,8 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionFilter;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
@@ -2888,6 +2890,14 @@ abstract class SQL extends Adapter
      */
     protected function syncWriteHooks(): void
     {
+        if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof Permissions))) {
+            $this->addWriteHook(new Permissions());
+        }
+
+        $this->removeWriteHook(Tenancy::class);
+        if ($this->sharedTables && ($this->tenant !== null || $this->tenantPerDocument)) {
+            $this->addWriteHook(new Tenancy($this->tenant ?? 0));
+        }
     }
 
     /**

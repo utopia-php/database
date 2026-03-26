@@ -2101,7 +2101,7 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input($forPermission->value, $collection->getPermissionsByType($forPermission->value)));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission->value, $collection->getPermissionsByType($forPermission)));
 
         if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -2148,7 +2148,7 @@ trait Documents
                     throw new QueryException("Joined collection '{$joinCollectionId}' not found");
                 }
 
-                if (! $this->authorization->isValid(new Input($forPermission->value, $joinCollection->getPermissionsByType($forPermission->value)))) {
+                if (! $this->authorization->isValid(new Input($forPermission->value, $joinCollection->getPermissionsByType($forPermission)))) {
                     throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
                 }
             }

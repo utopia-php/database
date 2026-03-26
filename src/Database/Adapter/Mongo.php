@@ -164,10 +164,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected function syncWriteHooks(): void
     {
-        $this->removeWriteHook(Tenancy::class);
-        if ($this->sharedTables && $this->tenant !== null) {
-            $this->addWriteHook(new Tenancy($this->tenant));
-        }
     }
 
     protected function syncReadHooks(): void

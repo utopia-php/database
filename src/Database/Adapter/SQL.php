@@ -2890,14 +2890,7 @@ abstract class SQL extends Adapter
      */
     protected function syncWriteHooks(): void
     {
-        if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof Permissions))) {
-            $this->addWriteHook(new Permissions());
-        }
 
-        $this->removeWriteHook(Tenancy::class);
-        if ($this->sharedTables && ($this->tenant !== null || $this->tenantPerDocument)) {
-            $this->addWriteHook(new Tenancy($this->tenant ?? 0));
-        }
     }
 
     /**

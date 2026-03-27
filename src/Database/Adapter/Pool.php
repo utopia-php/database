@@ -89,12 +89,14 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addTransform($tName, $tTransform);
             }
-            foreach ($this->writeHooks as $hook) {
-                if (empty(\array_filter($adapter->getWriteHooks(), fn ($h) => $h::class === $hook::class))) {
-                    $adapter->addWriteHook($hook);
+            // Sync write hooks for DML operations only (not DDL like createCollection)
+            if (\in_array($method, ['createDocuments', 'updateDocuments', 'deleteDocuments', 'deleteDocument', 'upsertDocuments'])) {
+                foreach ($this->writeHooks as $hook) {
+                    if (empty(\array_filter($adapter->getWriteHooks(), fn ($h) => $h::class === $hook::class))) {
+                        $adapter->addWriteHook($hook);
+                    }
                 }
             }
-
             return $adapter->{$method}(...$args);
         });
     }

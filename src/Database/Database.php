@@ -2584,6 +2584,7 @@ class Database
                 }
                 break;
             case self::VAR_INTEGER:
+            case self::VAR_BIGINT:
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
@@ -2910,6 +2911,12 @@ class Database
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
                     throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
+                }
+                break;
+            case self::VAR_BIGINT:
+                $limit = ($signed) ? $this->adapter->getLimitForBigInt() / 2 : $this->adapter->getLimitForBigInt();
+                if ($size > $limit) {
+                    throw new DatabaseException('Max size allowed for bigint is: ' . number_format($limit));
                 }
                 break;
             case self::VAR_FLOAT:

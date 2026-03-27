@@ -897,6 +897,19 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        // 2^64 - 1
+        // 18446744073709551615 is the maximum value for a 64-bit unsigned integer
+        // 9223372036854775807 is the maximum value for a 64-bit signed integer
+        return 18446744073709551615;
+    }
+
+    /**
      * Get maximum column limit.
      * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
      * Can be inherited by MySQL since we utilize the InnoDB engine
@@ -1157,11 +1170,11 @@ abstract class SQL extends Adapter
                     break;
 
                 case Database::VAR_INTEGER:
-                    if ($attribute['size'] >= 8) {
-                        $total += 8; //  BIGINT 8 bytes
-                    } else {
-                        $total += 4; // INT 4 bytes
-                    }
+                    $total += 4; // INT 4 bytes
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $total += 8; //  BIGINT 8 bytes
                     break;
 
                 case Database::VAR_FLOAT:

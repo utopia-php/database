@@ -1310,6 +1310,7 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_INTEGER:
+                    case Database::VAR_BIGINT:
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME:
@@ -2211,6 +2212,7 @@ class Mongo extends Adapter
             Database::VAR_MEDIUMTEXT => 'string',
             Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
+            Database::VAR_BIGINT => 'int',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',
@@ -3002,6 +3004,17 @@ class Mongo extends Adapter
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        // Mongo does not handle integers directly, so using MariaDB limit for now
+        return 18446744073709551615;
     }
 
     /**

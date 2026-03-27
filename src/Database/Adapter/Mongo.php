@@ -2212,7 +2212,7 @@ class Mongo extends Adapter
             Database::VAR_MEDIUMTEXT => 'string',
             Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
-            Database::VAR_BIGINT => 'int',
+            Database::VAR_BIGINT => 'long',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',

@@ -89,6 +89,11 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addTransform($tName, $tTransform);
             }
+            foreach ($this->writeHooks as $hook) {
+                if (empty(\array_filter($adapter->getWriteHooks(), fn ($h) => $h::class === $hook::class))) {
+                    $adapter->addWriteHook($hook);
+                }
+            }
 
             return $adapter->{$method}(...$args);
         });

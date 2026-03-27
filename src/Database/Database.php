@@ -42,6 +42,7 @@ class Database
     // Simple Types
     public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
+    public const VAR_BIGINT = 'bigint';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
@@ -2512,6 +2513,7 @@ class Database
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
+            maxBigIntLength: $this->adapter->getLimitForBigInt(),
             supportForSchemaAttributes: $this->adapter->getSupportForSchemaAttributes(),
             supportForVectors: $this->adapter->getSupportForVectors(),
             supportForSpatialAttributes: $this->adapter->getSupportForSpatialAttributes(),

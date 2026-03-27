@@ -31,6 +31,7 @@ class Attribute extends Validator
      * @param int $maxStringLength
      * @param int $maxVarcharLength
      * @param int $maxIntLength
+     * @param int $maxBigIntLength
      * @param bool $supportForSchemaAttributes
      * @param bool $supportForVectors
      * @param bool $supportForSpatialAttributes
@@ -49,6 +50,7 @@ class Attribute extends Validator
         protected int $maxStringLength = 0,
         protected int $maxVarcharLength = 0,
         protected int $maxIntLength = 0,
+        protected int $maxBigIntLength = 0,
         protected bool $supportForSchemaAttributes = false,
         protected bool $supportForVectors = false,
         protected bool $supportForSpatialAttributes = false,
@@ -59,6 +61,11 @@ class Attribute extends Validator
         protected bool $isMigrating = false,
         protected bool $sharedTables = false,
     ) {
+        // Keep backwards compatibility for existing validator construction sites.
+        if ($this->maxBigIntLength === 0) {
+            $this->maxBigIntLength = $this->maxIntLength;
+        }
+
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
@@ -333,6 +340,14 @@ class Attribute extends Validator
                 $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: ' . number_format($limit);
+                    throw new DatabaseException($this->message);
+                }
+                break;
+
+            case Database::VAR_BIGINT:
+                $limit = ($signed) ? $this->maxBigIntLength / 2 : $this->maxBigIntLength;
+                if ($size > $limit) {
+                    $this->message = 'Max size allowed for bigint is: ' . number_format($limit);
                     throw new DatabaseException($this->message);
                 }
                 break;

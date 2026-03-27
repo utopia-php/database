@@ -2890,7 +2890,9 @@ abstract class SQL extends Adapter
      */
     protected function syncWriteHooks(): void
     {
-
+        if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof Permissions))) {
+            $this->addWriteHook(new Permissions());
+        }
     }
 
     /**

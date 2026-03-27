@@ -1965,6 +1965,11 @@ class Postgres extends SQL
                 return 'TEXT';  // PostgreSQL doesn't have MEDIUMTEXT/LONGTEXT, use TEXT
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
+
+                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
+                    return 'BIGINT';
+                }
+
                 return 'INTEGER';
 
             case Database::VAR_BIGINT:

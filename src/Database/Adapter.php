@@ -881,6 +881,13 @@ abstract class Adapter
     abstract public function getLimitForInt(): int;
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    abstract public function getLimitForBigInt(): int;
+
+    /**
      * Get maximum attributes limit.
      *
      * @return int

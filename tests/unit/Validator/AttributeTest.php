@@ -1139,6 +1139,58 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
+    public function testBigIntSizeTooLarge(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            maxBigIntLength: 200,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 101,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Max size allowed for bigint is: 100');
+        $validator->isValid($attribute);
+    }
+
+    public function testUnsignedBigIntSizeLimit(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            maxBigIntLength: 200,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 200,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
     public function testDuplicateAttributeIdCaseInsensitive(): void
     {
         $validator = new Attribute(

@@ -2221,6 +2221,35 @@ trait AttributeTests
         }
     }
 
+    public function testCreateAttributesBigIntSizeLimit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+
+        $limit = $database->getAdapter()->getLimitForBigInt() / 2;
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_BIGINT,
+            'size' => (int)$limit + 1,
+            'required' => false
+        ]];
+
+        try {
+            $database->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
     public function testCreateAttributesSuccessMultiple(): void
     {
         /** @var Database $database */

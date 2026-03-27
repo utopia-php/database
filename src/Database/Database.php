@@ -42,6 +42,7 @@ class Database
     // Simple Types
     public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
+    public const VAR_BIGINT = 'bigint';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
@@ -2512,6 +2513,7 @@ class Database
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
+            maxBigIntLength: $this->adapter->getLimitForBigInt(),
             supportForSchemaAttributes: $this->adapter->getSupportForSchemaAttributes(),
             supportForVectors: $this->adapter->getSupportForVectors(),
             supportForSpatialAttributes: $this->adapter->getSupportForSpatialAttributes(),
@@ -2582,6 +2584,7 @@ class Database
                 }
                 break;
             case self::VAR_INTEGER:
+            case self::VAR_BIGINT:
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
@@ -2607,6 +2610,7 @@ class Database
                     self::VAR_MEDIUMTEXT,
                     self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
+                    self::VAR_BIGINT,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,
                     self::VAR_DATETIME,
@@ -2909,6 +2913,12 @@ class Database
                     throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                 }
                 break;
+            case self::VAR_BIGINT:
+                $limit = ($signed) ? $this->adapter->getLimitForBigInt() / 2 : $this->adapter->getLimitForBigInt();
+                if ($size > $limit) {
+                    throw new DatabaseException('Max size allowed for bigint is: ' . number_format($limit));
+                }
+                break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
             case self::VAR_DATETIME:
@@ -2975,6 +2985,7 @@ class Database
                     self::VAR_MEDIUMTEXT,
                     self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
+                    self::VAR_BIGINT,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,
                     self::VAR_DATETIME,

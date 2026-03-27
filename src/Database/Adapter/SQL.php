@@ -1171,7 +1171,11 @@ abstract class SQL extends Adapter
                     break;
 
                 case Database::VAR_INTEGER:
-                    $total += 4; // INT 4 bytes
+                    if ($attribute['size'] >= 8) {
+                        $total += 8; //  BIGINT 8 bytes
+                    } else {
+                        $total += 4; // INT 4 bytes
+                    }
                     break;
 
                 case Database::VAR_BIGINT:

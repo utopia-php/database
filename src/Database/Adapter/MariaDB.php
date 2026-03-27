@@ -1727,6 +1727,11 @@ class MariaDB extends SQL
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
+
+                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
+                    return 'BIGINT' . $signed;
+                }
+
                 return 'INT' . $signed;
 
             case Database::VAR_BIGINT:

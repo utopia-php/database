@@ -55,9 +55,4 @@ class Limit extends Base
 
         return true;
     }
-
-    public function getMethodType(): string
-    {
-        return self::METHOD_TYPE_LIMIT;
-    }
 }

@@ -2232,7 +2232,8 @@ abstract class SQL extends Adapter
      */
     public function getMaxVarcharLength(): int
     {
-        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+        // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+        return $this->getMaxIndexLength();
     }
 
     /**

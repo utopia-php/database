@@ -2584,10 +2584,14 @@ class Database
                 }
                 break;
             case self::VAR_INTEGER:
-            case self::VAR_BIGINT:
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            case Database::VAR_BIGINT:
+                if ($defaultType !== 'integer') {
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;

@@ -1495,6 +1495,45 @@ trait DocumentTests
         return $document;
     }
 
+    public function testCreateUpdateBigIntAndIncrementDecrement(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'bigint_update_increase_decrease';
+        $database->createCollection($collection);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'inc', Database::VAR_BIGINT, 8, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'dec', Database::VAR_BIGINT, 8, true));
+
+        $document = $database->createDocument($collection, new Document([
+            'inc' => 10,
+            'dec' => 10,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
+        ]));
+
+        $this->assertIsInt($document->getAttribute('inc'));
+        $this->assertEquals(10, $document->getAttribute('inc'));
+
+        // Verify regular update works for bigint attributes
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'inc' => 20,
+        ]));
+        $this->assertEquals(20, $updated->getAttribute('inc'));
+
+        // Verify atomic increment/decrement supports bigint schema attributes
+        $afterInc = $database->increaseDocumentAttribute($collection, $document->getId(), 'inc', 5, 30);
+        $this->assertEquals(25, $afterInc->getAttribute('inc'));
+
+        $afterDec = $database->decreaseDocumentAttribute($collection, $document->getId(), 'dec', 3, 7);
+        $this->assertEquals(7, $afterDec->getAttribute('dec'));
+    }
+
     /**
      * @depends testIncreaseDecrease
      */

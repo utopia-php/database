@@ -7430,6 +7430,7 @@ class Database
 
             $whiteList = [
                 self::VAR_INTEGER,
+                self::VAR_BIGINT,
                 self::VAR_FLOAT
             ];
 
@@ -7528,6 +7529,7 @@ class Database
 
             $whiteList = [
                 self::VAR_INTEGER,
+                self::VAR_BIGINT,
                 self::VAR_FLOAT
             ];
 

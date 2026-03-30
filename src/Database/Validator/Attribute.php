@@ -431,6 +431,7 @@ class Attribute extends Validator
                     Database::VAR_LONGTEXT,
                     Database::VAR_INTEGER,
                     Database::VAR_BIGINT,
+                    Database::VAR_BIGINT,
                     Database::VAR_FLOAT,
                     Database::VAR_BOOLEAN,
                     Database::VAR_DATETIME,
@@ -526,6 +527,7 @@ class Attribute extends Validator
                 }
                 break;
             case Database::VAR_INTEGER:
+            case Database::VAR_BIGINT:
             case Database::VAR_FLOAT:
             case Database::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
@@ -554,6 +556,7 @@ class Attribute extends Validator
                     Database::VAR_MEDIUMTEXT,
                     Database::VAR_LONGTEXT,
                     Database::VAR_INTEGER,
+                    Database::VAR_BIGINT,
                     Database::VAR_FLOAT,
                     Database::VAR_BOOLEAN,
                     Database::VAR_DATETIME,

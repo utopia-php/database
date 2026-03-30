@@ -527,10 +527,15 @@ class Attribute extends Validator
                 }
                 break;
             case Database::VAR_INTEGER:
-            case Database::VAR_BIGINT:
             case Database::VAR_FLOAT:
             case Database::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
+                    $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
+                    throw new DatabaseException($this->message);
+                }
+                break;
+            case Database::VAR_BIGINT:
+                if ($defaultType !== 'integer') {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }

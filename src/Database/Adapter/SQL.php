@@ -903,11 +903,7 @@ abstract class SQL extends Adapter
      */
     public function getLimitForBigInt(): int
     {
-        // 2^64 - 1
-        // 18446744073709551615 is the maximum value for a 64-bit unsigned integer
-        // 9223372036854775807 is the maximum value for a 64-bit signed integer
-        // in php we can't represent 64-bit integer, so greater than 4294967295 will be treated as bigint
-        return 4294967295;
+        return Database::MAX_BIG_INT;
     }
 
     /**

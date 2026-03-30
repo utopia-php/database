@@ -2221,7 +2221,8 @@ trait AttributeTests
         }
     }
 
-    public function testCreateAttributesBigIntSizeLimit(): void
+
+    public function testCreateAttributesBigIntIgnoresSizeLimit(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -2234,20 +2235,23 @@ trait AttributeTests
         $database->createCollection(__FUNCTION__);
 
         $limit = $database->getAdapter()->getLimitForBigInt() / 2;
+        $size = (int)$limit + 1;
 
         $attributes = [[
             '$id' => 'foo',
             'type' => Database::VAR_BIGINT,
-            'size' => (int)$limit + 1,
+            'size' => $size,
             'required' => false
         ]];
 
-        try {
-            $database->createAttributes(__FUNCTION__, $attributes);
-            $this->fail('Expected DatabaseException not thrown');
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-        }
+        $result = $database->createAttributes(__FUNCTION__, $attributes);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection(__FUNCTION__);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attrs);
+        $this->assertEquals('foo', $attrs[0]['$id']);
+        $this->assertEquals($size, $attrs[0]['size']);
     }
 
     public function testCreateAttributesSuccessMultiple(): void

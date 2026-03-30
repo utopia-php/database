@@ -3013,8 +3013,7 @@ class Mongo extends Adapter
      */
     public function getLimitForBigInt(): int
     {
-        // Mongo does not handle integers directly, so using MariaDB limit for now
-        return 4294967295;
+        return Database::MAX_BIG_INT;
     }
 
     /**

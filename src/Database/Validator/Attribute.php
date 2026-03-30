@@ -345,11 +345,6 @@ class Attribute extends Validator
                 break;
 
             case Database::VAR_BIGINT:
-                $limit = ($signed) ? $this->maxBigIntLength / 2 : $this->maxBigIntLength;
-                if ($size > $limit) {
-                    $this->message = 'Max size allowed for bigint is: ' . number_format($limit);
-                    throw new DatabaseException($this->message);
-                }
                 break;
 
             case Database::VAR_FLOAT:

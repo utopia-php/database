@@ -1139,7 +1139,7 @@ class AttributeTest extends TestCase
         $validator->isValid($attribute);
     }
 
-    public function testBigIntSizeTooLarge(): void
+    public function testBigIntSizeNotLimited(): void
     {
         $validator = new Attribute(
             attributes: [],
@@ -1161,9 +1161,7 @@ class AttributeTest extends TestCase
             'filters' => [],
         ]);
 
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Max size allowed for bigint is: 100');
-        $validator->isValid($attribute);
+        $this->assertTrue($validator->isValid($attribute));
     }
 
     public function testUnsignedBigIntSizeLimit(): void

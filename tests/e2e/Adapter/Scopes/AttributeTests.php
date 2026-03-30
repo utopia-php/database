@@ -2222,7 +2222,7 @@ trait AttributeTests
     }
 
 
-    public function testCreateAttributesBigIntIgnoresSizeLimit(): void
+    public function testCreateAttributesBigInt(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();

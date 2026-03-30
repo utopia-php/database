@@ -8941,6 +8941,9 @@ class Database
                     case self::VAR_INTEGER:
                         $node = (int)$node;
                         break;
+                    case self::VAR_BIGINT:
+                        $node = (int)$node;
+                        break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;

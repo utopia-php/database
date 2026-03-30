@@ -1522,7 +1522,7 @@ trait DocumentTests
 
         // Verify regular update works for bigint attributes
         $updated = $database->updateDocument($collection, $document->getId(), new Document([
-            'inc' => 20,
+            'inc' => 20
         ]));
         $this->assertEquals(20, $updated->getAttribute('inc'));
 

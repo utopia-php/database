@@ -25,7 +25,6 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Hook\MongoPermissionFilter;
 use Utopia\Database\Hook\MongoTenantFilter;
-use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Hook\Tenant;
 use Utopia\Database\Index;
@@ -634,18 +633,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                     switch ($index->type) {
                         case IndexType::Key:
-                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
                             // MongoDB fulltext index is just 'text'
                             $order = 'text';
                             break;
                         case IndexType::Unique:
-                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
                             $unique = true;
                             break;
                         case IndexType::Ttl:
-                            $order = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$j] ?? '')) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
                             break;
                         default:
                             // index not supported
@@ -1030,7 +1029,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder(OrderDirection::tryFrom((string) ($orders[$i] ?? '')) ?? OrderDirection::Asc);
+            $orderType = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$i] ?? ''))) ?? OrderDirection::Asc);
             $indexKey[$attributes[$i]] = $orderType;
 
             switch ($type) {

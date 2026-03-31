@@ -3,8 +3,8 @@
 namespace Utopia\Database\Hook;
 
 use Utopia\Database\Document;
-use Utopia\Query\Hook;
 use Utopia\Database\Event;
+use Utopia\Query\Hook;
 
 /**
  * Hook for transforming documents after they are read from or written to the database.

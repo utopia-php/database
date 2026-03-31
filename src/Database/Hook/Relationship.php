@@ -2,10 +2,9 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Query\Hook;
-
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Query\Hook;
 
 /**
  * Contract for handling document relationship operations including creation, updates, deletion, and population.

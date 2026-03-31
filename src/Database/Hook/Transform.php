@@ -2,9 +2,8 @@
 
 namespace Utopia\Database\Hook;
 
-use Utopia\Query\Hook;
-
 use Utopia\Database\Event;
+use Utopia\Query\Hook;
 
 /**
  * Hook for transforming SQL queries before execution.

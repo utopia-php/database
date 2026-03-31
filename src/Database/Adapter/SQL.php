@@ -25,7 +25,6 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;

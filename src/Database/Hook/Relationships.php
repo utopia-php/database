@@ -147,6 +147,11 @@ class Relationships implements Hook
             $this->writeStack[] = $collection->getId();
 
             try {
+                if (\is_array($value) && ! \array_is_list($value)) {
+                    $value = new Document($value);
+                    $document->setAttribute($key, $value);
+                }
+
                 if (\is_array($value)) {
                     if (
                         ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent) ||
@@ -279,6 +284,12 @@ class Relationships implements Hook
             $typedRelAttr = Attribute::fromDocument($relationship);
             $key = $typedRelAttr->key;
             $value = $document->getAttribute($key);
+
+            if (\is_array($value) && ! \array_is_list($value)) {
+                $value = new Document($value);
+                $document->setAttribute($key, $value);
+            }
+
             $oldValue = $old->getAttribute($key);
             $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);

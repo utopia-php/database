@@ -241,7 +241,13 @@ class Document extends ArrayObject
      */
     public function getTenant(): int|string|null
     {
-        return $this->getAttribute('$tenant');
+        $tenant = $this->getAttribute('$tenant');
+
+        if (\is_numeric($tenant)) {
+            return (int) $tenant;
+        }
+
+        return $tenant;
     }
 
     /**

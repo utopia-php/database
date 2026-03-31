@@ -17,7 +17,7 @@ class MongoTenantFilter implements Read
     /**
      * @param int|string|null $tenant The current tenant ID
      * @param bool $sharedTables Whether shared tables mode is enabled
-     * @param Closure(string, array<int|string>=): (int|string|null|array<string, array<int|string>>) $getTenantFilters Closure that returns tenant filter values for a collection
+     * @param Closure(string, array<int|string>=): (int|string|null|array<string, array<int|string|null>>) $getTenantFilters Closure that returns tenant filter values for a collection
      */
     public function __construct(
         private int|string|null $tenant,

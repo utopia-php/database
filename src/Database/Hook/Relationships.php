@@ -148,8 +148,7 @@ class Relationships implements Hook
 
             try {
                 if (\is_array($value) && ! \array_is_list($value)) {
-                    /** @var array<string, mixed> $value */
-                    $value = new Document($value);
+                    $value = new Document($value); // @phpstan-ignore argument.type
                     $document->setAttribute($key, $value);
                 }
 
@@ -287,8 +286,7 @@ class Relationships implements Hook
             $value = $document->getAttribute($key);
 
             if (\is_array($value) && ! \array_is_list($value)) {
-                /** @var array<string, mixed> $value */
-                $value = new Document($value);
+                $value = new Document($value); // @phpstan-ignore argument.type
                 $document->setAttribute($key, $value);
             }
 
@@ -536,6 +534,10 @@ class Relationships implements Hook
                             }
                             $this->db->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
+                            if (empty($value->getId())) {
+                                throw new RelationshipException('Invalid relationship value. Document must have a valid $id.');
+                            }
+
                             $related = $this->db->skipRelationships(
                                 fn () => $this->db->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])])
                             );

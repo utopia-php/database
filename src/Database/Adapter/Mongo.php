@@ -184,6 +184,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function applyReadFilters(array $filters, string $collection, string $forPermission = 'read'): array
     {
+        $this->syncReadHooks();
         foreach ($this->readHooks as $hook) {
             $filters = $hook->applyFilters($filters, $collection, $forPermission);
         }

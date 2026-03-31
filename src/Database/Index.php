@@ -74,7 +74,7 @@ class Index
         /** @var string $key */
         $key = $document->getAttribute('key', $document->getId());
         /** @var string $type */
-        $type = $document->getAttribute('type', 'index');
+        $type = $document->getAttribute('type', IndexType::Key->value);
         /** @var array<string> $attributes */
         $attributes = $document->getAttribute('attributes', []);
         /** @var array<int> $lengths */

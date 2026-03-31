@@ -44,7 +44,9 @@ class Query extends BaseQuery
     public static function parse(string $query): static
     {
         try {
-            return parent::parse($query);
+            $parsed = parent::parse($query);
+
+            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
         } catch (BaseQueryException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
@@ -58,7 +60,9 @@ class Query extends BaseQuery
     public static function parseQuery(array $query): static
     {
         try {
-            return parent::parseQuery($query);
+            $parsed = parent::parseQuery($query);
+
+            return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
         } catch (BaseQueryException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }

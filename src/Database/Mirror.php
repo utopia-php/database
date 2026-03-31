@@ -401,20 +401,22 @@ class Mirror extends Database
             $document = $attribute->toDocument();
 
             foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeCreateAttribute(
+                $document = $filter->beforeCreateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     attributeId: $attribute->key,
                     attribute: $document,
                 );
-                if ($filtered !== null) {
-                    $document = $filtered;
+                if ($document === null) {
+                    break;
                 }
             }
 
-            $filteredAttribute = Attribute::fromDocument($document);
-            $result = $this->destination->createAttribute($collection, $filteredAttribute);
+            if ($document !== null) {
+                $filteredAttribute = Attribute::fromDocument($document);
+                $result = $this->destination->createAttribute($collection, $filteredAttribute);
+            }
         } catch (Throwable $err) {
             $this->logError('createAttribute', $err);
         }
@@ -441,25 +443,29 @@ class Mirror extends Database
                 $document = $attribute->toDocument();
 
                 foreach ($this->writeFilters as $filter) {
-                    $filtered = $filter->beforeCreateAttribute(
+                    $document = $filter->beforeCreateAttribute(
                         source: $this->source,
                         destination: $this->destination,
                         collectionId: $collection,
                         attributeId: $attribute->key,
                         attribute: $document,
                     );
-                    if ($filtered !== null) {
-                        $document = $filtered;
+                    if ($document === null) {
+                        break;
                     }
                 }
 
-                $filteredAttributes[] = Attribute::fromDocument($document);
+                if ($document !== null) {
+                    $filteredAttributes[] = Attribute::fromDocument($document);
+                }
             }
 
-            $result = $this->destination->createAttributes(
-                $collection,
-                $filteredAttributes,
-            );
+            if ($filteredAttributes !== []) {
+                $result = $this->destination->createAttributes(
+                    $collection,
+                    $filteredAttributes,
+                );
+            }
         } catch (Throwable $err) {
             $this->logError('createAttributes', $err);
         }

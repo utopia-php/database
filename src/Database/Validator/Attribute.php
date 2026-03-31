@@ -326,6 +326,7 @@ class Attribute extends Validator
                 }
                 break;
 
+            case ColumnType::Float:
             case ColumnType::Double:
             case ColumnType::Boolean:
             case ColumnType::Datetime:
@@ -409,6 +410,7 @@ class Attribute extends Validator
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,
@@ -501,9 +503,15 @@ class Attribute extends Validator
                 }
                 break;
             case ColumnType::Integer:
-            case ColumnType::Double:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    throw new DatabaseException($this->message);
+                }
+                break;
+            case ColumnType::Float:
+            case ColumnType::Double:
+                if ($defaultType !== 'double') {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }
@@ -529,6 +537,7 @@ class Attribute extends Validator
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,

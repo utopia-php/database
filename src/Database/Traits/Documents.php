@@ -437,9 +437,10 @@ trait Documents
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $fetchDepth = $hook->getWriteStackCount();
             $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $fetchDepth));
-            $document = $this->adapter->castingAfter($collection, $documents[0]);
+            $document = $documents[0];
         }
 
+        $document = $this->adapter->castingAfter($collection, $document);
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 

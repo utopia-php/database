@@ -2821,8 +2821,8 @@ abstract class SQL extends Adapter
             '$updatedAt' => '_updatedAt',
             '$permissions' => '_permissions',
         ]));
-        if ($this->hasTenantHook()) {
-            $builder->addHook(new TenantFilter($this->getTenantHook()->getTenant(), Database::METADATA));
+        if ($this->sharedTables && $this->tenant !== null) {
+            $builder->addHook(new TenantFilter($this->tenant, Database::METADATA));
         }
 
         return $builder;

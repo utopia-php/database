@@ -2532,7 +2532,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                         if (! ($node instanceof UTCDateTime)) {
                             /** @var mixed $node */
                             $nodeStr = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : '');
-                            $node = new UTCDateTime(new NativeDateTime($nodeStr));
+                            if (\is_numeric($nodeStr)) {
+                                $node = new UTCDateTime((int) $nodeStr);
+                            } else {
+                                $node = new UTCDateTime(new NativeDateTime($nodeStr));
+                            }
                         }
                         break;
                     case ColumnType::Object:

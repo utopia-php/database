@@ -2177,6 +2177,7 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Returns the current PDO object
      * @return mixed
      * @deprecated Use getDriver() instead
      */

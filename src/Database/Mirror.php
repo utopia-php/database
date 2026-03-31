@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
@@ -1296,6 +1297,10 @@ class Mirror extends Database
         if ($hook instanceof Relationships) {
             $this->source->addHook(new Relationships($this->source));
             $this->destination?->addHook(new Relationships($this->destination));
+        }
+
+        if ($hook instanceof Write) {
+            $this->destination?->getAdapter()->addWriteHook($hook);
         }
 
         return $this;

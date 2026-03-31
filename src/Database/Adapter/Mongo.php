@@ -2458,7 +2458,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             // Include both tenant-specific and tenant-null documents for metadata collections
             // by returning the $in filter which covers tenant documents
             // (null tenant docs are accessible to all tenants for metadata)
-            return ['$in' => $values];
+            return ['$in' => [...$values, null]];
         }
 
         if (empty($values)) {

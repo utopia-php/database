@@ -2430,7 +2430,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     /**
      * @param  array<int|string>  $tenants
-     * @return int|string|null|array<string, array<int|string>>
+     * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
         string $collection,

@@ -38,7 +38,7 @@ trait AggregationTests
             return;
         }
 
-        $database->createCollection($collection);
+        $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
         $database->createAttribute($collection, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
         $database->createAttribute($collection, new Attribute(key: 'price', type: ColumnType::Integer, size: 0, required: true));
@@ -74,7 +74,7 @@ trait AggregationTests
             $database->deleteCollection($collection);
         }
 
-        $database->createCollection($collection);
+        $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($collection, new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($collection, new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($collection, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 0, required: true));
@@ -111,7 +111,7 @@ trait AggregationTests
             $database->deleteCollection($collection);
         }
 
-        $database->createCollection($collection);
+        $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
         $database->createAttribute($collection, new Attribute(key: 'email', type: ColumnType::String, size: 200, required: true));
         $database->createAttribute($collection, new Attribute(key: 'country', type: ColumnType::String, size: 50, required: true));
@@ -142,7 +142,7 @@ trait AggregationTests
             $database->deleteCollection($collection);
         }
 
-        $database->createCollection($collection);
+        $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($collection, new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($collection, new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($collection, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
@@ -258,7 +258,7 @@ trait AggregationTests
         if ($database->exists($database->getDatabase(), $col)) {
             $database->deleteCollection($col);
         }
-        $database->createCollection($col);
+        $database->createCollection($col, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($col, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
 
         $results = $database->find($col, [Query::count('*', 'total')]);
@@ -1106,16 +1106,16 @@ trait AggregationTests
         $cols = ['jp_apg_o', 'jp_apg_c'];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection('jp_apg_c');
+        $database->createCollection('jp_apg_c', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('viewer'))]);
         $database->createAttribute('jp_apg_c', new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-        $database->createCollection('jp_apg_o', documentSecurity: true);
+        $database->createCollection('jp_apg_o', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
         $database->createAttribute('jp_apg_o', new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute('jp_apg_o', new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
         foreach (['u1', 'u2'] as $uid) {
             $database->createDocument('jp_apg_c', new Document([
                 '$id' => $uid, 'name' => 'User ' . $uid,
-                '$permissions' => [Permission::read(Role::any())],
+                '$permissions' => [Permission::read(Role::any()), Permission::read(Role::user('viewer'))],
             ]));
         }
 
@@ -1173,9 +1173,9 @@ trait AggregationTests
         $cols = ['jp_ljpf_p', 'jp_ljpf_r'];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection('jp_ljpf_p', documentSecurity: true);
+        $database->createCollection('jp_ljpf_p', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
         $database->createAttribute('jp_ljpf_p', new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-        $database->createCollection('jp_ljpf_r');
+        $database->createCollection('jp_ljpf_r', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('tester'))]);
         $database->createAttribute('jp_ljpf_r', new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute('jp_ljpf_r', new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1191,7 +1191,7 @@ trait AggregationTests
         foreach (['visible', 'visible', 'hidden'] as $pid) {
             $database->createDocument('jp_ljpf_r', new Document([
                 'product_uid' => $pid, 'score' => 5,
-                '$permissions' => [Permission::read(Role::any())],
+                '$permissions' => [Permission::read(Role::any()), Permission::read(Role::user('tester'))],
             ]));
         }
 

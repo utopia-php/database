@@ -26,10 +26,10 @@ trait JoinTests
         $cols = [$pCol, $rCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($rCol);
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
 
@@ -68,10 +68,10 @@ trait JoinTests
         $cols = [$pCol, $rCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($rCol);
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
 
@@ -130,10 +130,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -181,10 +181,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -248,10 +248,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -305,10 +305,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -358,10 +358,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -412,10 +412,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -466,10 +466,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'product', type: ColumnType::String, size: 50, required: true));
 
@@ -516,10 +516,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -576,10 +576,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -637,10 +637,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -683,10 +683,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -728,10 +728,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -769,10 +769,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -811,10 +811,10 @@ trait JoinTests
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -867,10 +867,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -928,10 +928,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -979,10 +979,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -1030,10 +1030,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'tag', type: ColumnType::String, size: 50, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -1081,10 +1081,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -1143,10 +1143,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1199,10 +1199,10 @@ trait JoinTests
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1248,10 +1248,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1319,10 +1319,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1388,10 +1388,10 @@ trait JoinTests
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'qty', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1455,10 +1455,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1524,10 +1524,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1589,10 +1589,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1644,10 +1644,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1691,10 +1691,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1739,10 +1739,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1805,10 +1805,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1860,10 +1860,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1897,10 +1897,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -1944,13 +1944,13 @@ trait JoinTests
         $cols = [$cCol, $pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'title', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2021,10 +2021,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -2078,10 +2078,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2136,10 +2136,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 
@@ -2191,10 +2191,10 @@ trait JoinTests
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'qty', type: ColumnType::Integer, size: 0, required: true));
 
@@ -2238,10 +2238,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2311,10 +2311,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2373,10 +2373,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'product', type: ColumnType::String, size: 50, required: true));
 
@@ -2431,10 +2431,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2494,10 +2494,10 @@ trait JoinTests
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol);
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'qty', type: ColumnType::Integer, size: 0, required: true));
 
@@ -2544,10 +2544,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'tag', type: ColumnType::String, size: 50, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
@@ -2595,10 +2595,10 @@ trait JoinTests
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($cCol);
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
 
-        $database->createCollection($oCol);
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
         $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
         $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
 

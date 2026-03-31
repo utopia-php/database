@@ -2823,9 +2823,6 @@ abstract class SQL extends Adapter
         if ($this->hasTenantHook()) {
             $builder->addHook(new TenantFilter($this->getTenantHook()->getTenant(), Database::METADATA));
         }
-        if ($this->hasPermissionHook() && $this->authorization->getStatus()) {
-            $builder->addHook($this->newPermissionHook($table, $this->authorization->getRoles()));
-        }
 
         return $builder;
     }
@@ -2889,6 +2886,9 @@ abstract class SQL extends Adapter
      */
     protected function syncWriteHooks(): void
     {
+        if (empty(array_filter($this->writeHooks, fn ($h) => $h instanceof Permissions))) {
+            $this->addWriteHook(new Permissions());
+        }
     }
 
     /**

@@ -375,6 +375,7 @@ class Structure extends Validator
                     $validators[] = new Range($min, $max, ColumnType::Integer->value);
                     break;
 
+                case ColumnType::Float:
                 case ColumnType::Double:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();

@@ -2822,7 +2822,7 @@ abstract class SQL extends Adapter
             '$permissions' => '_permissions',
         ]));
         if ($this->sharedTables && $this->tenant !== null) {
-            $builder->addHook(new TenantFilter($this->tenant, Database::METADATA));
+            $builder->addHook(new TenantFilter($this->tenant, Database::METADATA, $table));
         }
 
         return $builder;

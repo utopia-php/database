@@ -9,7 +9,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\Lifecycle;
-use Utopia\Database\Hook\Relationship as RelationshipHook;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
@@ -1294,7 +1293,7 @@ class Mirror extends Database
     {
         parent::addHook($hook);
 
-        if ($hook instanceof RelationshipHook) {
+        if ($hook instanceof Relationships) {
             $this->source->addHook(new Relationships($this->source));
             $this->destination?->addHook(new Relationships($this->destination));
         }

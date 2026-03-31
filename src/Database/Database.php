@@ -18,7 +18,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
-use Utopia\Database\Hook\Relationship;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Type\TypeRegistry;
@@ -272,7 +272,7 @@ class Database
 
     protected ?NativeDateTime $timestamp = null;
 
-    protected ?Relationship $relationshipHook = null;
+    protected ?Relationships $relationshipHook = null;
 
     protected bool $filter = true;
 
@@ -896,9 +896,9 @@ class Database
     /**
      * Get the current relationship hook.
      *
-     * @return Relationship|null The relationship hook, or null if not set.
+     * @return Relationships|null The relationship hook, or null if not set.
      */
-    public function getRelationshipHook(): ?Relationship
+    public function getRelationshipHook(): ?Relationships
     {
         return $this->relationshipHook;
     }
@@ -1186,7 +1186,7 @@ class Database
      * Dispatches by type:
      * - {@see Hook\Lifecycle} — fire-and-forget side effects (auditing, logging)
      * - {@see Hook\Decorator} — document transformation on read/write results
-     * - {@see Hook\Relationship} — relationship resolution and mutation
+     * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
      * - {@see Hook\Transform} — raw SQL transformation before execution
      */
@@ -1200,7 +1200,7 @@ class Database
             $this->decorators[] = $hook;
         }
 
-        if ($hook instanceof Relationship) {
+        if ($hook instanceof Relationships) {
             $this->relationshipHook = $hook;
         }
 

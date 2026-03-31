@@ -19,18 +19,16 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship as RelationshipVO;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Query\Hook;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 /**
- * Concrete implementation of relationship handling for document CRUD, population, and query conversion.
- *
- * Manages relationship side effects (creating/updating/deleting related documents),
- * populates nested relationships on read, and converts relationship filter queries
- * into adapter-compatible subqueries.
+ * Handles relationship side effects for document CRUD, populates nested relationships
+ * on read, and converts relationship filter queries into adapter-compatible subqueries.
  */
-class Relationships implements Relationship
+class Relationships implements Hook
 {
     private bool $enabled = true;
 

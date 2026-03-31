@@ -589,7 +589,7 @@ trait Attributes
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             $rawType = $attribute->getAttribute('type');
-            $attrType = $rawType instanceof ColumnType ? $rawType : ColumnType::from($rawType);
+            $attrType = $rawType instanceof ColumnType ? $rawType : ColumnType::from((string) $rawType);
             if (! Structure::hasFormat($format, $attrType)) {
                 throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType->value.'"');
             }

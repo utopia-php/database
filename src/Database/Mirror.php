@@ -214,7 +214,7 @@ class Mirror extends Database
      */
     public function addLifecycleHook(Lifecycle $hook): static
     {
-        $this->source->addLifecycleHook($hook);
+        $this->source->addHook($hook);
 
         return $this;
     }

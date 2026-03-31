@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
@@ -148,7 +149,11 @@ class Relationships implements Hook
 
             try {
                 if (\is_array($value) && ! \array_is_list($value)) {
-                    $value = new Document($value); // @phpstan-ignore argument.type
+                    try {
+                        $value = new Document($value); // @phpstan-ignore argument.type
+                    } catch (StructureException $e) {
+                        throw new RelationshipException('Invalid relationship value. ' . $e->getMessage());
+                    }
                     $document->setAttribute($key, $value);
                 }
 
@@ -286,7 +291,11 @@ class Relationships implements Hook
             $value = $document->getAttribute($key);
 
             if (\is_array($value) && ! \array_is_list($value)) {
-                $value = new Document($value); // @phpstan-ignore argument.type
+                try {
+                    $value = new Document($value); // @phpstan-ignore argument.type
+                } catch (StructureException $e) {
+                    throw new RelationshipException('Invalid relationship value. ' . $e->getMessage());
+                }
                 $document->setAttribute($key, $value);
             }
 

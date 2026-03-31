@@ -18,6 +18,7 @@ use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Database;
+use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Validator\Authorization;
 
@@ -63,6 +64,9 @@ abstract class Base extends TestCase
         $db = $this->getDatabase();
         if ($db->getRelationshipHook() === null) {
             $db->addHook(new Relationships($db));
+        }
+        if (! $db->getAdapter()->hasPermissionHook()) {
+            $db->addHook(new Permissions());
         }
     }
 

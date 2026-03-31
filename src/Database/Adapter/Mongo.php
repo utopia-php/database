@@ -169,13 +169,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $this->readHooks = [];
 
-        $this->readHooks[] = new MongoTenantFilter(
-            $this->tenant,
-            $this->sharedTables,
-            fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
-        );
+        if ($this->sharedTables && $this->tenant !== null) {
+            $this->readHooks[] = new MongoTenantFilter(
+                $this->tenant,
+                $this->sharedTables,
+                fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
+            );
+        }
 
-        $this->readHooks[] = new MongoPermissionFilter($this->authorization);
+        if ($this->hasPermissionHook()) {
+            $this->readHooks[] = new MongoPermissionFilter($this->authorization);
+        }
     }
 
     /**

@@ -1585,5 +1585,5 @@ abstract class Adapter
     /**
      * @return mixed
      */
-    abstract protected function getDriver(): mixed;
+    abstract public function getDriver(): mixed;
 }

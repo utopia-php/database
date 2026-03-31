@@ -78,10 +78,10 @@ class Mongo extends Adapter
     }
 
     /**
-     * Returns the current PDO object
+     * Returns the current Mongo client
      * @return mixed
      */
-    protected function getDriver(): mixed
+    public function getDriver(): mixed
     {
         return $this->client;
     }

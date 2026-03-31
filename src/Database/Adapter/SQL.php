@@ -2190,7 +2190,7 @@ abstract class SQL extends Adapter
      * Returns the current PDO object
      * @return mixed
      */
-    protected function getDriver(): mixed
+    public function getDriver(): mixed
     {
         return $this->pdo;
     }

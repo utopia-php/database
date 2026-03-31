@@ -148,6 +148,7 @@ class Relationships implements Hook
 
             try {
                 if (\is_array($value) && ! \array_is_list($value)) {
+                    /** @var array<string, mixed> $value */
                     $value = new Document($value);
                     $document->setAttribute($key, $value);
                 }
@@ -286,6 +287,7 @@ class Relationships implements Hook
             $value = $document->getAttribute($key);
 
             if (\is_array($value) && ! \array_is_list($value)) {
+                /** @var array<string, mixed> $value */
                 $value = new Document($value);
                 $document->setAttribute($key, $value);
             }

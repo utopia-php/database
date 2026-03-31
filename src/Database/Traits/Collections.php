@@ -256,7 +256,7 @@ trait Collections
             ->setAttribute('$permissions', $permissions)
             ->setAttribute('documentSecurity', $documentSecurity);
 
-        $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $collection = $this->skipValidation(fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection)));
 
         $this->trigger(Event::CollectionUpdate, $collection);
 

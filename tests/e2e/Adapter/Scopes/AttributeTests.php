@@ -599,7 +599,7 @@ trait AttributeTests
             $max = $attribute['formatOptions']['max'];
 
             return new Range($min, $max);
-        }, ColumnType::Integer->value);
+        }, ColumnType::Integer);
 
         $database->updateAttributeFormat($this->getFlowersCollection(), 'price', 'priceRange');
         $database->updateAttributeFormatOptions($this->getFlowersCollection(), 'price', ['min' => 1, 'max' => 10000]);
@@ -674,7 +674,7 @@ trait AttributeTests
             $max = $attribute['formatOptions']['max'];
 
             return new Range($min, $max);
-        }, ColumnType::Integer->value);
+        }, ColumnType::Integer);
 
         $database->updateAttributeFormat($this->getFlowersCollection(), 'price', 'priceRange');
         $database->updateAttributeFormatOptions($this->getFlowersCollection(), 'price', ['min' => 1, 'max' => 10000]);
@@ -693,7 +693,7 @@ trait AttributeTests
             $max = $attribute['formatOptions']['max'];
 
             return new Range($min, $max);
-        }, ColumnType::Integer->value);
+        }, ColumnType::Integer);
 
         /** @var Database $database */
         $database = $this->getDatabase();

@@ -2179,8 +2179,18 @@ abstract class SQL extends Adapter
     /**
      * Returns the current PDO object
      * @return mixed
+     * @deprecated Use getDriver() instead
      */
     protected function getPDO(): mixed
+    {
+        return $this->pdo;
+    }
+
+    /**
+     * Returns the current PDO object
+     * @return mixed
+     */
+    public function getDriver(): mixed
     {
         return $this->pdo;
     }

@@ -154,7 +154,7 @@ class StructureTest extends TestCase
             $size = is_numeric($sizeRaw) ? (int) $sizeRaw : 0;
 
             return new Format($size);
-        }, ColumnType::String->value);
+        }, ColumnType::String);
 
         // Cannot encode format when defining constants
         // So add feedback attribute on startup

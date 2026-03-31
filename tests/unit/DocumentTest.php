@@ -113,17 +113,17 @@ class DocumentTest extends TestCase
 
     public function test_get_permission_by_type(): void
     {
-        $this->assertEquals(['any', 'user:creator'], $this->document->getPermissionsByType(PermissionType::Create->value));
-        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create->value));
+        $this->assertEquals(['any', 'user:creator'], $this->document->getPermissionsByType(PermissionType::Create));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Create));
 
-        $this->assertEquals(['user:123', 'team:123'], $this->document->getPermissionsByType(PermissionType::Read->value));
-        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read->value));
+        $this->assertEquals(['user:123', 'team:123'], $this->document->getPermissionsByType(PermissionType::Read));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Read));
 
-        $this->assertEquals(['any', 'user:updater'], $this->document->getPermissionsByType(PermissionType::Update->value));
-        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update->value));
+        $this->assertEquals(['any', 'user:updater'], $this->document->getPermissionsByType(PermissionType::Update));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Update));
 
-        $this->assertEquals(['any', 'user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete->value));
-        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete->value));
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getPermissionsByType(PermissionType::Delete));
+        $this->assertEquals([], $this->empty->getPermissionsByType(PermissionType::Delete));
     }
 
     public function test_get_permissions(): void

@@ -1845,7 +1845,7 @@ class AttributeTest extends TestCase
     {
         Structure::addFormat('testformat', function (mixed $attribute) {
             return new \Utopia\Validator\Text(100);
-        }, ColumnType::Integer->value);
+        }, ColumnType::Integer);
 
         $validator = new Attribute(
             attributes: [],

@@ -19,7 +19,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Lifecycle;
-use Utopia\Database\Hook\QueryTransform;
+use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -1081,7 +1081,7 @@ trait CollectionTests
             ];
 
             $test = $this;
-            $database->addLifecycleHook(new class ($events, $test) implements Lifecycle {
+            $database->addHook(new class ($events, $test) implements Lifecycle {
                 /** @param array<Event> $events */
                 public function __construct(private array &$events, private $test)
                 {
@@ -1222,18 +1222,19 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->addQueryTransform('test', new class () implements QueryTransform {
+        $hook = new class () implements Transform {
             public function transform(Event $event, string $query): string
             {
                 return 'SELECT 1';
             }
-        });
+        };
+        $database->addHook($hook);
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
 
-        $database->removeQueryTransform('test');
+        $database->removeTransform($hook::class);
     }
 
     public function testSetGlobalCollection(): void

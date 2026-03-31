@@ -18,7 +18,7 @@ use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Database;
-use Utopia\Database\Hook\RelationshipHandler;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Validator\Authorization;
 
 \ini_set('memory_limit', '2048M');
@@ -62,7 +62,7 @@ abstract class Base extends TestCase
 
         $db = $this->getDatabase();
         if ($db->getRelationshipHook() === null) {
-            $db->setRelationshipHook(new RelationshipHandler($db));
+            $db->addHook(new Relationships($db));
         }
     }
 

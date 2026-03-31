@@ -3,6 +3,7 @@
 namespace Tests\Unit\Authorization;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 
@@ -25,26 +26,26 @@ class AuthorizationTest extends TestCase
     public function testIsValidWithMatchingRole(): void
     {
         $this->auth->addRole('user:123');
-        $input = new Input('read', ['user:123']);
+        $input = new Input(PermissionType::Read, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
     public function testIsValidWithNonMatchingRole(): void
     {
         $this->auth->addRole('user:123');
-        $input = new Input('read', ['user:456']);
+        $input = new Input(PermissionType::Read, ['user:456']);
         $this->assertFalse($this->auth->isValid($input));
     }
 
     public function testIsValidWithAnyRoleMatchesAllPermissions(): void
     {
-        $input = new Input('read', ['any']);
+        $input = new Input(PermissionType::Read, ['any']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
     public function testIsValidReturnsFalseWithEmptyPermissions(): void
     {
-        $input = new Input('read', []);
+        $input = new Input(PermissionType::Read, []);
         $this->assertFalse($this->auth->isValid($input));
         $this->assertStringContainsString('No permissions provided', $this->auth->getDescription());
     }
@@ -89,7 +90,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->cleanRoles();
 
-        $input = new Input('read', ['user:999']);
+        $input = new Input(PermissionType::Read, ['user:999']);
         $this->assertFalse($this->auth->isValid($input));
 
         $result = $this->auth->skip(function () use ($input) {
@@ -129,7 +130,7 @@ class AuthorizationTest extends TestCase
         $this->auth->addRole('user:123');
         $this->auth->addRole('team:456');
 
-        $input = new Input('read', ['team:456']);
+        $input = new Input(PermissionType::Read, ['team:456']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -137,7 +138,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('read', ['user:123', 'team:456']);
+        $input = new Input(PermissionType::Read, ['user:123', 'team:456']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -145,7 +146,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('team:456');
 
-        $input = new Input('read', ['user:123', 'team:456']);
+        $input = new Input(PermissionType::Read, ['user:123', 'team:456']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -153,7 +154,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('guests');
 
-        $input = new Input('read', ['guests']);
+        $input = new Input(PermissionType::Read, ['guests']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -161,7 +162,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('users');
 
-        $input = new Input('read', ['users']);
+        $input = new Input(PermissionType::Read, ['users']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -169,7 +170,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123/admin');
 
-        $input = new Input('read', ['user:123/admin']);
+        $input = new Input(PermissionType::Read, ['user:123/admin']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -177,7 +178,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123/admin');
 
-        $input = new Input('read', ['user:123']);
+        $input = new Input(PermissionType::Read, ['user:123']);
         $this->assertFalse($this->auth->isValid($input));
     }
 
@@ -185,7 +186,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('read', ['user:123/admin']);
+        $input = new Input(PermissionType::Read, ['user:123/admin']);
         $this->assertFalse($this->auth->isValid($input));
     }
 
@@ -194,7 +195,7 @@ class AuthorizationTest extends TestCase
         $this->auth->cleanRoles();
         $this->auth->addRole('user:123');
 
-        $input = new Input('read', ['team:456']);
+        $input = new Input(PermissionType::Read, ['team:456']);
         $this->assertFalse($this->auth->isValid($input));
 
         $description = $this->auth->getDescription();
@@ -204,7 +205,7 @@ class AuthorizationTest extends TestCase
 
     public function testGetDescriptionOnEmptyPermissions(): void
     {
-        $input = new Input('write', []);
+        $input = new Input(PermissionType::Write, []);
         $this->assertFalse($this->auth->isValid($input));
         $this->assertStringContainsString("No permissions provided for action 'write'", $this->auth->getDescription());
     }
@@ -236,7 +237,7 @@ class AuthorizationTest extends TestCase
         $this->auth->disable();
         $this->auth->cleanRoles();
 
-        $input = new Input('read', ['user:999']);
+        $input = new Input(PermissionType::Read, ['user:999']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -263,7 +264,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('read', ['user:123']);
+        $input = new Input(PermissionType::Read, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -271,7 +272,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('create', ['user:123']);
+        $input = new Input(PermissionType::Create, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -279,7 +280,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('update', ['user:123']);
+        $input = new Input(PermissionType::Update, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -287,7 +288,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('delete', ['user:123']);
+        $input = new Input(PermissionType::Delete, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -295,7 +296,7 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('user:123');
 
-        $input = new Input('write', ['user:123']);
+        $input = new Input(PermissionType::Write, ['user:123']);
         $this->assertTrue($this->auth->isValid($input));
     }
 
@@ -320,11 +321,11 @@ class AuthorizationTest extends TestCase
 
     public function testInputSettersAndGetters(): void
     {
-        $input = new Input('read', ['user:123']);
+        $input = new Input(PermissionType::Read, ['user:123']);
         $this->assertEquals('read', $input->getAction());
         $this->assertEquals(['user:123'], $input->getPermissions());
 
-        $input->setAction('write');
+        $input->setAction(PermissionType::Write);
         $this->assertEquals('write', $input->getAction());
 
         $input->setPermissions(['team:456']);
@@ -335,10 +336,10 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('team:abc/owner');
 
-        $input = new Input('read', ['team:abc/owner']);
+        $input = new Input(PermissionType::Read, ['team:abc/owner']);
         $this->assertTrue($this->auth->isValid($input));
 
-        $input = new Input('read', ['team:abc/member']);
+        $input = new Input(PermissionType::Read, ['team:abc/member']);
         $this->assertFalse($this->auth->isValid($input));
     }
 
@@ -361,10 +362,10 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('label:vip');
 
-        $input = new Input('read', ['label:vip']);
+        $input = new Input(PermissionType::Read, ['label:vip']);
         $this->assertTrue($this->auth->isValid($input));
 
-        $input = new Input('read', ['label:premium']);
+        $input = new Input(PermissionType::Read, ['label:premium']);
         $this->assertFalse($this->auth->isValid($input));
     }
 
@@ -372,10 +373,10 @@ class AuthorizationTest extends TestCase
     {
         $this->auth->addRole('member:abc123');
 
-        $input = new Input('read', ['member:abc123']);
+        $input = new Input(PermissionType::Read, ['member:abc123']);
         $this->assertTrue($this->auth->isValid($input));
 
-        $input = new Input('read', ['member:def456']);
+        $input = new Input(PermissionType::Read, ['member:def456']);
         $this->assertFalse($this->auth->isValid($input));
     }
 }

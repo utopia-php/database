@@ -298,7 +298,7 @@ class PermissionTest extends TestCase
         $parsed = Permission::aggregate($permissions);
         $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
-        $parsed = Permission::aggregate($permissions, [PermissionType::Update->value, PermissionType::Delete->value]);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
@@ -310,7 +310,7 @@ class PermissionTest extends TestCase
             'delete("user:123")',
         ];
 
-        $parsed = Permission::aggregate($permissions, [PermissionType::Create->value, PermissionType::Read->value, PermissionType::Update->value, PermissionType::Delete->value]);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals([
             'read("any")',
             'read("user:123")',

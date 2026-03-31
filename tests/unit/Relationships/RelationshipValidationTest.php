@@ -19,7 +19,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Hook\RelationshipHandler;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Operator;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
@@ -161,7 +161,7 @@ class RelationshipValidationTest extends TestCase
         $database->getAuthorization()->addRole(Role::any()->toString());
 
         if ($withRelationshipHook) {
-            $database->setRelationshipHook(new RelationshipHandler($database));
+            $database->addHook(new Relationships($database));
         }
 
         return $database;

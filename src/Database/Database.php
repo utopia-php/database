@@ -1220,6 +1220,10 @@ class Database
      */
     protected function decorateDocument(Event $event, Document $collection, Document $document): Document
     {
+        if ($this->eventsSilenced) {
+            return $document;
+        }
+
         foreach ($this->decorators as $decorator) {
             $document = $decorator->decorate($event, $collection, $document);
         }

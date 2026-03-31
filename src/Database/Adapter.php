@@ -1581,4 +1581,9 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract protected function getDriver(): mixed;
 }

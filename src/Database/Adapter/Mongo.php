@@ -77,6 +77,15 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    /**
+     * Returns the current PDO object
+     * @return mixed
+     */
+    protected function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {

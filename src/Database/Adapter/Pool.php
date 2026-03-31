@@ -70,6 +70,13 @@ class Pool extends Adapter
         });
     }
 
+    protected function getDriver(): mixed
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $this;
+    }
+
     public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());

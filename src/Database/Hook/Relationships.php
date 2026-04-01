@@ -53,6 +53,20 @@ class Relationships implements Hook
     ) {
     }
 
+    private function coerceToDocument(Document $document, string $key, mixed $value): mixed
+    {
+        if (\is_array($value) && ! \array_is_list($value)) {
+            try {
+                $value = new Document($value); // @phpstan-ignore argument.type
+            } catch (StructureException $e) {
+                throw new RelationshipException('Invalid relationship value. ' . $e->getMessage());
+            }
+            $document->setAttribute($key, $value);
+        }
+
+        return $value;
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -148,14 +162,7 @@ class Relationships implements Hook
             $this->writeStack[] = $collection->getId();
 
             try {
-                if (\is_array($value) && ! \array_is_list($value)) {
-                    try {
-                        $value = new Document($value); // @phpstan-ignore argument.type
-                    } catch (StructureException $e) {
-                        throw new RelationshipException('Invalid relationship value. ' . $e->getMessage());
-                    }
-                    $document->setAttribute($key, $value);
-                }
+                $value = $this->coerceToDocument($document, $key, $value);
 
                 if (\is_array($value)) {
                     if (
@@ -290,14 +297,7 @@ class Relationships implements Hook
             $key = $typedRelAttr->key;
             $value = $document->getAttribute($key);
 
-            if (\is_array($value) && ! \array_is_list($value)) {
-                try {
-                    $value = new Document($value); // @phpstan-ignore argument.type
-                } catch (StructureException $e) {
-                    throw new RelationshipException('Invalid relationship value. ' . $e->getMessage());
-                }
-                $document->setAttribute($key, $value);
-            }
+            $value = $this->coerceToDocument($document, $key, $value);
 
             $oldValue = $old->getAttribute($key);
             $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
@@ -543,7 +543,7 @@ class Relationships implements Hook
                             }
                             $this->db->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
-                            if (empty($value->getId())) {
+                            if ($value->getId() === '') {
                                 throw new RelationshipException('Invalid relationship value. Document must have a valid $id.');
                             }
 

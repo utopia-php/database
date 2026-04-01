@@ -247,7 +247,7 @@ trait Collections
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getTenant() != $this->adapter->getTenant()
+            && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -279,7 +279,7 @@ trait Collections
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
             && $collection->getTenant() !== null
-            && $collection->getTenant() != $this->adapter->getTenant()
+            && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -326,7 +326,7 @@ trait Collections
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -354,7 +354,7 @@ trait Collections
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -388,7 +388,7 @@ trait Collections
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 

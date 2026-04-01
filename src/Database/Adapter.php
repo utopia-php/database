@@ -244,10 +244,16 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * Get Tenant.
      *
-     * Get tenant to use for shared tables
+     * Get tenant to use for shared tables.
+     * Numeric values are normalized to int for consistent comparison
+     * across adapters that may return string representations.
      */
     public function getTenant(): int|string|null
     {
+        if (\is_string($this->tenant) && \ctype_digit($this->tenant)) {
+            return (int) $this->tenant;
+        }
+
         return $this->tenant;
     }
 

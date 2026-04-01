@@ -237,13 +237,16 @@ class Document extends ArrayObject
     /**
      * Get the tenant ID associated with this document.
      *
+     * Numeric string values are normalized to int for consistent comparison
+     * across adapters that may return string representations (e.g. PDO stringify).
+     *
      * @return int|string|null The tenant ID, or null if not set.
      */
     public function getTenant(): int|string|null
     {
         $tenant = $this->getAttribute('$tenant');
 
-        if (\is_numeric($tenant)) {
+        if (\is_string($tenant) && \ctype_digit($tenant)) {
             return (int) $tenant;
         }
 

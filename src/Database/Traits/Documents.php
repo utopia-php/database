@@ -1405,7 +1405,7 @@ trait Documents
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (! $old->isEmpty() && $old->getTenant() != $document->getTenant()) {
+                    if (! $old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {

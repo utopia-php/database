@@ -46,7 +46,7 @@ trait Collections
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
     {
         $attributes = array_map(fn ($attr): Attribute => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr), $attributes);
         $indexes = array_map(fn ($idx): Index => $idx instanceof Index ? $idx : Index::fromDocument($idx), $indexes);
@@ -125,14 +125,14 @@ trait Collections
         $attributeDocs = array_map(fn (Attribute $attr) => $attr->toDocument(), $attributes);
         $indexDocs = array_map(fn (Index $idx) => $idx->toDocument(), $indexes);
 
-        $collection = new Document([
+        $collection = new Document(\array_merge([
             '$id' => ID::custom($id),
             '$permissions' => $permissions,
             'name' => $id,
             'attributes' => $attributeDocs,
             'indexes' => $indexDocs,
             'documentSecurity' => $documentSecurity,
-        ]);
+        ], $metadata));
 
         if ($this->validate) {
             $validator = new IndexValidator(

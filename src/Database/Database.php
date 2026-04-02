@@ -235,6 +235,17 @@ class Database
                 'array' => false,
                 'filters' => [],
             ],
+            [
+                '$id' => 'externalId',
+                'key' => 'externalId',
+                'type' => 'string',
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
         ],
         'indexes' => [],
     ];

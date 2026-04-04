@@ -7116,8 +7116,11 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
+        $skipPreRead = !empty($attribute) && !$this->authorization->getStatus();
         foreach ($documents as $key => $document) {
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            if ($skipPreRead) {
+                $old = new Document();
+            } elseif ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = $this->authorization->skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
@@ -7142,9 +7145,12 @@ class Database
 
             $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
 
+            // When skipping pre-read (increment upserts), always skip permission updates.
+            // The SQL ON DUPLICATE KEY UPDATE only touches the increment column + _updatedAt,
+            // so existing permissions are preserved by the DB, and new docs get empty permissions.
             $skipPermissionsUpdate = true;
 
-            if ($document->offsetExists('$permissions')) {
+            if (!$skipPreRead && $document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions = $document->getPermissions();
 

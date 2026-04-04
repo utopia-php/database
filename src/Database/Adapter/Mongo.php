@@ -1676,20 +1676,21 @@ class Mongo extends Adapter
                 $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
 
                 if (!empty($attribute)) {
-                    // Get the attribute value before removing it from $set
+                    // Get the attribute value before removing it from the record
                     $attributeValue = $record[$attribute] ?? 0;
-
-                    // Remove the attribute from $set since we're incrementing it
-                    // it is requierd to mimic the behaver of SQL on duplicate key update
                     unset($record[$attribute]);
-
-                    // Also remove from unset if it was there
                     unset($unsetFields[$attribute]);
 
-                    // Increment the specific attribute and update all other fields
+                    // For increment upserts, only update _updatedAt on existing docs.
+                    // All other fields use $setOnInsert (only applied on insert, not update),
+                    // matching SQL ON DUPLICATE KEY UPDATE which only touches value + _updatedAt.
+                    $updatedAt = $record['_updatedAt'];
+                    unset($record['_updatedAt']);
+
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
-                        '$set' => $record
+                        '$set' => ['_updatedAt' => $updatedAt],
+                        '$setOnInsert' => $record
                     ];
 
                     if (!empty($unsetFields)) {

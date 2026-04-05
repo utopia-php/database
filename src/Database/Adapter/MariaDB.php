@@ -1693,18 +1693,9 @@ class MariaDB extends SQL
 
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
+                if ($size > $this->getMaxIndexLength()) {
                     return 'LONGTEXT';
                 }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
-                if ($size > $this->getMaxVarcharLength()) {
-                    return 'TEXT';
-                }
-
                 return "VARCHAR({$size})";
 
             case Database::VAR_VARCHAR:

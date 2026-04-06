@@ -1,0 +1,908 @@
+<?php
+
+namespace Tests\E2E\Adapter\Scopes;
+
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
+
+trait JoinsTests
+{
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws TimeoutException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    public function testJoin(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        //Authorization::setRole('user:bob');
+
+        $database->createCollection('__users');
+        $database->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
+        $database->createAttribute('__users', 'bank_internal_id', Database::VAR_INTEGER, 8, false);
+
+        $database->createCollection('__sessions');
+        $database->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+        $database->createAttribute('__sessions', 'user_internal_id', Database::VAR_ID, 8, false);
+        $database->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
+        $database->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
+
+        $database->createCollection(
+            '__banks',
+            permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+            documentSecurity: false
+        );
+        $database->createAttribute('__banks', 'name', Database::VAR_STRING, 100, false);
+
+        $bank1 = $database->createDocument('__banks', new Document([
+            'name' => 'Chase'
+        ]));
+
+        $user1 = $database->createDocument('__users', new Document([
+            'username' => 'Donald',
+            'bank_internal_id' => (int)$bank1->getSequence(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $sessionNoPermissions = $database->createDocument('__sessions', new Document([
+            'user_id' => $user1->getId(),
+            'user_internal_id' => $user1->getSequence(),
+            '$permissions' => [],
+        ]));
+
+        /**
+         * Test collection not whitelist
+         */
+        try {
+            $database->find('__users', [
+                Query::join('__sessions', 'B', [])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot InnerJoin this table.', $e->getMessage());
+        }
+
+        $database->addJoinCollectionId('__users');
+        $database->addJoinCollectionId('__sessions');
+        $database->addJoinCollectionId('__banks');
+
+        /**
+         * Test $session1 does not have read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(0, $documents);
+
+        $session2 = $database->createDocument('__sessions', new Document([
+            'user_id' => $user1->getId(),
+            'user_internal_id' => $user1->getSequence(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'boolean' => false,
+            'float' => 10.5,
+        ]));
+
+        $user2 = $database->createDocument('__users', new Document([
+            'username' => 'Abraham',
+
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $session3 = $database->createDocument('__sessions', new Document([
+            'user_id' => $user2->getId(),
+            'user_internal_id' => $user2->getSequence(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'boolean' => true,
+            'float' => 5.5,
+        ]));
+
+        /**
+         * Test $session2 has read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(2, $documents);
+
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                        Query::equal('user_id', [$user1->getId()], 'B'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(1, $documents);
+
+        /**
+         * Test alias does not exist
+         */
+        try {
+            $database->find(
+                '__sessions',
+                [
+                    Query::equal('user_id', ['bob'], 'alias_not_found')
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Unknown Alias context', $e->getMessage());
+        }
+
+        /**
+         * Test Ambiguous alias
+         */
+        try {
+            $database->find('__users', [
+                Query::join('__sessions', Query::DEFAULT_ALIAS)
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Ambiguous alias for collection "__sessions".', $e->getMessage());
+        }
+
+        /**
+         * Test relation query exist, but not on the join alias
+         */
+        try {
+            $database->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test if relation query exists in the join queries list
+         */
+        try {
+            $database->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test allow only filter queries in joins ON clause
+         */
+        try {
+            $database->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', [
+                        Query::orderAsc()
+                    ]),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: InnerJoin queries can only contain filter queries', $e->getMessage());
+        }
+
+        /**
+         * Test Relations are valid within joins
+         */
+        try {
+            $database->find(
+                '__users',
+                [
+                    Query::relationEqual('', '$id', '', '$sequence'),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Relations are only valid within joins.', $e->getMessage());
+        }
+
+        /**
+         * Test invalid alias name
+         */
+        try {
+            $alias = 'drop schema;';
+            $database->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        $alias,
+                        [
+                            Query::relationEqual($alias, 'user_id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
+        }
+
+        /**
+         * Test join same collection
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::join(
+                    '__sessions',
+                    'C',
+                    [
+                        Query::relationEqual('C', 'user_id', 'B', 'user_id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(2, $documents);
+
+        /**
+         * Test order by related collection
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderAsc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Donald', $documents[0]['username']);
+        $this->assertEquals('Abraham', $documents[1]['username']);
+
+        $documents = $database->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderDesc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Abraham', $documents[0]['username']);
+        $this->assertEquals('Donald', $documents[1]['username']);
+
+        /**
+         * Select queries
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::select('*', 'main'),
+                Query::select('user_id', 'S'),
+                Query::select('float', 'S'),
+                Query::select('boolean', 'S'),
+                Query::join(
+                    '__sessions',
+                    'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                        Query::greaterThan('float', 1.1, 'S'),
+                    ]
+                ),
+                Query::orderDesc('float', 'S'),
+            ]
+        );
+
+        /**
+         * Since we use main.* we should see all attributes
+         */
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(10.5, $document->getAttribute('float'));
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(false, $document->getAttribute('boolean'));
+
+        /**
+         * Select * on related collection
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::select('*', 'S'),
+                Query::join(
+                    '__sessions',
+                    'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                    ]
+                ),
+                Query::orderDesc('float', 'S'),
+                Query::limit(1),
+            ]
+        );
+
+        /**
+         * Since we use S.* we should see all related attributes
+         */
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayHasKey('user_id', $document);
+        $this->assertEquals('1', $document->getAttribute('user_internal_id'));
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(10.5, $document->getAttribute('float'));
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(false, $document->getAttribute('boolean'));
+
+        /**
+         * Test invalid as
+         */
+        try {
+            $database->find('__users', [
+                Query::select('$id', as: 'truncate schema;'),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Select "as" must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
+        }
+
+        try {
+            $database->find('__users', [
+                Query::select('*', as: 'as'),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Select Invalid "as" on attribute "*"', $e->getMessage());
+        }
+
+        /**
+         * Simple `as` query getDocument
+         */
+        $document = $database->getDocument(
+            '__sessions',
+            $session2->getId(),
+            [
+                Query::select('$permissions', as: '___permissions'),
+                Query::select('$id', as: '___uid'),
+                Query::select('$sequence', as: '___id'),
+                Query::select('$createdAt', as: '___created'),
+                Query::select('user_id', as: 'user_id_as'),
+                Query::select('float', as: 'float_as'),
+                Query::select('boolean', as: 'boolean_as'),
+            ]
+        );
+
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayHasKey('___permissions', $document);
+        $this->assertArrayHasKey('___uid', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayHasKey('___id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayHasKey('___created', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayHasKey('user_id_as', $document);
+        $this->assertArrayNotHasKey('user_id', $document);
+        $this->assertArrayHasKey('float_as', $document);
+        $this->assertArrayNotHasKey('float', $document);
+        $this->assertIsFloat($document->getAttribute('float_as'));
+        $this->assertEquals(10.5, $document->getAttribute('float_as'));
+        $this->assertArrayHasKey('boolean_as', $document);
+        $this->assertArrayNotHasKey('boolean', $document);
+        $this->assertIsBool($document->getAttribute('boolean_as'));
+        $this->assertEquals(false, $document->getAttribute('boolean_as'));
+
+        /**
+         * Simple `as` query getDocument
+         */
+        $document = $database->getDocument(
+            '__sessions',
+            $session2->getId(),
+            [
+                Query::select('$permissions', as: '___permissions'),
+            ]
+        );
+        $this->assertArrayHasKey('___permissions', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayHasKey('$collection', $document);
+
+        /**
+         * Simple `as` query find
+         */
+        $document = $database->findOne(
+            '__sessions',
+            [
+                Query::select('$id', as: '___uid'),
+                Query::select('$sequence', as: '___id'),
+                Query::select('$createdAt', as: '___created'),
+                Query::select('user_id', as: 'user_id_as'),
+                Query::select('float', as: 'float_as'),
+                Query::select('boolean', as: 'boolean_as'),
+            ]
+        );
+
+        $this->assertArrayHasKey('___uid', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayHasKey('___id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayHasKey('___created', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayHasKey('user_id_as', $document);
+        $this->assertArrayNotHasKey('user_id', $document);
+        $this->assertArrayHasKey('float_as', $document);
+        $this->assertArrayNotHasKey('float', $document);
+        $this->assertIsFloat($document->getAttribute('float_as'));
+        $this->assertEquals(10.5, $document->getAttribute('float_as'));
+        $this->assertArrayHasKey('boolean_as', $document);
+        $this->assertArrayNotHasKey('boolean', $document);
+        $this->assertIsBool($document->getAttribute('boolean_as'));
+        $this->assertEquals(false, $document->getAttribute('boolean_as'));
+
+        /**
+         * Select queries
+         */
+        $document = $database->findOne(
+            '__users',
+            [
+                Query::select('username', '', as: 'as_username'),
+                Query::select('user_id', 'S', as: 'as_user_id'),
+                Query::select('float', 'S', as: 'as_float'),
+                Query::select('boolean', 'S', as: 'as_boolean'),
+                Query::select('$permissions', 'S', as: 'as_permissions'),
+                Query::join(
+                    '__sessions',
+                    'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                    ]
+                )
+            ]
+        );
+
+        $this->assertArrayHasKey('as_username', $document);
+        $this->assertArrayHasKey('as_user_id', $document);
+        $this->assertArrayHasKey('as_float', $document);
+        $this->assertArrayHasKey('as_boolean', $document);
+        $this->assertArrayHasKey('as_permissions', $document);
+        $this->assertIsArray($document->getAttribute('as_permissions'));
+
+        //        /**
+        //         * ambiguous and duplications selects
+        //         */
+        //        try {
+        //            $database->find(
+        //                '__users',
+        //                [
+        //                    Query::select('$id', 'main'),
+        //                    Query::select('$id', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        //        }
+
+        //
+        //        try {
+        //            $database->find(
+        //                '__users',
+        //                [
+        //                    Query::select('*', 'main'),
+        //                    Query::select('*', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "*"', $e->getMessage());
+        //        }
+        //
+        //        try {
+        //            $database->find('__users',
+        //                [
+        //                    Query::select('$id'),
+        //                    Query::select('$id'),
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Duplicate Query Select on "main.$id"', $e->getMessage());
+        //        }
+        //
+        //        /**
+        //         * This should fail? since 2 _uid attributes will be returned?
+        //         */
+        //        try {
+        //            $database->find(
+        //                '__users',
+        //                [
+        //                    Query::select('*', 'main'),
+        //                    Query::select('$id', 'S'),
+        //                    Query::join('__sessions', 'S',
+        //                        [
+        //                            Query::relationEqual('', '$id', 'S', 'user_id'),
+        //                        ]
+        //                    )
+        //                ]
+        //            );
+        //            $this->fail('Failed to throw exception');
+        //        } catch (\Throwable $e) {
+        //            $this->assertTrue($e instanceof QueryException);
+        //            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        //        }
+    }
+
+    public function testLeftJoin(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = $database->find(
+            '__users',
+            [
+                Query::select('username'),
+                Query::select('float', 'B'),
+                Query::leftJoin(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('', '$id', 'B', 'user_id'),
+                    ]
+                ),
+                Query::orderAsc('username')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+
+        /**
+         * Left join skip permissions
+         */
+        $documents = $database->getAuthorization()->skip(function () use ($database) {
+            return $database->find(
+                '__users',
+                [
+                    Query::select('username'),
+                    Query::select('float', 'B'),
+                    Query::leftJoin(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', 'B', 'user_id'),
+                            Query::relationEqual('', '$sequence', 'B', 'user_internal_id'),
+                        ]
+                    ),
+                    Query::orderAsc('$sequence', 'B')
+                ]
+            );
+        });
+        $this->assertEquals(3, count($documents));
+        $this->assertEquals('Donald', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals('Abraham', $documents[2]->getAttribute('username'));
+        $this->assertEquals(null, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+        $this->assertEquals(5.5, $documents[2]->getAttribute('float'));
+
+        /**
+         * Left join with additional query in ON clause
+         */
+        $documents = $database->find(
+            '__users',
+            [
+                Query::select('username'),
+                Query::select('float', 'B'),
+                Query::leftJoin(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('', '$id', 'B', 'user_id'),
+                        Query::equal('float', [5.5], 'B'),
+                    ]
+                ),
+                Query::orderAsc('username')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+    }
+
+    public function testRightJoin(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = $database->find(
+            '__sessions',
+            [
+                Query::select('float'),
+                Query::select('username', 'B'),
+                Query::rightJoin(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                    ]
+                ),
+                Query::orderAsc('username', 'B')
+            ]
+        );
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[1]->getAttribute('float'));
+
+        /**
+         * Right join skip permissions
+         */
+        $documents = $database->getAuthorization()->skip(function () use ($database) {
+            return $database->find(
+                '__sessions',
+                [
+                    Query::select('float'),
+                    Query::select('username', 'B'),
+                    Query::rightJoin(
+                        '__users',
+                        'B',
+                        [
+                            Query::relationEqual('B', '$id', '', 'user_id'),
+                        ]
+                    ),
+                    Query::orderAsc('username', 'B')
+                ]
+            );
+        });
+        $this->assertEquals(3, count($documents));
+        $this->assertEquals('Abraham', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[1]->getAttribute('username'));
+        $this->assertEquals('Donald', $documents[2]->getAttribute('username'));
+        $this->assertEquals(5.5, $documents[0]->getAttribute('float'));
+        $this->assertEquals(null, $documents[1]->getAttribute('float'));
+        $this->assertEquals(10.5, $documents[2]->getAttribute('float'));
+
+        /**
+         * Right join with additional query in ON clause
+         */
+        $documents = $database->find(
+            '__sessions',
+            [
+                Query::select('float'),
+                Query::select('username', 'B'),
+                Query::rightJoin(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                        Query::equal('float', [5.5]),
+                    ]
+                ),
+                Query::orderAsc('username', 'B')
+            ]
+        );
+
+        /**
+         * Issue because right join query return nulls and permissions query + tenant
+         * Since right join return null for main collection, which are filtered by the above
+         */
+        $this->assertEquals(2, count($documents));
+    }
+
+    public function testJoinsScopeOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        $documents = $database->find(
+            '__sessions',
+            [
+                Query::select('username', 'B'),
+                Query::select('name', 'C', 'bank'),
+                Query::join(
+                    '__users',
+                    'B',
+                    [
+                        Query::relationEqual('B', '$id', '', 'user_id'),
+                    ]
+                ),
+                Query::join(
+                    '__banks',
+                    'C',
+                    [
+                        Query::relationEqual('C', '$sequence', 'B', 'bank_internal_id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Donald', $documents[0]->getAttribute('username'));
+        $this->assertEquals('Chase', $documents[0]->getAttribute('bank'));
+
+        try {
+            $database->find(
+                '__sessions',
+                [
+                    Query::join(
+                        '__banks',
+                        'A',
+                        [
+                            Query::relationEqual('A', '$sequence', 'BAD', 'bank_internal_id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: RelationEqual alias reference in join has not been defined.', $e->getMessage());
+        }
+    }
+
+    public function testJoinsSum(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $queries = [
+            Query::join(
+                '__users',
+                'B',
+                [
+                    Query::relationEqual('B', '$id', '', 'user_id'),
+                ]
+            )
+        ];
+
+        $documents = $database->find('__sessions', $queries);
+        $this->assertEquals(2, count($documents));
+
+        $count = $database->count('__sessions', $queries);
+        $this->assertEquals(2, $count);
+    }
+
+    public function testCleanUp(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForJoins()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->assertTrue($database->deleteCollection('__users'));
+        $this->assertTrue($database->deleteCollection('__sessions'));
+        $this->assertTrue($database->deleteCollection('__banks'));
+    }
+}

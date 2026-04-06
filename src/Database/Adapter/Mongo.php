@@ -77,6 +77,15 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    /**
+     * Returns the current Mongo client
+     * @return mixed
+     */
+    public function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
@@ -2969,7 +2978,7 @@ class Mongo extends Adapter
      */
     protected function getOrder(string $order): int
     {
-        return match ($order) {
+        return match (\strtoupper($order)) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
             default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),

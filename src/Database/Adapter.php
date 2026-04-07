@@ -729,12 +729,13 @@ abstract class Adapter
      *
      * @param Document $collection
      * @param array<Document> $documents
+     * @param bool $ignore If true, silently ignore duplicate documents instead of throwing
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(Document $collection, array $documents): array;
+    abstract public function createDocuments(Document $collection, array $documents, bool $ignore = false): array;
 
     /**
      * Update Document

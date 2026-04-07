@@ -1361,6 +1361,35 @@ class Postgres extends SQL
         return $document;
     }
 
+    protected function getInsertKeyword(bool $ignore): string
+    {
+        return 'INSERT INTO';
+    }
+
+    protected function getInsertSuffix(bool $ignore, string $table): string
+    {
+        if (!$ignore) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables ? '("_uid", _tenant)' : '("_uid")';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
+    protected function getInsertPermissionsSuffix(bool $ignore): string
+    {
+        if (!$ignore) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables
+            ? '(_type, _permission, _document, _tenant)'
+            : '(_type, _permission, _document)';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
     /**
      * @param string $tableName
      * @param string $columns

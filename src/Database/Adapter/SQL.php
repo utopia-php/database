@@ -2451,7 +2451,7 @@ abstract class SQL extends Adapter
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocuments(Document $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         if (empty($documents)) {
             return $documents;
@@ -2553,8 +2553,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
+                {$this->getInsertSuffix($ignore, $name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2568,8 +2569,9 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
+                    {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions}
+                    {$this->getInsertPermissionsSuffix($ignore)}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -2586,6 +2588,33 @@ abstract class SQL extends Adapter
         }
 
         return $documents;
+    }
+
+    /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(bool $ignore): string
+    {
+        return $ignore ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(bool $ignore, string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(bool $ignore): string
+    {
+        return '';
     }
 
     /**

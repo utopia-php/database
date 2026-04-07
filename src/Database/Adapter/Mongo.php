@@ -1439,11 +1439,16 @@ class Mongo extends Adapter
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function createDocuments(Document $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
+
+        if ($ignore) {
+            $options['ordered'] = false;
+        }
+
         $records = [];
         $hasSequence = null;
         $documents = \array_map(fn ($doc) => clone $doc, $documents);
@@ -1469,7 +1474,13 @@ class Mongo extends Adapter
         try {
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
-            throw $this->processException($e);
+            $processed = $this->processException($e);
+
+            if ($ignore && $processed instanceof DuplicateException) {
+                return $documents;
+            }
+
+            throw $processed;
         }
 
         foreach ($documents as $index => $document) {

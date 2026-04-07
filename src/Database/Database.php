@@ -5562,6 +5562,7 @@ class Database
      * @param int $batchSize
      * @param (callable(Document): void)|null $onNext
      * @param (callable(Throwable): void)|null $onError
+     * @param bool $ignore If true, silently ignore duplicate documents instead of throwing
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -5574,6 +5575,7 @@ class Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
+        bool $ignore = false,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -5641,8 +5643,8 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection, $chunk);
+            $batch = $this->withTransaction(function () use ($collection, $chunk, $ignore) {
+                return $this->adapter->createDocuments($collection, $chunk, $ignore);
             });
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);

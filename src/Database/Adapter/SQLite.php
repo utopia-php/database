@@ -979,6 +979,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     /**
      * Is upsert supported?
      *
@@ -1317,6 +1322,16 @@ class SQLite extends MariaDB
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
+        // Table/index already exists (SQLITE_ERROR with "already exists" message)
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'already exists') !== false) {
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
+        }
+
+        // Table not found (SQLITE_ERROR with "no such table" message)
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such table') !== false) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
+        }
+
         // Duplicate - SQLite uses various error codes for constraint violations:
         // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
         // - Error code 1 is also used for some duplicate cases
@@ -1325,7 +1340,6 @@ class SQLite extends MariaDB
             ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1 || $e->errorInfo[1] === 19)) ||
             $e->getCode() === '23000'
         ) {
-            // Check if it's actually a duplicate/unique constraint violation
             $message = $e->getMessage();
             if (
                 (isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) ||

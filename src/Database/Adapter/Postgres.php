@@ -439,7 +439,11 @@ class Postgres extends SQL
         $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->getPDO()->prepare($sql)->execute();
+        try {
+            return $this->getPDO()->prepare($sql)->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -2171,6 +2175,11 @@ class Postgres extends SQL
         return false;
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
     public function getSupportForUpserts(): bool
     {
         return true;
@@ -2256,6 +2265,11 @@ class Postgres extends SQL
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
+        }
+
+        // Unknown table
+        if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
         // Unknown column

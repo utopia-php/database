@@ -70,6 +70,11 @@ class Pool extends Adapter
         });
     }
 
+    public function getDriver(): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -559,6 +564,16 @@ class Pool extends Adapter
     }
 
     public function getSchemaAttributes(string $collection): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSchemaIndexes(string $collection): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

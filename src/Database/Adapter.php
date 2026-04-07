@@ -23,7 +23,7 @@ abstract class Adapter
 
     protected bool $sharedTables = false;
 
-    protected ?int $tenant = null;
+    protected int|string|null $tenant = null;
 
     protected bool $tenantPerDocument = false;
 
@@ -219,11 +219,11 @@ abstract class Adapter
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      *
      * @return bool
      */
-    public function setTenant(?int $tenant): bool
+    public function setTenant(int|string|null $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -235,9 +235,9 @@ abstract class Adapter
      *
      * Get tenant to use for shared tables
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->tenant;
     }
@@ -960,6 +960,13 @@ abstract class Adapter
     abstract public function getSupportForSchemaAttributes(): bool;
 
     /**
+     * Are schema indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaIndexes(): bool;
+
+    /**
      * Is index supported?
      *
      * @return bool
@@ -1367,6 +1374,17 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get Schema Indexes
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
      * Get the expected column type for a given attribute type.
      *
      * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
@@ -1564,4 +1582,9 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract public function getDriver(): mixed;
 }

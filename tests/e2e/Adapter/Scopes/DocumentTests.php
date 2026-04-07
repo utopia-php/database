@@ -85,13 +85,22 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
+
+        /**
+         * Query with int $sequence value (supported by SQL adapters, rejected by MongoDB)
+         */
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_INTEGER) {
+            $this->assertTrue($sequence === 5_000_000_000_000_000);
+            $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
+            $this->assertSame((string)$sequence, $document->getSequence());
+        }
     }
 
     public function testCreateDocument(): Document
@@ -1534,6 +1543,38 @@ trait DocumentTests
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e);
+        }
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseDecreasePreserveDates(Document $document): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->setPreserveDates(true);
+
+        try {
+            $before = $database->getDocument('increase_decrease', $document->getId());
+            $updatedAt = $before->getUpdatedAt();
+            $increase = $before->getAttribute('increase');
+            $decrease = $before->getAttribute('decrease');
+
+            $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1);
+
+            $after = $database->getDocument('increase_decrease', $document->getId());
+            $this->assertSame($increase + 1, $after->getAttribute('increase'));
+            $this->assertSame($updatedAt, $after->getUpdatedAt());
+
+            $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1);
+
+            $after = $database->getDocument('increase_decrease', $document->getId());
+            $this->assertSame($decrease - 1, $after->getAttribute('decrease'));
+            $this->assertSame($updatedAt, $after->getUpdatedAt());
+        } finally {
+            $database->setPreserveDates(false);
         }
     }
 

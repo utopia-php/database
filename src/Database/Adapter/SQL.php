@@ -2179,8 +2179,18 @@ abstract class SQL extends Adapter
     /**
      * Returns the current PDO object
      * @return mixed
+     * @deprecated Use getDriver() instead
      */
     protected function getPDO(): mixed
+    {
+        return $this->pdo;
+    }
+
+    /**
+     * Returns the current PDO object
+     * @return mixed
+     */
+    public function getDriver(): mixed
     {
         return $this->pdo;
     }
@@ -2326,6 +2336,16 @@ abstract class SQL extends Adapter
     public function getSchemaAttributes(string $collection): array
     {
         return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
     }
 
     public function getTenantQuery(

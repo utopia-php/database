@@ -77,6 +77,15 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    /**
+     * Returns the current Mongo client
+     * @return mixed
+     */
+    public function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
@@ -414,8 +423,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // For metadata collections outside transactions, check if exists first
-        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata, the physical collection may
+        // already exist for another tenant. Return early to avoid a
+        // "Collection Exists" exception from the client.
+        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -427,6 +438,16 @@ class Mongo extends Adapter
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
                 return true;
+            }
+            // Client throws code-0 "Collection Exists" when its pre-check
+            // finds the collection. In shared-tables/metadata context this
+            // is a no-op; otherwise re-throw as DuplicateException so
+            // Database::createCollection() can run orphan reconciliation.
+            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
             }
             throw $e;
         }
@@ -2037,7 +2058,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         $options = [];
@@ -2298,7 +2319,7 @@ class Mongo extends Adapter
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         /**
@@ -2388,7 +2409,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -2913,7 +2934,7 @@ class Mongo extends Adapter
      */
     protected function getOrder(string $order): int
     {
-        return match ($order) {
+        return match (\strtoupper($order)) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
             default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
@@ -3610,15 +3631,25 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
     /**
      * @param string $collection
-     * @param array<int> $tenants
-     * @return int|null|array<string, array<int>>
+     * @param array<int|string> $tenants
+     * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|string|null|array {
         $values = [];
         if (!$this->sharedTables) {
             return $values;

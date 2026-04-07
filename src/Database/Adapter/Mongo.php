@@ -1464,10 +1464,12 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $options = $this->getTransactionOptions();
-
         if ($ignore) {
-            $options['ordered'] = false;
+            // Run outside transaction — MongoDB aborts transactions on any write error,
+            // so ordered:false + session would roll back even successfully inserted docs.
+            $options = ['ordered' => false];
+        } else {
+            $options = $this->getTransactionOptions();
         }
 
         $records = [];
@@ -1498,7 +1500,10 @@ class Mongo extends Adapter
             $processed = $this->processException($e);
 
             if ($ignore && $processed instanceof DuplicateException) {
-                return $documents;
+                // Race condition: a doc was inserted between pre-filter and insertMany.
+                // With ordered:false outside transaction, non-duplicate inserts persist.
+                // Return empty — we cannot determine which docs succeeded without querying.
+                return [];
             }
 
             throw $processed;

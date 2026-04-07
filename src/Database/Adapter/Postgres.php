@@ -1376,7 +1376,7 @@ class Postgres extends SQL
             return '';
         }
 
-        $conflictTarget = $this->sharedTables ? '("_uid", _tenant)' : '("_uid")';
+        $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
 
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
@@ -1388,8 +1388,8 @@ class Postgres extends SQL
         }
 
         $conflictTarget = $this->sharedTables
-            ? '(_type, _permission, _document, _tenant)'
-            : '(_type, _permission, _document)';
+            ? '("_type", "_permission", "_document", "_tenant")'
+            : '("_type", "_permission", "_document")';
 
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }

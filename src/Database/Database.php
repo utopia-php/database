@@ -5659,7 +5659,7 @@ class Database
         // pre-fetch existing document IDs so we skip relationship writes for duplicates
         $preExistingIds = [];
         $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
-        if ($ignore && $this->resolveRelationships) {
+        if ($ignore) {
             if ($tenantPerDocument) {
                 $idsByTenant = [];
                 foreach ($documents as $doc) {
@@ -5667,7 +5667,7 @@ class Database
                 }
                 foreach ($idsByTenant as $tenant => $tenantIds) {
                     $tenantIds = \array_values(\array_unique($tenantIds));
-                    foreach (\array_chunk($tenantIds, $this->maxQueryValues) as $idChunk) {
+                    foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                         $existing = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
                             $collection->getId(),
                             [
@@ -5686,7 +5686,7 @@ class Database
                     \array_map(fn (Document $doc) => $doc->getId(), $documents)
                 )));
 
-                foreach (\array_chunk($inputIds, $this->maxQueryValues) as $idChunk) {
+                foreach (\array_chunk($inputIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                     $existing = $this->authorization->skip(fn () => $this->silent(fn () => $this->find(
                         $collection->getId(),
                         [
@@ -5755,6 +5755,18 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
+            if ($ignore && !empty($preExistingIds)) {
+                $chunk = \array_values(\array_filter($chunk, function (Document $doc) use ($preExistingIds, $tenantPerDocument) {
+                    $key = $tenantPerDocument
+                        ? $doc->getTenant() . ':' . $doc->getId()
+                        : $doc->getId();
+                    return !isset($preExistingIds[$key]);
+                }));
+                if (empty($chunk)) {
+                    continue;
+                }
+            }
+
             $batch = $this->withTransaction(function () use ($collection, $chunk, $ignore) {
                 return $this->adapter->createDocuments($collection, $chunk, $ignore);
             });
@@ -7190,7 +7202,7 @@ class Database
                 }
                 foreach ($idsByTenant as $tenant => $tenantIds) {
                     $tenantIds = \array_values(\array_unique($tenantIds));
-                    foreach (\array_chunk($tenantIds, $this->maxQueryValues) as $idChunk) {
+                    foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                         $fetched = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
                             $collection->getId(),
                             [Query::equal('$id', $idChunk), Query::limit(\count($idChunk))],
@@ -7201,7 +7213,7 @@ class Database
                     }
                 }
             } else {
-                foreach (\array_chunk($uniqueIds, $this->maxQueryValues) as $idChunk) {
+                foreach (\array_chunk($uniqueIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                     $fetched = $this->authorization->skip(fn () => $this->silent(fn () => $this->find(
                         $collection->getId(),
                         [Query::equal('$id', $idChunk), Query::limit(\count($idChunk))],

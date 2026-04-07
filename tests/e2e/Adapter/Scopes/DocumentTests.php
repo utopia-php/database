@@ -7788,6 +7788,9 @@ trait DocumentTests
             ]),
         ], ignore: true);
 
+        // Only doc3 was new, doc1 was skipped as duplicate
+        $this->assertSame(1, $count);
+
         // doc3 should exist, doc1 should retain original value
         $doc1 = $database->getDocument(__FUNCTION__, 'doc1');
         $this->assertSame('Original A', $doc1->getAttribute('name'));
@@ -7831,6 +7834,9 @@ trait DocumentTests
                 ],
             ]),
         ], ignore: true);
+
+        // All duplicates skipped, nothing inserted
+        $this->assertSame(0, $count);
 
         // Original document should be unchanged
         $doc = $database->getDocument(__FUNCTION__, 'existing');

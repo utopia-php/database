@@ -7118,18 +7118,44 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        foreach ($documents as $key => $document) {
+
+        // Batch-fetch existing documents in one query instead of N individual getDocument() calls
+        $ids = \array_filter(\array_map(fn ($doc) => $doc->getId(), $documents));
+        $existingDocs = [];
+
+        if (!empty($ids)) {
+            $uniqueIds = \array_values(\array_unique($ids));
+
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                $old = $this->authorization->skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                ))));
+                // Group IDs by tenant and fetch each group separately
+                $idsByTenant = [];
+                foreach ($documents as $doc) {
+                    $tenant = $doc->getTenant();
+                    $idsByTenant[$tenant][] = $doc->getId();
+                }
+                foreach ($idsByTenant as $tenant => $tenantIds) {
+                    $tenantIds = \array_values(\array_unique($tenantIds));
+                    $fetched = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
+                        $collection->getId(),
+                        [Query::equal('$id', $tenantIds), Query::limit(\count($tenantIds))],
+                    ))));
+                    foreach ($fetched as $doc) {
+                        $existingDocs[$doc->getId()] = $doc;
+                    }
+                }
             } else {
-                $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
+                $fetched = $this->authorization->skip(fn () => $this->silent(fn () => $this->find(
                     $collection->getId(),
-                    $document->getId(),
+                    [Query::equal('$id', $uniqueIds), Query::limit(\count($uniqueIds))],
                 )));
+                foreach ($fetched as $doc) {
+                    $existingDocs[$doc->getId()] = $doc;
+                }
             }
+        }
+
+        foreach ($documents as $key => $document) {
+            $old = $existingDocs[$document->getId()] ?? new Document();
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();

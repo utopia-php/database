@@ -5658,22 +5658,46 @@ class Database
         // When ignore mode is on and relationships are being resolved,
         // pre-fetch existing document IDs so we skip relationship writes for duplicates
         $preExistingIds = [];
+        $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
         if ($ignore && $this->resolveRelationships) {
-            $inputIds = \array_values(\array_unique(\array_filter(
-                \array_map(fn (Document $doc) => $doc->getId(), $documents)
-            )));
-
-            foreach (\array_chunk($inputIds, $this->maxQueryValues) as $idChunk) {
-                $existing = $this->authorization->skip(fn () => $this->silent(fn () => $this->find(
-                    $collection->getId(),
-                    [
-                        Query::equal('$id', $idChunk),
-                        Query::select(['$id']),
-                        Query::limit(\count($idChunk)),
-                    ]
+            if ($tenantPerDocument) {
+                $idsByTenant = [];
+                foreach ($documents as $doc) {
+                    $idsByTenant[$doc->getTenant()][] = $doc->getId();
+                }
+                foreach ($idsByTenant as $tenant => $tenantIds) {
+                    $tenantIds = \array_values(\array_unique($tenantIds));
+                    foreach (\array_chunk($tenantIds, $this->maxQueryValues) as $idChunk) {
+                        $existing = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
+                            $collection->getId(),
+                            [
+                                Query::equal('$id', $idChunk),
+                                Query::select(['$id']),
+                                Query::limit(\count($idChunk)),
+                            ]
+                        ))));
+                        foreach ($existing as $doc) {
+                            $preExistingIds[$tenant . ':' . $doc->getId()] = true;
+                        }
+                    }
+                }
+            } else {
+                $inputIds = \array_values(\array_unique(\array_filter(
+                    \array_map(fn (Document $doc) => $doc->getId(), $documents)
                 )));
-                foreach ($existing as $doc) {
-                    $preExistingIds[$doc->getId()] = true;
+
+                foreach (\array_chunk($inputIds, $this->maxQueryValues) as $idChunk) {
+                    $existing = $this->authorization->skip(fn () => $this->silent(fn () => $this->find(
+                        $collection->getId(),
+                        [
+                            Query::equal('$id', $idChunk),
+                            Query::select(['$id']),
+                            Query::limit(\count($idChunk)),
+                        ]
+                    )));
+                    foreach ($existing as $doc) {
+                        $preExistingIds[$doc->getId()] = true;
+                    }
                 }
             }
         }
@@ -5717,8 +5741,14 @@ class Database
                 }
             }
 
-            if ($this->resolveRelationships && !isset($preExistingIds[$document->getId()])) {
-                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            if ($this->resolveRelationships) {
+                $preExistKey = $tenantPerDocument
+                    ? $document->getTenant() . ':' . $document->getId()
+                    : $document->getId();
+
+                if (!isset($preExistingIds[$preExistKey])) {
+                    $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+                }
             }
 
             $document = $this->adapter->castingBefore($collection, $document);
@@ -7145,12 +7175,14 @@ class Database
         // Batch-fetch existing documents in one query instead of N individual getDocument() calls
         $ids = \array_filter(\array_map(fn ($doc) => $doc->getId(), $documents));
         $existingDocs = [];
+        $upsertTenantPerDocument = $this->getSharedTables() && $this->getTenantPerDocument();
 
         if (!empty($ids)) {
             $uniqueIds = \array_values(\array_unique($ids));
 
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            if ($upsertTenantPerDocument) {
                 // Group IDs by tenant and fetch each group separately
+                // Use composite key tenant:id to avoid cross-tenant collisions
                 $idsByTenant = [];
                 foreach ($documents as $doc) {
                     $tenant = $doc->getTenant();
@@ -7164,7 +7196,7 @@ class Database
                             [Query::equal('$id', $idChunk), Query::limit(\count($idChunk))],
                         ))));
                         foreach ($fetched as $doc) {
-                            $existingDocs[$doc->getId()] = $doc;
+                            $existingDocs[$tenant . ':' . $doc->getId()] = $doc;
                         }
                     }
                 }
@@ -7182,7 +7214,10 @@ class Database
         }
 
         foreach ($documents as $key => $document) {
-            $old = $existingDocs[$document->getId()] ?? new Document();
+            $lookupKey = $upsertTenantPerDocument
+                ? $document->getTenant() . ':' . $document->getId()
+                : $document->getId();
+            $old = $existingDocs[$lookupKey] ?? new Document();
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();

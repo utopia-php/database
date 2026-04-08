@@ -1493,7 +1493,11 @@ class Mongo extends Adapter
             $uids = \array_filter(\array_map(fn ($r) => $r['_uid'] ?? null, $records));
             if (!empty($uids)) {
                 $findOptions = $this->getTransactionOptions(['projection' => ['_uid' => 1]]);
-                $result = $this->client->find($name, ['_uid' => ['$in' => \array_values($uids)]], $findOptions);
+                $filters = ['_uid' => ['$in' => \array_values($uids)]];
+                if ($this->sharedTables) {
+                    $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+                }
+                $result = $this->client->find($name, $filters, $findOptions);
                 $existingUids = [];
                 foreach ($result->cursor->firstBatch ?? [] as $doc) {
                     $existingUids[$doc->_uid] = true;

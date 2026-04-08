@@ -7,6 +7,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
@@ -109,7 +110,8 @@ class Structure extends Validator
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
-        private readonly ?Document $currentDocument = null
+        private readonly ?Document $currentDocument = null,
+        private readonly bool $supportUnsignedBigInt = true
     ) {
     }
 
@@ -237,7 +239,7 @@ class Structure extends Validator
             return false;
         }
 
-        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+        if (!$this->checkForInvalidAttributeValues($document, $structure, $keys)) {
             return false;
         }
 
@@ -305,7 +307,7 @@ class Structure extends Validator
      *
      * @return bool
      */
-    protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
+    protected function checkForInvalidAttributeValues(Document $document, array $structure, array $keys): bool
     {
         foreach ($structure as $key => $value) {
             if (Operator::isOperator($value)) {
@@ -336,6 +338,15 @@ class Structure extends Validator
                 continue;
             }
 
+            // BIGINT accepts both PHP int and numeric strings.
+            // If the numeric string is within PHP's int range, normalize it to an int
+            // so downstream code gets a numeric value without precision loss.
+            if ($type === Database::VAR_BIGINT && \is_string($value) && $this->isBigIntStringWithinPhpIntRange($value, $signed)) {
+                $normalized = (int)$value;
+                $document->setAttribute($key, $normalized);
+                $value = $normalized;
+            }
+
             $validators = [];
 
             switch ($type) {
@@ -352,7 +363,6 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                case Database::VAR_BIGINT:
                     // Determine bit size based on attribute size in bytes
                     // BIGINT is always 64-bit in SQL adapters; VAR_INTEGER uses size to decide.
                     $bits = ($type === Database::VAR_BIGINT || $size >= 8) ? 64 : 32;
@@ -363,6 +373,10 @@ class Structure extends Validator
                     $max = $bits === 64 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, Database::VAR_INTEGER);
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $validators[] = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case Database::VAR_FLOAT:
@@ -446,6 +460,11 @@ class Structure extends Validator
         }
 
         return true;
+    }
+
+    public function isBigIntStringWithinPhpIntRange(string $value, bool $signed): bool
+    {
+        return BigIntHelper::fitsPhpInt($value, $signed);
     }
 
     /**

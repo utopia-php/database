@@ -42,6 +42,20 @@ class FilterTest extends TestCase
                 'type' => Database::VAR_INTEGER,
                 'array' => false,
             ]),
+            new Document([
+                '$id' => 'bigint_unsigned',
+                'key' => 'bigint_unsigned',
+                'type' => Database::VAR_BIGINT,
+                'array' => false,
+                'signed' => false,
+            ]),
+            new Document([
+                '$id' => 'bigint_signed',
+                'key' => 'bigint_signed',
+                'type' => Database::VAR_BIGINT,
+                'array' => false,
+                'signed' => true,
+            ]),
         ];
 
         $this->validator = new Filter(
@@ -61,6 +75,8 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100,10,-1])));
         $this->assertTrue($this->validator->isValid(Query::contains('string_array', ["1","10","-1"])));
         $this->assertTrue($this->validator->isValid(Query::contains('string', ['super'])));
+        $this->assertTrue($this->validator->isValid(Query::equal('bigint_unsigned', ['18446744073709551615'])));
+        $this->assertTrue($this->validator->isValid(Query::equal('bigint_signed', ['-9223372036854775808'])));
     }
 
     public function testFailure(): void

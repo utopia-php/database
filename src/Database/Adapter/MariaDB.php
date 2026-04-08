@@ -2255,6 +2255,11 @@ class MariaDB extends SQL
         return false;
     }
 
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return true;
+    }
+
     /**
      * Are object (JSON) indexes supported?
      *

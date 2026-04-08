@@ -1449,6 +1449,11 @@ abstract class Adapter
      */
     abstract public function decodePolygon(string $wkb): array;
 
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return false;
+    }
+
     /**
         * Returns the document after casting
         * @param Document $collection

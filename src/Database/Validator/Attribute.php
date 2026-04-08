@@ -7,6 +7,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Validator;
 
 class Attribute extends Validator
@@ -60,6 +61,7 @@ class Attribute extends Validator
         protected mixed $filterCallback = null,
         protected bool $isMigrating = false,
         protected bool $sharedTables = false,
+        protected bool $supportUnsignedBigInt = false,
     ) {
         // Keep backwards compatibility for existing validator construction sites.
         if ($this->maxBigIntLength === 0) {
@@ -345,6 +347,21 @@ class Attribute extends Validator
                 break;
 
             case Database::VAR_BIGINT:
+                $sizeString = \is_string($size) ? $size : (string)$size;
+                if (!BigIntHelper::isIntegerString($sizeString, false)) {
+                    $this->message = 'Size must be a positive integer';
+                    throw new DatabaseException($this->message);
+                }
+
+                $sizeString = BigIntHelper::normalizeUnsignedString($sizeString);
+                $limit = (!$signed && $this->supportUnsignedBigInt)
+                    ? BigIntHelper::UNSIGNED_MAX
+                    : (string)$this->maxBigIntLength;
+
+                if (BigIntHelper::compareUnsignedStrings($sizeString, $limit) > 0) {
+                    $this->message = 'Max size allowed for bigint is: ' . BigIntHelper::formatIntegerString($limit);
+                    throw new DatabaseException($this->message);
+                }
                 break;
 
             case Database::VAR_FLOAT:

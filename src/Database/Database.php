@@ -22,6 +22,7 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1905,6 +1906,7 @@ class Database
     public function getCollection(string $id): Document
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $collection = $this->normalizeCollectionAttributeSizes($collection);
 
         if (
             $id !== self::METADATA
@@ -1940,6 +1942,8 @@ class Database
             Query::offset($offset)
         ]));
 
+        $result = \array_map(fn (Document $collection) => $this->normalizeCollectionAttributeSizes($collection), $result);
+
         try {
             $this->trigger(self::EVENT_COLLECTION_LIST, $result);
         } catch (\Throwable $e) {
@@ -1947,6 +1951,40 @@ class Database
         }
 
         return $result;
+    }
+
+    private function normalizeCollectionAttributeSizes(Document $collection): Document
+    {
+        if ($collection->isEmpty()) {
+            return $collection;
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        if (!\is_array($attributes)) {
+            return $collection;
+        }
+
+        foreach ($attributes as $attribute) {
+            if (!$attribute instanceof Document) {
+                continue;
+            }
+
+            $type = $attribute->getAttribute('type');
+            $size = $attribute->getAttribute('size', 0);
+
+            if ($type === self::VAR_BIGINT) {
+                // Keep bigint size as string to avoid precision loss.
+                $attribute->setAttribute('size', (string)$size);
+                continue;
+            }
+
+            // Keep legacy behavior for non-bigint metadata.
+            $attribute->setAttribute('size', (int)$size);
+        }
+
+        $collection->setAttribute('attributes', $attributes);
+
+        return $collection;
     }
 
     /**
@@ -2193,7 +2231,7 @@ class Database
                 '$id' => ID::custom($id),
                 'key' => $id,
                 'type' => $type,
-                'size' => $size,
+                'size' => $type === self::VAR_BIGINT ? (string)$size : $size,
                 'required' => $required,
                 'default' => $default,
                 'signed' => $signed,
@@ -2490,7 +2528,7 @@ class Database
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
-            'size' => $size,
+            'size' => $type === self::VAR_BIGINT ? (string)$size : $size,
             'required' => $required,
             'default' => $default,
             'signed' => $signed,
@@ -2523,6 +2561,7 @@ class Database
             filterCallback: fn ($id) => $this->adapter->filter($id),
             isMigrating: $this->isMigrating(),
             sharedTables: $this->getSharedTables(),
+            supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
         );
 
         $validator->isValid($attribute);
@@ -2918,6 +2957,13 @@ class Database
                 }
                 break;
             case self::VAR_BIGINT:
+                $sizeString = (string)$size;
+                $limit = ($this->adapter->getSupportForUnsignedBigInt() && !$signed)
+                    ? BigIntHelper::UNSIGNED_MAX
+                    : (string)$this->adapter->getLimitForBigInt();
+                if (!BigIntHelper::fitsBigIntRange($sizeString, false, $this->adapter->getSupportForUnsignedBigInt() && !$signed)) {
+                    throw new DatabaseException('Max size allowed for bigint is: ' . BigIntHelper::formatIntegerString($limit));
+                }
                 break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
@@ -3024,7 +3070,7 @@ class Database
             ->setAttribute('$id', $newKey ?? $id)
             ->setattribute('key', $newKey ?? $id)
             ->setAttribute('type', $type)
-            ->setAttribute('size', $size)
+            ->setAttribute('size', $type === self::VAR_BIGINT ? (string)$size : $size)
             ->setAttribute('signed', $signed)
             ->setAttribute('array', $array)
             ->setAttribute('format', $format)
@@ -5588,7 +5634,9 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                null,
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -5696,7 +5744,9 @@ class Database
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
-                    $this->adapter->getSupportForAttributes()
+                    $this->adapter->getSupportForAttributes(),
+                    null,
+                    $this->adapter->getSupportForUnsignedBigInt()
                 );
                 if (!$validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
@@ -6389,7 +6439,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
 
             if (!$validator->isValid($queries)) {
@@ -6434,7 +6485,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                null // No old document available in bulk updates
+                null, // No old document available in bulk updates
+                $this->adapter->getSupportForUnsignedBigInt()
             );
 
             if (!$validator->isValid($updates)) {
@@ -8097,7 +8149,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
 
             if (!$validator->isValid($queries)) {
@@ -8319,7 +8372,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8575,7 +8629,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8648,7 +8703,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8913,6 +8969,7 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
+            $signed = $attribute['signed'] ?? true;
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
@@ -8946,7 +9003,9 @@ class Database
                         $node = (int)$node;
                         break;
                     case self::VAR_BIGINT:
-                        $node = (int)$node;
+                        if (\is_string($node) && BigIntHelper::fitsPhpInt($node, $signed)) {
+                            $node = (int)$node;
+                        }
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
@@ -8963,7 +9022,6 @@ class Database
 
         return $document;
     }
-
 
     /**
      * Encode Attribute

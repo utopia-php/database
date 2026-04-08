@@ -1906,7 +1906,6 @@ class Database
     public function getCollection(string $id): Document
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
-        $collection = $this->normalizeCollectionAttributeSizes($collection);
 
         if (
             $id !== self::METADATA
@@ -1942,8 +1941,6 @@ class Database
             Query::offset($offset)
         ]));
 
-        $result = \array_map(fn (Document $collection) => $this->normalizeCollectionAttributeSizes($collection), $result);
-
         try {
             $this->trigger(self::EVENT_COLLECTION_LIST, $result);
         } catch (\Throwable $e) {
@@ -1951,43 +1948,6 @@ class Database
         }
 
         return $result;
-    }
-
-    private function normalizeCollectionAttributeSizes(Document $collection): Document
-    {
-        if ($collection->isEmpty()) {
-            return $collection;
-        }
-
-        $attributes = $collection->getAttribute('attributes', []);
-        if (!\is_array($attributes)) {
-            return $collection;
-        }
-
-        foreach ($attributes as $attribute) {
-            if (!$attribute instanceof Document) {
-                continue;
-            }
-
-            $type = $attribute->getAttribute('type');
-
-            if ($type === self::VAR_BIGINT) {
-                $formatOptions = $attribute->getAttribute('formatOptions', []);
-                if (\is_array($formatOptions)) {
-                    if (\array_key_exists('min', $formatOptions) && $formatOptions['min'] !== null) {
-                        $formatOptions['min'] = (string)$formatOptions['min'];
-                    }
-                    if (\array_key_exists('max', $formatOptions) && $formatOptions['max'] !== null) {
-                        $formatOptions['max'] = (string)$formatOptions['max'];
-                    }
-                    $attribute->setAttribute('formatOptions', $formatOptions);
-                }
-            }
-        }
-
-        $collection->setAttribute('attributes', $attributes);
-
-        return $collection;
     }
 
     /**

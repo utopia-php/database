@@ -9,35 +9,32 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 class DateTimeTest extends TestCase
 {
     private \DateTime $minAllowed;
+
     private \DateTime $maxAllowed;
+
     private string $minString = '0000-01-01 00:00:00';
+
     private string $maxString = '9999-12-31 23:59:59';
 
-    public function __construct()
+    protected function setUp(): void
     {
-        parent::__construct();
-
         $this->minAllowed = new \DateTime($this->minString);
         $this->maxAllowed = new \DateTime($this->maxString);
     }
 
-    public function setUp(): void
+    protected function tearDown(): void
     {
     }
 
-    public function tearDown(): void
-    {
-    }
-
-    public function testCreateDatetime(): void
+    public function test_create_datetime(): void
     {
         $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
 
         $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-1-4 11:31"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04 11:31:52"));
-        $this->assertEquals(true, $dateValidator->isValid("2022-1-4 11:31:52.123456789"));
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-1-4 11:31'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04 11:31:52'));
+        $this->assertEquals(true, $dateValidator->isValid('2022-1-4 11:31:52.123456789'));
         $this->assertGreaterThan('2022-7-2', '2022-7-2 11:31:52.680');
         $now = DateTime::now();
         $this->assertEquals(23, strlen($now));
@@ -55,21 +52,21 @@ class DateTimeTest extends TestCase
         $this->assertEquals('52', $dateObject->format('s'));
         $this->assertEquals('680', $dateObject->format('v'));
 
-        $this->assertEquals(true, $dateValidator->isValid("2022-12-04 11:31:52.680+02:00"));
+        $this->assertEquals(true, $dateValidator->isValid('2022-12-04 11:31:52.680+02:00'));
         $this->assertEquals('UTC', date_default_timezone_get());
-        $this->assertEquals("2022-12-04 09:31:52.680", DateTime::setTimezone("2022-12-04 11:31:52.680+02:00"));
-        $this->assertEquals("2022-12-04T09:31:52.681+00:00", DateTime::formatTz("2022-12-04 09:31:52.681"));
+        $this->assertEquals('2022-12-04 09:31:52.680', DateTime::setTimezone('2022-12-04 11:31:52.680+02:00'));
+        $this->assertEquals('2022-12-04T09:31:52.681+00:00', DateTime::formatTz('2022-12-04 09:31:52.681'));
 
         /**
          * Test for Failure
          */
-        $this->assertEquals(false, $dateValidator->isValid("2022-13-04 11:31:52.680"));
-        $this->assertEquals(false, $dateValidator->isValid("-0001-13-04 00:00:00"));
-        $this->assertEquals(false, $dateValidator->isValid("0000-00-00 00:00:00"));
-        $this->assertEquals(false, $dateValidator->isValid("10000-01-01 00:00:00"));
+        $this->assertEquals(false, $dateValidator->isValid('2022-13-04 11:31:52.680'));
+        $this->assertEquals(false, $dateValidator->isValid('-0001-13-04 00:00:00'));
+        $this->assertEquals(false, $dateValidator->isValid('0000-00-00 00:00:00'));
+        $this->assertEquals(false, $dateValidator->isValid('10000-01-01 00:00:00'));
     }
 
-    public function testPastDateValidation(): void
+    public function test_past_date_validation(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -92,7 +89,7 @@ class DateTimeTest extends TestCase
         $this->assertEquals("Value must be valid date between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
     }
 
-    public function testDatePrecision(): void
+    public function test_date_precision(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -151,7 +148,7 @@ class DateTimeTest extends TestCase
         $this->assertEquals("Value must be valid date with minutes precision between {$this->minString} and {$this->maxString}.", $dateValidator->getDescription());
     }
 
-    public function testOffset(): void
+    public function test_offset(): void
     {
         $dateValidator = new DatetimeValidator(
             $this->minAllowed,
@@ -190,5 +187,51 @@ class DateTimeTest extends TestCase
         } catch (\Exception $e) {
             $this->assertEquals('Offset must be a positive integer.', $e->getMessage());
         }
+    }
+
+    public function test_empty_and_non_string_values(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isValid(''));
+        $this->assertFalse($dateValidator->isValid(12345));
+        $this->assertFalse($dateValidator->isValid(null));
+        $this->assertFalse($dateValidator->isValid([]));
+        $this->assertFalse($dateValidator->isValid(false));
+    }
+
+    public function test_year_outside_min_max_range(): void
+    {
+        $dateValidator = new DatetimeValidator(
+            new \DateTime('2000-01-01'),
+            new \DateTime('2050-12-31'),
+        );
+
+        $this->assertFalse($dateValidator->isValid('1999-06-15 12:00:00'));
+        $this->assertFalse($dateValidator->isValid('2051-01-01 00:00:00'));
+        $this->assertTrue($dateValidator->isValid('2025-06-15 12:00:00'));
+    }
+
+    public function test_value_without_four_digit_year(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isValid('noon'));
+        $this->assertFalse($dateValidator->isValid('tomorrow'));
+        $this->assertFalse($dateValidator->isValid('next Monday'));
+    }
+
+    public function test_is_array(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertFalse($dateValidator->isArray());
+    }
+
+    public function test_get_type(): void
+    {
+        $dateValidator = new DatetimeValidator($this->minAllowed, $this->maxAllowed);
+
+        $this->assertEquals('string', $dateValidator->getType());
     }
 }

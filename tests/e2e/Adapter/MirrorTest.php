@@ -6,6 +6,7 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -18,13 +19,18 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
+use Utopia\Query\Schema\ColumnType;
 
 class MirrorTest extends Base
 {
     protected static ?Mirror $database = null;
+
     protected static ?PDO $destinationPdo = null;
+
     protected static ?PDO $sourcePdo = null;
+
     protected static Database $source;
+
     protected static Database $destination;
 
     protected static string $namespace;
@@ -35,7 +41,7 @@ class MirrorTest extends Base
      */
     protected function getDatabase(bool $fresh = false): Mirror
     {
-        if (!is_null(self::$database) && !$fresh) {
+        if (! is_null(self::$database) && ! $fresh) {
             return self::$database;
         }
 
@@ -48,8 +54,8 @@ class MirrorTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis');
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(5);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);
@@ -63,40 +69,43 @@ class MirrorTest extends Base
 
         $mirrorRedis = new Redis();
         $mirrorRedis->connect('redis-mirror');
-        $mirrorRedis->flushAll();
-        $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
+        $mirrorRedis->select(5);
+        $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
 
         self::$destinationPdo = $mirrorPdo;
         self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);
 
         $database = new Mirror(self::$source, self::$destination);
 
+        $token = static::getTestToken();
         $schemas = [
-            'utopiaTests',
-            'schema1',
-            'schema2',
-            'sharedTables',
-            'sharedTablesTenantPerDocument'
+            $this->testDatabase,
+            'schema1_'.$token,
+            'schema2_'.$token,
+            'sharedTables_'.$token,
+            'sharedTablesTenantPerDocument_'.$token,
         ];
 
         /**
          * Handle cases where the source and destination databases are not in sync because of previous tests
          */
+        assert(self::$authorization !== null);
         foreach ($schemas as $schema) {
             if ($database->getSource()->exists($schema)) {
                 $database->getSource()->setAuthorization(self::$authorization);
                 $database->getSource()->setDatabase($schema)->delete();
             }
-            if ($database->getDestination()->exists($schema)) {
-                $database->getDestination()->setAuthorization(self::$authorization);
-                $database->getDestination()->setDatabase($schema)->delete();
+            $destination = $database->getDestination();
+            if ($destination !== null && $destination->exists($schema)) {
+                $destination->setAuthorization(self::$authorization);
+                $destination->setDatabase($schema)->delete();
             }
         }
 
         $database
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setAuthorization(self::$authorization)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         $database->create();
 
@@ -107,7 +116,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetMirrorSource(): void
+    public function test_get_mirror_source(): void
     {
         $database = $this->getDatabase();
         $source = $database->getSource();
@@ -119,7 +128,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetMirrorDestination(): void
+    public function test_get_mirror_destination(): void
     {
         $database = $this->getDatabase();
         $destination = $database->getDestination();
@@ -133,7 +142,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testCreateMirroredCollection(): void
+    public function test_create_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -141,7 +150,9 @@ class MirrorTest extends Base
 
         // Assert collection exists in both databases
         $this->assertFalse($database->getSource()->getCollection('testCreateMirroredCollection')->isEmpty());
-        $this->assertFalse($database->getDestination()->getCollection('testCreateMirroredCollection')->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertFalse($destination->getCollection('testCreateMirroredCollection')->isEmpty());
     }
 
     /**
@@ -151,7 +162,7 @@ class MirrorTest extends Base
      * @throws Conflict
      * @throws Exception
      */
-    public function testUpdateMirroredCollection(): void
+    public function test_update_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -166,7 +177,7 @@ class MirrorTest extends Base
             [
                 Permission::read(Role::users()),
             ],
-            $collection->getAttribute('documentSecurity')
+            (bool) $collection->getAttribute('documentSecurity')
         );
 
         // Asset both databases have updated the collection
@@ -175,13 +186,15 @@ class MirrorTest extends Base
             $database->getSource()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             [Permission::read(Role::users())],
-            $database->getDestination()->getCollection('testUpdateMirroredCollection')->getPermissions()
+            $destination->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
     }
 
-    public function testDeleteMirroredCollection(): void
+    public function test_delete_mirrored_collection(): void
     {
         $database = $this->getDatabase();
 
@@ -191,7 +204,9 @@ class MirrorTest extends Base
 
         // Assert collection is deleted in both databases
         $this->assertTrue($database->getSource()->getCollection('testDeleteMirroredCollection')->isEmpty());
-        $this->assertTrue($database->getDestination()->getCollection('testDeleteMirroredCollection')->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertTrue($destination->getCollection('testDeleteMirroredCollection')->isEmpty());
     }
 
     /**
@@ -202,17 +217,12 @@ class MirrorTest extends Base
      * @throws Structure
      * @throws Exception
      */
-    public function testCreateMirroredDocument(): void
+    public function test_create_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -220,7 +230,7 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testCreateMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         // Assert document is created in both databases
@@ -229,9 +239,11 @@ class MirrorTest extends Base
             $database->getSource()->getDocument('testCreateMirroredDocument', $document->getId())
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             $document,
-            $database->getDestination()->getDocument('testCreateMirroredDocument', $document->getId())
+            $destination->getDocument('testCreateMirroredDocument', $document->getId())
         );
     }
 
@@ -244,17 +256,12 @@ class MirrorTest extends Base
      * @throws Structure
      * @throws Exception
      */
-    public function testUpdateMirroredDocument(): void
+    public function test_update_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -263,7 +270,7 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testUpdateMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         $document = $database->updateDocument(
@@ -278,23 +285,20 @@ class MirrorTest extends Base
             $database->getSource()->getDocument('testUpdateMirroredDocument', $document->getId())
         );
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
         $this->assertEquals(
             $document,
-            $database->getDestination()->getDocument('testUpdateMirroredDocument', $document->getId())
+            $destination->getDocument('testUpdateMirroredDocument', $document->getId())
         );
     }
 
-    public function testDeleteMirroredDocument(): void
+    public function test_delete_mirrored_document(): void
     {
         $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredDocument', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -303,26 +307,30 @@ class MirrorTest extends Base
 
         $document = $database->createDocument('testDeleteMirroredDocument', new Document([
             'name' => 'Jake',
-            '$permissions' => []
+            '$permissions' => [],
         ]));
 
         $database->deleteDocument('testDeleteMirroredDocument', $document->getId());
 
         // Assert document is deleted in both databases
         $this->assertTrue($database->getSource()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
-        $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+        $this->assertTrue($destination->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$sourcePdo !== null);
         self::$sourcePdo->exec($sql);
 
-        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$destinationPdo !== null);
         self::$destinationPdo->exec($sql);
 
         return true;
@@ -330,14 +338,16 @@ class MirrorTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$sourcePdo !== null);
         self::$sourcePdo->exec($sql);
 
-        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.self::$destination->getDatabase().'`.`'.self::$destination->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$destinationPdo !== null);
         self::$destinationPdo->exec($sql);
 
         return true;

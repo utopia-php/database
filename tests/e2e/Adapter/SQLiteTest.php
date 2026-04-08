@@ -12,38 +12,38 @@ use Utopia\Database\PDO;
 class SQLiteTest extends Base
 {
     public static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
-    /**
-     * @return Database
-     */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
-        $db = __DIR__."/database.sql";
+        $db = __DIR__.'/database_'.static::getTestToken().'.sql';
 
         if (file_exists($db)) {
             unlink($db);
         }
 
         $dsn = $db;
-        //$dsn = 'memory'; // Overwrite for fast tests
-        $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
+        // $dsn = 'memory'; // Overwrite for fast tests
+        $pdo = new PDO('sqlite:'.$dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        $redis->select(3);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new SQLite($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setDatabase($this->testDatabase)
+            ->setNamespace(static::$namespace = 'myapp_'.uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -52,14 +52,16 @@ class SQLiteTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -67,9 +69,10 @@ class SQLiteTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $index = "`".$this->getDatabase()->getNamespace()."_".$this->getDatabase()->getTenant()."_{$collection}_{$index}`";
+        $index = '`'.$this->getDatabase()->getNamespace().'_'.$this->getDatabase()->getTenant()."_{$collection}_{$index}`";
         $sql = "DROP INDEX {$index}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

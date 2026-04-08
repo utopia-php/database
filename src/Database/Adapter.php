@@ -2,7 +2,11 @@
 
 namespace Utopia\Database;
 
+use BadMethodCallException;
+use DateTime;
 use Exception;
+use Throwable;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -12,11 +16,20 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Hook\Transform;
+use Utopia\Database\Hook\Write;
+use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
 
-abstract class Adapter
+/**
+ * Abstract base class for all database adapters, providing shared state management and a contract for database operations.
+ */
+abstract class Adapter implements Feature\Attributes, Feature\Collections, Feature\Databases, Feature\Documents, Feature\Indexes, Feature\Transactions
 {
     protected string $database = '';
+
     protected string $hostname = '';
 
     protected string $namespace = '';
@@ -39,11 +52,9 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
-     * @var array<string, array<callable>>
+     * @var array<string, Transform>
      */
-    protected array $transformations = [
-        '*' => [],
-    ];
+    protected array $queryTransforms = [];
 
     /**
      * @var array<string, mixed>
@@ -51,13 +62,48 @@ abstract class Adapter
     protected array $metadata = [];
 
     /**
-     * @var Authorization
+     * @var list<Write>
      */
+    protected array $writeHooks = [];
+
+    protected ?QueryProfiler $profiler = null;
+
     protected Authorization $authorization;
 
+    /** @var array<string, true>|null */
+    private ?array $capabilitySet = null;
+
     /**
-     * @param Authorization $authorization
+     * Check if this adapter supports a given capability.
      *
+     * @param  Capability  $feature  Capability enum case
+     */
+    public function supports(Capability $feature): bool
+    {
+        if ($this->capabilitySet === null) {
+            $this->capabilitySet = [];
+            foreach ($this->capabilities() as $cap) {
+                $this->capabilitySet[$cap->name] = true;
+            }
+        }
+        return isset($this->capabilitySet[$feature->name]);
+    }
+
+    /**
+     * Get the list of capabilities this adapter supports.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return [
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+        ];
+    }
+
+    /**
      * @return $this
      */
     public function setAuthorization(Authorization $authorization): self
@@ -67,93 +113,26 @@ abstract class Adapter
         return $this;
     }
 
+    /**
+     * Get the authorization instance used for permission checks.
+     *
+     * @return Authorization The current authorization instance.
+     */
     public function getAuthorization(): Authorization
     {
         return $this->authorization;
     }
-    /**
-     * @param string $key
-     * @param mixed $value
-     *
-     * @return $this
-     */
-    public function setDebug(string $key, mixed $value): static
+
+    public function setProfiler(?QueryProfiler $profiler): static
     {
-        $this->debug[$key] = $value;
+        $this->profiler = $profiler;
 
         return $this;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function getDebug(): array
+    public function getProfiler(): ?QueryProfiler
     {
-        return $this->debug;
-    }
-
-    /**
-     * @return static
-     */
-    public function resetDebug(): static
-    {
-        $this->debug = [];
-
-        return $this;
-    }
-
-    /**
-     * Set Namespace.
-     *
-     * Set namespace to divide different scope of data sets
-     *
-     * @param string $namespace
-     *
-     * @return $this
-     * @throws DatabaseException
-     *
-     */
-    public function setNamespace(string $namespace): static
-    {
-        $this->namespace = $this->filter($namespace);
-
-        return $this;
-    }
-
-    /**
-     * Get Namespace.
-     *
-     * Get namespace of current set scope
-     *
-     * @return string
-     *
-     */
-    public function getNamespace(): string
-    {
-        return $this->namespace;
-    }
-
-    /**
-     * Set Hostname.
-     *
-     * @param string $hostname
-     * @return $this
-     */
-    public function setHostname(string $hostname): static
-    {
-        $this->hostname = $hostname;
-
-        return $this;
-    }
-
-    /**
-     * Get Hostname.
-     *
-     * @return string
-     */
-    public function getHostname(): string
-    {
-        return $this->hostname;
+        return $this->profiler;
     }
 
     /**
@@ -161,9 +140,7 @@ abstract class Adapter
      *
      * Set database to use for current scope
      *
-     * @param string $name
      *
-     * @return bool
      * @throws DatabaseException
      */
     public function setDatabase(string $name): bool
@@ -177,9 +154,6 @@ abstract class Adapter
      * Get Database.
      *
      * Get Database from current scope
-     *
-     * @return string
-     *
      */
     public function getDatabase(): string
     {
@@ -187,13 +161,56 @@ abstract class Adapter
     }
 
     /**
+     * Set Namespace.
+     *
+     * Set namespace to divide different scope of data sets
+     *
+     *
+     * @return $this
+     *
+     * @throws DatabaseException
+     */
+    public function setNamespace(string $namespace): static
+    {
+        $this->namespace = $this->filter($namespace);
+
+        return $this;
+    }
+
+    /**
+     * Get Namespace.
+     *
+     * Get namespace of current set scope
+     */
+    public function getNamespace(): string
+    {
+        return $this->namespace;
+    }
+
+    /**
+     * Set Hostname.
+     *
+     * @return $this
+     */
+    public function setHostname(string $hostname): static
+    {
+        $this->hostname = $hostname;
+
+        return $this;
+    }
+
+    /**
+     * Get Hostname.
+     */
+    public function getHostname(): string
+    {
+        return $this->hostname;
+    }
+
+    /**
      * Set Shared Tables.
      *
      * Set whether to share tables between tenants
-     *
-     * @param bool $sharedTables
-     *
-     * @return bool
      */
     public function setSharedTables(bool $sharedTables): bool
     {
@@ -206,8 +223,6 @@ abstract class Adapter
      * Get Share Tables.
      *
      * Get whether to share tables between tenants
-     *
-     * @return bool
      */
     public function getSharedTables(): bool
     {
@@ -218,10 +233,6 @@ abstract class Adapter
      * Set Tenant.
      *
      * Set tenant to use if tables are shared
-     *
-     * @param int|string|null $tenant
-     *
-     * @return bool
      */
     public function setTenant(int|string|null $tenant): bool
     {
@@ -233,12 +244,16 @@ abstract class Adapter
     /**
      * Get Tenant.
      *
-     * Get tenant to use for shared tables
-     *
-     * @return int|string|null
+     * Get tenant to use for shared tables.
+     * Numeric values are normalized to int for consistent comparison
+     * across adapters that may return string representations.
      */
     public function getTenant(): int|string|null
     {
+        if (\is_string($this->tenant) && \ctype_digit($this->tenant)) {
+            return (int) $this->tenant;
+        }
+
         return $this->tenant;
     }
 
@@ -246,10 +261,6 @@ abstract class Adapter
      * Set Tenant Per Document.
      *
      * Set whether to use a different tenant for each document
-     *
-     * @param bool $tenantPerDocument
-     *
-     * @return bool
      */
     public function setTenantPerDocument(bool $tenantPerDocument): bool
     {
@@ -262,8 +273,6 @@ abstract class Adapter
      * Get Tenant Per Document.
      *
      * Get whether to use a different tenant for each document
-     *
-     * @return bool
      */
     public function getTenantPerDocument(): bool
     {
@@ -271,24 +280,49 @@ abstract class Adapter
     }
 
     /**
+     * Set a debug key-value pair for diagnostic purposes.
+     *
+     * @param string $key The debug key.
+     * @param mixed $value The debug value.
+     * @return $this
+     */
+    public function setDebug(string $key, mixed $value): static
+    {
+        $this->debug[$key] = $value;
+
+        return $this;
+    }
+
+    /**
+     * Get all collected debug data.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDebug(): array
+    {
+        return $this->debug;
+    }
+
+    /**
+     * Reset all debug data.
+     *
+     * @return $this
+     */
+    public function resetDebug(): static
+    {
+        $this->debug = [];
+
+        return $this;
+    }
+
+    /**
      * Set metadata for query comments
      *
-     * @param string $key
-     * @param mixed $value
      * @return $this
      */
     public function setMetadata(string $key, mixed $value): static
     {
         $this->metadata[$key] = $value;
-
-        $output = '';
-        foreach ($this->metadata as $key => $value) {
-            $output .= "/* {$key}: {$value} */\n";
-        }
-
-        $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
-            return $output . $query;
-        });
 
         return $this;
     }
@@ -316,22 +350,21 @@ abstract class Adapter
     }
 
     /**
-     * Set a global timeout for database queries in milliseconds.
+     * Set a global timeout for database queries.
      *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire for
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     * @param int $milliseconds Timeout duration in milliseconds.
+     * @param Event $event The event scope for the timeout.
      */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        $this->timeout = $milliseconds;
+    }
 
+    /**
+     * Get the current query timeout value.
+     *
+     * @return int Timeout in milliseconds, or 0 if no timeout is set.
+     */
     public function getTimeout(): int
     {
         return $this->timeout;
@@ -339,14 +372,153 @@ abstract class Adapter
 
     /**
      * Clears a global timeout for database queries.
-     *
-     * @param string $event
-     * @return void
      */
-    public function clearTimeout(string $event): void
+    public function clearTimeout(Event $event = Event::All): void
     {
-        // Clear existing callback
-        $this->before($event, 'timeout');
+        $this->timeout = 0;
+    }
+
+    /**
+     * Enable or disable LOCK=SHARED during ALTER TABLE operations.
+     *
+     * @param bool $enable True to enable alter locks.
+     * @return $this
+     */
+    public function enableAlterLocks(bool $enable): self
+    {
+        $this->alterLocks = $enable;
+
+        return $this;
+    }
+
+    /**
+     * Set support for attributes
+     */
+    abstract public function setSupportForAttributes(bool $support): bool;
+
+    /**
+     * Register a write hook that intercepts document write operations.
+     *
+     * @param Write $hook The write hook to add.
+     * @return $this
+     */
+    public function addWriteHook(Write $hook): static
+    {
+        $this->writeHooks[] = $hook;
+
+        return $this;
+    }
+
+    public function hasPermissionHook(): bool
+    {
+        foreach ($this->writeHooks as $hook) {
+            if ($hook instanceof Hook\Permissions) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasTenantHook(): bool
+    {
+        return $this->getTenantHook() !== null;
+    }
+
+    public function getTenantHook(): ?Hook\Tenancy
+    {
+        foreach ($this->writeHooks as $hook) {
+            if ($hook instanceof Hook\Tenancy) {
+                return $hook;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Remove a write hook by its class name.
+     *
+     * @param string $class The fully qualified class name of the hook to remove.
+     * @return $this
+     */
+    public function removeWriteHook(string $class): static
+    {
+        $this->writeHooks = \array_values(\array_filter(
+            $this->writeHooks,
+            fn (Write $h) => ! ($h instanceof $class)
+        ));
+
+        return $this;
+    }
+
+    /**
+     * Get all registered write hooks.
+     *
+     * @return list<Write>
+     */
+    public function getWriteHooks(): array
+    {
+        return $this->writeHooks;
+    }
+
+    /**
+     * Register a named query transform hook that modifies queries before execution.
+     *
+     * @param string $name Unique name for the transform.
+     * @param Transform $transform The query transform hook to add.
+     * @return $this
+     */
+    public function addTransform(string $name, Transform $transform): static
+    {
+        $this->queryTransforms[$name] = $transform;
+
+        return $this;
+    }
+
+    /**
+     * Remove a query transform hook by name.
+     *
+     * @param string $name The name of the transform to remove.
+     * @return $this
+     */
+    public function removeTransform(string $name): static
+    {
+        unset($this->queryTransforms[$name]);
+
+        return $this;
+    }
+
+    /**
+     * Remove all registered query transform hooks.
+     *
+     * @return $this
+     */
+    public function resetTransforms(): static
+    {
+        $this->queryTransforms = [];
+
+        return $this;
+    }
+
+    /**
+     * Ping Database
+     */
+    abstract public function ping(): bool;
+
+    /**
+     * Reconnect Database
+     */
+    abstract public function reconnect(): void;
+
+    /**
+     * Get the unique identifier for the current database connection.
+     *
+     * @return string The connection ID, or empty string if not applicable.
+     */
+    public function getConnectionId(): string
+    {
+        return '';
     }
 
     /**
@@ -354,7 +526,6 @@ abstract class Adapter
      *
      * If a transaction is already active, this will only increment the transaction count and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function startTransaction(): bool;
@@ -366,7 +537,6 @@ abstract class Adapter
      * If there is more than one active transaction, this decrement the transaction count and return true.
      * If the transaction count is 1, it will be commited, the transaction count will be reset to 0, and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function commitTransaction(): bool;
@@ -377,15 +547,12 @@ abstract class Adapter
      * If no transaction is active, this will be a no-op and will return false.
      * If 1 or more transactions are active, this will roll back all transactions, reset the count to 0, and return true.
      *
-     * @return bool
      * @throws DatabaseException
      */
     abstract public function rollbackTransaction(): bool;
 
     /**
      * Check if a transaction is active.
-     *
-     * @return bool
      */
     public function inTransaction(): bool
     {
@@ -394,9 +561,11 @@ abstract class Adapter
 
     /**
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
-     * @throws \Throwable
+     *
+     * @throws Throwable
      */
     public function withTransaction(callable $callback): mixed
     {
@@ -408,13 +577,15 @@ abstract class Adapter
                 $this->startTransaction();
                 $result = $callback();
                 $this->commitTransaction();
+
                 return $result;
-            } catch (\Throwable $action) {
+            } catch (Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-                } catch (\Throwable $rollback) {
+                } catch (Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
+
                         continue;
                     }
 
@@ -435,6 +606,7 @@ abstract class Adapter
 
                 if ($attempts < $retries) {
                     \usleep($sleep * ($attempts + 1));
+
                     continue;
                 }
 
@@ -446,66 +618,7 @@ abstract class Adapter
     }
 
     /**
-     * Apply a transformation to a query before an event occurs
-     *
-     * @param string $event
-     * @param string $name
-     * @param ?callable $callback
-     * @return static
-     */
-    public function before(string $event, string $name = '', ?callable $callback = null): static
-    {
-        if (!isset($this->transformations[$event])) {
-            $this->transformations[$event] = [];
-        }
-
-        if (\is_null($callback)) {
-            unset($this->transformations[$event][$name]);
-        } else {
-            $this->transformations[$event][$name] = $callback;
-        }
-
-        return $this;
-    }
-
-    protected function trigger(string $event, mixed $query): mixed
-    {
-        foreach ($this->transformations[Database::EVENT_ALL] as $callback) {
-            $query = $callback($query);
-        }
-        foreach (($this->transformations[$event] ?? []) as $callback) {
-            $query = $callback($query);
-        }
-
-        return $query;
-    }
-
-    /**
-     * Quote a string
-     *
-     * @param string $string
-     * @return string
-     */
-    abstract protected function quote(string $string): string;
-
-    /**
-     * Ping Database
-     *
-     * @return bool
-     */
-    abstract public function ping(): bool;
-
-    /**
-     * Reconnect Database
-     */
-    abstract public function reconnect(): void;
-
-    /**
      * Create Database
-     *
-     * @param string $name
-     *
-     * @return bool
      */
     abstract public function create(string $name): bool;
 
@@ -513,10 +626,8 @@ abstract class Adapter
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string|null $collection (optional) collection name
-     *
-     * @return bool
+     * @param  string  $database  database name
+     * @param  string|null  $collection  (optional) collection name
      */
     abstract public function exists(string $database, ?string $collection = null): bool;
 
@@ -529,61 +640,40 @@ abstract class Adapter
 
     /**
      * Delete Database
-     *
-     * @param string $name
-     *
-     * @return bool
      */
     abstract public function delete(string $name): bool;
 
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param array<Document> $attributes (optional)
-     * @param array<Document> $indexes (optional)
-     * @return bool
+     * @param  array<Attribute>  $attributes  (optional)
+     * @param  array<Index>  $indexes  (optional)
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete Collection
-     *
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteCollection(string $id): bool;
 
     /**
      * Analyze a collection updating its metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
      */
     abstract public function analyzeCollection(string $collection): bool;
 
     /**
      * Create Attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @return bool
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
+    abstract public function createAttribute(string $collection, Attribute $attribute): bool;
 
     /**
      * Create Attributes
      *
-     * @param string $collection
-     * @param array<array<string, mixed>> $attributes
-     * @return bool
+     * @param  array<Attribute>  $attributes
+     *
      * @throws TimeoutException
      * @throws DuplicateException
      */
@@ -591,145 +681,79 @@ abstract class Adapter
 
     /**
      * Update Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param string|null $newKey
-     * @param bool $required
-     *
-     * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
+    abstract public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
 
     /**
      * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
 
     /**
      * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $id
-     * @param string $twoWayKey
-     * @return bool
+     * Create a relationship between two collections in the database schema.
+     *
+     * @param Relationship $relationship The relationship definition.
+     * @return bool True on success.
      */
-    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool;
+    public function createRelationship(Relationship $relationship): bool
+    {
+        return true;
+    }
 
     /**
-     * Update Relationship
+     * Update an existing relationship, optionally renaming keys.
      *
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @param string|null $newKey
-     * @param string|null $newTwoWayKey
-     * @return bool
+     * @param Relationship $relationship The current relationship definition.
+     * @param string|null $newKey New key name for the parent side, or null to keep unchanged.
+     * @param string|null $newTwoWayKey New key name for the child side, or null to keep unchanged.
+     * @return bool True on success.
      */
-    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    {
+        return true;
+    }
 
     /**
-     * Delete Relationship
+     * Delete a relationship from the database schema.
      *
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $key
-     * @param string $twoWayKey
-     * @param string $side
-     * @return bool
+     * @param Relationship $relationship The relationship to delete.
+     * @return bool True on success.
      */
-    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool;
+    public function deleteRelationship(Relationship $relationship): bool
+    {
+        return true;
+    }
 
     /**
-     * Rename Index
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
+     * @param  array<string, string>  $indexAttributeTypes
+     * @param  array<string, mixed>  $collation
      */
-    abstract public function renameIndex(string $collection, string $old, string $new): bool;
-
-    /**
-     * Create Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     * @param array<string,string> $indexAttributeTypes
-     * @param array<string, mixed> $collation
-     * @param int $ttl
-     *
-     * @return bool
-     */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool;
+    abstract public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool;
 
     /**
      * Delete Index
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteIndex(string $collection, string $id): bool;
 
     /**
-     * Get Document
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param array<Query> $queries
-     * @param bool $forUpdate
-     * @return Document
+     * Rename Index
      */
-    abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
+    abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
      * Create Document
-     *
-     * @param Document $collection
-     * @param Document $document
-     *
-     * @return Document
      */
     abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
      * Create Documents in batches
      *
-     * @param Document $collection
-     * @param array<Document> $documents
-     *
+     * @param  array<Document>  $documents
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -737,14 +761,14 @@ abstract class Adapter
     abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
+     * Get Document
+     *
+     * @param  array<Query>  $queries
+     */
+    abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
+
+    /**
      * Update Document
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param Document $document
-     * @param bool $skipPermissions
-     *
-     * @return Document
      */
     abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
@@ -753,57 +777,49 @@ abstract class Adapter
      *
      * Updates all documents which match the given query.
      *
-     * @param Document $collection
-     * @param Document $updates
-     * @param array<Document> $documents
-     *
-     * @return int
+     * @param  array<Document>  $documents
      *
      * @throws DatabaseException
      */
     abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
-     * Create documents if they do not exist, otherwise update them.
-     *
-     * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
-     *
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Change> $changes
+     * @param  array<Change>  $changes
      * @return array<Document>
      */
-    abstract public function upsertDocuments(
+    public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes
-    ): array;
+    ): array {
+        return [];
+    }
 
     /**
-     * @param string $collection
-     * @param array<Document> $documents
-     * @return array<Document>
+     * Increase or decrease attribute value
+     *
+     * @throws Exception
      */
-    abstract public function getSequences(string $collection, array $documents): array;
+    abstract public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool;
 
     /**
      * Delete Document
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
 
     /**
      * Delete Documents
      *
-     * @param string $collection
-     * @param array<string> $sequences
-     * @param array<string> $permissionIds
-     *
-     * @return int
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
      */
     abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
@@ -812,47 +828,90 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<\Utopia\Query\OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
      * @return array<Document>
      */
-    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
-
-    /**
-     * Sum an attribute
-     *
-     * @param Document $collection
-     * @param string $attribute
-     * @param array<Query> $queries
-     * @param int|null $max
-     *
-     * @return int|float
-     */
-    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array;
 
     /**
      * Count Documents
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     *
-     * @return int
+     * @param  array<Query>  $queries
      */
     abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
 
     /**
+     * Sum an attribute
+     *
+     * @param  array<Query>  $queries
+     */
+    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<Document>
+     */
+    abstract public function getSequences(string $collection, array $documents): array;
+
+    /**
+     * Get max STRING limit
+     */
+    abstract public function getLimitForString(): int;
+
+    /**
+     * Get max INT limit
+     */
+    abstract public function getLimitForInt(): int;
+
+    /**
+     * Get maximum attributes limit.
+     */
+    abstract public function getLimitForAttributes(): int;
+
+    /**
+     * Get maximum index limit.
+     */
+    abstract public function getLimitForIndexes(): int;
+
+    /**
+     * Get the maximum index key length in bytes.
+     */
+    abstract public function getMaxIndexLength(): int;
+
+    /**
+     * Get the maximum VARCHAR length for this adapter
+     */
+    abstract public function getMaxVarcharLength(): int;
+
+    /**
+     * Get the maximum UID length for this adapter
+     */
+    abstract public function getMaxUIDLength(): int;
+
+    /**
+     * Get the minimum supported DateTime value
+     */
+    abstract public function getMinDateTime(): DateTime;
+
+    /**
+     * Get the maximum supported DateTime value
+     */
+    public function getMaxDateTime(): DateTime
+    {
+        return new DateTime('9999-12-31 23:59:59');
+    }
+
+    /**
+     * Get the primitive type of the primary key type for this adapter
+     */
+    abstract public function getIdAttributeType(): string;
+
+    /**
      * Get Collection Size of the raw data
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
@@ -860,374 +919,13 @@ abstract class Adapter
     /**
      * Get Collection Size on the disk
      *
-     * @param string $collection
-     * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
-     * Get max STRING limit
-     *
-     * @return int
-     */
-    abstract public function getLimitForString(): int;
-
-    /**
-     * Get max INT limit
-     *
-     * @return int
-     */
-    abstract public function getLimitForInt(): int;
-
-    /**
-     * Get maximum attributes limit.
-     *
-     * @return int
-     */
-    abstract public function getLimitForAttributes(): int;
-
-    /**
-     * Get maximum index limit.
-     *
-     * @return int
-     */
-    abstract public function getLimitForIndexes(): int;
-
-    /**
-     * @return int
-     */
-    abstract public function getMaxIndexLength(): int;
-
-    /**
-     * Get the maximum VARCHAR length for this adapter
-     *
-     * @return int
-     */
-    abstract public function getMaxVarcharLength(): int;
-
-    /**
-     * Get the maximum UID length for this adapter
-     *
-     * @return int
-     */
-    abstract public function getMaxUIDLength(): int;
-
-    /**
-     * Get the minimum supported DateTime value
-     *
-     * @return \DateTime
-     */
-    abstract public function getMinDateTime(): \DateTime;
-
-    /**
-     * Get the primitive type of the primary key type for this adapter
-     *
-     * @return string
-     */
-    abstract public function getIdAttributeType(): string;
-
-    /**
-     * Get the maximum supported DateTime value
-     *
-     * @return \DateTime
-     */
-    public function getMaxDateTime(): \DateTime
-    {
-        return new \DateTime('9999-12-31 23:59:59');
-    }
-
-    /**
-     * Is schemas supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSchemas(): bool;
-
-    /**
-     * Are attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAttributes(): bool;
-
-    /**
-     * Are schema attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSchemaAttributes(): bool;
-
-    /**
-     * Are schema indexes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSchemaIndexes(): bool;
-
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndex(): bool;
-
-    /**
-     * Is indexing array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndexArray(): bool;
-
-    /**
-     * Is cast index as array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCastIndexArray(): bool;
-
-    /**
-     * Is unique index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUniqueIndex(): bool;
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForFulltextIndex(): bool;
-
-    /**
-     * Is fulltext wildcard supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForFulltextWildcardIndex(): bool;
-
-
-    /**
-     * Does the adapter handle casting?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCasting(): bool;
-
-    /**
-     * Does the adapter handle array Contains?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForQueryContains(): bool;
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTimeouts(): bool;
-
-    /**
-     * Are relationships supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForRelationships(): bool;
-
-    abstract public function getSupportForUpdateLock(): bool;
-
-    /**
-     * Are batch operations supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBatchOperations(): bool;
-
-    /**
-     * Is attribute resizing supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAttributeResizing(): bool;
-
-    /**
-     * Is get connection id supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForGetConnectionId(): bool;
-
-    /**
-     * Is upserting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUpserts(): bool;
-
-    /**
-     * Is vector type supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForVectors(): bool;
-
-    /**
-     * Is Cache Fallback supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCacheSkipOnFailure(): bool;
-
-    /**
-     * Is reconnection supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForReconnection(): bool;
-
-    /**
-     * Is hostname supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForHostname(): bool;
-
-    /**
-     * Is creating multiple attributes in a single query supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBatchCreateAttributes(): bool;
-
-    /**
-     * Is spatial attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialAttributes(): bool;
-
-    /**
-     * Are object (JSON) attributes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForObject(): bool;
-
-    /**
-     * Are object (JSON) indexes supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForObjectIndexes(): bool;
-
-    /**
-     * Does the adapter support null values in spatial indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialIndexNull(): bool;
-
-    /**
-     * Does the adapter support operators?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOperators(): bool;
-
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
-
-    /**
-     * Does the adapter support order attribute in spatial indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialIndexOrder(): bool;
-
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForSpatialAxisOrder(): bool;
-
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForBoundaryInclusiveContains(): bool;
-
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
-
-    /**
-     * Does the adapter support multiple fulltext indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForMultipleFulltextIndexes(): bool;
-
-
-    /**
-     * Does the adapter support identical indexes?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIdenticalIndexes(): bool;
-
-    /**
-     * Does the adapter support random order by?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForOrderRandom(): bool;
-
-    /**
-     * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    abstract public function getCountOfAttributes(Document $collection): int;
-
-    /**
-     * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    abstract public function getCountOfIndexes(Document $collection): int;
-
-    /**
-     * Returns number of attributes used by default.
-     *
-     * @return int
-     */
-    abstract public function getCountOfDefaultAttributes(): int;
-
-    /**
-     * Returns number of indexes used by default.
-     *
-     * @return int
-     */
-    abstract public function getCountOfDefaultIndexes(): int;
-
-    /**
      * Get maximum width, in bytes, allowed for a SQL row
      * Return 0 when no restrictions apply
-     *
-     * @return int
      */
     abstract public function getDocumentSizeLimit(): int;
 
@@ -1236,11 +934,28 @@ abstract class Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     *
-     * @param Document $collection
-     * @return int
      */
     abstract public function getAttributeWidth(Document $collection): int;
+
+    /**
+     * Get current attribute count from collection document
+     */
+    abstract public function getCountOfAttributes(Document $collection): int;
+
+    /**
+     * Get current index count from collection document
+     */
+    abstract public function getCountOfIndexes(Document $collection): int;
+
+    /**
+     * Returns number of attributes used by default.
+     */
+    abstract public function getCountOfDefaultAttributes(): int;
+
+    /**
+     * Returns number of indexes used by default.
+     */
+    abstract public function getCountOfDefaultIndexes(): int;
 
     /**
      * Get list of keywords that cannot be used
@@ -1250,42 +965,174 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * Get an attribute projection given a list of selected attributes
+     * Get List of internal index keys names
      *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @return array<string>
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
+    abstract public function getInternalIndexesKeys(): array;
 
     /**
-     * Get all selected attributes from queries
+     * Get the physical schema attributes for a collection from the database engine.
      *
-     * @param Query[] $queries
-     * @return string[]
+     * @param string $collection The collection identifier.
+     * @return array<Document>
      */
-    protected function getAttributeSelections(array $queries): array
+    public function getSchemaAttributes(string $collection): array
     {
-        $selections = [];
+        return [];
+    }
 
-        foreach ($queries as $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        $selections[] = $value;
-                    }
-                    break;
-            }
-        }
+    /**
+     * Get the physical schema indexes for a collection from the database engine.
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection The collection identifier.
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
 
-        return $selections;
+    /**
+     * Get the expected column type for a given attribute type.
+     *
+     * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
+     * that would be used when creating a column for the given attribute parameters.
+     * Returns an empty string if the adapter does not support this operation.
+     *
+     * @throws DatabaseException For unknown types on adapters that support column-type resolution.
+     */
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        return '';
+    }
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param  string  $collection  The collection being queried
+     * @param  string  $alias  The alias of the parent collection if in a subquery
+     */
+    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+
+    /**
+     * Handle non utf characters supported?
+     */
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Apply adapter-specific type casting before writing a document.
+     *
+     * @param Document $collection The collection definition.
+     * @param Document $document The document to cast.
+     * @return Document The document with casting applied.
+     */
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
+
+    /**
+     * Apply adapter-specific type casting after reading a document.
+     *
+     * @param Document $collection The collection definition.
+     * @param Document $document The document to cast.
+     * @return Document The document with casting applied.
+     */
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
+
+    /**
+     * Convert a datetime string to UTC format for the adapter.
+     *
+     * @param string $value The datetime string to convert.
+     * @return mixed The converted datetime value.
+     */
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $value;
+    }
+
+    /**
+     * Decode a WKB point value into an array of floats.
+     *
+     * @return array<float>
+     *
+     * @throws BadMethodCallException
+     */
+    public function decodePoint(string $wkb): array
+    {
+        throw new BadMethodCallException('decodePoint is not implemented by this adapter');
+    }
+
+    /**
+     * Decode a WKB linestring value into an array of point arrays.
+     *
+     * @return array<array<float>>
+     *
+     * @throws BadMethodCallException
+     */
+    public function decodeLinestring(string $wkb): array
+    {
+        throw new BadMethodCallException('decodeLinestring is not implemented by this adapter');
+    }
+
+    /**
+     * Decode a WKB polygon value into an array of linestring arrays.
+     *
+     * @return array<array<array<float>>>
+     *
+     * @throws BadMethodCallException
+     */
+    public function decodePolygon(string $wkb): array
+    {
+        throw new BadMethodCallException('decodePolygon is not implemented by this adapter');
+    }
+
+    /**
+     * Execute a raw query and return results as Documents.
+     *
+     * @param string $query The raw query string
+     * @param array<mixed> $bindings Parameter bindings for prepared statements
+     * @return array<Document> The query results as Document objects
+     *
+     * @throws DatabaseException
+     */
+    public function rawQuery(string $query, array $bindings = []): array
+    {
+        throw new DatabaseException('Raw queries are not supported by this adapter');
+    }
+
+    /**
+     * @param  array<mixed>  $bindings
+     *
+     * @throws DatabaseException
+     */
+    public function rawMutation(string $query, array $bindings = []): int
+    {
+        throw new DatabaseException('Raw mutations are not supported by this adapter');
+    }
+
+    public function getBuilder(string $collection): \Utopia\Query\Builder
+    {
+        throw new DatabaseException('Query builder is not supported by this adapter');
+    }
+
+    public function getSchema(): \Utopia\Query\Schema
+    {
+        throw new DatabaseException('Schema builder is not supported by this adapter');
     }
 
     /**
      * Filter Keys
      *
-     * @param string $value
-     * @return string
      * @throws DatabaseException
      */
     public function filter(string $value): string
@@ -1297,6 +1144,73 @@ abstract class Adapter
         }
 
         return $value;
+    }
+
+    /**
+     * Apply all write hooks' decorateRow to a row.
+     *
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $metadata
+     * @return array<string, mixed>
+     */
+    protected function decorateRow(array $row, array $metadata): array
+    {
+        foreach ($this->writeHooks as $hook) {
+            $row = $hook->decorateRow($row, $metadata);
+        }
+
+        return $row;
+    }
+
+    /**
+     * Run all write hooks concurrently when more than one is registered,
+     * otherwise run sequentially. The provided callable receives a single
+     * Write hook instance.
+     *
+     * @param callable(Write): void $fn
+     */
+    protected function runWriteHooks(callable $fn): void
+    {
+        foreach ($this->writeHooks as $hook) {
+            $fn($hook);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function documentMetadata(Document $document): array
+    {
+        return ['id' => $document->getId(), 'tenant' => $document->getTenant()];
+    }
+
+    /**
+     * Get an attribute projection given a list of selected attributes
+     *
+     * @param  array<string>  $selections
+     */
+    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
+
+    /**
+     * Get all selected attributes from queries
+     *
+     * @param  array<Query>  $queries
+     * @return array<string>
+     */
+    protected function getAttributeSelections(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Method::Select) {
+                foreach ($query->getValues() as $value) {
+                    /** @var string $value */
+                    $selections[] = $value;
+                }
+            }
+        }
+
+        return $selections;
     }
 
     protected function escapeWildcards(string $value): string
@@ -1316,7 +1230,7 @@ abstract class Adapter
             ')',
             '{',
             '}',
-            '|'
+            '|',
         ];
 
         foreach ($wildcards as $wildcard) {
@@ -1327,260 +1241,11 @@ abstract class Adapter
     }
 
     /**
-     * Increase or decrease attribute value
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param string $updatedAt
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
-     * @throws Exception
+     * Quote a string
      */
-    abstract public function increaseDocumentAttribute(
-        string $collection,
-        string $id,
-        string $attribute,
-        int|float $value,
-        string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
-    ): bool;
+    abstract protected function quote(string $string): string;
 
-    /**
-     * Returns the connection ID identifier
-     *
-     * @return string
-     */
-    abstract public function getConnectionId(): string;
-
-    /**
-     * Get List of internal index keys names
-     *
-     * @return array<string>
-     */
-    abstract public function getInternalIndexesKeys(): array;
-
-    /**
-     * Get Schema Attributes
-     *
-     * @param string $collection
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    abstract public function getSchemaAttributes(string $collection): array;
-
-    /**
-     * Get Schema Indexes
-     *
-     * Returns physical index definitions from the database schema.
-     *
-     * @param string $collection
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    abstract public function getSchemaIndexes(string $collection): array;
-
-    /**
-     * Get the expected column type for a given attribute type.
-     *
-     * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
-     * that would be used when creating a column for the given attribute parameters.
-     * Returns an empty string if the adapter does not support this operation.
-     *
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @param bool $required
-     * @return string
-     * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
-     */
-    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        return '';
-    }
-
-    /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
-     * @return string
-     */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
-
-    /**
-     * @param mixed $stmt
-     * @return bool
-     */
     abstract protected function execute(mixed $stmt): bool;
-
-    /**
-     * Decode a WKB or textual POINT into [x, y]
-     *
-     * @param string $wkb
-     * @return float[] Array with two elements: [x, y]
-     */
-    abstract public function decodePoint(string $wkb): array;
-
-    /**
-     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
-     *
-     * @param string $wkb
-     * @return float[][] Array of points, each as [x, y]
-     */
-    abstract public function decodeLinestring(string $wkb): array;
-
-    /**
-     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
-     *
-     * @param string $wkb
-     * @return float[][][] Array of rings, each ring is an array of points [x, y]
-     */
-    abstract public function decodePolygon(string $wkb): array;
-
-    /**
-        * Returns the document after casting
-        * @param Document $collection
-        * @param Document $document
-        * @return Document
-        */
-    abstract public function castingBefore(Document $collection, Document $document): Document;
-
-    /**
-     * Returns the document after casting
-     * @param Document $collection
-     * @param Document $document
-     * @return Document
-     */
-    abstract public function castingAfter(Document $collection, Document $document): Document;
-
-    /**
-     * Is internal casting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForInternalCasting(): bool;
-
-    /**
-     * Is UTC casting supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForUTCCasting(): bool;
-
-    /**
-    * Set UTC Datetime
-    *
-    * @param string $value
-    * @return mixed
-    */
-    abstract public function setUTCDatetime(string $value): mixed;
-
-    /**
-    * Set support for attributes
-    *
-    * @param bool $support
-    * @return bool
-    */
-    abstract public function setSupportForAttributes(bool $support): bool;
-
-    /**
-     * Does the adapter require booleans to be converted to integers (0/1)?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIntegerBooleans(): bool;
-
-    /**
-     * Does the adapter have support for ALTER TABLE locking modes?
-     *
-     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
-     * during ALTER TABLE operations to control concurrent access.
-     *
-     * @return bool
-     */
-    abstract public function getSupportForAlterLocks(): bool;
-
-    /**
-     * @param bool $enable
-     *
-     * @return $this
-     */
-    public function enableAlterLocks(bool $enable): self
-    {
-        $this->alterLocks = $enable;
-
-        return $this;
-    }
-
-    /**
-     * Handle non utf characters supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportNonUtfCharacters(): bool;
-
-    /**
-     * Does the adapter support trigram index?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTrigramIndex(): bool;
-
-    /**
-     * Is PCRE regex supported?
-     * PCRE (Perl Compatible Regular Expressions) supports \b for word boundaries
-     *
-     * @return bool
-     */
-    abstract public function getSupportForPCRERegex(): bool;
-
-    /**
-     * Is POSIX regex supported?
-     * POSIX regex uses \y for word boundaries instead of \b
-     *
-     * @return bool
-     */
-    abstract public function getSupportForPOSIXRegex(): bool;
-
-    /**
-     * Is regex supported at all?
-     * Returns true if either PCRE or POSIX regex is supported
-     *
-     * @return bool
-     */
-    public function getSupportForRegex(): bool
-    {
-        return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
-    }
-
-    /**
-     * Are ttl indexes supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTTLIndexes(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support transaction retries?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTransactionRetries(): bool;
-
-    /**
-     * Does the adapter support nested transactions?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForNestedTransactions(): bool;
 
     /**
      * @return mixed

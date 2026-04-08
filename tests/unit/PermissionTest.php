@@ -3,14 +3,14 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\PermissionType;
 
 class PermissionTest extends TestCase
 {
-    public function testOutputFromString(): void
+    public function test_output_from_string(): void
     {
         $permission = Permission::parse('read("any")');
         $this->assertEquals('read', $permission->getPermission());
@@ -141,7 +141,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('unverified', $permission->getDimension());
     }
 
-    public function testInputFromParameters(): void
+    public function test_input_from_parameters(): void
     {
         $permission = new Permission('read', 'any');
         $this->assertEquals('read("any")', $permission->toString());
@@ -192,7 +192,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('delete("team:123/admin")', $permission->toString());
     }
 
-    public function testInputFromRoles(): void
+    public function test_input_from_roles(): void
     {
         $permission = Permission::read(Role::any());
         $this->assertEquals('read("any")', $permission);
@@ -258,7 +258,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('write("any")', $permission);
     }
 
-    public function testInvalidFormats(): void
+    public function test_invalid_formats(): void
     {
         try {
             Permission::parse('read');
@@ -292,13 +292,13 @@ class PermissionTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testAggregation(): void
+    public function test_aggregation(): void
     {
         $permissions = ['write("any")'];
         $parsed = Permission::aggregate($permissions);
         $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
-        $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
@@ -307,10 +307,10 @@ class PermissionTest extends TestCase
             'read("user:123")',
             'write("user:123")',
             'update("user:123")',
-            'delete("user:123")'
+            'delete("user:123")',
         ];
 
-        $parsed = Permission::aggregate($permissions, Database::PERMISSIONS);
+        $parsed = Permission::aggregate($permissions, [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete]);
         $this->assertEquals([
             'read("any")',
             'read("user:123")',

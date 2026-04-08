@@ -3,47 +3,46 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Schema\ColumnType;
 
 class SelectTest extends TestCase
 {
-    protected Base|null $validator = null;
+    protected Select $validator;
 
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         $this->validator = new Select(
             attributes: [
                 new Document([
                     '$id' => 'attr',
                     'key' => 'attr',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
                 new Document([
                     '$id' => 'artist',
                     'key' => 'artist',
-                    'type' => Database::VAR_RELATIONSHIP,
+                    'type' => ColumnType::Relationship->value,
                     'array' => false,
                 ]),
             ],
         );
     }
 
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
         $this->assertTrue($this->validator->isValid(Query::select(['*', 'attr'])));
         $this->assertTrue($this->validator->isValid(Query::select(['artist.name'])));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::limit(1)));
         $this->assertEquals('Invalid query', $this->validator->getDescription());

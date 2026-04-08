@@ -702,7 +702,7 @@ class Mongo extends Adapter
      * @param bool $array
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         return true;
     }
@@ -1983,7 +1983,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);

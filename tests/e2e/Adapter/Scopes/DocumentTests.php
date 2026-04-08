@@ -161,8 +161,8 @@ trait DocumentTests
 
         $this->assertNotNull($signedAttr);
         $this->assertNotNull($unsignedAttr);
-        $this->assertSame('0', $signedAttr->getAttribute('size'));
-        $this->assertSame('0', $unsignedAttr->getAttribute('size'));
+        $this->assertSame(0, $signedAttr->getAttribute('size'));
+        $this->assertSame(0, $unsignedAttr->getAttribute('size'));
 
         // "Out of regular int limit" (32-bit) but valid bigint should still normalize to PHP int.
         $beyond32Bit = '2147483648';

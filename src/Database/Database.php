@@ -1970,30 +1970,24 @@ class Database
             }
 
             $type = $attribute->getAttribute('type');
-            $size = $attribute->getAttribute('size', 0);
 
             if ($type === self::VAR_BIGINT) {
-                // Keep bigint size as string to avoid precision loss.
-                $attribute->setAttribute('size', (string)$size);
-                continue;
+                $formatOptions = $attribute->getAttribute('formatOptions', []);
+                if (\is_array($formatOptions)) {
+                    if (\array_key_exists('min', $formatOptions) && $formatOptions['min'] !== null) {
+                        $formatOptions['min'] = (string)$formatOptions['min'];
+                    }
+                    if (\array_key_exists('max', $formatOptions) && $formatOptions['max'] !== null) {
+                        $formatOptions['max'] = (string)$formatOptions['max'];
+                    }
+                    $attribute->setAttribute('formatOptions', $formatOptions);
+                }
             }
-
-            // Keep legacy behavior for non-bigint metadata.
-            $attribute->setAttribute('size', (int)$size);
         }
 
         $collection->setAttribute('attributes', $attributes);
 
         return $collection;
-    }
-
-    private function getSize(string $type, int|string|null $size): int|string
-    {
-        if ($type === self::VAR_BIGINT) {
-            return (string)($size ?? 0);
-        }
-
-        return (int)($size ?? 0);
     }
 
     /**
@@ -2155,9 +2149,8 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int|string $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $size = $this->getSize($type, $size);
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -2241,7 +2234,7 @@ class Database
                 '$id' => ID::custom($id),
                 'key' => $id,
                 'type' => $type,
-                'size' => $this->getSize($type, $size),
+                'size' => $size,
                 'required' => $required,
                 'default' => $default,
                 'signed' => $signed,
@@ -2365,7 +2358,6 @@ class Database
             $existsInSchema = false;
 
             try {
-                $attribute['size'] = $this->getSize($attribute['type'], $attribute['size']);
                 $attributeDocument = $this->validateAttribute(
                     $collection,
                     $attribute['$id'],
@@ -2422,7 +2414,7 @@ class Database
                     '$id' => ID::custom($attribute['$id']),
                     'key' => $attribute['$id'],
                     'type' => $attribute['type'],
-                    'size' => $this->getSize($attribute['type'], $attribute['size']),
+                    'size' => $attribute['size'],
                     'required' => $attribute['required'],
                     'default' => $attribute['default'],
                     'signed' => $attribute['signed'],
@@ -2525,7 +2517,7 @@ class Database
         Document $collection,
         string $id,
         string $type,
-        int|string $size,
+        int $size,
         bool $required,
         mixed $default,
         bool $signed,
@@ -2539,7 +2531,7 @@ class Database
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
-            'size' => $this->getSize($type, $size),
+            'size' => $size,
             'required' => $required,
             'default' => $default,
             'signed' => $signed,
@@ -2881,7 +2873,7 @@ class Database
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, ?string $type = null, int|string|null $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $collectionDoc = $this->silent(fn () => $this->getCollection($collection));
 
@@ -2917,7 +2909,6 @@ class Database
             || !\is_null($newKey);
         $type ??= $attribute->getAttribute('type');
         $size ??= $attribute->getAttribute('size');
-        $size = $this->getSize($type, $size);
         $signed ??= $attribute->getAttribute('signed');
         $required ??= $attribute->getAttribute('required');
         $default ??= $attribute->getAttribute('default');
@@ -2969,11 +2960,12 @@ class Database
                 }
                 break;
             case self::VAR_BIGINT:
-                $sizeString = (string)$size;
-                $limit = ($this->adapter->getSupportForUnsignedBigInt() && !$signed)
+                $sizeString = BigIntHelper::normalizeUnsignedString((string)$size);
+                $limit = (!$signed && $this->adapter->getSupportForUnsignedBigInt())
                     ? BigIntHelper::UNSIGNED_MAX
-                    : (string)$this->adapter->getLimitForBigInt();
-                if (!BigIntHelper::fitsBigIntRange($sizeString, false, $this->adapter->getSupportForUnsignedBigInt() && !$signed)) {
+                    : BigIntHelper::SIGNED_MAX;
+
+                if (BigIntHelper::compareUnsignedStrings($sizeString, $limit) > 0) {
                     throw new DatabaseException('Max size allowed for bigint is: ' . BigIntHelper::formatIntegerString($limit));
                 }
                 break;
@@ -3082,7 +3074,7 @@ class Database
             ->setAttribute('$id', $newKey ?? $id)
             ->setattribute('key', $newKey ?? $id)
             ->setAttribute('type', $type)
-            ->setAttribute('size', $this->getSize($type, $size))
+            ->setAttribute('size', $size)
             ->setAttribute('signed', $signed)
             ->setAttribute('array', $array)
             ->setAttribute('format', $format)

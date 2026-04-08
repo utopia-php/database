@@ -243,7 +243,7 @@ abstract class SQL extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function createAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         $id = $this->quote($this->filter($id));
         $type = $this->getSQLType($type, $size, $signed, $array, $required);
@@ -1837,7 +1837,7 @@ abstract class SQL extends Adapter
 
     abstract protected function getSQLType(
         string $type,
-        int|string $size,
+        int $size,
         bool $signed = true,
         bool $array = false,
         bool $required = false
@@ -1846,7 +1846,7 @@ abstract class SQL extends Adapter
     /**
      * @throws DatabaseException For unknown type values.
      */
-    public function getColumnType(string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): string
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         return $this->getSQLType($type, $size, $signed, $array, $required);
     }

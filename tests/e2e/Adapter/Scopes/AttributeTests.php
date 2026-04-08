@@ -2252,7 +2252,7 @@ trait AttributeTests
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(1, $attrs);
         $this->assertEquals('foo', $attrs[0]['$id']);
-        $this->assertEquals((string)$size, (string)$attrs[0]['size']);
+        $this->assertEquals($size, $attrs[0]['size']);
     }
 
     public function testCreateAttributesBigIntValidationSignedUnsignedAndSizeMetadata(): void
@@ -2298,8 +2298,8 @@ trait AttributeTests
         $this->assertNotNull($unsignedAttribute);
         $this->assertTrue($signedAttribute['signed']);
         $this->assertFalse($unsignedAttribute['signed']);
-        $this->assertEquals('0', (string)$signedAttribute['size']);
-        $this->assertEquals('0', (string)$unsignedAttribute['size']);
+        $this->assertEquals(0, $signedAttribute['size']);
+        $this->assertEquals(0, $unsignedAttribute['size']);
 
         // Signed overflow check (only when we can build an int beyond adapter signed max).
         $signedLimit = (int)$database->getAdapter()->getLimitForBigInt();

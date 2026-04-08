@@ -552,7 +552,7 @@ class Attribute extends Validator
                 }
                 break;
             case Database::VAR_BIGINT:
-                if ($defaultType !== 'integer') {
+                if ($defaultType !== 'integer' && $defaultType !== 'string') {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }

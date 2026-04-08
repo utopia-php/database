@@ -2313,7 +2313,7 @@ trait AttributeTests
             }
         }
 
-        // Unsigned > signed-max behavior validated through batch create (string size avoids int overflow).
+        // Batch create with unsigned bigint should be accepted with default size semantics.
         $largeUnsignedAttribute = [[
             '$id' => 'unsigned_bigint_large',
             'type' => Database::VAR_BIGINT,
@@ -2321,18 +2321,7 @@ trait AttributeTests
             'required' => false,
             'signed' => false,
         ]];
-
-        if ($database->getAdapter()->getSupportForUnsignedBigInt()) {
-            $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
-        } else {
-            try {
-                $database->createAttributes($collectionName, $largeUnsignedAttribute);
-                $this->fail('Expected DatabaseException for unsigned bigint overflow on adapter without unsigned bigint support');
-            } catch (\Throwable $e) {
-                $this->assertInstanceOf(DatabaseException::class, $e);
-                $this->assertStringContainsString('Max size allowed for bigint', $e->getMessage());
-            }
-        }
+        $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
     }
 
     public function testCreateAttributesSuccessMultiple(): void

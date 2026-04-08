@@ -6318,7 +6318,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $old
+                    $old,
+                    $this->adapter->getSupportForUnsignedBigInt()
                 );
                 if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
@@ -7332,7 +7333,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $old->isEmpty() ? null : $old
+                    $old->isEmpty() ? null : $old,
+                    $this->adapter->getSupportForUnsignedBigInt()
                 );
 
                 if (!$validator->isValid($document)) {

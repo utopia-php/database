@@ -1460,11 +1460,18 @@ class Mongo extends Adapter
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function createDocuments(Document $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $options = $this->getTransactionOptions();
+        if ($ignore) {
+            // Run outside transaction — MongoDB aborts transactions on any write error,
+            // so ordered:false + session would roll back even successfully inserted docs.
+            $options = ['ordered' => false];
+        } else {
+            $options = $this->getTransactionOptions();
+        }
+
         $records = [];
         $hasSequence = null;
         $documents = \array_map(fn ($doc) => clone $doc, $documents);
@@ -1490,7 +1497,16 @@ class Mongo extends Adapter
         try {
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
-            throw $this->processException($e);
+            $processed = $this->processException($e);
+
+            if ($ignore && $processed instanceof DuplicateException) {
+                // Race condition: a doc was inserted between pre-filter and insertMany.
+                // With ordered:false outside transaction, non-duplicate inserts persist.
+                // Return empty — we cannot determine which docs succeeded without querying.
+                return [];
+            }
+
+            throw $processed;
         }
 
         foreach ($documents as $index => $document) {

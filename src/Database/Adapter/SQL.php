@@ -2476,6 +2476,54 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
+
+        // Pre-filter duplicates inside the transaction to prevent race conditions.
+        // Query which UIDs already exist and remove them from the batch.
+        if ($ignore) {
+            $collectionId = $collection->getId();
+            $name = $this->filter($collectionId);
+            $uids = \array_filter(\array_map(fn (Document $doc) => $doc->getId(), $documents));
+
+            if (!empty($uids)) {
+                $placeholders = [];
+                $binds = [];
+                foreach (\array_values(\array_unique($uids)) as $i => $uid) {
+                    $key = ':_dup_uid_' . $i;
+                    $placeholders[] = $key;
+                    $binds[$key] = $uid;
+                }
+
+                $tenantFilter = '';
+                if ($this->sharedTables) {
+                    $tenantFilter = ' AND _tenant = :_dup_tenant';
+                    $binds[':_dup_tenant'] = $this->getTenant();
+                }
+
+                $sql = 'SELECT _uid FROM ' . $this->getSQLTable($name)
+                    . ' WHERE _uid IN (' . \implode(', ', $placeholders) . ')'
+                    . $tenantFilter;
+
+                $stmt = $this->getPDO()->prepare($sql);
+                foreach ($binds as $k => $v) {
+                    $stmt->bindValue($k, $v, $this->getPDOType($v));
+                }
+                $stmt->execute();
+                $existingUids = \array_flip(\array_column($stmt->fetchAll(), '_uid'));
+                $stmt->closeCursor();
+
+                if (!empty($existingUids)) {
+                    $documents = \array_values(\array_filter(
+                        $documents,
+                        fn (Document $doc) => !isset($existingUids[$doc->getId()])
+                    ));
+                }
+            }
+
+            if (empty($documents)) {
+                return [];
+            }
+        }
+
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {

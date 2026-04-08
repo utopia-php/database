@@ -5655,6 +5655,24 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
+        // Deduplicate intra-batch documents by ID when ignore mode is on.
+        // Keeps the first occurrence, mirrors upsertDocuments' seenIds check.
+        if ($ignore) {
+            $seenIds = [];
+            $deduplicated = [];
+            foreach ($documents as $document) {
+                $docId = $document->getId();
+                if ($docId !== '' && isset($seenIds[$docId])) {
+                    continue;
+                }
+                if ($docId !== '') {
+                    $seenIds[$docId] = true;
+                }
+                $deduplicated[] = $document;
+            }
+            $documents = $deduplicated;
+        }
+
         // When ignore mode is on and relationships are being resolved,
         // pre-fetch existing document IDs so we skip relationship writes for duplicates
         $preExistingIds = [];

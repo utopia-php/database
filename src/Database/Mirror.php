@@ -273,14 +273,15 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
     {
         $result = $this->source->createCollection(
             $id,
             $attributes,
             $indexes,
             $permissions,
-            $documentSecurity
+            $documentSecurity,
+            $metadata
         );
 
         if ($this->destination === null) {
@@ -305,7 +306,8 @@ class Mirror extends Database
                 $attributes,
                 $indexes,
                 $permissions,
-                $documentSecurity
+                $documentSecurity,
+                $metadata
             );
 
             $this->silent(function () use ($id) {

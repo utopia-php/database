@@ -108,6 +108,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
+     * Returns the current Mongo client
+     * @return mixed
+     */
+    public function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
+    /**
      * Get the list of capabilities supported by the MongoDB adapter.
      *
      * @return array<Capability>

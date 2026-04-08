@@ -40,6 +40,7 @@ trait Collections
      * @param  array<Index|Document>  $indexes  Initial indexes for the collection
      * @param  array<string>|null  $permissions  Permission strings, defaults to allow any create
      * @param  bool  $documentSecurity  Whether to enable document-level security
+     * @param  array<string, mixed>  $metadata  Additional metadata attributes to merge into the collection document
      * @return Document The created collection metadata document
      *
      * @throws DatabaseException

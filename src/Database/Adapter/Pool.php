@@ -98,6 +98,11 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         });
     }
 
+    public function getDriver(): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     /**
      * Check if a specific capability is supported by the pooled adapter.
      *

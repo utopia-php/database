@@ -1246,4 +1246,9 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract protected function quote(string $string): string;
 
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract public function getDriver(): mixed;
 }

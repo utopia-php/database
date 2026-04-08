@@ -5655,18 +5655,24 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
+        $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
+
         // Deduplicate intra-batch documents by ID when ignore mode is on.
         // Keeps the first occurrence, mirrors upsertDocuments' seenIds check.
+        // In tenant-per-document mode, dedupe by tenant+id to allow same ID across tenants.
         if ($ignore) {
             $seenIds = [];
             $deduplicated = [];
             foreach ($documents as $document) {
                 $docId = $document->getId();
-                if ($docId !== '' && isset($seenIds[$docId])) {
-                    continue;
-                }
                 if ($docId !== '') {
-                    $seenIds[$docId] = true;
+                    $dedupeKey = $tenantPerDocument
+                        ? $document->getTenant() . ':' . $docId
+                        : $docId;
+                    if (isset($seenIds[$dedupeKey])) {
+                        continue;
+                    }
+                    $seenIds[$dedupeKey] = true;
                 }
                 $deduplicated[] = $document;
             }
@@ -5676,7 +5682,6 @@ class Database
         // When ignore mode is on and relationships are being resolved,
         // pre-fetch existing document IDs so we skip relationship writes for duplicates
         $preExistingIds = [];
-        $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
         if ($ignore) {
             if ($tenantPerDocument) {
                 $idsByTenant = [];
@@ -5684,7 +5689,7 @@ class Database
                     $idsByTenant[$doc->getTenant()][] = $doc->getId();
                 }
                 foreach ($idsByTenant as $tenant => $tenantIds) {
-                    $tenantIds = \array_values(\array_unique($tenantIds));
+                    $tenantIds = \array_values(\array_unique(\array_filter($tenantIds)));
                     foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                         $existing = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
                             $collection->getId(),
@@ -7219,7 +7224,7 @@ class Database
                     $idsByTenant[$tenant][] = $doc->getId();
                 }
                 foreach ($idsByTenant as $tenant => $tenantIds) {
-                    $tenantIds = \array_values(\array_unique($tenantIds));
+                    $tenantIds = \array_values(\array_unique(\array_filter($tenantIds)));
                     foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $idChunk) {
                         $fetched = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(fn () => $this->find(
                             $collection->getId(),

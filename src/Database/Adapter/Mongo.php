@@ -1463,14 +1463,7 @@ class Mongo extends Adapter
     public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-
-        if ($ignore) {
-            // Run outside transaction — MongoDB aborts transactions on any write error,
-            // so ordered:false + session would roll back even successfully inserted docs.
-            $options = ['ordered' => false];
-        } else {
-            $options = $this->getTransactionOptions();
-        }
+        $options = $this->getTransactionOptions();
 
         $records = [];
         $hasSequence = null;
@@ -1494,19 +1487,42 @@ class Mongo extends Adapter
             $records[] = $record;
         }
 
+        // In ignore mode, pre-filter duplicates within the same session to avoid
+        // BulkWriteException which would abort the transaction.
+        if ($ignore && !empty($records)) {
+            $uids = \array_filter(\array_map(fn ($r) => $r['_uid'] ?? null, $records));
+            if (!empty($uids)) {
+                $findOptions = $this->getTransactionOptions(['projection' => ['_uid' => 1]]);
+                $result = $this->client->find($name, ['_uid' => ['$in' => \array_values($uids)]], $findOptions);
+                $existingUids = [];
+                foreach ($result->cursor->firstBatch ?? [] as $doc) {
+                    $existingUids[$doc->_uid] = true;
+                }
+
+                if (!empty($existingUids)) {
+                    $filteredRecords = [];
+                    $filteredDocuments = [];
+                    foreach ($records as $i => $record) {
+                        $uid = $record['_uid'] ?? '';
+                        if (!isset($existingUids[$uid])) {
+                            $filteredRecords[] = $record;
+                            $filteredDocuments[] = $documents[$i];
+                        }
+                    }
+                    $records = $filteredRecords;
+                    $documents = $filteredDocuments;
+                }
+            }
+
+            if (empty($records)) {
+                return [];
+            }
+        }
+
         try {
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
-            $processed = $this->processException($e);
-
-            if ($ignore && $processed instanceof DuplicateException) {
-                // Race condition: a doc was inserted between pre-filter and insertMany.
-                // With ordered:false outside transaction, non-duplicate inserts persist.
-                // Return empty — we cannot determine which docs succeeded without querying.
-                return [];
-            }
-
-            throw $processed;
+            throw $this->processException($e);
         }
 
         foreach ($documents as $index => $document) {

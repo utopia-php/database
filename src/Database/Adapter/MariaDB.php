@@ -418,7 +418,7 @@ class MariaDB extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -1678,7 +1678,7 @@ class MariaDB extends SQL
      * @return string
      * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    protected function getSQLType(string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, Database::SPATIAL_TYPES)) {
             return $this->getSpatialSQLType($type, $required);

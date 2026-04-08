@@ -576,7 +576,7 @@ abstract class Adapter
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
+    abstract public function createAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): bool;
 
     /**
      * Create Attributes
@@ -603,7 +603,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int|string $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
 
     /**
      * Delete Attribute
@@ -1405,7 +1405,7 @@ abstract class Adapter
      * @return string
      * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
      */
-    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    public function getColumnType(string $type, int|string $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         return '';
     }

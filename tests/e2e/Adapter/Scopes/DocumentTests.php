@@ -187,6 +187,10 @@ trait DocumentTests
         $this->assertEquals($unsignedValue, (string)$document->getAttribute('unsigned_bigint'));
         $this->assertTrue(\is_string($document->getAttribute('unsigned_bigint')));
 
+        // Read path: fetch document and ensure unsigned bigint round-trips unchanged.
+        $fetchedDocument = $database->getDocument($collection, $document->getId());
+        $this->assertEquals($unsignedValue, (string)$fetchedDocument->getAttribute('unsigned_bigint'));
+
         // Update path should apply the same normalization for signed bigint numeric strings.
         $updated = $database->updateDocument($collection, $document->getId(), new Document([
             'signed_bigint' => $signedMax,
@@ -230,8 +234,8 @@ trait DocumentTests
         $database->createCollection($collection);
         $this->assertEquals(true, $database->createAttribute($collection, 'signed_bigint', Database::VAR_BIGINT, 0, true));
 
-        $signedMin = (string)\PHP_INT_MIN;
-        $signedMax = (string)\PHP_INT_MAX;
+        $signedMin = \PHP_INT_MIN;
+        $signedMax = \PHP_INT_MAX;
 
         $document = $database->createDocument($collection, new Document([
             '$id' => 'signed-bigint-doc',

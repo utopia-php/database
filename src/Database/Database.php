@@ -1987,6 +1987,15 @@ class Database
         return $collection;
     }
 
+    private function getSize(string $type, int|string|null $size): int|string
+    {
+        if ($type === self::VAR_BIGINT) {
+            return (string)($size ?? 0);
+        }
+
+        return (int)($size ?? 0);
+    }
+
     /**
      * Get Collection Size
      *
@@ -2146,8 +2155,9 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int|string $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
+        $size = $this->getSize($type, $size);
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -2231,7 +2241,7 @@ class Database
                 '$id' => ID::custom($id),
                 'key' => $id,
                 'type' => $type,
-                'size' => $type === self::VAR_BIGINT ? (string)$size : $size,
+                'size' => $this->getSize($type, $size),
                 'required' => $required,
                 'default' => $default,
                 'signed' => $signed,
@@ -2355,6 +2365,7 @@ class Database
             $existsInSchema = false;
 
             try {
+                $attribute['size'] = $this->getSize($attribute['type'], $attribute['size']);
                 $attributeDocument = $this->validateAttribute(
                     $collection,
                     $attribute['$id'],
@@ -2411,7 +2422,7 @@ class Database
                     '$id' => ID::custom($attribute['$id']),
                     'key' => $attribute['$id'],
                     'type' => $attribute['type'],
-                    'size' => $attribute['size'],
+                    'size' => $this->getSize($attribute['type'], $attribute['size']),
                     'required' => $attribute['required'],
                     'default' => $attribute['default'],
                     'signed' => $attribute['signed'],
@@ -2514,7 +2525,7 @@ class Database
         Document $collection,
         string $id,
         string $type,
-        int $size,
+        int|string $size,
         bool $required,
         mixed $default,
         bool $signed,
@@ -2528,7 +2539,7 @@ class Database
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
-            'size' => $type === self::VAR_BIGINT ? (string)$size : $size,
+            'size' => $this->getSize($type, $size),
             'required' => $required,
             'default' => $default,
             'signed' => $signed,
@@ -2870,7 +2881,7 @@ class Database
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $id, ?string $type = null, int|string|null $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $collectionDoc = $this->silent(fn () => $this->getCollection($collection));
 
@@ -2906,6 +2917,7 @@ class Database
             || !\is_null($newKey);
         $type ??= $attribute->getAttribute('type');
         $size ??= $attribute->getAttribute('size');
+        $size = $this->getSize($type, $size);
         $signed ??= $attribute->getAttribute('signed');
         $required ??= $attribute->getAttribute('required');
         $default ??= $attribute->getAttribute('default');
@@ -3070,7 +3082,7 @@ class Database
             ->setAttribute('$id', $newKey ?? $id)
             ->setattribute('key', $newKey ?? $id)
             ->setAttribute('type', $type)
-            ->setAttribute('size', $type === self::VAR_BIGINT ? (string)$size : $size)
+            ->setAttribute('size', $this->getSize($type, $size))
             ->setAttribute('signed', $signed)
             ->setAttribute('array', $array)
             ->setAttribute('format', $format)
@@ -3194,7 +3206,7 @@ class Database
                 $collection,
                 $newKey ?? $id,
                 $originalType,
-                $originalSize,
+                (int)$originalSize,
                 $originalSigned,
                 $originalArray,
                 $originalKey,

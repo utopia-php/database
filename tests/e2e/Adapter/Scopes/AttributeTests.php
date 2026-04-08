@@ -2313,13 +2313,13 @@ trait AttributeTests
             }
         }
 
-        // Batch create with unsigned bigint should be accepted with default size semantics.
         $largeUnsignedAttribute = [[
             '$id' => 'unsigned_bigint_large',
             'type' => Database::VAR_BIGINT,
             'size' => 0,
             'required' => false,
             'signed' => false,
+            'default' => '18446744073709551615'
         ]];
         $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
     }

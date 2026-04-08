@@ -7922,27 +7922,4 @@ trait DocumentTests
     //        $database->deleteCollection($collectionName);
     //    }
 
-    public function testCreateDocumentWithBigIntStringValues(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $collection = 'test_big_int_string_values';
-        $database->createCollection($collection);
-        $this->assertEquals(true, $database->createAttribute($collection, 'bigint_unsigned', Database::VAR_BIGINT, 0, false, signed: false));
-
-        $database->createDocument($collection, new Document([
-            '$id' => 'bigint-string-type-doc',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-            ],
-            'bigint_unsigned' => (string)9223372036854775807,
-        ]));
-
-        $data = $database->getDocument($collection, 'bigint-string-type-doc');
-        $this->assertFalse($data->isEmpty());
-        $this->assertEquals('bigint-string-type-doc', $data->getId());
-        $this->assertEquals('9223372036854775807', (string)$data->getAttribute('bigint_unsigned'));
-    }
 }

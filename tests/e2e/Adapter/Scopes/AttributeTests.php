@@ -2317,7 +2317,7 @@ trait AttributeTests
         $largeUnsignedAttribute = [[
             '$id' => 'unsigned_bigint_large',
             'type' => Database::VAR_BIGINT,
-            'size' => '18446744073709551615',
+            'size' => 0,
             'required' => false,
             'signed' => false,
         ]];

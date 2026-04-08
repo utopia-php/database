@@ -2301,25 +2301,32 @@ trait AttributeTests
         $this->assertEquals('0', (string)$signedAttribute['size']);
         $this->assertEquals('0', (string)$unsignedAttribute['size']);
 
-        // Signed overflow should always fail.
-        try {
-            $database->updateAttribute($collectionName, 'signed_bigint', size: Database::MAX_BIG_INT + 1);
-            $this->fail('Expected DatabaseException for signed bigint size overflow');
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('Max size allowed for bigint', $e->getMessage());
+        // Signed overflow check (only when we can build an int beyond adapter signed max).
+        $signedLimit = (int)$database->getAdapter()->getLimitForBigInt();
+        if ($signedLimit < \PHP_INT_MAX) {
+            try {
+                $database->updateAttribute($collectionName, 'signed_bigint', size: $signedLimit + 1);
+                $this->fail('Expected DatabaseException for signed bigint size overflow');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(DatabaseException::class, $e);
+                $this->assertStringContainsString('Max size allowed for bigint', $e->getMessage());
+            }
         }
 
-        // Unsigned overflow behavior depends on adapter support.
+        // Unsigned > signed-max behavior validated through batch create (string size avoids int overflow).
+        $largeUnsignedAttribute = [[
+            '$id' => 'unsigned_bigint_large',
+            'type' => Database::VAR_BIGINT,
+            'size' => '18446744073709551615',
+            'required' => false,
+            'signed' => false,
+        ]];
+
         if ($database->getAdapter()->getSupportForUnsignedBigInt()) {
-            // Should accept values above signed max for unsigned bigint.
-            $this->assertInstanceOf(
-                Document::class,
-                $database->updateAttribute($collectionName, 'unsigned_bigint', size: Database::MAX_BIG_INT + 1)
-            );
+            $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
         } else {
             try {
-                $database->updateAttribute($collectionName, 'unsigned_bigint', size: Database::MAX_BIG_INT + 1);
+                $database->createAttributes($collectionName, $largeUnsignedAttribute);
                 $this->fail('Expected DatabaseException for unsigned bigint overflow on adapter without unsigned bigint support');
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(DatabaseException::class, $e);

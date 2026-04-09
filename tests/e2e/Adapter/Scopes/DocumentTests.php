@@ -7722,4 +7722,200 @@ trait DocumentTests
     //        }
     //        $database->deleteCollection($collectionName);
     //    }
+
+    public function testCreateDocumentsIgnoreDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        // Insert initial documents
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'doc1',
+                'name' => 'Original A',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                'name' => 'Original B',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]);
+
+        // Without ignore, duplicates should throw
+        try {
+            $database->createDocuments(__FUNCTION__, [
+                new Document([
+                    '$id' => 'doc1',
+                    'name' => 'Duplicate A',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ]);
+            $this->fail('Expected DuplicateException');
+        } catch (DuplicateException $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
+
+        // With ignore, duplicates should be silently skipped
+        $emittedIds = [];
+        $count = $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'doc1',
+                'name' => 'Duplicate A',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                'name' => 'New C',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ], onNext: function (Document $doc) use (&$emittedIds) {
+            $emittedIds[] = $doc->getId();
+        }, ignore: true);
+
+        // Only doc3 was new, doc1 was skipped as duplicate
+        $this->assertSame(1, $count);
+        $this->assertCount(1, $emittedIds);
+        $this->assertSame('doc3', $emittedIds[0]);
+
+        // doc3 should exist, doc1 should retain original value
+        $doc1 = $database->getDocument(__FUNCTION__, 'doc1');
+        $this->assertSame('Original A', $doc1->getAttribute('name'));
+
+        $doc3 = $database->getDocument(__FUNCTION__, 'doc3');
+        $this->assertSame('New C', $doc3->getAttribute('name'));
+
+        // Total should be 3 (doc1, doc2, doc3)
+        $all = $database->find(__FUNCTION__);
+        $this->assertCount(3, $all);
+    }
+
+    public function testCreateDocumentsIgnoreIntraBatchDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $col = 'createDocsIgnoreIntraBatch';
+
+        $database->createCollection($col);
+        $database->createAttribute($col, 'name', Database::VAR_STRING, 128, true);
+
+        // Two docs with same ID in one batch — first wins, second is deduplicated
+        $emittedIds = [];
+        $count = $database->createDocuments($col, [
+            new Document([
+                '$id' => 'dup',
+                'name' => 'First',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'dup',
+                'name' => 'Second',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::user('extra')),
+                ],
+            ]),
+            new Document([
+                '$id' => 'unique1',
+                'name' => 'Unique',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ], onNext: function (Document $doc) use (&$emittedIds) {
+            $emittedIds[] = $doc->getId();
+        }, ignore: true);
+
+        $this->assertSame(2, $count);
+        $this->assertCount(2, $emittedIds);
+
+        // First occurrence wins
+        $doc = $database->getDocument($col, 'dup');
+        $this->assertSame('First', $doc->getAttribute('name'));
+
+        // Second doc's extra permission should NOT exist (no ACL drift)
+        $perms = $doc->getPermissions();
+        foreach ($perms as $perm) {
+            $this->assertStringNotContainsString('extra', $perm);
+        }
+
+        // unique1 should exist
+        $unique = $database->getDocument($col, 'unique1');
+        $this->assertSame('Unique', $unique->getAttribute('name'));
+
+        // Total: 2 documents
+        $all = $database->find($col);
+        $this->assertCount(2, $all);
+    }
+
+    public function testCreateDocumentsIgnoreAllDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        // Insert initial document
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'existing',
+                'name' => 'Original',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]);
+
+        // With ignore, inserting only duplicates should succeed with no new rows
+        $emittedIds = [];
+        $count = $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'existing',
+                'name' => 'Duplicate',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ], onNext: function (Document $doc) use (&$emittedIds) {
+            $emittedIds[] = $doc->getId();
+        }, ignore: true);
+
+        // All duplicates skipped, nothing inserted
+        $this->assertSame(0, $count);
+        $this->assertSame([], $emittedIds);
+
+        // Original document should be unchanged
+        $doc = $database->getDocument(__FUNCTION__, 'existing');
+        $this->assertSame('Original', $doc->getAttribute('name'));
+
+        // Still only 1 document
+        $all = $database->find(__FUNCTION__);
+        $this->assertCount(1, $all);
+    }
 }

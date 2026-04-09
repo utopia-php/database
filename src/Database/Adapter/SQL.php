@@ -2471,11 +2471,87 @@ abstract class SQL extends Adapter
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocuments(Document $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         if (empty($documents)) {
             return $documents;
         }
+
+        // Pre-filter existing UIDs to prevent race-condition duplicates.
+        if ($ignore) {
+            $collectionId = $collection->getId();
+            $name = $this->filter($collectionId);
+            $uids = \array_filter(\array_map(fn (Document $doc) => $doc->getId(), $documents), fn ($v) => $v !== null);
+
+            if (!empty($uids)) {
+                try {
+                    $placeholders = [];
+                    $binds = [];
+                    foreach (\array_values(\array_unique($uids)) as $i => $uid) {
+                        $key = ':_dup_uid_' . $i;
+                        $placeholders[] = $key;
+                        $binds[$key] = $uid;
+                    }
+
+                    $tenantFilter = '';
+                    if ($this->sharedTables) {
+                        if ($this->tenantPerDocument) {
+                            $tenants = \array_values(\array_unique(\array_filter(
+                                \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
+                                fn ($v) => $v !== null
+                            )));
+                            $tenantPlaceholders = [];
+                            foreach ($tenants as $j => $tenant) {
+                                $tKey = ':_dup_tenant_' . $j;
+                                $tenantPlaceholders[] = $tKey;
+                                $binds[$tKey] = $tenant;
+                            }
+                            $tenantFilter = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
+                        } else {
+                            $tenantFilter = ' AND _tenant = :_dup_tenant';
+                            $binds[':_dup_tenant'] = $this->getTenant();
+                        }
+                    }
+
+                    $tenantSelect = $this->sharedTables && $this->tenantPerDocument ? ', _tenant' : '';
+                    $sql = 'SELECT _uid' . $tenantSelect . ' FROM ' . $this->getSQLTable($name)
+                        . ' WHERE _uid IN (' . \implode(', ', $placeholders) . ')'
+                        . $tenantFilter;
+
+                    $stmt = $this->getPDO()->prepare($sql);
+                    foreach ($binds as $k => $v) {
+                        $stmt->bindValue($k, $v, $this->getPDOType($v));
+                    }
+                    $stmt->execute();
+                    $rows = $stmt->fetchAll();
+                    $stmt->closeCursor();
+
+                    if ($this->sharedTables && $this->tenantPerDocument) {
+                        $existingKeys = [];
+                        foreach ($rows as $row) {
+                            $existingKeys[$row['_tenant'] . ':' . $row['_uid']] = true;
+                        }
+                        $documents = \array_values(\array_filter(
+                            $documents,
+                            fn (Document $doc) => !isset($existingKeys[$doc->getTenant() . ':' . $doc->getId()])
+                        ));
+                    } else {
+                        $existingUids = \array_flip(\array_column($rows, '_uid'));
+                        $documents = \array_values(\array_filter(
+                            $documents,
+                            fn (Document $doc) => !isset($existingUids[$doc->getId()])
+                        ));
+                    }
+                } catch (PDOException $e) {
+                    throw $this->processException($e);
+                }
+            }
+
+            if (empty($documents)) {
+                return [];
+            }
+        }
+
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {
@@ -2573,8 +2649,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
+                {$this->getInsertSuffix($ignore, $name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2583,13 +2660,111 @@ abstract class SQL extends Adapter
 
             $this->execute($stmt);
 
+            // Reconcile returned docs with actual inserts when a race condition skipped rows.
+            if ($ignore && $stmt->rowCount() < \count($documents)) {
+                $expectedTimestamps = [];
+                foreach ($documents as $doc) {
+                    $eKey = ($this->sharedTables && $this->tenantPerDocument)
+                        ? $doc->getTenant() . ':' . $doc->getId()
+                        : $doc->getId();
+                    $expectedTimestamps[$eKey] = $doc->getCreatedAt();
+                }
+
+                $verifyPlaceholders = [];
+                $verifyBinds = [];
+                $rawUids = \array_values(\array_unique(\array_map(fn (Document $doc) => $doc->getId(), $documents)));
+                foreach ($rawUids as $idx => $uid) {
+                    $ph = ':_vfy_' . $idx;
+                    $verifyPlaceholders[] = $ph;
+                    $verifyBinds[$ph] = $uid;
+                }
+
+                $tenantWhere = '';
+                $tenantSelect = '';
+                if ($this->sharedTables) {
+                    if ($this->tenantPerDocument) {
+                        $tenants = \array_values(\array_unique(\array_filter(
+                            \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
+                            fn ($v) => $v !== null
+                        )));
+                        $tenantPlaceholders = [];
+                        foreach ($tenants as $j => $tenant) {
+                            $tKey = ':_vfy_tenant_' . $j;
+                            $tenantPlaceholders[] = $tKey;
+                            $verifyBinds[$tKey] = $tenant;
+                        }
+                        $tenantWhere = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
+                        $tenantSelect = ', _tenant';
+                    } else {
+                        $tenantWhere = ' AND _tenant = :_vfy_tenant';
+                        $verifyBinds[':_vfy_tenant'] = $this->getTenant();
+                    }
+                }
+
+                $verifySql = 'SELECT _uid' . $tenantSelect . ', ' . $this->quote($this->filter('_createdAt'))
+                    . ' FROM ' . $this->getSQLTable($name)
+                    . ' WHERE _uid IN (' . \implode(', ', $verifyPlaceholders) . ')'
+                    . $tenantWhere;
+
+                $verifyStmt = $this->getPDO()->prepare($verifySql);
+                foreach ($verifyBinds as $k => $v) {
+                    $verifyStmt->bindValue($k, $v, $this->getPDOType($v));
+                }
+                $verifyStmt->execute();
+                $rows = $verifyStmt->fetchAll();
+                $verifyStmt->closeCursor();
+
+                // Normalise timestamps — Postgres omits .000 for round seconds.
+                $normalizeTimestamp = fn (?string $ts): string => $ts !== null
+                    ? (new \DateTime($ts))->format('Y-m-d H:i:s.v')
+                    : '';
+
+                $actualTimestamps = [];
+                foreach ($rows as $row) {
+                    $key = ($this->sharedTables && $this->tenantPerDocument)
+                        ? $row['_tenant'] . ':' . $row['_uid']
+                        : $row['_uid'];
+                    $actualTimestamps[$key] = $normalizeTimestamp($row['_createdAt']);
+                }
+
+                $insertedDocs = [];
+                foreach ($documents as $doc) {
+                    $key = ($this->sharedTables && $this->tenantPerDocument)
+                        ? $doc->getTenant() . ':' . $doc->getId()
+                        : $doc->getId();
+                    if (isset($actualTimestamps[$key]) && $actualTimestamps[$key] === $normalizeTimestamp($expectedTimestamps[$key] ?? null)) {
+                        $insertedDocs[] = $doc;
+                    }
+                }
+                $documents = $insertedDocs;
+
+                // Rebuild permissions for actually-inserted docs only
+                $permissions = [];
+                $bindValuesPermissions = [];
+                foreach ($documents as $index => $document) {
+                    foreach (Database::PERMISSIONS as $type) {
+                        foreach ($document->getPermissionsByType($type) as $permission) {
+                            $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
+                            $permission = \str_replace('"', '', $permission);
+                            $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
+                            $permissions[] = $permission;
+                            $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
+                            if ($this->sharedTables) {
+                                $bindValuesPermissions[":_tenant_{$index}"] = $document->getTenant();
+                            }
+                        }
+                    }
+                }
+            }
+
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
+                    {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions}
+                    {$this->getInsertPermissionsSuffix($ignore)}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -2606,6 +2781,33 @@ abstract class SQL extends Adapter
         }
 
         return $documents;
+    }
+
+    /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(bool $ignore): string
+    {
+        return $ignore ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(bool $ignore, string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(bool $ignore): string
+    {
+        return '';
     }
 
     /**

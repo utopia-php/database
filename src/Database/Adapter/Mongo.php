@@ -1460,11 +1460,11 @@ class Mongo extends Adapter
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function createDocuments(Document $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-
         $options = $this->getTransactionOptions();
+
         $records = [];
         $hasSequence = null;
         $documents = \array_map(fn ($doc) => clone $doc, $documents);
@@ -1485,6 +1485,95 @@ class Mongo extends Adapter
             }
 
             $records[] = $record;
+        }
+
+        // Pre-filter duplicates within the session to avoid aborting the transaction.
+        if ($ignore && !empty($records)) {
+            $existingKeys = [];
+
+            try {
+                if ($this->sharedTables && $this->tenantPerDocument) {
+                    $idsByTenant = [];
+                    foreach ($records as $record) {
+                        $uid = $record['_uid'] ?? '';
+                        if ($uid === '') {
+                            continue;
+                        }
+                        $tenant = $record['_tenant'] ?? $this->getTenant();
+                        $idsByTenant[$tenant][] = $uid;
+                    }
+
+                    foreach ($idsByTenant as $tenant => $tenantUids) {
+                        $tenantUids = \array_values(\array_unique($tenantUids));
+                        $findOptions = $this->getTransactionOptions([
+                            'projection' => ['_uid' => 1],
+                            'batchSize' => \count($tenantUids),
+                        ]);
+                        $filters = ['_uid' => ['$in' => $tenantUids], '_tenant' => $tenant];
+                        $response = $this->client->find($name, $filters, $findOptions);
+                        foreach ($response->cursor->firstBatch ?? [] as $doc) {
+                            $existingKeys[$tenant . ':' . $doc->_uid] = true;
+                        }
+                        $cursorId = $response->cursor->id ?? 0;
+                        while ($cursorId != 0) {
+                            $more = $this->client->getMore($cursorId, $name, \count($tenantUids));
+                            foreach ($more->cursor->nextBatch ?? [] as $doc) {
+                                $existingKeys[$tenant . ':' . $doc->_uid] = true;
+                            }
+                            $cursorId = $more->cursor->id ?? 0;
+                        }
+                    }
+                } else {
+                    $uids = \array_filter(\array_map(fn ($r) => $r['_uid'] ?? null, $records), fn ($v) => $v !== null);
+                    if (!empty($uids)) {
+                        $uidValues = \array_values(\array_unique($uids));
+                        $findOptions = $this->getTransactionOptions([
+                            'projection' => ['_uid' => 1],
+                            'batchSize' => \count($uidValues),
+                        ]);
+                        $filters = ['_uid' => ['$in' => $uidValues]];
+                        if ($this->sharedTables) {
+                            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+                        }
+                        $response = $this->client->find($name, $filters, $findOptions);
+                        foreach ($response->cursor->firstBatch ?? [] as $doc) {
+                            $existingKeys[$doc->_uid] = true;
+                        }
+                        $cursorId = $response->cursor->id ?? 0;
+                        while ($cursorId != 0) {
+                            $more = $this->client->getMore($cursorId, $name, \count($uidValues));
+                            foreach ($more->cursor->nextBatch ?? [] as $doc) {
+                                $existingKeys[$doc->_uid] = true;
+                            }
+                            $cursorId = $more->cursor->id ?? 0;
+                        }
+                    }
+                }
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            if (!empty($existingKeys)) {
+                $filteredRecords = [];
+                $filteredDocuments = [];
+                $tenantPerDoc = $this->sharedTables && $this->tenantPerDocument;
+                foreach ($records as $i => $record) {
+                    $uid = $record['_uid'] ?? '';
+                    $key = $tenantPerDoc
+                        ? ($record['_tenant'] ?? $this->getTenant()) . ':' . $uid
+                        : $uid;
+                    if (!isset($existingKeys[$key])) {
+                        $filteredRecords[] = $record;
+                        $filteredDocuments[] = $documents[$i];
+                    }
+                }
+                $records = $filteredRecords;
+                $documents = $filteredDocuments;
+            }
+
+            if (empty($records)) {
+                return [];
+            }
         }
 
         try {

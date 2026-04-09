@@ -34,6 +34,11 @@ use Utopia\Database\Operator;
  */
 class SQLite extends MariaDB
 {
+    protected function getInsertKeyword(bool $ignore): string
+    {
+        return $ignore ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+    }
+
     /**
      * @inheritDoc
      */

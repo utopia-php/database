@@ -600,6 +600,7 @@ class Mirror extends Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
+        bool $ignore = false,
     ): int {
         $modified = $this->source->createDocuments(
             $collection,
@@ -607,6 +608,7 @@ class Mirror extends Database
             $batchSize,
             $onNext,
             $onError,
+            $ignore,
         );
 
         if (
@@ -645,6 +647,7 @@ class Mirror extends Database
                     $collection,
                     $clones,
                     $batchSize,
+                    ignore: $ignore,
                 )
             );
 

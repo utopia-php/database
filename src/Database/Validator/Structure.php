@@ -7,7 +7,6 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
@@ -365,7 +364,7 @@ class Structure extends Validator
                 case Database::VAR_INTEGER:
                     // Determine bit size based on attribute size in bytes
                     // BIGINT is always 64-bit in SQL adapters; VAR_INTEGER uses size to decide.
-                    $bits = ($type === Database::VAR_BIGINT || $size >= 8) ? 64 : 32;
+                    $bits =  $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     // The Range validator will restrict to positive values only
                     $unsigned = !$signed && $bits < 64;
@@ -464,7 +463,7 @@ class Structure extends Validator
 
     public function isBigIntStringWithinPhpIntRange(string $value, bool $signed): bool
     {
-        return BigIntHelper::fitsPhpInt($value, $signed);
+        return BigInt::fitsPhpInt($value, $signed);
     }
 
     /**

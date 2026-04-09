@@ -157,7 +157,7 @@ class Filter extends Base
                 case Database::VAR_INTEGER:
                     $size = $attributeSchema['size'] ?? 4;
                     $signed = $attributeSchema['signed'] ?? true;
-                    $bits = ($attributeType === Database::VAR_BIGINT || $size >= 8) ? 64 : 32;
+                    $bits = $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     $unsigned = !$signed && $bits < 64;
                     $validator = new Integer(false, $bits, $unsigned);

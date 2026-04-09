@@ -22,13 +22,13 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
-use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\BigInt as BigIntValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
@@ -2593,7 +2593,7 @@ class Database
                 }
                 break;
             case Database::VAR_BIGINT:
-                if ($defaultType !== 'integer') {
+                if ($defaultType !== 'integer' && $defaultType !== 'string') {
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
@@ -2920,13 +2920,13 @@ class Database
                 }
                 break;
             case self::VAR_BIGINT:
-                $sizeString = BigIntHelper::normalizeUnsignedString((string)$size);
+                $sizeString = BigIntValidator::normalizeUnsignedString((string)$size);
                 $limit = (!$signed && $this->adapter->getSupportForUnsignedBigInt())
-                    ? BigIntHelper::UNSIGNED_MAX
-                    : BigIntHelper::SIGNED_MAX;
+                    ? BigIntValidator::UNSIGNED_MAX
+                    : BigIntValidator::SIGNED_MAX;
 
-                if (BigIntHelper::compareUnsignedStrings($sizeString, $limit) > 0) {
-                    throw new DatabaseException('Max size allowed for bigint is: ' . BigIntHelper::formatIntegerString($limit));
+                if (BigIntValidator::compareUnsignedStrings($sizeString, $limit) > 0) {
+                    throw new DatabaseException('Max size allowed for bigint is: ' . BigIntValidator::formatIntegerString($limit));
                 }
                 break;
             case self::VAR_FLOAT:
@@ -8969,7 +8969,7 @@ class Database
                         $node = (int)$node;
                         break;
                     case self::VAR_BIGINT:
-                        if (\is_string($node) && BigIntHelper::fitsPhpInt($node, $signed)) {
+                        if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
                             $node = (int)$node;
                         }
                         break;

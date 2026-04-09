@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Database\Helpers\BigInt as BigIntHelper;
 use Utopia\Validator;
 
@@ -33,7 +34,7 @@ class BigInt extends Validator
 
     public function getType(): string
     {
-        return self::TYPE_MIXED;
+        return Database::VAR_BIGINT;
     }
 
     public function isValid(mixed $value): bool

@@ -5801,6 +5801,64 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testInvalidCreatedAndUpdatedAtThrowStructureException(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'invalid_date_attributes';
+
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+
+        $database->setPreserveDates(true);
+
+        try {
+            // Outside allowed year range (Structure uses DatetimeValidator min/max, e.g. 0000–9999).
+            $invalidDate = '10000-01-01T00:00:00.000+00:00';
+
+            try {
+                $database->createDocument($collection, new Document([
+                    '$id' => 'doc1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    '$createdAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $createdAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'doc2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'string' => 'x',
+            ]));
+
+            try {
+                $database->updateDocument($collection, 'doc2', new Document([
+                    '$updatedAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $updatedAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+        } finally {
+            $database->setPreserveDates(false);
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testSingleDocumentDateOperations(): void
     {
         /** @var Database $database */

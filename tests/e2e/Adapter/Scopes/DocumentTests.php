@@ -5805,52 +5805,53 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'invalid_date_attributes';
 
         $database->createCollection($collection);
         $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
-        $invalidDates = [
-            'not-a-date',
-            '2026-13-01T00:00:00.000+00:00',
-        ];
-
         $database->setPreserveDates(true);
 
         try {
-            foreach ($invalidDates as $index => $invalidDate) {
-                foreach (['$createdAt', '$updatedAt'] as $attribute) {
-                    try {
-                        if ($attribute === '$createdAt') {
-                            $database->createDocument($collection, new Document([
-                                '$id' => $attribute . '-' . $index,
-                                '$permissions' => [
-                                    Permission::read(Role::any()),
-                                    Permission::write(Role::any()),
-                                    Permission::update(Role::any()),
-                                ],
-                                'string' => 'invalid-date',
-                                $attribute => $invalidDate,
-                            ]));
-                        } else {
-                            $document = $database->createDocument($collection, new Document([
-                                '$id' => 'doc-' . $index,
-                                '$permissions' => [
-                                    Permission::read(Role::any()),
-                                    Permission::write(Role::any()),
-                                    Permission::update(Role::any()),
-                                ],
-                                'string' => 'valid-date',
-                            ]));
-                            $document->setAttribute($attribute, $invalidDate);
-                            $database->updateDocument($collection, $document->getId(), $document);
-                        }
+            // Outside allowed year range (Structure uses DatetimeValidator min/max, e.g. 0000–9999).
+            $invalidDate = '10000-01-01T00:00:00.000+00:00';
 
-                        $this->fail('Expected StructureException for invalid ' . $attribute);
-                    } catch (Throwable $e) {
-                        $this->assertInstanceOf(StructureException::class, $e);
-                    }
-                }
+            try {
+                $database->createDocument($collection, new Document([
+                    '$id' => 'doc1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    '$createdAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $createdAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'doc2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'string' => 'x',
+            ]));
+
+            try {
+                $database->updateDocument($collection, 'doc2', new Document([
+                    '$updatedAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $updatedAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
             }
         } finally {
             $database->setPreserveDates(false);

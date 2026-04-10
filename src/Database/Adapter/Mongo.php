@@ -1576,18 +1576,37 @@ class Mongo extends Adapter
             }
         }
 
+        if ($ignore) {
+            $options['ignoreDuplicates'] = true;
+        }
+
         try {
-            $documents = $this->client->insertMany($name, $records, $options);
+            $inserted = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
 
-        foreach ($documents as $index => $document) {
-            $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
-            $documents[$index] = new Document($documents[$index]);
+        $insertedUids = [];
+        foreach ($inserted as $record) {
+            $arr = $this->client->toArray($record);
+            // _uid is excluded from replaceChars transformation, so extract it before conversion
+            $uid = $arr['_uid'] ?? '';
+            $arr = $this->replaceChars('_', '$', $arr);
+            $insertedUids[$uid] = new Document($arr);
         }
 
-        return $documents;
+        if ($ignore) {
+            $result = [];
+            foreach ($records as $i => $record) {
+                $uid = $record['_uid'] ?? '';
+                if (isset($insertedUids[$uid])) {
+                    $result[] = $documents[$i];
+                }
+            }
+            return $result;
+        }
+
+        return \array_values($insertedUids);
     }
 
     /**

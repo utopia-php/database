@@ -13,6 +13,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -1414,7 +1415,11 @@ class Mongo extends Adapter
                 switch ($type) {
                     case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
-                            $node = new UTCDateTime(new \DateTime($node));
+                            try {
+                                $node = new UTCDateTime(new \DateTime($node));
+                            } catch (\Throwable $e) {
+                                throw new StructureException('Invalid datetime value for attribute "' . $key . '": ' . $e->getMessage());
+                            }
                         }
                         break;
                     case Database::VAR_OBJECT:

@@ -7768,28 +7768,31 @@ trait DocumentTests
             $this->assertNotEmpty($e->getMessage());
         }
 
-        // With ignore, duplicates should be silently skipped
+        // With skipDuplicates, duplicates should be silently skipped
         $emittedIds = [];
-        $count = $database->createDocuments(__FUNCTION__, [
-            new Document([
-                '$id' => 'doc1',
-                'name' => 'Duplicate A',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                ],
-            ]),
-            new Document([
-                '$id' => 'doc3',
-                'name' => 'New C',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                ],
-            ]),
-        ], onNext: function (Document $doc) use (&$emittedIds) {
-            $emittedIds[] = $doc->getId();
-        }, ignore: true);
+        $collection = __FUNCTION__;
+        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+            return $database->createDocuments($collection, [
+                new Document([
+                    '$id' => 'doc1',
+                    'name' => 'Duplicate A',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    'name' => 'New C',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ], onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
 
         // Only doc3 was new, doc1 was skipped as duplicate
         $this->assertSame(1, $count);
@@ -7819,35 +7822,37 @@ trait DocumentTests
 
         // Two docs with same ID in one batch — first wins, second is deduplicated
         $emittedIds = [];
-        $count = $database->createDocuments($col, [
-            new Document([
-                '$id' => 'dup',
-                'name' => 'First',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                ],
-            ]),
-            new Document([
-                '$id' => 'dup',
-                'name' => 'Second',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::user('extra')),
-                ],
-            ]),
-            new Document([
-                '$id' => 'unique1',
-                'name' => 'Unique',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                ],
-            ]),
-        ], onNext: function (Document $doc) use (&$emittedIds) {
-            $emittedIds[] = $doc->getId();
-        }, ignore: true);
+        $count = $database->skipDuplicates(function () use ($database, $col, &$emittedIds) {
+            return $database->createDocuments($col, [
+                new Document([
+                    '$id' => 'dup',
+                    'name' => 'First',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+                new Document([
+                    '$id' => 'dup',
+                    'name' => 'Second',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::user('extra')),
+                    ],
+                ]),
+                new Document([
+                    '$id' => 'unique1',
+                    'name' => 'Unique',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ], onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
 
         $this->assertSame(2, $count);
         $this->assertCount(2, $emittedIds);
@@ -7891,20 +7896,23 @@ trait DocumentTests
             ]),
         ]);
 
-        // With ignore, inserting only duplicates should succeed with no new rows
+        // With skipDuplicates, inserting only duplicates should succeed with no new rows
         $emittedIds = [];
-        $count = $database->createDocuments(__FUNCTION__, [
-            new Document([
-                '$id' => 'existing',
-                'name' => 'Duplicate',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                ],
-            ]),
-        ], onNext: function (Document $doc) use (&$emittedIds) {
-            $emittedIds[] = $doc->getId();
-        }, ignore: true);
+        $collection = __FUNCTION__;
+        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+            return $database->createDocuments($collection, [
+                new Document([
+                    '$id' => 'existing',
+                    'name' => 'Duplicate',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ], onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
 
         // All duplicates skipped, nothing inserted
         $this->assertSame(0, $count);

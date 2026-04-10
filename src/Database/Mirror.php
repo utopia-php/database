@@ -600,16 +600,18 @@ class Mirror extends Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-        bool $ignore = false,
     ): int {
-        $modified = $this->source->createDocuments(
+        $createFn = fn () => $this->source->createDocuments(
             $collection,
             $documents,
             $batchSize,
             $onNext,
             $onError,
-            $ignore,
         );
+
+        $modified = $this->skipDuplicates
+            ? $this->source->skipDuplicates($createFn)
+            : $createFn();
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -641,15 +643,18 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $this->destination->withPreserveDates(
+            $destFn = fn () => $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->createDocuments(
                     $collection,
                     $clones,
                     $batchSize,
-                    ignore: $ignore,
                 )
             );
+
+            $this->skipDuplicates
+                ? $this->destination->skipDuplicates($destFn)
+                : $destFn();
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

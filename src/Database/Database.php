@@ -417,6 +417,8 @@ class Database
 
     protected bool $preserveDates = false;
 
+    protected bool $skipDuplicates = false;
+
     protected bool $preserveSequence = false;
 
     protected int $maxQueryValues = 5000;
@@ -839,6 +841,18 @@ class Database
             return $callback();
         } finally {
             $this->checkRelationshipsExist = $previous;
+        }
+    }
+
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
         }
     }
 
@@ -5621,7 +5635,6 @@ class Database
      * @param int $batchSize
      * @param (callable(Document): void)|null $onNext
      * @param (callable(Throwable): void)|null $onError
-     * @param bool $ignore If true, silently ignore duplicate documents instead of throwing
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -5634,7 +5647,6 @@ class Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-        bool $ignore = false,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -5656,6 +5668,7 @@ class Database
         $modified = 0;
 
         $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
+        $ignore = $this->skipDuplicates;
 
         // Deduplicate intra-batch documents by ID (tenant-aware). First occurrence wins.
         if ($ignore) {

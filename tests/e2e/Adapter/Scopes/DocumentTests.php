@@ -6667,6 +6667,81 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    /**
+     * SQL adapters store columns under filter(attributeId). After getDocument + decode, and after
+     * updateDocument (return value + refetch), the document must expose only schema ids (e.g.
+     * pb.e_DSS.FIRMWARE_VERSION), never the filtered alias.
+     */
+    public function testDottedAttributeKeyGetDocumentExposesOnlySchemaKeys(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Keep id short: MySQL/MariaDB table names are limited to 64 characters (namespace + collection).
+        $collectionId = 'dotkey_' . ID::unique();
+        $attrId = 'pb.e_DSS.FIRMWARE_VERSION';
+        $filteredStorageKey = $database->getAdapter()->filter($attrId);
+
+        $database->createCollection($collectionId);
+        $this->assertTrue($database->createAttribute($collectionId, $attrId, Database::VAR_STRING, 128, false));
+
+        // Optional attribute omitted: DB column is NULL — decode must not leave the SQL column name as a key.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'dev1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('dev1', $doc->getId());
+        $this->assertNull($doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $updated = $database->updateDocument($collectionId, 'dev1', new Document([
+            $attrId => '1.0.0',
+        ]));
+        $this->assertSame('1.0.0', $updated->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $updated->getAttributes());
+        $userKeys = array_keys($updated->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('1.0.0', $doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $updated = $database->updateDocument($collectionId, 'dev1', new Document([
+            $attrId => '2.0.0',
+        ]));
+        $this->assertSame('2.0.0', $updated->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $updated->getAttributes());
+        $userKeys = array_keys($updated->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('2.0.0', $doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testUpsertWithJSONFilters(): void
     {
         $database = static::getDatabase();

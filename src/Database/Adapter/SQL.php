@@ -2461,6 +2461,59 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build a `_uid IN (...) [AND _tenant ...]` WHERE clause (and matching binds)
+     * for a batch of documents. Used by the skipDuplicates pre-filter and the
+     * race-condition reconciliation path.
+     *
+     * @param array<Document> $documents
+     * @param string $bindPrefix Prefix for bind keys; must differ between concurrent uses.
+     * @return array{where: string, tenantSelect: string, binds: array<string, mixed>}
+     */
+    private function buildUidTenantLookup(array $documents, string $bindPrefix): array
+    {
+        $binds = [];
+        $placeholders = [];
+        $uids = \array_values(\array_unique(\array_filter(
+            \array_map(fn (Document $doc) => $doc->getId(), $documents),
+            fn ($v) => $v !== null
+        )));
+        foreach ($uids as $i => $uid) {
+            $key = ':' . $bindPrefix . 'uid_' . $i;
+            $placeholders[] = $key;
+            $binds[$key] = $uid;
+        }
+
+        $tenantFilter = '';
+        $tenantSelect = '';
+        if ($this->sharedTables) {
+            if ($this->tenantPerDocument) {
+                $tenants = \array_values(\array_unique(\array_filter(
+                    \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
+                    fn ($v) => $v !== null
+                )));
+                $tenantPlaceholders = [];
+                foreach ($tenants as $j => $tenant) {
+                    $tKey = ':' . $bindPrefix . 'tenant_' . $j;
+                    $tenantPlaceholders[] = $tKey;
+                    $binds[$tKey] = $tenant;
+                }
+                $tenantFilter = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
+                $tenantSelect = ', _tenant';
+            } else {
+                $tenantKey = ':' . $bindPrefix . 'tenant';
+                $tenantFilter = ' AND _tenant = ' . $tenantKey;
+                $binds[$tenantKey] = $this->getTenant();
+            }
+        }
+
+        return [
+            'where' => '_uid IN (' . \implode(', ', $placeholders) . ')' . $tenantFilter,
+            'tenantSelect' => $tenantSelect,
+            'binds' => $binds,
+        ];
+    }
+
+    /**
      * Create Documents in batches
      *
      * @param Document $collection
@@ -2479,47 +2532,17 @@ abstract class SQL extends Adapter
 
         // Pre-filter existing UIDs to prevent race-condition duplicates.
         if ($this->skipDuplicates) {
-            $collectionId = $collection->getId();
-            $name = $this->filter($collectionId);
-            $uids = \array_filter(\array_map(fn (Document $doc) => $doc->getId(), $documents), fn ($v) => $v !== null);
+            $name = $this->filter($collection->getId());
+            $lookup = $this->buildUidTenantLookup($documents, '_dup_');
 
-            if (!empty($uids)) {
+            if (!empty($lookup['binds'])) {
                 try {
-                    $placeholders = [];
-                    $binds = [];
-                    foreach (\array_values(\array_unique($uids)) as $i => $uid) {
-                        $key = ':_dup_uid_' . $i;
-                        $placeholders[] = $key;
-                        $binds[$key] = $uid;
-                    }
-
-                    $tenantFilter = '';
-                    if ($this->sharedTables) {
-                        if ($this->tenantPerDocument) {
-                            $tenants = \array_values(\array_unique(\array_filter(
-                                \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
-                                fn ($v) => $v !== null
-                            )));
-                            $tenantPlaceholders = [];
-                            foreach ($tenants as $j => $tenant) {
-                                $tKey = ':_dup_tenant_' . $j;
-                                $tenantPlaceholders[] = $tKey;
-                                $binds[$tKey] = $tenant;
-                            }
-                            $tenantFilter = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
-                        } else {
-                            $tenantFilter = ' AND _tenant = :_dup_tenant';
-                            $binds[':_dup_tenant'] = $this->getTenant();
-                        }
-                    }
-
-                    $tenantSelect = $this->sharedTables && $this->tenantPerDocument ? ', _tenant' : '';
-                    $sql = 'SELECT _uid' . $tenantSelect . ' FROM ' . $this->getSQLTable($name)
-                        . ' WHERE _uid IN (' . \implode(', ', $placeholders) . ')'
-                        . $tenantFilter;
+                    $sql = 'SELECT _uid' . $lookup['tenantSelect']
+                        . ' FROM ' . $this->getSQLTable($name)
+                        . ' WHERE ' . $lookup['where'];
 
                     $stmt = $this->getPDO()->prepare($sql);
-                    foreach ($binds as $k => $v) {
+                    foreach ($lookup['binds'] as $k => $v) {
                         $stmt->bindValue($k, $v, $this->getPDOType($v));
                     }
                     $stmt->execute();
@@ -2670,44 +2693,13 @@ abstract class SQL extends Adapter
                     $expectedTimestamps[$eKey] = $doc->getCreatedAt();
                 }
 
-                $verifyPlaceholders = [];
-                $verifyBinds = [];
-                $rawUids = \array_values(\array_unique(\array_map(fn (Document $doc) => $doc->getId(), $documents)));
-                foreach ($rawUids as $idx => $uid) {
-                    $ph = ':_vfy_' . $idx;
-                    $verifyPlaceholders[] = $ph;
-                    $verifyBinds[$ph] = $uid;
-                }
-
-                $tenantWhere = '';
-                $tenantSelect = '';
-                if ($this->sharedTables) {
-                    if ($this->tenantPerDocument) {
-                        $tenants = \array_values(\array_unique(\array_filter(
-                            \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
-                            fn ($v) => $v !== null
-                        )));
-                        $tenantPlaceholders = [];
-                        foreach ($tenants as $j => $tenant) {
-                            $tKey = ':_vfy_tenant_' . $j;
-                            $tenantPlaceholders[] = $tKey;
-                            $verifyBinds[$tKey] = $tenant;
-                        }
-                        $tenantWhere = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
-                        $tenantSelect = ', _tenant';
-                    } else {
-                        $tenantWhere = ' AND _tenant = :_vfy_tenant';
-                        $verifyBinds[':_vfy_tenant'] = $this->getTenant();
-                    }
-                }
-
-                $verifySql = 'SELECT _uid' . $tenantSelect . ', ' . $this->quote($this->filter('_createdAt'))
+                $lookup = $this->buildUidTenantLookup($documents, '_vfy_');
+                $verifySql = 'SELECT _uid' . $lookup['tenantSelect'] . ', ' . $this->quote($this->filter('_createdAt'))
                     . ' FROM ' . $this->getSQLTable($name)
-                    . ' WHERE _uid IN (' . \implode(', ', $verifyPlaceholders) . ')'
-                    . $tenantWhere;
+                    . ' WHERE ' . $lookup['where'];
 
                 $verifyStmt = $this->getPDO()->prepare($verifySql);
-                foreach ($verifyBinds as $k => $v) {
+                foreach ($lookup['binds'] as $k => $v) {
                     $verifyStmt->bindValue($k, $v, $this->getPDOType($v));
                 }
                 $verifyStmt->execute();

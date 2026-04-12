@@ -601,17 +601,16 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        $createFn = fn () => $this->source->createDocuments(
-            $collection,
-            $documents,
-            $batchSize,
-            $onNext,
-            $onError,
+        $modified = $this->source->skipDuplicates(
+            fn () => $this->source->createDocuments(
+                $collection,
+                $documents,
+                $batchSize,
+                $onNext,
+                $onError,
+            ),
+            $this->skipDuplicates
         );
-
-        $modified = $this->skipDuplicates
-            ? $this->source->skipDuplicates($createFn)
-            : $createFn();
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -643,18 +642,16 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $destFn = fn () => $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->createDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                )
+            $this->destination->skipDuplicates(
+                fn () => $this->destination->withPreserveDates(
+                    fn () => $this->destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                ),
+                $this->skipDuplicates
             );
-
-            $this->skipDuplicates
-                ? $this->destination->skipDuplicates($destFn)
-                : $destFn();
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

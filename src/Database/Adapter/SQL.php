@@ -2506,6 +2506,15 @@ abstract class SQL extends Adapter
             }
         }
 
+        // No UIDs to match → return a clause that matches nothing without leaving dangling binds.
+        if (empty($placeholders)) {
+            return [
+                'where' => '1=0',
+                'tenantSelect' => $tenantSelect,
+                'binds' => [],
+            ];
+        }
+
         return [
             'where' => '_uid IN (' . \implode(', ', $placeholders) . ')' . $tenantFilter,
             'tenantSelect' => $tenantSelect,

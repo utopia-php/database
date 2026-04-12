@@ -1365,14 +1365,14 @@ class Postgres extends SQL
         return $document;
     }
 
-    protected function getInsertKeyword(bool $ignore): string
+    protected function getInsertKeyword(): string
     {
         return 'INSERT INTO';
     }
 
-    protected function getInsertSuffix(bool $ignore, string $table): string
+    protected function getInsertSuffix(string $table): string
     {
-        if (!$ignore) {
+        if (!$this->skipDuplicates) {
             return '';
         }
 
@@ -1381,9 +1381,9 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(bool $ignore): string
+    protected function getInsertPermissionsSuffix(): string
     {
-        if (!$ignore) {
+        if (!$this->skipDuplicates) {
             return '';
         }
 

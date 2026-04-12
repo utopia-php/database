@@ -33,6 +33,29 @@ abstract class Adapter
 
     protected bool $alterLocks = false;
 
+    protected bool $skipDuplicates = false;
+
+    /**
+     * Run a callback with skipDuplicates enabled.
+     * Duplicate key errors during createDocuments() will be silently skipped
+     * instead of thrown. Nestable — saves and restores previous state.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
     /**
      * @var array<string, mixed>
      */
@@ -729,13 +752,12 @@ abstract class Adapter
      *
      * @param Document $collection
      * @param array<Document> $documents
-     * @param bool $ignore If true, silently ignore duplicate documents instead of throwing
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(Document $collection, array $documents, bool $ignore = false): array;
+    abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
      * Update Document

@@ -34,9 +34,9 @@ use Utopia\Database\Operator;
  */
 class SQLite extends MariaDB
 {
-    protected function getInsertKeyword(bool $ignore): string
+    protected function getInsertKeyword(): string
     {
-        return $ignore ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
     }
 
     /**

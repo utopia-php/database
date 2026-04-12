@@ -5668,10 +5668,9 @@ class Database
         $modified = 0;
 
         $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
-        $ignore = $this->skipDuplicates;
 
         // Deduplicate intra-batch documents by ID (tenant-aware). First occurrence wins.
-        if ($ignore) {
+        if ($this->skipDuplicates) {
             $seenIds = [];
             $deduplicated = [];
             foreach ($documents as $document) {
@@ -5692,7 +5691,7 @@ class Database
 
         // Pre-fetch existing IDs to skip relationship writes for known duplicates
         $preExistingIds = [];
-        if ($ignore) {
+        if ($this->skipDuplicates) {
             if ($tenantPerDocument) {
                 $idsByTenant = [];
                 foreach ($documents as $doc) {
@@ -5739,7 +5738,7 @@ class Database
         /** @var array<string, array<string, mixed>> $deferredRelationships */
         $deferredRelationships = [];
         $relationships = [];
-        if ($ignore && $this->resolveRelationships) {
+        if ($this->skipDuplicates && $this->resolveRelationships) {
             $relationships = \array_filter($collection->getAttribute('attributes', []), fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP);
         }
 
@@ -5813,7 +5812,7 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            if ($ignore && !empty($preExistingIds)) {
+            if ($this->skipDuplicates && !empty($preExistingIds)) {
                 $chunk = \array_values(\array_filter($chunk, function (Document $doc) use ($preExistingIds, $tenantPerDocument) {
                     $key = $tenantPerDocument
                         ? $doc->getTenant() . ':' . $doc->getId()
@@ -5825,12 +5824,15 @@ class Database
                 }
             }
 
-            $batch = $this->withTransaction(function () use ($collection, $chunk, $ignore) {
-                return $this->adapter->createDocuments($collection, $chunk, $ignore);
+            $batch = $this->withTransaction(function () use ($collection, $chunk) {
+                $createFn = fn () => $this->adapter->createDocuments($collection, $chunk);
+                return $this->skipDuplicates
+                    ? $this->adapter->skipDuplicates($createFn)
+                    : $createFn();
             });
 
             // Create deferred relationships only for docs that were actually inserted
-            if ($ignore && $this->resolveRelationships && \count($deferredRelationships) > 0) {
+            if ($this->skipDuplicates && $this->resolveRelationships && \count($deferredRelationships) > 0) {
                 foreach ($batch as $insertedDoc) {
                     $deferKey = $tenantPerDocument
                         ? $insertedDoc->getTenant() . ':' . $insertedDoc->getId()

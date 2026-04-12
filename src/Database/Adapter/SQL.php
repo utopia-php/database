@@ -2471,14 +2471,14 @@ abstract class SQL extends Adapter
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
         // Pre-filter existing UIDs to prevent race-condition duplicates.
-        if ($ignore) {
+        if ($this->skipDuplicates) {
             $collectionId = $collection->getId();
             $name = $this->filter($collectionId);
             $uids = \array_filter(\array_map(fn (Document $doc) => $doc->getId(), $documents), fn ($v) => $v !== null);
@@ -2649,9 +2649,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
-                {$this->getInsertSuffix($ignore, $name)}
+                {$this->getInsertSuffix($name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2661,7 +2661,7 @@ abstract class SQL extends Adapter
             $this->execute($stmt);
 
             // Reconcile returned docs with actual inserts when a race condition skipped rows.
-            if ($ignore && $stmt->rowCount() < \count($documents)) {
+            if ($this->skipDuplicates && $stmt->rowCount() < \count($documents)) {
                 $expectedTimestamps = [];
                 foreach ($documents as $doc) {
                     $eKey = ($this->sharedTables && $this->tenantPerDocument)
@@ -2762,9 +2762,9 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    {$this->getInsertKeyword($ignore)} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
                     VALUES {$permissions}
-                    {$this->getInsertPermissionsSuffix($ignore)}
+                    {$this->getInsertPermissionsSuffix()}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -2787,16 +2787,16 @@ abstract class SQL extends Adapter
      * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
      * Override in adapter subclasses for DB-specific syntax.
      */
-    protected function getInsertKeyword(bool $ignore): string
+    protected function getInsertKeyword(): string
     {
-        return $ignore ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
     }
 
     /**
      * Returns a suffix appended after VALUES clause for duplicate handling.
      * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
      */
-    protected function getInsertSuffix(bool $ignore, string $table): string
+    protected function getInsertSuffix(string $table): string
     {
         return '';
     }
@@ -2805,7 +2805,7 @@ abstract class SQL extends Adapter
      * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
      * Override in adapter subclasses for DB-specific syntax.
      */
-    protected function getInsertPermissionsSuffix(bool $ignore): string
+    protected function getInsertPermissionsSuffix(): string
     {
         return '';
     }

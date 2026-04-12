@@ -43,7 +43,8 @@ class Pool extends Adapter
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
-            return $this->pinnedAdapter->{$method}(...$args);
+            $invoke = fn () => $this->pinnedAdapter->{$method}(...$args);
+            return $this->skipDuplicates ? $this->pinnedAdapter->skipDuplicates($invoke) : $invoke();
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
@@ -66,7 +67,8 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            return $adapter->{$method}(...$args);
+            $invoke = fn () => $adapter->{$method}(...$args);
+            return $this->skipDuplicates ? $adapter->skipDuplicates($invoke) : $invoke();
         });
     }
 
@@ -146,7 +148,8 @@ class Pool extends Adapter
 
             $this->pinnedAdapter = $adapter;
             try {
-                return $adapter->withTransaction($callback);
+                $invoke = fn () => $adapter->withTransaction($callback);
+                return $this->skipDuplicates ? $adapter->skipDuplicates($invoke) : $invoke();
             } finally {
                 $this->pinnedAdapter = null;
             }
@@ -268,7 +271,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

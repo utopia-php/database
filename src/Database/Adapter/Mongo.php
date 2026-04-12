@@ -1460,7 +1460,7 @@ class Mongo extends Adapter
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function createDocuments(Document $collection, array $documents, bool $ignore = false): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $options = $this->getTransactionOptions();
@@ -1488,7 +1488,7 @@ class Mongo extends Adapter
         }
 
         // Pre-filter duplicates within the session to avoid aborting the transaction.
-        if ($ignore && !empty($records)) {
+        if ($this->skipDuplicates && !empty($records)) {
             $existingKeys = [];
 
             try {

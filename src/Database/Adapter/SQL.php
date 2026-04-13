@@ -1030,6 +1030,33 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(): string
+    {
+        return '';
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -2609,33 +2636,6 @@ abstract class SQL extends Adapter
         }
 
         return $documents;
-    }
-
-    /**
-     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
-     * Override in adapter subclasses for DB-specific syntax.
-     */
-    protected function getInsertKeyword(): string
-    {
-        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
-    }
-
-    /**
-     * Returns a suffix appended after VALUES clause for duplicate handling.
-     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
-     */
-    protected function getInsertSuffix(string $table): string
-    {
-        return '';
-    }
-
-    /**
-     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
-     * Override in adapter subclasses for DB-specific syntax.
-     */
-    protected function getInsertPermissionsSuffix(): string
-    {
-        return '';
     }
 
     /**

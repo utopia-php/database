@@ -39,20 +39,13 @@ abstract class Adapter
      * Run a callback with skipDuplicates enabled.
      * Duplicate key errors during createDocuments() will be silently skipped
      * instead of thrown. Nestable — saves and restores previous state.
-     * Pass $enable = false to run the callback without toggling the flag
-     * (useful for conditional forwarding from wrappers like Pool/Mirror).
      *
      * @template T
      * @param callable(): T $callback
-     * @param bool $enable
      * @return T
      */
-    public function skipDuplicates(callable $callback, bool $enable = true): mixed
+    public function skipDuplicates(callable $callback): mixed
     {
-        if (!$enable) {
-            return $callback();
-        }
-
         $previous = $this->skipDuplicates;
         $this->skipDuplicates = true;
 

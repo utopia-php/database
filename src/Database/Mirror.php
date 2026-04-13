@@ -601,27 +601,39 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        // Forward only docs the source actually persisted, so skipDuplicates no-ops
-        // on the source don't inject would-be values into the destination.
-        /** @var array<Document> $insertedFromSource */
-        $insertedFromSource = [];
-        $captureOnNext = function (Document $doc) use (&$insertedFromSource, $onNext): void {
-            $insertedFromSource[] = $doc;
-            if ($onNext !== null) {
-                $onNext($doc);
-            }
-        };
+        // In skipDuplicates mode, forward only docs the source actually persisted
+        // so skipDuplicates no-ops don't inject would-be values into the destination.
+        // In normal mode, pass the input through directly (no capture overhead).
+        if ($this->skipDuplicates) {
+            /** @var array<Document> $docsToMirror */
+            $docsToMirror = [];
+            $captureOnNext = function (Document $doc) use (&$docsToMirror, $onNext): void {
+                $docsToMirror[] = $doc;
+                if ($onNext !== null) {
+                    $onNext($doc);
+                }
+            };
 
-        $modified = $this->source->skipDuplicates(
-            fn () => $this->source->createDocuments(
+            $modified = $this->source->skipDuplicates(
+                fn () => $this->source->createDocuments(
+                    $collection,
+                    $documents,
+                    $batchSize,
+                    $captureOnNext,
+                    $onError,
+                )
+            );
+        } else {
+            $modified = $this->source->createDocuments(
                 $collection,
                 $documents,
                 $batchSize,
-                $captureOnNext,
+                $onNext,
                 $onError,
-            ),
-            $this->skipDuplicates
-        );
+            );
+
+            $docsToMirror = $documents;
+        }
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -635,15 +647,14 @@ class Mirror extends Database
             return $modified;
         }
 
-        // Nothing for the source to mirror — early-out before touching destination.
-        if (empty($insertedFromSource)) {
+        if (empty($docsToMirror)) {
             return $modified;
         }
 
         try {
             $clones = [];
 
-            foreach ($insertedFromSource as $document) {
+            foreach ($docsToMirror as $document) {
                 $clone = clone $document;
 
                 foreach ($this->writeFilters as $filter) {
@@ -658,16 +669,19 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $this->destination->skipDuplicates(
-                fn () => $this->destination->withPreserveDates(
-                    fn () => $this->destination->createDocuments(
-                        $collection,
-                        $clones,
-                        $batchSize,
-                    )
-                ),
-                $this->skipDuplicates
+            $mirror = fn () => $this->destination->withPreserveDates(
+                fn () => $this->destination->createDocuments(
+                    $collection,
+                    $clones,
+                    $batchSize,
+                )
             );
+
+            if ($this->skipDuplicates) {
+                $this->destination->skipDuplicates($mirror);
+            } else {
+                $mirror();
+            }
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

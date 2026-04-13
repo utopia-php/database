@@ -43,10 +43,12 @@ class Pool extends Adapter
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
-            return $this->pinnedAdapter->skipDuplicates(
-                fn () => $this->pinnedAdapter->{$method}(...$args),
-                $this->skipDuplicates
-            );
+            if ($this->skipDuplicates) {
+                return $this->pinnedAdapter->skipDuplicates(
+                    fn () => $this->pinnedAdapter->{$method}(...$args)
+                );
+            }
+            return $this->pinnedAdapter->{$method}(...$args);
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
@@ -69,10 +71,12 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            return $adapter->skipDuplicates(
-                fn () => $adapter->{$method}(...$args),
-                $this->skipDuplicates
-            );
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
+            return $adapter->{$method}(...$args);
         });
     }
 
@@ -152,10 +156,12 @@ class Pool extends Adapter
 
             $this->pinnedAdapter = $adapter;
             try {
-                return $adapter->skipDuplicates(
-                    fn () => $adapter->withTransaction($callback),
-                    $this->skipDuplicates
-                );
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->withTransaction($callback)
+                    );
+                }
+                return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;
             }

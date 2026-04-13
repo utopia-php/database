@@ -601,12 +601,25 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        // Capture the docs the source actually persisted (rather than the input)
+        // so that, in skipDuplicates mode, we don't end up forwarding skipped
+        // duplicates to the destination — that would let the destination diverge
+        // from the source whenever the source no-ops a write.
+        /** @var array<Document> $insertedFromSource */
+        $insertedFromSource = [];
+        $captureOnNext = function (Document $doc) use (&$insertedFromSource, $onNext): void {
+            $insertedFromSource[] = $doc;
+            if ($onNext !== null) {
+                $onNext($doc);
+            }
+        };
+
         $modified = $this->source->skipDuplicates(
             fn () => $this->source->createDocuments(
                 $collection,
                 $documents,
                 $batchSize,
-                $onNext,
+                $captureOnNext,
                 $onError,
             ),
             $this->skipDuplicates
@@ -624,10 +637,15 @@ class Mirror extends Database
             return $modified;
         }
 
+        // Nothing for the source to mirror — early-out before touching destination.
+        if (empty($insertedFromSource)) {
+            return $modified;
+        }
+
         try {
             $clones = [];
 
-            foreach ($documents as $document) {
+            foreach ($insertedFromSource as $document) {
                 $clone = clone $document;
 
                 foreach ($this->writeFilters as $filter) {

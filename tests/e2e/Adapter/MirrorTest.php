@@ -313,6 +313,95 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
+    /**
+     * Regression: when skipDuplicates causes the source to no-op a write,
+     * the Mirror must NOT forward the input document to the destination.
+     * Otherwise the destination would diverge from the source — receiving
+     * the would-be value for a row the source kept unchanged.
+     */
+    public function testCreateDocumentsSkipDuplicatesDoesNotDivergeDestination(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'mirrorSkipDup';
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        // Seed the SOURCE only (bypass the mirror) with the row we want to
+        // skipDuplicates over later. Destination intentionally does NOT have it.
+        $database->getSource()->createDocument($collection, new Document([
+            '$id' => 'dup',
+            'name' => 'Original',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]));
+
+        // Sanity check setup
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
+        );
+
+        // Now do skipDuplicates createDocuments via the Mirror with a different
+        // value for 'dup' plus one new doc 'fresh'. The source must skip 'dup'
+        // (already exists) and insert 'fresh'. The Mirror must forward only
+        // 'fresh' to the destination — NOT 'dup' with the would-be value.
+        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'dup',
+                'name' => 'WouldBe',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'fresh',
+                'name' => 'Fresh',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]));
+
+        // Source: 'dup' untouched, 'fresh' inserted.
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+
+        // Destination: 'fresh' was forwarded, 'dup' was NOT (would-be value
+        // is the bug — destination should not have 'dup' at all because the
+        // source skipped it and the destination was never told to insert it).
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty(),
+            'Mirror must not forward source-skipped docs to the destination'
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";

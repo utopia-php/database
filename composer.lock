@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e7e2b8f8ff6424bb98827b11e25323e8",
+    "content-hash": "4f64a9be4913ee68ff7df2a8db313eac",
     "packages": [
         {
             "name": "brick/math",
@@ -1807,16 +1807,16 @@
         },
         {
             "name": "symfony/polyfill-php85",
-            "version": "v1.33.0",
+            "version": "v1.34.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/polyfill-php85.git",
-                "reference": "d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91"
+                "reference": "2c408a6bb0313e6001a83628dc5506100474254e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-php85/zipball/d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91",
-                "reference": "d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91",
+                "url": "https://api.github.com/repos/symfony/polyfill-php85/zipball/2c408a6bb0313e6001a83628dc5506100474254e",
+                "reference": "2c408a6bb0313e6001a83628dc5506100474254e",
                 "shasum": ""
             },
             "require": {
@@ -1863,7 +1863,7 @@
                 "shim"
             ],
             "support": {
-                "source": "https://github.com/symfony/polyfill-php85/tree/v1.33.0"
+                "source": "https://github.com/symfony/polyfill-php85/tree/v1.34.0"
             },
             "funding": [
                 {
@@ -1883,7 +1883,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2025-06-23T16:12:55+00:00"
+            "time": "2026-04-10T16:50:15+00:00"
         },
         {
             "name": "symfony/service-contracts",
@@ -2126,16 +2126,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "1.0.0",
+            "version": "dev-upsert-return-upserted-count",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d"
+                "reference": "25d0a8c02b1a39d3f4c5b2a9cbb76171319c7ba5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
-                "reference": "45bedf36c2c946ec7a0a3e59b9f12f772de0b01d",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/25d0a8c02b1a39d3f4c5b2a9cbb76171319c7ba5",
+                "reference": "25d0a8c02b1a39d3f4c5b2a9cbb76171319c7ba5",
                 "shasum": ""
             },
             "require": {
@@ -2157,7 +2157,25 @@
                     "Utopia\\Mongo\\": "src"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "autoload-dev": {
+                "psr-4": {
+                    "Utopia\\Tests\\": "tests"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "phpunit"
+                ],
+                "check": [
+                    "vendor/bin/phpstan analyse --memory-limit=1G src"
+                ],
+                "format": [
+                    "vendor/bin/pint"
+                ],
+                "lint": [
+                    "vendor/bin/pint --test"
+                ]
+            },
             "license": [
                 "MIT"
             ],
@@ -2180,10 +2198,10 @@
                 "utopia"
             ],
             "support": {
-                "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/1.0.0"
+                "source": "https://github.com/utopia-php/mongo/tree/upsert-return-upserted-count",
+                "issues": "https://github.com/utopia-php/mongo/issues"
             },
-            "time": "2026-02-12T05:54:06+00:00"
+            "time": "2026-04-13T01:32:46+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -4582,9 +4600,11 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": {},
-    "prefer-stable": false,
+    "minimum-stability": "dev",
+    "stability-flags": {
+        "utopia-php/mongo": 20
+    },
+    "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": ">=8.4",

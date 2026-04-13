@@ -877,23 +877,18 @@ class Database
      *
      * @param Document $collection
      * @param array<Document> $documents Source documents (only IDs are read)
-     * @param bool $idsOnly When true, uses Query::select(['$id']) for a lighter fetch
      * @return array<string, Document>
      */
-    private function fetchExistingByIds(Document $collection, array $documents, bool $idsOnly = false): array
+    private function fetchExistingByIds(Document $collection, array $documents): array
     {
         $collectionId = $collection->getId();
         $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
         $result = [];
 
-        $buildQueries = function (array $chunk) use ($idsOnly) {
-            $queries = [Query::equal('$id', $chunk)];
-            if ($idsOnly) {
-                $queries[] = Query::select(['$id']);
-            }
-            $queries[] = Query::limit(\count($chunk));
-            return $queries;
-        };
+        $buildQueries = fn (array $chunk) => [
+            Query::equal('$id', $chunk),
+            Query::limit(\count($chunk)),
+        ];
 
         if ($tenantPerDocument) {
             $idsByTenant = [];
@@ -5765,11 +5760,6 @@ class Database
             $documents = $deduplicated;
         }
 
-        // Pre-fetch existing IDs to skip relationship writes for known duplicates
-        $preExistingIds = $this->skipDuplicates
-            ? $this->fetchExistingByIds($collection, $documents, idsOnly: true)
-            : [];
-
         /** @var array<string, array<string, mixed>> $deferredRelationships */
         $deferredRelationships = [];
         $relationships = [];
@@ -5838,20 +5828,12 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            if ($this->skipDuplicates && !empty($preExistingIds)) {
-                $chunk = \array_values(\array_filter(
-                    $chunk,
-                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
-                ));
-                if (empty($chunk)) {
-                    continue;
-                }
-            }
-
-            $batch = $this->withTransaction(fn () => $this->adapter->skipDuplicates(
-                fn () => $this->adapter->createDocuments($collection, $chunk),
+            // skipDuplicates wraps withTransaction so the adapter's flag is set before
+            // Mongo::withTransaction decides whether to start a real transaction.
+            $batch = $this->adapter->skipDuplicates(
+                fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk)),
                 $this->skipDuplicates
-            ));
+            );
 
             // Create deferred relationships only for docs that were actually inserted
             if ($this->skipDuplicates && $this->resolveRelationships && \count($deferredRelationships) > 0) {

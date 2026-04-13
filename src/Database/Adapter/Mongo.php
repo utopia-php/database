@@ -121,6 +121,14 @@ class Mongo extends Adapter
             return $callback();
         }
 
+        // skipDuplicates uses upsert + $setOnInsert, whose filter query would hit
+        // WriteConflict (E112) under transaction snapshot isolation. The upsert is
+        // atomic on its own and relationship writes are deferred by the Database
+        // layer, so running outside a transaction is both safe and necessary.
+        if ($this->skipDuplicates) {
+            return $callback();
+        }
+
         try {
             $this->startTransaction();
             $result = $callback();
@@ -1450,42 +1458,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Find existing `_uid` values matching the given filters, fully walking the cursor.
-     *
-     * @param string $name
-     * @param array<string, mixed> $filters
-     * @param int $batchSize Hint: expected max result count — lets MongoDB return everything in one batch
-     * @return array<int, string>
-     *
-     * @throws MongoException
-     */
-    private function findExistingUids(string $name, array $filters, int $batchSize): array
-    {
-        $options = $this->getTransactionOptions([
-            'projection' => ['_uid' => 1],
-            'batchSize' => $batchSize,
-        ]);
-
-        $response = $this->client->find($name, $filters, $options);
-        $uids = [];
-
-        foreach ($response->cursor->firstBatch ?? [] as $doc) {
-            $uids[] = $doc->_uid;
-        }
-
-        $cursorId = $response->cursor->id ?? 0;
-        while ($cursorId != 0) {
-            $more = $this->client->getMore($cursorId, $name, $batchSize);
-            foreach ($more->cursor->nextBatch ?? [] as $doc) {
-                $uids[] = $doc->_uid;
-            }
-            $cursorId = $more->cursor->id ?? 0;
-        }
-
-        return $uids;
-    }
-
-    /**
      * Create Documents in batches
      *
      * @param Document $collection
@@ -1523,70 +1495,58 @@ class Mongo extends Adapter
             $records[] = $record;
         }
 
-        // Pre-filter duplicates within the session — MongoDB has no INSERT IGNORE,
-        // so sending a duplicate would abort the entire transaction.
-        if ($this->skipDuplicates && !empty($records)) {
-            $tenantPerDoc = $this->sharedTables && $this->tenantPerDocument;
-            $recordKey = fn (array $record): string => $tenantPerDoc
-                ? ($record['_tenant'] ?? $this->getTenant()) . ':' . ($record['_uid'] ?? '')
-                : ($record['_uid'] ?? '');
+        // skipDuplicates: use upsert + $setOnInsert so an already-present row (whether
+        // from a prior batch or a concurrent writer) becomes a silent no-op. MongoDB has
+        // no INSERT IGNORE, and plain insertMany aborts the transaction on any duplicate.
+        // Adapter::withTransaction opts out of a real transaction in this mode to avoid
+        // snapshot-isolation-induced WriteConflict errors from the upsert's filter query.
+        if ($this->skipDuplicates) {
+            if (empty($records)) {
+                return [];
+            }
 
-            $existingKeys = [];
+            $operations = [];
+            $opIndexToDocIndex = [];
+            foreach ($records as $i => $record) {
+                $filter = ['_uid' => $record['_uid'] ?? ''];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                }
+
+                // Filter fields cannot reappear in $setOnInsert — MongoDB rejects
+                // the update with a path-conflict error otherwise.
+                $setOnInsert = $record;
+                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+
+                if (empty($setOnInsert)) {
+                    continue;
+                }
+
+                $opIndexToDocIndex[\count($operations)] = $i;
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => ['$setOnInsert' => $setOnInsert],
+                ];
+            }
 
             try {
-                if ($tenantPerDoc) {
-                    $idsByTenant = [];
-                    foreach ($records as $record) {
-                        $uid = $record['_uid'] ?? '';
-                        if ($uid === '') {
-                            continue;
-                        }
-                        $tenant = $record['_tenant'] ?? $this->getTenant();
-                        $idsByTenant[$tenant][] = $uid;
-                    }
-
-                    foreach ($idsByTenant as $tenant => $tenantUids) {
-                        $tenantUids = \array_values(\array_unique($tenantUids));
-                        $filters = ['_uid' => ['$in' => $tenantUids], '_tenant' => $tenant];
-                        foreach ($this->findExistingUids($name, $filters, \count($tenantUids)) as $uid) {
-                            $existingKeys[$tenant . ':' . $uid] = true;
-                        }
-                    }
-                } else {
-                    $uids = \array_values(\array_unique(\array_filter(
-                        \array_map(fn ($r) => $r['_uid'] ?? null, $records),
-                        fn ($v) => $v !== null
-                    )));
-                    if (!empty($uids)) {
-                        $filters = ['_uid' => ['$in' => $uids]];
-                        if ($this->sharedTables) {
-                            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-                        }
-                        foreach ($this->findExistingUids($name, $filters, \count($uids)) as $uid) {
-                            $existingKeys[$uid] = true;
-                        }
-                    }
-                }
+                $result = $this->client->upsertWithCounts($name, $operations, $options);
             } catch (MongoException $e) {
                 throw $this->processException($e);
             }
 
-            if (!empty($existingKeys)) {
-                $filteredRecords = [];
-                $filteredDocuments = [];
-                foreach ($records as $i => $record) {
-                    if (!isset($existingKeys[$recordKey($record)])) {
-                        $filteredRecords[] = $record;
-                        $filteredDocuments[] = $documents[$i];
-                    }
+            // Map MongoDB's upserted entries back to the originating documents
+            // so the caller sees an exact "actually inserted" list — matched
+            // (pre-existing) docs are silently dropped.
+            $inserted = [];
+            foreach ($result['upserted'] as $entry) {
+                $docIndex = $opIndexToDocIndex[$entry['index']] ?? null;
+                if ($docIndex !== null) {
+                    $inserted[] = $documents[$docIndex];
                 }
-                $records = $filteredRecords;
-                $documents = $filteredDocuments;
             }
 
-            if (empty($records)) {
-                return [];
-            }
+            return $inserted;
         }
 
         try {

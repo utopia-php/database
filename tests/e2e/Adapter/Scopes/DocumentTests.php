@@ -7926,4 +7926,281 @@ trait DocumentTests
         $all = $database->find(__FUNCTION__);
         $this->assertCount(1, $all);
     }
+
+    public function testCreateDocumentsSkipDuplicatesEmptyBatch(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupEmpty';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $count = $database->skipDuplicates(fn () => $database->createDocuments($collection, []));
+
+        $this->assertSame(0, $count);
+        $this->assertCount(0, $database->find($collection));
+    }
+
+    public function testCreateDocumentsSkipDuplicatesNestedScope(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupNested';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $makeDoc = fn (string $id, string $name) => new Document([
+            '$id' => $id,
+            'name' => $name,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]);
+
+        // Seed an existing doc
+        $database->createDocuments($collection, [$makeDoc('seed', 'Seed')]);
+
+        // Nested scope — inner scope runs inside outer scope.
+        // After inner exits, outer state should still be "skip enabled".
+        // After outer exits, state should restore to "skip disabled".
+        $countOuter = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+            // Inner scope: add dup + new
+            $countInner = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+                return $database->createDocuments($collection, [
+                    $makeDoc('seed', 'Dup'),
+                    $makeDoc('innerNew', 'InnerNew'),
+                ]);
+            });
+            $this->assertSame(1, $countInner, 'Inner scope should insert only innerNew');
+
+            // Still inside outer scope — skip flag should still be on
+            return $database->createDocuments($collection, [
+                $makeDoc('seed', 'Dup2'),
+                $makeDoc('outerNew', 'OuterNew'),
+            ]);
+        });
+        $this->assertSame(1, $countOuter, 'Outer scope should insert only outerNew');
+
+        // After both scopes exit, skip flag is off again — a plain createDocuments
+        // call with a duplicate should throw.
+        $thrown = null;
+        try {
+            $database->createDocuments($collection, [$makeDoc('seed', 'ShouldThrow')]);
+        } catch (DuplicateException $e) {
+            $thrown = $e;
+        }
+        $this->assertNotNull($thrown, 'Plain createDocuments after nested scopes should throw on duplicate');
+
+        // Final state: seed + innerNew + outerNew
+        $all = $database->find($collection);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $all);
+        \sort($ids);
+        $this->assertSame(['innerNew', 'outerNew', 'seed'], $ids);
+    }
+
+    public function testCreateDocumentsSkipDuplicatesLargeBatch(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupLarge';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'idx', Database::VAR_INTEGER, 0, true);
+
+        // Seed 50 docs
+        $seed = [];
+        for ($i = 0; $i < 50; $i++) {
+            $seed[] = new Document([
+                '$id' => 'doc_' . $i,
+                'idx' => $i,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]);
+        }
+        $database->createDocuments($collection, $seed);
+
+        // Now call skipDuplicates with 300 docs: 50 existing (0-49) + 250 new (50-299).
+        // 300 > default INSERT_BATCH_SIZE, so this exercises the chunk loop.
+        $batch = [];
+        for ($i = 0; $i < 300; $i++) {
+            $batch[] = new Document([
+                '$id' => 'doc_' . $i,
+                'idx' => $i + 1000, // different value so we can detect if existing got overwritten
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]);
+        }
+
+        $emittedIds = [];
+        $count = $database->skipDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
+            return $database->createDocuments($collection, $batch, onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+
+        $this->assertSame(250, $count, '250 new docs should have been inserted');
+        $this->assertCount(250, $emittedIds);
+
+        // The 50 seed docs must still have their original idx values (not overwritten).
+        $seedDoc = $database->getDocument($collection, 'doc_25');
+        $this->assertSame(25, $seedDoc->getAttribute('idx'), 'Existing docs must not be overwritten');
+
+        // A newly-inserted doc should have the batch value.
+        $newDoc = $database->getDocument($collection, 'doc_100');
+        $this->assertSame(1100, $newDoc->getAttribute('idx'));
+
+        // Total count: 300
+        $total = $database->count($collection);
+        $this->assertSame(300, $total);
+    }
+
+    public function testCreateDocumentsSkipDuplicatesSecondCallSkipsAll(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupSecond';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $makeBatch = fn (string $name) => \array_map(
+            fn (string $id) => new Document([
+                '$id' => $id,
+                'name' => $name,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            ['a', 'b', 'c']
+        );
+
+        // First call — all new
+        $firstCount = $database->skipDuplicates(
+            fn () => $database->createDocuments($collection, $makeBatch('First'))
+        );
+        $this->assertSame(3, $firstCount);
+
+        // Second call — identical ids, all pre-existing, should be silently skipped
+        $emittedIds = [];
+        $secondCount = $database->skipDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
+            return $database->createDocuments($collection, $makeBatch('Second'), onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+        $this->assertSame(0, $secondCount);
+        $this->assertSame([], $emittedIds);
+
+        // All three should retain the First values
+        foreach (['a', 'b', 'c'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertSame('First', $doc->getAttribute('name'), "Doc {$id} should not have been overwritten");
+        }
+    }
+
+    public function testCreateDocumentsSkipDuplicatesRelationships(): void
+    {
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parent = 'skipDupParent';
+        $child = 'skipDupChild';
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection($parent);
+        $database->createCollection($child);
+        $database->createAttribute($parent, 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute($child, 'name', Database::VAR_STRING, 128, true);
+        $database->createRelationship(
+            collection: $parent,
+            relatedCollection: $child,
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+        );
+
+        // Seed: existing parent with one existing child.
+        $database->createDocument($parent, new Document([
+            '$id' => 'existingParent',
+            'name' => 'ExistingParent',
+            '$permissions' => $permissions,
+            'children' => [
+                new Document([
+                    '$id' => 'existingChild',
+                    'name' => 'ExistingChild',
+                    '$permissions' => $permissions,
+                ]),
+            ],
+        ]));
+
+        // Batch: existing parent (with children that should be IGNORED because the
+        // parent already exists) + new parent (with children that SHOULD be created).
+        $batch = [
+            new Document([
+                '$id' => 'existingParent',
+                'name' => 'ShouldNotOverwrite',
+                '$permissions' => $permissions,
+                'children' => [
+                    new Document([
+                        '$id' => 'orphanChild',
+                        'name' => 'OrphanChild',
+                        '$permissions' => $permissions,
+                    ]),
+                ],
+            ]),
+            new Document([
+                '$id' => 'newParent',
+                'name' => 'NewParent',
+                '$permissions' => $permissions,
+                'children' => [
+                    new Document([
+                        '$id' => 'newChild',
+                        'name' => 'NewChild',
+                        '$permissions' => $permissions,
+                    ]),
+                ],
+            ]),
+        ];
+
+        $count = $database->skipDuplicates(fn () => $database->createDocuments($parent, $batch));
+        $this->assertSame(1, $count, 'Only newParent should be inserted');
+
+        // existingParent untouched
+        $existing = $database->getDocument($parent, 'existingParent');
+        $this->assertFalse($existing->isEmpty());
+        $this->assertSame('ExistingParent', $existing->getAttribute('name'), 'Existing parent name must not be overwritten');
+        $existingChildren = $existing->getAttribute('children', []);
+        $this->assertCount(1, $existingChildren);
+        $this->assertSame('existingChild', $existingChildren[0]->getId());
+
+        // newParent and its child exist
+        $new = $database->getDocument($parent, 'newParent');
+        $this->assertFalse($new->isEmpty());
+        $this->assertSame('NewParent', $new->getAttribute('name'));
+        $newChildren = $new->getAttribute('children', []);
+        $this->assertCount(1, $newChildren);
+        $this->assertSame('newChild', $newChildren[0]->getId());
+
+        // Most important assertion: the child record from the ignored parent entry
+        // must NOT have been written — no orphan rows.
+        $orphan = $database->getDocument($child, 'orphanChild');
+        $this->assertTrue($orphan->isEmpty(), 'orphanChild must not exist (deferred relationship was correctly skipped for the ignored parent)');
+
+        // Child collection should contain exactly 2 docs: existingChild + newChild
+        $allChildren = $database->find($child);
+        $childIds = \array_map(fn (Document $d) => $d->getId(), $allChildren);
+        \sort($childIds);
+        $this->assertSame(['existingChild', 'newChild'], $childIds);
+    }
 }

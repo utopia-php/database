@@ -2462,8 +2462,8 @@ abstract class SQL extends Adapter
 
     /**
      * Build a `_uid IN (...) [AND _tenant ...]` WHERE clause (and matching binds)
-     * for a batch of documents. Used by skipDuplicates reconciliation to identify
-     * actually-inserted rows after an INSERT IGNORE / ON CONFLICT DO NOTHING.
+     * for a batch of documents. Used by the skipDuplicates pre-filter and the
+     * race-condition reconciliation path.
      *
      * @param array<Document> $documents
      * @param string $bindPrefix Prefix for bind keys; must differ between concurrent uses.
@@ -2537,6 +2537,51 @@ abstract class SQL extends Adapter
     {
         if (empty($documents)) {
             return $documents;
+        }
+
+        // Pre-filter existing UIDs to prevent race-condition duplicates.
+        if ($this->skipDuplicates) {
+            $name = $this->filter($collection->getId());
+            $lookup = $this->buildUidTenantLookup($documents, '_dup_');
+
+            if (!empty($lookup['binds'])) {
+                try {
+                    $sql = 'SELECT _uid' . $lookup['tenantSelect']
+                        . ' FROM ' . $this->getSQLTable($name)
+                        . ' WHERE ' . $lookup['where'];
+
+                    $stmt = $this->getPDO()->prepare($sql);
+                    foreach ($lookup['binds'] as $k => $v) {
+                        $stmt->bindValue($k, $v, $this->getPDOType($v));
+                    }
+                    $stmt->execute();
+                    $rows = $stmt->fetchAll();
+                    $stmt->closeCursor();
+
+                    if ($this->sharedTables && $this->tenantPerDocument) {
+                        $existingKeys = [];
+                        foreach ($rows as $row) {
+                            $existingKeys[$row['_tenant'] . ':' . $row['_uid']] = true;
+                        }
+                        $documents = \array_values(\array_filter(
+                            $documents,
+                            fn (Document $doc) => !isset($existingKeys[$doc->getTenant() . ':' . $doc->getId()])
+                        ));
+                    } else {
+                        $existingUids = \array_flip(\array_column($rows, '_uid'));
+                        $documents = \array_values(\array_filter(
+                            $documents,
+                            fn (Document $doc) => !isset($existingUids[$doc->getId()])
+                        ));
+                    }
+                } catch (PDOException $e) {
+                    throw $this->processException($e);
+                }
+            }
+
+            if (empty($documents)) {
+                return [];
+            }
         }
 
         $spatialAttributes = $this->getSpatialAttributes($collection);

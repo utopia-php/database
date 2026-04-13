@@ -2461,68 +2461,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Build a `_uid IN (...) [AND _tenant ...]` WHERE clause (and matching binds)
-     * for a batch of documents. Used by the skipDuplicates pre-filter and the
-     * race-condition reconciliation path.
-     *
-     * @param array<Document> $documents
-     * @param string $bindPrefix Prefix for bind keys; must differ between concurrent uses.
-     * @return array{where: string, tenantSelect: string, binds: array<string, mixed>}
-     */
-    private function buildUidTenantLookup(array $documents, string $bindPrefix): array
-    {
-        $binds = [];
-        $placeholders = [];
-        $uids = \array_values(\array_unique(\array_filter(
-            \array_map(fn (Document $doc) => $doc->getId(), $documents),
-            fn ($v) => $v !== null
-        )));
-        foreach ($uids as $i => $uid) {
-            $key = ':' . $bindPrefix . 'uid_' . $i;
-            $placeholders[] = $key;
-            $binds[$key] = $uid;
-        }
-
-        $tenantFilter = '';
-        $tenantSelect = '';
-        if ($this->sharedTables) {
-            if ($this->tenantPerDocument) {
-                $tenants = \array_values(\array_unique(\array_filter(
-                    \array_map(fn (Document $doc) => $doc->getTenant(), $documents),
-                    fn ($v) => $v !== null
-                )));
-                $tenantPlaceholders = [];
-                foreach ($tenants as $j => $tenant) {
-                    $tKey = ':' . $bindPrefix . 'tenant_' . $j;
-                    $tenantPlaceholders[] = $tKey;
-                    $binds[$tKey] = $tenant;
-                }
-                $tenantFilter = ' AND _tenant IN (' . \implode(', ', $tenantPlaceholders) . ')';
-                $tenantSelect = ', _tenant';
-            } else {
-                $tenantKey = ':' . $bindPrefix . 'tenant';
-                $tenantFilter = ' AND _tenant = ' . $tenantKey;
-                $binds[$tenantKey] = $this->getTenant();
-            }
-        }
-
-        // No UIDs to match → return a clause that matches nothing without leaving dangling binds.
-        if (empty($placeholders)) {
-            return [
-                'where' => '1=0',
-                'tenantSelect' => $tenantSelect,
-                'binds' => [],
-            ];
-        }
-
-        return [
-            'where' => '_uid IN (' . \implode(', ', $placeholders) . ')' . $tenantFilter,
-            'tenantSelect' => $tenantSelect,
-            'binds' => $binds,
-        ];
-    }
-
-    /**
      * Create Documents in batches
      *
      * @param Document $collection
@@ -2537,51 +2475,6 @@ abstract class SQL extends Adapter
     {
         if (empty($documents)) {
             return $documents;
-        }
-
-        // Pre-filter existing UIDs to prevent race-condition duplicates.
-        if ($this->skipDuplicates) {
-            $name = $this->filter($collection->getId());
-            $lookup = $this->buildUidTenantLookup($documents, '_dup_');
-
-            if (!empty($lookup['binds'])) {
-                try {
-                    $sql = 'SELECT _uid' . $lookup['tenantSelect']
-                        . ' FROM ' . $this->getSQLTable($name)
-                        . ' WHERE ' . $lookup['where'];
-
-                    $stmt = $this->getPDO()->prepare($sql);
-                    foreach ($lookup['binds'] as $k => $v) {
-                        $stmt->bindValue($k, $v, $this->getPDOType($v));
-                    }
-                    $stmt->execute();
-                    $rows = $stmt->fetchAll();
-                    $stmt->closeCursor();
-
-                    if ($this->sharedTables && $this->tenantPerDocument) {
-                        $existingKeys = [];
-                        foreach ($rows as $row) {
-                            $existingKeys[$row['_tenant'] . ':' . $row['_uid']] = true;
-                        }
-                        $documents = \array_values(\array_filter(
-                            $documents,
-                            fn (Document $doc) => !isset($existingKeys[$doc->getTenant() . ':' . $doc->getId()])
-                        ));
-                    } else {
-                        $existingUids = \array_flip(\array_column($rows, '_uid'));
-                        $documents = \array_values(\array_filter(
-                            $documents,
-                            fn (Document $doc) => !isset($existingUids[$doc->getId()])
-                        ));
-                    }
-                } catch (PDOException $e) {
-                    throw $this->processException($e);
-                }
-            }
-
-            if (empty($documents)) {
-                return [];
-            }
         }
 
         $spatialAttributes = $this->getSpatialAttributes($collection);
@@ -2691,72 +2584,6 @@ abstract class SQL extends Adapter
             }
 
             $this->execute($stmt);
-
-            // Reconcile returned docs with actual inserts when a race condition skipped rows.
-            if ($this->skipDuplicates && $stmt->rowCount() < \count($documents)) {
-                $expectedTimestamps = [];
-                foreach ($documents as $doc) {
-                    $eKey = ($this->sharedTables && $this->tenantPerDocument)
-                        ? $doc->getTenant() . ':' . $doc->getId()
-                        : $doc->getId();
-                    $expectedTimestamps[$eKey] = $doc->getCreatedAt();
-                }
-
-                $lookup = $this->buildUidTenantLookup($documents, '_vfy_');
-                $verifySql = 'SELECT _uid' . $lookup['tenantSelect'] . ', ' . $this->quote($this->filter('_createdAt'))
-                    . ' FROM ' . $this->getSQLTable($name)
-                    . ' WHERE ' . $lookup['where'];
-
-                $verifyStmt = $this->getPDO()->prepare($verifySql);
-                foreach ($lookup['binds'] as $k => $v) {
-                    $verifyStmt->bindValue($k, $v, $this->getPDOType($v));
-                }
-                $verifyStmt->execute();
-                $rows = $verifyStmt->fetchAll();
-                $verifyStmt->closeCursor();
-
-                // Normalise timestamps — Postgres omits .000 for round seconds.
-                $normalizeTimestamp = fn (?string $ts): string => $ts !== null
-                    ? (new \DateTime($ts))->format('Y-m-d H:i:s.v')
-                    : '';
-
-                $actualTimestamps = [];
-                foreach ($rows as $row) {
-                    $key = ($this->sharedTables && $this->tenantPerDocument)
-                        ? $row['_tenant'] . ':' . $row['_uid']
-                        : $row['_uid'];
-                    $actualTimestamps[$key] = $normalizeTimestamp($row['_createdAt']);
-                }
-
-                $insertedDocs = [];
-                foreach ($documents as $doc) {
-                    $key = ($this->sharedTables && $this->tenantPerDocument)
-                        ? $doc->getTenant() . ':' . $doc->getId()
-                        : $doc->getId();
-                    if (isset($actualTimestamps[$key]) && $actualTimestamps[$key] === $normalizeTimestamp($expectedTimestamps[$key] ?? null)) {
-                        $insertedDocs[] = $doc;
-                    }
-                }
-                $documents = $insertedDocs;
-
-                // Rebuild permissions for actually-inserted docs only
-                $permissions = [];
-                $bindValuesPermissions = [];
-                foreach ($documents as $index => $document) {
-                    foreach (Database::PERMISSIONS as $type) {
-                        foreach ($document->getPermissionsByType($type) as $permission) {
-                            $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
-                            $permission = \str_replace('"', '', $permission);
-                            $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
-                            $permissions[] = $permission;
-                            $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
-                            if ($this->sharedTables) {
-                                $bindValuesPermissions[":_tenant_{$index}"] = $document->getTenant();
-                            }
-                        }
-                    }
-                }
-            }
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';

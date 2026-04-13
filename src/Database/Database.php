@@ -877,18 +877,23 @@ class Database
      *
      * @param Document $collection
      * @param array<Document> $documents Source documents (only IDs are read)
+     * @param bool $idsOnly When true, uses Query::select(['$id']) for a lighter fetch
      * @return array<string, Document>
      */
-    private function fetchExistingByIds(Document $collection, array $documents): array
+    private function fetchExistingByIds(Document $collection, array $documents, bool $idsOnly = false): array
     {
         $collectionId = $collection->getId();
         $tenantPerDocument = $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument();
         $result = [];
 
-        $buildQueries = fn (array $chunk) => [
-            Query::equal('$id', $chunk),
-            Query::limit(\count($chunk)),
-        ];
+        $buildQueries = function (array $chunk) use ($idsOnly) {
+            $queries = [Query::equal('$id', $chunk)];
+            if ($idsOnly) {
+                $queries[] = Query::select(['$id']);
+            }
+            $queries[] = Query::limit(\count($chunk));
+            return $queries;
+        };
 
         if ($tenantPerDocument) {
             $idsByTenant = [];
@@ -5760,6 +5765,14 @@ class Database
             $documents = $deduplicated;
         }
 
+        // Pre-fetch existing IDs so chunks only carry docs that don't already exist.
+        // The adapter still applies INSERT IGNORE / ON CONFLICT DO NOTHING / upsert as a
+        // race-safety net, but the pre-filter handles the common case so the adapter can
+        // simply return its input as the inserted set without per-row reconciliation.
+        $preExistingIds = $this->skipDuplicates
+            ? $this->fetchExistingByIds($collection, $documents, idsOnly: true)
+            : [];
+
         /** @var array<string, array<string, mixed>> $deferredRelationships */
         $deferredRelationships = [];
         $relationships = [];
@@ -5828,6 +5841,16 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
+            if ($this->skipDuplicates && !empty($preExistingIds)) {
+                $chunk = \array_values(\array_filter(
+                    $chunk,
+                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
+                ));
+                if (empty($chunk)) {
+                    continue;
+                }
+            }
+
             // skipDuplicates wraps withTransaction so the adapter's flag is set before
             // Mongo::withTransaction decides whether to start a real transaction.
             $batch = $this->adapter->skipDuplicates(

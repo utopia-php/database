@@ -4,8 +4,7 @@
     "type": "library",
     "keywords": ["php","framework", "upf", "utopia", "database"],
     "license": "MIT",
-    "minimum-stability": "dev",
-    "prefer-stable": true,
+    "minimum-stability": "stable",
     "autoload": {
         "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
@@ -42,7 +41,7 @@
         "utopia-php/console": "0.1.*",
         "utopia-php/cache": "1.*",
         "utopia-php/pools": "1.*",
-        "utopia-php/mongo": "dev-upsert-return-upserted-count"
+        "utopia-php/mongo": "1.*"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",
@@ -60,12 +59,6 @@
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
 
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/utopia-php/mongo.git"
-        }
-    ],
     "config": {
         "allow-plugins": {
             "php-http/discovery": false,

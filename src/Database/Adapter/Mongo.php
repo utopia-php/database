@@ -1511,8 +1511,7 @@ class Mongo extends Adapter
             }
 
             $operations = [];
-            $opIndexToDocIndex = [];
-            foreach ($records as $i => $record) {
+            foreach ($records as $record) {
                 $filter = ['_uid' => $record['_uid'] ?? ''];
                 if ($this->sharedTables) {
                     $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
@@ -1527,7 +1526,6 @@ class Mongo extends Adapter
                     continue;
                 }
 
-                $opIndexToDocIndex[\count($operations)] = $i;
                 $operations[] = [
                     'filter' => $filter,
                     'update' => ['$setOnInsert' => $setOnInsert],
@@ -1535,23 +1533,12 @@ class Mongo extends Adapter
             }
 
             try {
-                $result = $this->client->upsertWithCounts($name, $operations, $options);
+                $this->client->upsert($name, $operations, $options);
             } catch (MongoException $e) {
                 throw $this->processException($e);
             }
 
-            // Map MongoDB's upserted entries back to the originating documents
-            // so the caller sees an exact "actually inserted" list — matched
-            // (pre-existing) docs are silently dropped.
-            $inserted = [];
-            foreach ($result['upserted'] as $entry) {
-                $docIndex = $opIndexToDocIndex[$entry['index']] ?? null;
-                if ($docIndex !== null) {
-                    $inserted[] = $documents[$docIndex];
-                }
-            }
-
-            return $inserted;
+            return $documents;
         }
 
         try {

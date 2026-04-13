@@ -5748,7 +5748,8 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        // Deduplicate intra-batch documents by ID (tenant-aware). First occurrence wins.
+        // skipDuplicates: dedupe intra-batch (first wins) then drop already-existing rows.
+        // Adapter INSERT IGNORE / ON CONFLICT / upsert is the race-safety net.
         if ($this->skipDuplicates) {
             $seenIds = [];
             $deduplicated = [];
@@ -5763,21 +5764,14 @@ class Database
                 $deduplicated[] = $document;
             }
             $documents = $deduplicated;
-        }
 
-        // Pre-fetch existing IDs so chunks only carry docs that don't already exist.
-        // The adapter still applies INSERT IGNORE / ON CONFLICT DO NOTHING / upsert as a
-        // race-safety net, but the pre-filter handles the common case so the adapter can
-        // simply return its input as the inserted set without per-row reconciliation.
-        $preExistingIds = $this->skipDuplicates
-            ? $this->fetchExistingByIds($collection, $documents, idsOnly: true)
-            : [];
-
-        /** @var array<string, array<string, mixed>> $deferredRelationships */
-        $deferredRelationships = [];
-        $relationships = [];
-        if ($this->skipDuplicates && $this->resolveRelationships) {
-            $relationships = \array_filter($collection->getAttribute('attributes', []), fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP);
+            $preExistingIds = $this->fetchExistingByIds($collection, $documents, idsOnly: true);
+            if (!empty($preExistingIds)) {
+                $documents = \array_values(\array_filter(
+                    $documents,
+                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
+                ));
+            }
         }
 
         foreach ($documents as $document) {
@@ -5819,21 +5813,7 @@ class Database
                 }
             }
 
-            if ($this->resolveRelationships && !empty($relationships)) {
-                // Defer relationship writes until after INSERT so we don't orphan records for duplicates.
-                $relationshipData = [];
-                foreach ($relationships as $rel) {
-                    $key = $rel['key'];
-                    $value = $document->getAttribute($key);
-                    if ($value !== null) {
-                        $relationshipData[$key] = $value;
-                    }
-                    $document->removeAttribute($key);
-                }
-                if (!empty($relationshipData)) {
-                    $deferredRelationships[$this->tenantKey($document)] = $relationshipData;
-                }
-            } elseif ($this->resolveRelationships) {
+            if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
@@ -5841,37 +5821,11 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            if ($this->skipDuplicates && !empty($preExistingIds)) {
-                $chunk = \array_values(\array_filter(
-                    $chunk,
-                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
-                ));
-                if (empty($chunk)) {
-                    continue;
-                }
-            }
-
-            // skipDuplicates wraps withTransaction so the adapter's flag is set before
-            // Mongo::withTransaction decides whether to start a real transaction.
+            // Set adapter flag before withTransaction so Mongo can opt out of a real txn.
             $batch = $this->adapter->skipDuplicates(
                 fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk)),
                 $this->skipDuplicates
             );
-
-            // Create deferred relationships only for docs that were actually inserted
-            if ($this->skipDuplicates && $this->resolveRelationships && \count($deferredRelationships) > 0) {
-                foreach ($batch as $insertedDoc) {
-                    $deferKey = $this->tenantKey($insertedDoc);
-                    if (\array_key_exists($deferKey, $deferredRelationships)) {
-                        $relDoc = clone $insertedDoc;
-                        foreach ($deferredRelationships[$deferKey] as $key => $value) {
-                            $relDoc->setAttribute($key, $value);
-                        }
-                        $this->silent(fn () => $this->createDocumentRelationships($collection, $relDoc));
-                        unset($deferredRelationships[$deferKey]);
-                    }
-                }
-            }
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 

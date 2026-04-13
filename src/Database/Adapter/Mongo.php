@@ -122,10 +122,7 @@ class Mongo extends Adapter
             return $callback();
         }
 
-        // skipDuplicates uses upsert + $setOnInsert, whose filter query would hit
-        // WriteConflict (E112) under transaction snapshot isolation. The upsert is
-        // atomic on its own and relationship writes are deferred by the Database
-        // layer, so running outside a transaction is both safe and necessary.
+        // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
         if ($this->skipDuplicates) {
             return $callback();
         }
@@ -1500,11 +1497,7 @@ class Mongo extends Adapter
             $records[] = $record;
         }
 
-        // skipDuplicates: use upsert + $setOnInsert so an already-present row (whether
-        // from a prior batch or a concurrent writer) becomes a silent no-op. MongoDB has
-        // no INSERT IGNORE, and plain insertMany aborts the transaction on any duplicate.
-        // Adapter::withTransaction opts out of a real transaction in this mode to avoid
-        // snapshot-isolation-induced WriteConflict errors from the upsert's filter query.
+        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
         if ($this->skipDuplicates) {
             if (empty($records)) {
                 return [];
@@ -1517,8 +1510,7 @@ class Mongo extends Adapter
                     $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
                 }
 
-                // Filter fields cannot reappear in $setOnInsert — MongoDB rejects
-                // the update with a path-conflict error otherwise.
+                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
                 $setOnInsert = $record;
                 unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
 

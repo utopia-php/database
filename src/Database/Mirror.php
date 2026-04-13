@@ -601,10 +601,8 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        // Capture the docs the source actually persisted (rather than the input)
-        // so that, in skipDuplicates mode, we don't end up forwarding skipped
-        // duplicates to the destination — that would let the destination diverge
-        // from the source whenever the source no-ops a write.
+        // Forward only docs the source actually persisted, so skipDuplicates no-ops
+        // on the source don't inject would-be values into the destination.
         /** @var array<Document> $insertedFromSource */
         $insertedFromSource = [];
         $captureOnNext = function (Document $doc) use (&$insertedFromSource, $onNext): void {

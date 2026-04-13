@@ -8958,10 +8958,15 @@ class Database
             }
 
             if (\is_null($value)) {
-                $value = $document->getAttribute($this->adapter->filter($key));
+                $filteredKey = $this->adapter->filter($key);
+                $value = $document->getAttribute($filteredKey);
 
                 if (!\is_null($value)) {
-                    $document->removeAttribute($this->adapter->filter($key));
+                    $document->removeAttribute($filteredKey);
+                } elseif ($filteredKey !== $key && $document->offsetExists($filteredKey)) {
+                    // SQL adapter column names use filter($key); remove the alias so the
+                    // in-memory document only exposes keys (e.g. "a.b") that match the schema.
+                    $document->removeAttribute($filteredKey);
                 }
             }
 

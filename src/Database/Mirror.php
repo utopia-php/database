@@ -601,16 +601,75 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        // In skipDuplicates mode, forward only docs the source actually persisted
-        // so skipDuplicates no-ops don't inject would-be values into the destination.
-        // In normal mode, pass the input through directly (no capture overhead).
+        // skipDuplicates: forward only what the source persisted; flush-on-fill keeps memory O($batchSize).
         if ($this->skipDuplicates) {
-            /** @var array<Document> $docsToMirror */
-            $docsToMirror = [];
-            $captureOnNext = function (Document $doc) use (&$docsToMirror, $onNext): void {
-                $docsToMirror[] = $doc;
+            // Resolve destination eligibility upfront so the flush closure can short-circuit.
+            $shouldMirror = !\in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+                && $this->destination !== null;
+
+            if ($shouldMirror) {
+                $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+                $shouldMirror = $upgrade !== null && $upgrade->getAttribute('status', '') === 'upgraded';
+            }
+
+            /** @var array<Document> $buffer */
+            $buffer = [];
+
+            $flushBuffer = function () use (&$buffer, $collection, $batchSize, $shouldMirror): void {
+                if (!$shouldMirror || empty($buffer)) {
+                    $buffer = [];
+                    return;
+                }
+
+                try {
+                    $clones = [];
+                    foreach ($buffer as $document) {
+                        $clone = clone $document;
+                        foreach ($this->writeFilters as $filter) {
+                            $clone = $filter->beforeCreateDocument(
+                                source: $this->source,
+                                destination: $this->destination,
+                                collectionId: $collection,
+                                document: $clone,
+                            );
+                        }
+                        $clones[] = $clone;
+                    }
+
+                    $this->destination->skipDuplicates(
+                        fn () => $this->destination->withPreserveDates(
+                            fn () => $this->destination->createDocuments(
+                                $collection,
+                                $clones,
+                                $batchSize,
+                            )
+                        )
+                    );
+
+                    foreach ($clones as $clone) {
+                        foreach ($this->writeFilters as $filter) {
+                            $filter->afterCreateDocument(
+                                source: $this->source,
+                                destination: $this->destination,
+                                collectionId: $collection,
+                                document: $clone,
+                            );
+                        }
+                    }
+                } catch (\Throwable $err) {
+                    $this->logError('createDocuments', $err);
+                }
+
+                $buffer = [];
+            };
+
+            $captureOnNext = function (Document $doc) use (&$buffer, &$flushBuffer, $batchSize, $onNext): void {
                 if ($onNext !== null) {
                     $onNext($doc);
+                }
+                $buffer[] = $doc;
+                if (\count($buffer) >= $batchSize) {
+                    $flushBuffer();
                 }
             };
 
@@ -623,17 +682,21 @@ class Mirror extends Database
                     $onError,
                 )
             );
-        } else {
-            $modified = $this->source->createDocuments(
-                $collection,
-                $documents,
-                $batchSize,
-                $onNext,
-                $onError,
-            );
 
-            $docsToMirror = $documents;
+            // Flush any tail (< $batchSize) that didn't trigger a flush during the source call.
+            $flushBuffer();
+
+            return $modified;
         }
+
+        // Non-skip path: pass through directly, forward original input to destination.
+        $modified = $this->source->createDocuments(
+            $collection,
+            $documents,
+            $batchSize,
+            $onNext,
+            $onError,
+        );
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -647,14 +710,10 @@ class Mirror extends Database
             return $modified;
         }
 
-        if (empty($docsToMirror)) {
-            return $modified;
-        }
-
         try {
             $clones = [];
 
-            foreach ($docsToMirror as $document) {
+            foreach ($documents as $document) {
                 $clone = clone $document;
 
                 foreach ($this->writeFilters as $filter) {
@@ -669,19 +728,13 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $mirror = fn () => $this->destination->withPreserveDates(
+            $this->destination->withPreserveDates(
                 fn () => $this->destination->createDocuments(
                     $collection,
                     $clones,
                     $batchSize,
                 )
             );
-
-            if ($this->skipDuplicates) {
-                $this->destination->skipDuplicates($mirror);
-            } else {
-                $mirror();
-            }
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

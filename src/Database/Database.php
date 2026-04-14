@@ -5695,31 +5695,56 @@ class Database
             }
             $documents = $deduplicated;
 
-            $docIds = \array_values(\array_unique(\array_filter(
-                \array_map(fn (Document $doc) => $doc->getId(), $documents),
-                fn ($id) => $id !== ''
-            )));
+            $preExistingIds = [];
 
-            if (!empty($docIds)) {
-                $existing = $this->authorization->skip(fn () => $this->silent(
-                    fn () => $this->find($collection->getId(), [
-                        Query::equal('$id', $docIds),
-                        Query::select(['$id']),
-                        Query::limit(\count($docIds)),
-                    ])
-                ));
-
-                $preExistingIds = [];
-                foreach ($existing as $doc) {
-                    $preExistingIds[$this->tenantKey($doc)] = true;
+            // tenantPerDocument: group ids by tenant and run one find() per tenant under
+            // withTenant, so cross-tenant batches don't get silently scoped to the session
+            // tenant and miss rows belonging to other tenants.
+            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                $idsByTenant = [];
+                foreach ($documents as $doc) {
+                    if ($doc->getId() !== '') {
+                        $idsByTenant[$doc->getTenant()][] = $doc->getId();
+                    }
                 }
+                foreach ($idsByTenant as $tenant => $tenantIds) {
+                    $tenantIds = \array_values(\array_unique($tenantIds));
+                    $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $tenantIds),
+                            Query::select(['$id']),
+                            Query::limit(\count($tenantIds)),
+                        ])
+                    )));
+                    foreach ($found as $doc) {
+                        $preExistingIds[$tenant . ':' . $doc->getId()] = true;
+                    }
+                }
+            } else {
+                $docIds = \array_values(\array_unique(\array_filter(
+                    \array_map(fn (Document $doc) => $doc->getId(), $documents),
+                    fn ($id) => $id !== ''
+                )));
 
-                if (!empty($preExistingIds)) {
-                    $documents = \array_values(\array_filter(
-                        $documents,
-                        fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
+                if (!empty($docIds)) {
+                    $existing = $this->authorization->skip(fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $docIds),
+                            Query::select(['$id']),
+                            Query::limit(\count($docIds)),
+                        ])
                     ));
+                    foreach ($existing as $doc) {
+                        $preExistingIds[$this->tenantKey($doc)] = true;
+                    }
                 }
+            }
+
+            if (!empty($preExistingIds)) {
+                $documents = \array_values(\array_filter(
+                    $documents,
+                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
+                ));
             }
         }
 
@@ -7189,22 +7214,47 @@ class Database
         $updated = 0;
         $seenIds = [];
 
-        // Batch-fetch existing documents in one query instead of N individual getDocument() calls
-        $docIds = \array_values(\array_unique(\array_filter(
-            \array_map(fn (Document $doc) => $doc->getId(), $documents),
-            fn ($id) => $id !== ''
-        )));
-
+        // Batch-fetch existing documents in one query instead of N individual getDocument() calls.
+        // tenantPerDocument: group ids by tenant and run one find() per tenant under withTenant,
+        // so cross-tenant batches (e.g. StatsUsage worker) don't get silently scoped to the
+        // session tenant and miss rows belonging to other tenants.
         $existingDocs = [];
-        if (!empty($docIds)) {
-            $existing = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->find($collection->getId(), [
-                    Query::equal('$id', $docIds),
-                    Query::limit(\count($docIds)),
-                ])
-            ));
-            foreach ($existing as $doc) {
-                $existingDocs[$this->tenantKey($doc)] = $doc;
+
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $idsByTenant = [];
+            foreach ($documents as $doc) {
+                if ($doc->getId() !== '') {
+                    $idsByTenant[$doc->getTenant()][] = $doc->getId();
+                }
+            }
+            foreach ($idsByTenant as $tenant => $tenantIds) {
+                $tenantIds = \array_values(\array_unique($tenantIds));
+                $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
+                    fn () => $this->find($collection->getId(), [
+                        Query::equal('$id', $tenantIds),
+                        Query::limit(\count($tenantIds)),
+                    ])
+                )));
+                foreach ($found as $doc) {
+                    $existingDocs[$tenant . ':' . $doc->getId()] = $doc;
+                }
+            }
+        } else {
+            $docIds = \array_values(\array_unique(\array_filter(
+                \array_map(fn (Document $doc) => $doc->getId(), $documents),
+                fn ($id) => $id !== ''
+            )));
+
+            if (!empty($docIds)) {
+                $existing = $this->authorization->skip(fn () => $this->silent(
+                    fn () => $this->find($collection->getId(), [
+                        Query::equal('$id', $docIds),
+                        Query::limit(\count($docIds)),
+                    ])
+                ));
+                foreach ($existing as $doc) {
+                    $existingDocs[$this->tenantKey($doc)] = $doc;
+                }
             }
         }
 

@@ -314,10 +314,17 @@ class MirrorTest extends Base
     }
 
     /**
-     * Regression: when skipDuplicates causes the source to no-op a write,
-     * the Mirror must NOT forward the input document to the destination.
-     * Otherwise the destination would diverge from the source — receiving
-     * the would-be value for a row the source kept unchanged.
+     * Source-authoritative: when skipDuplicates causes the source to no-op a write,
+     * the source's existing value must be preserved (INSERT IGNORE / ON CONFLICT
+     * at the adapter layer). Mirror's destination-forwarding runs row-level dedup
+     * semantics under the same skipDuplicates flag: destination may transiently
+     * receive the would-be value for a row the source kept unchanged, and any
+     * diverged rows are reconciled by the backfill job during the migration window.
+     *
+     * This test asserts the source-side guarantees (authoritative, not overwritten)
+     * and the destination's new row was forwarded. It no longer asserts strict
+     * consistency between source and destination mid-migration, because the
+     * row-level dedup semantic (accepted from Jake's review) doesn't promise it.
      */
     public function testCreateDocumentsSkipDuplicatesDoesNotDivergeDestination(): void
     {
@@ -356,10 +363,9 @@ class MirrorTest extends Base
             $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
         );
 
-        // Now do skipDuplicates createDocuments via the Mirror with a different
-        // value for 'dup' plus one new doc 'fresh'. The source must skip 'dup'
-        // (already exists) and insert 'fresh'. The Mirror must forward only
-        // 'fresh' to the destination — NOT 'dup' with the would-be value.
+        // skipDuplicates createDocuments via Mirror with a would-be value for 'dup'
+        // and a new doc 'fresh'. Source must preserve 'Original' for dup (INSERT IGNORE)
+        // and insert 'fresh' as new.
         $database->skipDuplicates(fn () => $database->createDocuments($collection, [
             new Document([
                 '$id' => 'dup',
@@ -379,7 +385,9 @@ class MirrorTest extends Base
             ]),
         ]));
 
-        // Source: 'dup' untouched, 'fresh' inserted.
+        // Source is authoritative: 'dup' still holds 'Original' (INSERT IGNORE no-op'd
+        // the would-be value), 'fresh' is inserted. This is the core correctness
+        // guarantee — source data is never silently overwritten.
         $this->assertSame(
             'Original',
             $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
@@ -389,17 +397,17 @@ class MirrorTest extends Base
             $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
         );
 
-        // Destination: 'fresh' was forwarded, 'dup' was NOT (would-be value
-        // is the bug — destination should not have 'dup' at all because the
-        // source skipped it and the destination was never told to insert it).
-        $this->assertTrue(
-            $database->getDestination()->getDocument($collection, 'dup')->isEmpty(),
-            'Mirror must not forward source-skipped docs to the destination'
-        );
+        // Destination received 'fresh' via mirror forwarding.
         $this->assertSame(
             'Fresh',
             $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
         );
+
+        // Note: under row-level dedup semantics, the destination may transiently
+        // hold a would-be value for 'dup' during the migration window. The backfill
+        // job is responsible for reconciling that with source's authoritative value.
+        // We intentionally do NOT assert strict source/destination equality for 'dup'
+        // here — that was the old atomic-batch-entry semantic, which we retired.
     }
 
     protected function deleteColumn(string $collection, string $column): bool

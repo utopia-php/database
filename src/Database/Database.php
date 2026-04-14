@@ -5678,8 +5678,10 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        // skipDuplicates: dedupe intra-batch (first wins) then drop already-existing rows.
-        // Adapter INSERT IGNORE / ON CONFLICT / upsert is the race-safety net.
+        // skipDuplicates: dedupe intra-batch (first wins) so the adapter's INSERT IGNORE /
+        // ON CONFLICT / upsert path handles duplicates atomically. relateDocuments is
+        // already idempotent per child $id, so pre-existing parents still let new children
+        // flow through correctly — which makes retry-safe imports work.
         if ($this->skipDuplicates) {
             $seenIds = [];
             $deduplicated = [];
@@ -5694,58 +5696,6 @@ class Database
                 $deduplicated[] = $document;
             }
             $documents = $deduplicated;
-
-            $preExistingIds = [];
-
-            // tenantPerDocument: group ids by tenant and run one find() per tenant under
-            // withTenant, so cross-tenant batches don't get silently scoped to the session
-            // tenant and miss rows belonging to other tenants.
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                $idsByTenant = [];
-                foreach ($documents as $doc) {
-                    if ($doc->getId() !== '') {
-                        $idsByTenant[$doc->getTenant()][] = $doc->getId();
-                    }
-                }
-                foreach ($idsByTenant as $tenant => $tenantIds) {
-                    $tenantIds = \array_values(\array_unique($tenantIds));
-                    $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
-                        fn () => $this->find($collection->getId(), [
-                            Query::equal('$id', $tenantIds),
-                            Query::select(['$id']),
-                            Query::limit(\count($tenantIds)),
-                        ])
-                    )));
-                    foreach ($found as $doc) {
-                        $preExistingIds[$tenant . ':' . $doc->getId()] = true;
-                    }
-                }
-            } else {
-                $docIds = \array_values(\array_unique(\array_filter(
-                    \array_map(fn (Document $doc) => $doc->getId(), $documents),
-                    fn ($id) => $id !== ''
-                )));
-
-                if (!empty($docIds)) {
-                    $existing = $this->authorization->skip(fn () => $this->silent(
-                        fn () => $this->find($collection->getId(), [
-                            Query::equal('$id', $docIds),
-                            Query::select(['$id']),
-                            Query::limit(\count($docIds)),
-                        ])
-                    ));
-                    foreach ($existing as $doc) {
-                        $preExistingIds[$this->tenantKey($doc)] = true;
-                    }
-                }
-            }
-
-            if (!empty($preExistingIds)) {
-                $documents = \array_values(\array_filter(
-                    $documents,
-                    fn (Document $doc) => !isset($preExistingIds[$this->tenantKey($doc)])
-                ));
-            }
         }
 
         foreach ($documents as $document) {

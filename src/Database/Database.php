@@ -5678,26 +5678,6 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        // skipDuplicates: dedupe intra-batch (first wins) so the adapter's INSERT IGNORE /
-        // ON CONFLICT / upsert path handles duplicates atomically. relateDocuments is
-        // already idempotent per child $id, so pre-existing parents still let new children
-        // flow through correctly — which makes retry-safe imports work.
-        if ($this->skipDuplicates) {
-            $seenIds = [];
-            $deduplicated = [];
-            foreach ($documents as $document) {
-                if ($document->getId() !== '') {
-                    $dedupeKey = $this->tenantKey($document);
-                    if (isset($seenIds[$dedupeKey])) {
-                        continue;
-                    }
-                    $seenIds[$dedupeKey] = true;
-                }
-                $deduplicated[] = $document;
-            }
-            $documents = $deduplicated;
-        }
-
         foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();

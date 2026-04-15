@@ -612,14 +612,16 @@ class Mirror extends Database
             ));
 
             if (!empty($ids)) {
-                $existing = $this->source->silent(
-                    fn () => $this->source->find($collection, [
-                        Query::equal('$id', $ids),
-                        Query::limit(\count($ids)),
-                    ])
-                );
-                foreach ($existing as $doc) {
-                    $existingIds[$doc->getId()] = true;
+                foreach (\array_chunk(\array_unique($ids), self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                    $existing = $this->source->silent(
+                        fn () => $this->source->find($collection, [
+                            Query::equal('$id', $chunk),
+                            Query::limit(PHP_INT_MAX),
+                        ])
+                    );
+                    foreach ($existing as $doc) {
+                        $existingIds[$doc->getId()] = true;
+                    }
                 }
             }
         }

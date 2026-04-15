@@ -7159,14 +7159,16 @@ class Database
             }
             foreach ($idsByTenant as $tenant => $tenantIds) {
                 $tenantIds = \array_values(\array_unique($tenantIds));
-                $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
-                    fn () => $this->find($collection->getId(), [
-                        Query::equal('$id', $tenantIds),
-                        Query::limit(\count($tenantIds)),
-                    ])
-                )));
-                foreach ($found as $doc) {
-                    $existingDocs[$tenant . ':' . $doc->getId()] = $doc;
+                foreach (\array_chunk($tenantIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                    $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit(PHP_INT_MAX),
+                        ])
+                    )));
+                    foreach ($found as $doc) {
+                        $existingDocs[$tenant . ':' . $doc->getId()] = $doc;
+                    }
                 }
             }
         } else {
@@ -7176,14 +7178,16 @@ class Database
             )));
 
             if (!empty($docIds)) {
-                $existing = $this->authorization->skip(fn () => $this->silent(
-                    fn () => $this->find($collection->getId(), [
-                        Query::equal('$id', $docIds),
-                        Query::limit(\count($docIds)),
-                    ])
-                ));
-                foreach ($existing as $doc) {
-                    $existingDocs[$this->tenantKey($doc)] = $doc;
+                foreach (\array_chunk($docIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                    $existing = $this->authorization->skip(fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit(PHP_INT_MAX),
+                        ])
+                    ));
+                    foreach ($existing as $doc) {
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
+                    }
                 }
             }
         }

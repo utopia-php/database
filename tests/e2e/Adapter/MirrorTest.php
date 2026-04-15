@@ -378,11 +378,11 @@ class MirrorTest extends Base
             $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
         );
 
-        // Destination must hold source's authoritative value, not the WouldBe input.
-        $this->assertSame(
-            'Original',
-            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
-            'Destination must reflect source authoritative state, not caller input'
+        // A source-skipped duplicate is a no-op and must not propagate to
+        // destination. Only the genuinely-inserted 'fresh' row should mirror.
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty(),
+            'Source-skipped doc must not be inserted into destination'
         );
         $this->assertSame(
             'Fresh',

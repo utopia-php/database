@@ -601,98 +601,34 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        // In skipDuplicates mode, identify which input ids already exist on source.
+        // These will be silently no-oped by the adapter's INSERT IGNORE and must
+        // not propagate to destination — a skipped duplicate is not a user write.
+        $existingIds = [];
         if ($this->skipDuplicates) {
-            $modified = $this->source->skipDuplicates(
-                fn () => $this->source->createDocuments(
-                    $collection,
-                    $documents,
-                    $batchSize,
-                    $onNext,
-                    $onError,
-                )
-            );
+            $ids = \array_values(\array_filter(
+                \array_map(fn (Document $d) => $d->getId(), $documents),
+                fn ($id) => $id !== ''
+            ));
 
-            if (
-                \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-                || $this->destination === null
-            ) {
-                return $modified;
-            }
-
-            $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
-            if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-                return $modified;
-            }
-
-            try {
-                // Adapter-level INSERT IGNORE does not report per-row outcomes, so
-                // forwarding the caller's input would diverge on source-skipped duplicates.
-                // Re-fetch source's authoritative state after its write settles and
-                // forward that — race-free regardless of concurrent writers.
-                $ids = \array_values(\array_filter(
-                    \array_map(fn (Document $d) => $d->getId(), $documents),
-                    fn ($id) => $id !== ''
-                ));
-
-                if (empty($ids)) {
-                    return $modified;
-                }
-
-                $authoritative = $this->source->silent(
+            if (!empty($ids)) {
+                $existing = $this->source->silent(
                     fn () => $this->source->find($collection, [
                         Query::equal('$id', $ids),
                         Query::limit(\count($ids)),
                     ])
                 );
-
-                $clones = [];
-                foreach ($authoritative as $document) {
-                    $clone = clone $document;
-                    foreach ($this->writeFilters as $filter) {
-                        $clone = $filter->beforeCreateDocument(
-                            source: $this->source,
-                            destination: $this->destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
-                    $clones[] = $clone;
+                foreach ($existing as $doc) {
+                    $existingIds[$doc->getId()] = true;
                 }
-
-                $this->destination->skipDuplicates(
-                    fn () => $this->destination->withPreserveDates(
-                        fn () => $this->destination->createDocuments(
-                            $collection,
-                            $clones,
-                            $batchSize,
-                        )
-                    )
-                );
-
-                foreach ($clones as $clone) {
-                    foreach ($this->writeFilters as $filter) {
-                        $filter->afterCreateDocument(
-                            source: $this->source,
-                            destination: $this->destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
-                }
-            } catch (\Throwable $err) {
-                $this->logError('createDocuments', $err);
             }
-
-            return $modified;
         }
 
-        $modified = $this->source->createDocuments(
-            $collection,
-            $documents,
-            $batchSize,
-            $onNext,
-            $onError,
-        );
+        $modified = $this->skipDuplicates
+            ? $this->source->skipDuplicates(
+                fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
+            )
+            : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -706,12 +642,23 @@ class Mirror extends Database
             return $modified;
         }
 
+        // In skipDuplicates mode, drop pre-existing ids so their no-op writes
+        // don't propagate. Non-skip mode forwards everything as before.
+        $toForward = $this->skipDuplicates
+            ? \array_values(\array_filter(
+                $documents,
+                fn (Document $d) => $d->getId() === '' || !isset($existingIds[$d->getId()])
+            ))
+            : $documents;
+
+        if (empty($toForward)) {
+            return $modified;
+        }
+
         try {
             $clones = [];
-
-            foreach ($documents as $document) {
+            foreach ($toForward as $document) {
                 $clone = clone $document;
-
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(
                         source: $this->source,
@@ -720,18 +667,25 @@ class Mirror extends Database
                         document: $clone,
                     );
                 }
-
                 $clones[] = $clone;
             }
 
-            $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->createDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                )
-            );
+            if ($this->skipDuplicates) {
+                $this->destination->skipDuplicates(
+                    fn () => $this->destination->withPreserveDates(
+                        fn () => $this->destination->createDocuments($collection, $clones, $batchSize)
+                    )
+                );
+            } else {
+                $this->destination->withPreserveDates(
+                    fn () =>
+                    $this->destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+            }
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

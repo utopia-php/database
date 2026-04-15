@@ -378,6 +378,12 @@ class MirrorTest extends Base
             $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
         );
 
+        // Destination must hold source's authoritative value, not the WouldBe input.
+        $this->assertSame(
+            'Original',
+            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            'Destination must reflect source authoritative state, not caller input'
+        );
         $this->assertSame(
             'Fresh',
             $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')

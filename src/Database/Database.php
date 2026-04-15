@@ -7159,7 +7159,7 @@ class Database
             }
             foreach ($idsByTenant as $tenant => $tenantIds) {
                 $tenantIds = \array_values(\array_unique($tenantIds));
-                foreach (\array_chunk($tenantIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $chunk) {
                     $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
                         fn () => $this->find($collection->getId(), [
                             Query::equal('$id', $chunk),
@@ -7178,7 +7178,7 @@ class Database
             )));
 
             if (!empty($docIds)) {
-                foreach (\array_chunk($docIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                foreach (\array_chunk($docIds, \max(1, $this->maxQueryValues)) as $chunk) {
                     $existing = $this->authorization->skip(fn () => $this->silent(
                         fn () => $this->find($collection->getId(), [
                             Query::equal('$id', $chunk),

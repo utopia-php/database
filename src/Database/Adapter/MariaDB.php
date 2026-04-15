@@ -1802,7 +1802,7 @@ class MariaDB extends SQL
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
 
-            return new UniqueException('Document already exists', $e->getCode(), $e);
+            return new UniqueException('Unique index violation', $e->getCode(), $e);
         }
 
         // Data is too big for column resize

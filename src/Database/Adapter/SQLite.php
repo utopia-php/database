@@ -1255,7 +1255,7 @@ class SQLite extends MariaDB
                 }
             }
 
-            return new UniqueException('Document already exists', $e->getCode(), $e);
+            return new UniqueException('Unique index violation', $e->getCode(), $e);
         }
 
         return $e;

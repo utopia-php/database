@@ -729,7 +729,8 @@ class Mirror extends Database
             }
 
             $this->destination->withPreserveDates(
-                fn () => $this->destination->createDocuments(
+                fn () =>
+                $this->destination->createDocuments(
                     $collection,
                     $clones,
                     $batchSize,

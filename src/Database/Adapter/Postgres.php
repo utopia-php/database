@@ -1365,35 +1365,6 @@ class Postgres extends SQL
         return $document;
     }
 
-    protected function getInsertKeyword(): string
-    {
-        return 'INSERT INTO';
-    }
-
-    protected function getInsertSuffix(string $table): string
-    {
-        if (!$this->skipDuplicates) {
-            return '';
-        }
-
-        $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
-    }
-
-    protected function getInsertPermissionsSuffix(): string
-    {
-        if (!$this->skipDuplicates) {
-            return '';
-        }
-
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
-    }
-
     /**
      * @param string $tableName
      * @param string $columns
@@ -2377,6 +2348,35 @@ class Postgres extends SQL
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
         return false;
+    }
+
+    protected function getInsertKeyword(): string
+    {
+        return 'INSERT INTO';
+    }
+
+    protected function getInsertSuffix(string $table): string
+    {
+        if (!$this->skipDuplicates) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
+    protected function getInsertPermissionsSuffix(): string
+    {
+        if (!$this->skipDuplicates) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables
+            ? '("_type", "_permission", "_document", "_tenant")'
+            : '("_type", "_permission", "_document")';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
     public function decodePoint(string $wkb): array

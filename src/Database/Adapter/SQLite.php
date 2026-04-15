@@ -34,11 +34,6 @@ use Utopia\Database\Operator;
  */
 class SQLite extends MariaDB
 {
-    protected function getInsertKeyword(): string
-    {
-        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
-    }
-
     /**
      * @inheritDoc
      */
@@ -1940,5 +1935,10 @@ class SQLite extends MariaDB
     public function getSupportForTTLIndexes(): bool
     {
         return false;
+    }
+
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
     }
 }

@@ -313,6 +313,83 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
+    public function testCreateDocumentsSkipDuplicatesDoesNotDivergeDestination(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'mirrorSkipDup';
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        // Seed the SOURCE only (bypass the mirror) with the row we want to
+        // skipDuplicates over later. Destination intentionally does NOT have it.
+        $database->getSource()->createDocument($collection, new Document([
+            '$id' => 'dup',
+            'name' => 'Original',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]));
+
+        // Sanity check setup
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
+        );
+
+        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'dup',
+                'name' => 'WouldBe',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'fresh',
+                'name' => 'Fresh',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]));
+
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+
+        // Destination must hold source's authoritative value, not the WouldBe input.
+        $this->assertSame(
+            'Original',
+            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            'Destination must reflect source authoritative state, not caller input'
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";

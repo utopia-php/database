@@ -2610,6 +2610,9 @@ class Database
                 if ($defaultType !== 'integer' && $defaultType !== 'string') {
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
+                if ($defaultType === 'string' && !BigIntValidator::isIntegerString($default)) {
+                    throw new DatabaseException('Default value ' . $default . ' is not a valid integer string for type bigint');
+                }
                 break;
             case self::VAR_DATETIME:
                 if ($defaultType !== self::VAR_STRING) {

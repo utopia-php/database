@@ -338,6 +338,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getLimitForAttributes(): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

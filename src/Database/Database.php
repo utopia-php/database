@@ -6458,8 +6458,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                null, // No old document available in bulk updates
-                $this->adapter->getSupportForUnsignedBigInt()
+                supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                currentDocument: null // No old document available in bulk updates
             );
 
             if (!$validator->isValid($updates)) {

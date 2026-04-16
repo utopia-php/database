@@ -103,6 +103,166 @@ trait DocumentTests
         }
     }
 
+    public function testCreateDocumentWithBigIntType(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'bigint_signed', Database::VAR_BIGINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'bigint_unsigned', Database::VAR_BIGINT, 0, true, signed: false));
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'bigint-type-doc',
+            '$permissions' => [Permission::read(Role::any())],
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
+        $this->assertIsInt($document->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
+
+        $results = $database->find(__FUNCTION__, [
+            Query::equal('bigint_unsigned', [Database::MAX_BIG_INT])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('bigint-type-doc', $results[0]->getId());
+    }
+
+    public function testBigIntScenariosWithFiltering(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUnsignedBigInt()) {
+            $this->markTestSkipped('Adapter does not support unsigned bigint');
+        }
+
+        $collection = 'bigint_scenarios_filters';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'signed_bigint', Database::VAR_BIGINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'unsigned_bigint', Database::VAR_BIGINT, 0, true, signed: false));
+
+        $collectionDoc = $database->getCollection($collection);
+        $this->assertEquals($collection, $collectionDoc->getId());
+        $attributes = $collectionDoc->getAttribute('attributes', []);
+        $signedAttr = null;
+        $unsignedAttr = null;
+        foreach ($attributes as $attribute) {
+            if (($attribute->getAttribute('$id') ?? '') === 'signed_bigint') {
+                $signedAttr = $attribute;
+            }
+            if (($attribute->getAttribute('$id') ?? '') === 'unsigned_bigint') {
+                $unsignedAttr = $attribute;
+            }
+        }
+
+        $this->assertNotNull($signedAttr);
+        $this->assertNotNull($unsignedAttr);
+        $this->assertSame(0, $signedAttr->getAttribute('size'));
+        $this->assertSame(0, $unsignedAttr->getAttribute('size'));
+
+        // "Out of regular int limit" (32-bit) but valid bigint should still normalize to PHP int.
+        $beyond32Bit = '2147483648';
+        $signedMax = (string)\PHP_INT_MAX;
+        $signedMin = (string)\PHP_INT_MIN;
+        $unsignedValue = '18446744073709551615';
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'bigint-scenarios-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'signed_bigint' => $beyond32Bit,
+            'unsigned_bigint' => $unsignedValue,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$beyond32Bit, $document->getAttribute('signed_bigint'));
+
+        // Compare by string representation to stay adapter-agnostic (int/string return type differs).
+        $this->assertEquals($unsignedValue, (string)$document->getAttribute('unsigned_bigint'));
+        $this->assertTrue(\is_string($document->getAttribute('unsigned_bigint')));
+
+        // Read path: fetch document and ensure unsigned bigint round-trips unchanged.
+        $fetchedDocument = $database->getDocument($collection, $document->getId());
+        $this->assertEquals($unsignedValue, (string)$fetchedDocument->getAttribute('unsigned_bigint'));
+
+        // Update path should apply the same normalization for signed bigint numeric strings.
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMax,
+        ]));
+        $this->assertIsInt($updated->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMax, $updated->getAttribute('signed_bigint'));
+
+        // Filtering tests: both int and numeric-string filters should match bigint fields.
+        $resultIntFilter = $database->find($collection, [
+            Query::equal('signed_bigint', [(int)$signedMax]),
+        ]);
+        $this->assertCount(1, $resultIntFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultIntFilter[0]->getId());
+
+        $resultStringFilter = $database->find($collection, [
+            Query::equal('signed_bigint', [$signedMax]),
+        ]);
+        $this->assertCount(1, $resultStringFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultStringFilter[0]->getId());
+
+        $resultUnsignedFilter = $database->find($collection, [
+            Query::equal('unsigned_bigint', [$unsignedValue]),
+        ]);
+        $this->assertCount(1, $resultUnsignedFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultUnsignedFilter[0]->getId());
+
+        // Lower signed boundary as numeric-string should also normalize to int.
+        $updatedMin = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMin,
+        ]));
+        $this->assertIsInt($updatedMin->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMin, $updatedMin->getAttribute('signed_bigint'));
+    }
+
+    public function testWithSingedBigInt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'signed_bigint_only';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'signed_bigint', Database::VAR_BIGINT, 0, true));
+
+        $signedMin = \PHP_INT_MIN;
+        $signedMax = \PHP_INT_MAX;
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'signed-bigint-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'signed_bigint' => $signedMax,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMax, $document->getAttribute('signed_bigint'));
+
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMin,
+        ]));
+
+        $this->assertIsInt($updated->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMin, $updated->getAttribute('signed_bigint'));
+
+        $results = $database->find($collection, [
+            Query::equal('signed_bigint', [$signedMin]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('signed-bigint-doc', $results[0]->getId());
+    }
+
     public function testCreateDocument(): Document
     {
         /** @var Database $database */
@@ -1465,6 +1625,45 @@ trait DocumentTests
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
 
         return $document;
+    }
+
+    public function testCreateUpdateBigIntAndIncrementDecrement(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'bigint_update_increase_decrease';
+        $database->createCollection($collection);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'inc', Database::VAR_BIGINT, 8, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'dec', Database::VAR_BIGINT, 8, true));
+
+        $document = $database->createDocument($collection, new Document([
+            'inc' => 10,
+            'dec' => 10,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
+        ]));
+
+        $this->assertIsInt($document->getAttribute('inc'));
+        $this->assertEquals(10, $document->getAttribute('inc'));
+
+        // Verify regular update works for bigint attributes
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'inc' => 20,
+        ]));
+        $this->assertEquals(20, $updated->getAttribute('inc'));
+
+        // Verify atomic increment/decrement supports bigint schema attributes
+        $afterInc = $database->increaseDocumentAttribute($collection, $document->getId(), 'inc', 5, 30);
+        $this->assertEquals(25, $afterInc->getAttribute('inc'));
+
+        $afterDec = $database->decreaseDocumentAttribute($collection, $document->getId(), 'dec', 3, 7);
+        $this->assertEquals(7, $afterDec->getAttribute('dec'));
     }
 
     /**
@@ -7855,4 +8054,5 @@ trait DocumentTests
     //        }
     //        $database->deleteCollection($collectionName);
     //    }
+
 }

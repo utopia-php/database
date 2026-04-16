@@ -897,6 +897,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
+    /**
      * Get maximum column limit.
      * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
      * Can be inherited by MySQL since we utilize the InnoDB engine
@@ -1162,6 +1172,10 @@ abstract class SQL extends Adapter
                     } else {
                         $total += 4; // INT 4 bytes
                     }
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $total += 8; //  BIGINT 8 bytes
                     break;
 
                 case Database::VAR_FLOAT:

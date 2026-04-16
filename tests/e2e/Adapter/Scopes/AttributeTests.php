@@ -2221,6 +2221,99 @@ trait AttributeTests
         }
     }
 
+
+    public function testCreateAttributesBigIntIgnoresSizeMetadata(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'bigint_ignores_size_limit';
+        $database->createCollection($collectionName);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_BIGINT,
+            'size' => 9999,
+            'required' => false
+        ]];
+
+        $result = $database->createAttributes($collectionName, $attributes);
+        $this->assertTrue($result);
+
+        $collection = $database->getCollection($collectionName);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attrs);
+        $this->assertEquals('foo', $attrs[0]['$id']);
+        $this->assertEquals(0, $attrs[0]['size']);
+
+        $database->updateAttribute($collectionName, 'foo', size: 1);
+        $collection = $database->getCollection($collectionName);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertEquals(0, $attrs[0]['size']);
+    }
+
+    public function testCreateAttributesBigIntValidationSignedUnsignedAndMetadata(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collectionName = 'bigint_attr_validation';
+        $database->createCollection($collectionName);
+
+        $this->assertTrue($database->createAttribute(
+            $collectionName,
+            'signed_bigint',
+            Database::VAR_BIGINT,
+            0,
+            false,
+            signed: true
+        ));
+        $this->assertTrue($database->createAttribute(
+            $collectionName,
+            'unsigned_bigint',
+            Database::VAR_BIGINT,
+            0,
+            false,
+            signed: false
+        ));
+
+        $collection = $database->getCollection($collectionName);
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $signedAttribute = null;
+        $unsignedAttribute = null;
+        foreach ($attributes as $attribute) {
+            if (($attribute['$id'] ?? '') === 'signed_bigint') {
+                $signedAttribute = $attribute;
+            }
+            if (($attribute['$id'] ?? '') === 'unsigned_bigint') {
+                $unsignedAttribute = $attribute;
+            }
+        }
+
+        $this->assertNotNull($signedAttribute);
+        $this->assertNotNull($unsignedAttribute);
+        $this->assertTrue($signedAttribute['signed']);
+        $this->assertFalse($unsignedAttribute['signed']);
+        $this->assertEquals(0, $signedAttribute['size']);
+        $this->assertEquals(0, $unsignedAttribute['size']);
+
+        $largeUnsignedAttribute = [[
+            '$id' => 'unsigned_bigint_large',
+            'type' => Database::VAR_BIGINT,
+            'size' => 0,
+            'required' => false,
+            'signed' => false,
+            'default' => '18446744073709551615'
+        ]];
+        $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
+    }
+
     public function testCreateAttributesSuccessMultiple(): void
     {
         /** @var Database $database */

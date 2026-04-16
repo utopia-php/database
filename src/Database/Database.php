@@ -5607,8 +5607,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt(),
-                null
+                supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                currentDocument: null
             );
             if (!$structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -5717,8 +5717,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $this->adapter->getSupportForUnsignedBigInt(),
-                    null
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: null
                 );
                 if (!$validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
@@ -6290,8 +6290,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $this->adapter->getSupportForUnsignedBigInt(),
-                    $old
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: $old
                 );
                 if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
@@ -7305,8 +7305,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $this->adapter->getSupportForUnsignedBigInt(),
-                    $old->isEmpty() ? null : $old
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: $old->isEmpty() ? null : $old
                 );
 
                 if (!$validator->isValid($document)) {

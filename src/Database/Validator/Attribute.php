@@ -55,12 +55,12 @@ class Attribute extends Validator
         protected bool $supportForVectors = false,
         protected bool $supportForSpatialAttributes = false,
         protected bool $supportForObject = false,
+        protected bool $supportUnsignedBigInt = false,
         protected mixed $attributeCountCallback = null,
         protected mixed $attributeWidthCallback = null,
         protected mixed $filterCallback = null,
         protected bool $isMigrating = false,
         protected bool $sharedTables = false,
-        protected bool $supportUnsignedBigInt = false,
     ) {
         // Keep backwards compatibility for existing validator construction sites.
         if ($this->maxBigIntLength === 0) {

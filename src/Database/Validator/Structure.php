@@ -109,8 +109,8 @@ class Structure extends Validator
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
-        private readonly ?Document $currentDocument = null,
-        private readonly bool $supportUnsignedBigInt = true
+        private readonly bool $supportUnsignedBigInt = true,
+        private readonly ?Document $currentDocument = null
     ) {
     }
 
@@ -340,7 +340,7 @@ class Structure extends Validator
             // BIGINT accepts both PHP int and numeric strings.
             // If the numeric string is within PHP's int range, normalize it to an int
             // so downstream code gets a numeric value without precision loss.
-            if ($type === Database::VAR_BIGINT && \is_string($value) && $this->isBigIntStringWithinPhpIntRange($value, $signed)) {
+            if ($type === Database::VAR_BIGINT && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
                 $normalized = (int)$value;
                 $document->setAttribute($key, $normalized);
                 $value = $normalized;
@@ -459,11 +459,6 @@ class Structure extends Validator
         }
 
         return true;
-    }
-
-    public function isBigIntStringWithinPhpIntRange(string $value, bool $signed): bool
-    {
-        return BigInt::fitsPhpInt($value, $signed);
     }
 
     /**

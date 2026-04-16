@@ -2222,7 +2222,7 @@ trait AttributeTests
     }
 
 
-    public function testCreateAttributesBigIntIgnoresSizeLimit(): void
+    public function testCreateAttributesBigIntIgnoresSizeMetadata(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -2235,13 +2235,10 @@ trait AttributeTests
         $collectionName = 'bigint_ignores_size_limit';
         $database->createCollection($collectionName);
 
-        $limit = $database->getAdapter()->getLimitForBigInt() / 2;
-        $size = (int)$limit + 1;
-
         $attributes = [[
             '$id' => 'foo',
             'type' => Database::VAR_BIGINT,
-            'size' => $size,
+            'size' => 9999,
             'required' => false
         ]];
 
@@ -2252,10 +2249,10 @@ trait AttributeTests
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(1, $attrs);
         $this->assertEquals('foo', $attrs[0]['$id']);
-        $this->assertEquals($size, $attrs[0]['size']);
+        $this->assertEquals(0, $attrs[0]['size']);
     }
 
-    public function testCreateAttributesBigIntValidationSignedUnsignedAndSizeMetadata(): void
+    public function testCreateAttributesBigIntValidationSignedUnsignedAndMetadata(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -2300,18 +2297,6 @@ trait AttributeTests
         $this->assertFalse($unsignedAttribute['signed']);
         $this->assertEquals(0, $signedAttribute['size']);
         $this->assertEquals(0, $unsignedAttribute['size']);
-
-        // Signed overflow check (only when we can build an int beyond adapter signed max).
-        $signedLimit = (int)$database->getAdapter()->getLimitForBigInt();
-        if ($signedLimit < \PHP_INT_MAX) {
-            try {
-                $database->updateAttribute($collectionName, 'signed_bigint', size: $signedLimit + 1);
-                $this->fail('Expected DatabaseException for signed bigint size overflow');
-            } catch (\Throwable $e) {
-                $this->assertInstanceOf(DatabaseException::class, $e);
-                $this->assertStringContainsString('Max size allowed for bigint', $e->getMessage());
-            }
-        }
 
         $largeUnsignedAttribute = [[
             '$id' => 'unsigned_bigint_large',

@@ -32,7 +32,7 @@ class Filter extends Base
         private readonly int $maxValuesCount = 5000,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        private readonly bool $supportForAttributes = true,
+        private bool $supportForAttributes = true,
         private readonly bool $supportUnsignedBigInt = true
     ) {
         foreach ($attributes as $attribute) {

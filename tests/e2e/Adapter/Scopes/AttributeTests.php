@@ -2250,6 +2250,11 @@ trait AttributeTests
         $this->assertCount(1, $attrs);
         $this->assertEquals('foo', $attrs[0]['$id']);
         $this->assertEquals(0, $attrs[0]['size']);
+
+        $database->updateAttribute($collectionName, 'foo', size: 1);
+        $collection = $database->getCollection($collectionName);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertEquals(0, $attrs[0]['size']);
     }
 
     public function testCreateAttributesBigIntValidationSignedUnsignedAndMetadata(): void

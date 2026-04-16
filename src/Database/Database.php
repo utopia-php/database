@@ -2122,9 +2122,7 @@ class Database
             $filters = array_unique($filters);
         }
 
-        if ($type === self::VAR_BIGINT) {
-            $size = 0;
-        }
+        $size = $this->normalizeBigIntSize($type, $size);
 
         $existsInSchema = false;
 
@@ -2319,9 +2317,7 @@ class Database
                 $attribute['filters'] = [];
             }
 
-            if ($attribute['type'] === self::VAR_BIGINT) {
-                $attribute['size'] = 0;
-            }
+            $attribute['size'] = $this->normalizeBigIntSize($attribute['type'], $attribute['size']);
 
             $existsInSchema = false;
 
@@ -2464,6 +2460,14 @@ class Database
     }
 
     /**
+     * Normalize BIGINT size metadata.
+     */
+    private function normalizeBigIntSize(string $type, int $size): int
+    {
+        return $type === self::VAR_BIGINT ? 0 : $size;
+    }
+
+    /**
      * @param Document $collection
      * @param string $id
      * @param string $type
@@ -2495,9 +2499,7 @@ class Database
         array $filters,
         ?array $schemaAttributes = null
     ): Document {
-        if ($type === self::VAR_BIGINT) {
-            $size = 0;
-        }
+        $size = $this->normalizeBigIntSize($type, $size);
 
         $attribute = new Document([
             '$id' => ID::custom($id),
@@ -2889,9 +2891,7 @@ class Database
         $formatOptions ??= $attribute->getAttribute('formatOptions');
         $filters ??= $attribute->getAttribute('filters');
 
-        if ($type === self::VAR_BIGINT) {
-            $size = 0;
-        }
+        $size = $this->normalizeBigIntSize($type, $size);
 
         if ($required === true && !\is_null($default)) {
             $default = null;

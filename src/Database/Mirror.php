@@ -601,31 +601,6 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        // In skipDuplicates mode, identify which input ids already exist on source.
-        // These will be silently no-oped by the adapter's INSERT IGNORE and must
-        // not propagate to destination — a skipped duplicate is not a user write.
-        $existingIds = [];
-        if ($this->skipDuplicates) {
-            $ids = \array_values(\array_filter(
-                \array_map(fn (Document $d) => $d->getId(), $documents),
-                fn ($id) => $id !== ''
-            ));
-
-            if (!empty($ids)) {
-                foreach (\array_chunk(\array_unique($ids), \max(1, $this->maxQueryValues)) as $chunk) {
-                    $existing = $this->source->silent(
-                        fn () => $this->source->find($collection, [
-                            Query::equal('$id', $chunk),
-                            Query::limit(PHP_INT_MAX),
-                        ])
-                    );
-                    foreach ($existing as $doc) {
-                        $existingIds[$doc->getId()] = true;
-                    }
-                }
-            }
-        }
-
         $modified = $this->skipDuplicates
             ? $this->source->skipDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
@@ -644,22 +619,13 @@ class Mirror extends Database
             return $modified;
         }
 
-        // In skipDuplicates mode, drop pre-existing ids so their no-op writes
-        // don't propagate. Non-skip mode forwards everything as before.
-        $toForward = $this->skipDuplicates
-            ? \array_values(\array_filter(
-                $documents,
-                fn (Document $d) => $d->getId() === '' || !isset($existingIds[$d->getId()])
-            ))
-            : $documents;
-
-        if (empty($toForward)) {
-            return $modified;
-        }
-
+        // Forward every input to destination. "upgraded" status means the schema
+        // is mirrored, not that every row is backfilled, so a row that is a
+        // duplicate on source may not yet exist on destination. In skipDuplicates
+        // mode the destination runs its own INSERT IGNORE and decides per-row.
         try {
             $clones = [];
-            foreach ($toForward as $document) {
+            foreach ($documents as $document) {
                 $clone = clone $document;
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(

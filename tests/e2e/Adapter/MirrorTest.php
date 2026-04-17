@@ -313,7 +313,7 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
-    public function testCreateDocumentsSkipDuplicatesDoesNotDivergeDestination(): void
+    public function testCreateDocumentsSkipDuplicatesBackfillsDestination(): void
     {
         $database = $this->getDatabase();
         $collection = 'mirrorSkipDup';
@@ -331,7 +331,9 @@ class MirrorTest extends Base
         ], documentSecurity: false);
 
         // Seed the SOURCE only (bypass the mirror) with the row we want to
-        // skipDuplicates over later. Destination intentionally does NOT have it.
+        // skipDuplicates over later. Destination intentionally does NOT have it —
+        // this simulates an in-flight backfill where the collection is marked
+        // 'upgraded' (schema mirrored) but not every row has reached destination.
         $database->getSource()->createDocument($collection, new Document([
             '$id' => 'dup',
             'name' => 'Original',
@@ -341,7 +343,6 @@ class MirrorTest extends Base
             ],
         ]));
 
-        // Sanity check setup
         $this->assertSame(
             'Original',
             $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
@@ -369,6 +370,7 @@ class MirrorTest extends Base
             ]),
         ]));
 
+        // Source: INSERT IGNORE — 'dup' is a no-op, keeps 'Original'.
         $this->assertSame(
             'Original',
             $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
@@ -378,11 +380,13 @@ class MirrorTest extends Base
             $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
         );
 
-        // A source-skipped duplicate is a no-op and must not propagate to
-        // destination. Only the genuinely-inserted 'fresh' row should mirror.
-        $this->assertTrue(
-            $database->getDestination()->getDocument($collection, 'dup')->isEmpty(),
-            'Source-skipped doc must not be inserted into destination'
+        // Destination: 'dup' is NOT a duplicate there, so destination's own
+        // INSERT IGNORE inserts it. This prevents permanent divergence when
+        // destination is still catching up on rows that already exist on source.
+        $this->assertSame(
+            'WouldBe',
+            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            'Source-skipped doc must still insert on destination when absent there'
         );
         $this->assertSame(
             'Fresh',

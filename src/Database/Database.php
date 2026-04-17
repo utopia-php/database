@@ -7163,11 +7163,11 @@ class Database
                     $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
                         fn () => $this->find($collection->getId(), [
                             Query::equal('$id', $chunk),
-                            Query::limit(PHP_INT_MAX),
+                            Query::limit($this->maxQueryValues),
                         ])
                     )));
                     foreach ($found as $doc) {
-                        $existingDocs[$tenant . ':' . $doc->getId()] = $doc;
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
                     }
                 }
             }
@@ -7182,7 +7182,7 @@ class Database
                     $existing = $this->authorization->skip(fn () => $this->silent(
                         fn () => $this->find($collection->getId(), [
                             Query::equal('$id', $chunk),
-                            Query::limit(PHP_INT_MAX),
+                            Query::limit($this->maxQueryValues),
                         ])
                     ));
                     foreach ($existing as $doc) {

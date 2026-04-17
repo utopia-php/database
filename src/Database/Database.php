@@ -8214,12 +8214,16 @@ class Database
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        $documentKeys = $this->cache->list($collectionKey);
-        foreach ($documentKeys as $documentKey) {
-            $this->cache->purge($documentKey);
-        }
+        try {
+            $documentKeys = $this->cache->list($collectionKey);
+            foreach ($documentKeys as $documentKey) {
+                $this->cache->purge($documentKey);
+            }
 
-        $this->cache->purge($collectionKey);
+            $this->cache->purge($collectionKey);
+        } catch (Exception $e) {
+            Console::warning('Failed to purge collection from cache: ' . $e->getMessage());
+        }
 
         return true;
     }
@@ -8241,8 +8245,12 @@ class Database
 
         [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
 
-        $this->cache->purge($collectionKey, $documentKey);
-        $this->cache->purge($documentKey);
+        try {
+            $this->cache->purge($collectionKey, $documentKey);
+            $this->cache->purge($documentKey);
+        } catch (Exception $e) {
+            Console::warning('Failed to purge document from cache: ' . $e->getMessage());
+        }
 
         return true;
     }

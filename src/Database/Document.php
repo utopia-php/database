@@ -15,6 +15,9 @@ class Document extends ArrayObject
     public const SET_TYPE_PREPEND = 'prepend';
     public const SET_TYPE_APPEND = 'append';
 
+    /** @var array<string, array<string>> */
+    private array $permissionCache = [];
+
     /**
      * Construct.
      *
@@ -144,16 +147,21 @@ class Document extends ArrayObject
      */
     public function getPermissionsByType(string $type): array
     {
-        $typePermissions = [];
-
-        foreach ($this->getPermissions() as $permission) {
-            if (!\str_starts_with($permission, $type)) {
-                continue;
-            }
-            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+        if (isset($this->permissionCache[$type])) {
+            return $this->permissionCache[$type];
         }
 
-        return \array_unique($typePermissions);
+        $prefix = $type . '("';
+        $prefixLen = \strlen($prefix);
+        $result = [];
+
+        foreach ($this->getPermissions() as $permission) {
+            if (\str_starts_with($permission, $prefix)) {
+                $result[] = \substr($permission, $prefixLen, -2);
+            }
+        }
+
+        return $this->permissionCache[$type] = \array_unique($result);
     }
 
     /**
@@ -243,6 +251,10 @@ class Document extends ArrayObject
      */
     public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): static
     {
+        if ($key === '$permissions') {
+            $this->permissionCache = [];
+        }
+
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
                 $this[$key] = $value;

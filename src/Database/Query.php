@@ -427,9 +427,9 @@ class Query
      * different parameter values produce the same fingerprint, which is
      * useful for pattern-based counting and slow-query grouping.
      *
-     * Logical queries (`and`, `or`, `elemMatch`) are recursively fingerprinted
-     * so their inner structure contributes to the hash — two `and(...)`
-     * queries with different child shapes produce different fingerprints.
+     * Logical queries (`and`, `or`, `elemMatch`) contribute their inner
+     * structure to the hash via `Query::shape()` — two `and(...)` queries
+     * with different child shapes produce different fingerprints.
      *
      * Accepts either raw query strings or parsed Query objects.
      *
@@ -450,7 +450,7 @@ class Query
                 throw new QueryException('Invalid query element for fingerprint: expected string or Query instance');
             }
 
-            $shapes[] = self::queryShape($query);
+            $shapes[] = $query->shape();
         }
 
         \sort($shapes);
@@ -459,28 +459,60 @@ class Query
     }
 
     /**
-     * Canonical shape string for a single Query — recursive for logical types.
+     * Canonical shape string for this Query — values excluded.
      *
-     * @param Query $query
+     * Non-logical queries produce `method:attribute`. Logical queries
+     * (`and`, `or`, `elemMatch`) produce `method:attribute(child1|child2|…)`
+     * with children sorted so child order does not affect the shape.
+     *
+     * Implemented iteratively: walks the tree into a preorder list via a
+     * stack, then processes the reversed list so each node's children are
+     * always resolved before the node itself.
+     *
      * @return string
      */
-    private static function queryShape(self $query): string
+    public function shape(): string
     {
-        $method = $query->getMethod();
+        // 1. Preorder flatten the tree.
+        $nodes = [];
+        $stack = [$this];
+        while ($stack) {
+            /** @var self $node */
+            $node = \array_pop($stack);
+            $nodes[] = $node;
 
-        if (\in_array($method, self::LOGICAL_TYPES, true)) {
-            $childShapes = [];
-            foreach ($query->getValues() as $child) {
+            if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
+                continue;
+            }
+            foreach ($node->values as $child) {
                 if ($child instanceof self) {
-                    $childShapes[] = self::queryShape($child);
+                    $stack[] = $child;
+                }
+            }
+        }
+
+        // 2. Process reversed so children are always shaped before parents.
+        $shapes = [];
+        foreach (\array_reverse($nodes) as $node) {
+            $id = \spl_object_id($node);
+
+            if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
+                $shapes[$id] = $node->method . ':' . $node->attribute;
+                continue;
+            }
+
+            $childShapes = [];
+            foreach ($node->values as $child) {
+                if ($child instanceof self) {
+                    $childShapes[] = $shapes[\spl_object_id($child)];
                 }
             }
             \sort($childShapes);
             // Attribute is empty for and/or; meaningful for elemMatch (the field being matched).
-            return $method . ':' . $query->getAttribute() . '(' . \implode('|', $childShapes) . ')';
+            $shapes[$id] = $node->method . ':' . $node->attribute . '(' . \implode('|', $childShapes) . ')';
         }
 
-        return $method . ':' . $query->getAttribute();
+        return $shapes[\spl_object_id($this)];
     }
 
     /**

@@ -544,4 +544,35 @@ class QueryTest extends TestCase
         $this->expectException(QueryException::class);
         Query::fingerprint([42]);
     }
+
+    public function testShape(): void
+    {
+        // Leaf queries
+        $this->assertSame('equal:name', Query::equal('name', ['Alice'])->shape());
+        $this->assertSame('greaterThan:age', Query::greaterThan('age', 18)->shape());
+
+        // Logical with empty attribute
+        $and = Query::and([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
+        $this->assertSame('and:(equal:name|greaterThan:age)', $and->shape());
+
+        // elemMatch preserves the attribute (the field being matched)
+        $elem = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
+        $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
+
+        // Deeply nested — iterative traversal must match recursive result
+        $deep = Query::and([
+            Query::or([
+                Query::equal('a', ['x']),
+                Query::and([
+                    Query::equal('b', ['y']),
+                    Query::lessThan('c', 5),
+                ]),
+            ]),
+            Query::greaterThan('d', 10),
+        ]);
+        $this->assertSame(
+            'and:(greaterThan:d|or:(and:(equal:b|lessThan:c)|equal:a))',
+            $deep->shape(),
+        );
+    }
 }

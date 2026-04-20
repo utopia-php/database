@@ -240,7 +240,7 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
-        $this->assertEquals(null, $manualIdDocument->getAttribute('id'));
+        $this->assertEquals(null, $manualIdDocument->getAttribute('always_null'));
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
@@ -354,10 +354,15 @@ trait DocumentTests
         ]));
         $this->assertNotEmpty($documentIdNull->getSequence());
         $this->assertNull($documentIdNull->getAttribute('id'));
+        $this->assertNull($documentIdNull['id']);
+        $this->assertTrue($documentIdNull->offsetExists('id'));
 
         $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
+
         $this->assertNotEmpty($documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
+        $this->assertNull($documentIdNull['id']);
+        $this->assertTrue($documentIdNull->offsetExists('id'));
 
         $documentIdNull = $database->findOne('documents', [
             query::isNull('id')

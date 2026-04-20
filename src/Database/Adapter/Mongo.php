@@ -122,6 +122,11 @@ class Mongo extends Adapter
             return $callback();
         }
 
+        // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
+        if ($this->skipDuplicates) {
+            return $callback();
+        }
+
         try {
             $this->startTransaction();
             $result = $callback();
@@ -1490,6 +1495,42 @@ class Mongo extends Adapter
             }
 
             $records[] = $record;
+        }
+
+        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
+        if ($this->skipDuplicates) {
+            if (empty($records)) {
+                return [];
+            }
+
+            $operations = [];
+            foreach ($records as $record) {
+                $filter = ['_uid' => $record['_uid'] ?? ''];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                }
+
+                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
+                $setOnInsert = $record;
+                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+
+                if (empty($setOnInsert)) {
+                    continue;
+                }
+
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => ['$setOnInsert' => $setOnInsert],
+                ];
+            }
+
+            try {
+                $this->client->upsert($name, $operations, $options);
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            return $documents;
         }
 
         try {

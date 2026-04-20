@@ -1936,4 +1936,9 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+    }
 }

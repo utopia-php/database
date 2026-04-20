@@ -528,6 +528,15 @@ class QueryTest extends TestCase
         $andOne = Query::and([Query::equal('name', ['Alice'])]);
         $andTwo = Query::and([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
         $this->assertNotSame(Query::fingerprint([$andOne]), Query::fingerprint([$andTwo]));
+
+        // elemMatch attribute matters: same inner shape on different fields must NOT collide
+        $elemTags = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
+        $elemCategories = new Query(Query::TYPE_ELEM_MATCH, 'categories', [Query::equal('name', ['php'])]);
+        $this->assertNotSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemCategories]));
+
+        // elemMatch values-only change (same field, same child shape) still collides — as expected
+        $elemTagsOther = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['js'])]);
+        $this->assertSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemTagsOther]));
     }
 
     public function testFingerprintRejectsInvalidElements(): void

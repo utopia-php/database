@@ -476,7 +476,8 @@ class Query
                 }
             }
             \sort($childShapes);
-            return $method . '(' . \implode('|', $childShapes) . ')';
+            // Attribute is empty for and/or; meaningful for elemMatch (the field being matched).
+            return $method . ':' . $query->getAttribute() . '(' . \implode('|', $childShapes) . ')';
         }
 
         return $method . ':' . $query->getAttribute();

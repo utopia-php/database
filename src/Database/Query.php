@@ -420,6 +420,41 @@ class Query
     }
 
     /**
+     * Compute a shape-only fingerprint of an array of queries.
+     *
+     * The fingerprint captures the structure of the queries — method and
+     * attribute — without values. Two query sets with the same shape but
+     * different parameter values produce the same fingerprint, which is
+     * useful for pattern-based counting and slow-query grouping.
+     *
+     * Accepts either raw query strings or parsed Query objects.
+     *
+     * @param array<string|Query> $queries
+     * @return string md5 hash of the canonical shape
+     * @throws QueryException
+     */
+    public static function fingerprint(array $queries): string
+    {
+        $shapes = [];
+
+        foreach ($queries as $query) {
+            if (\is_string($query)) {
+                $query = self::parse($query);
+            }
+
+            if (!$query instanceof self) {
+                continue;
+            }
+
+            $shapes[] = $query->getMethod() . ':' . $query->getAttribute();
+        }
+
+        \sort($shapes);
+
+        return \md5(\implode('|', $shapes));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array

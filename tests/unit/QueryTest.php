@@ -468,4 +468,39 @@ class QueryTest extends TestCase
         $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
         $this->assertContains(Query::TYPE_ORDER_RANDOM, Query::TYPES);
     }
+
+    public function testFingerprint(): void
+    {
+        $equalAlice = '{"method":"equal","attribute":"name","values":["Alice"]}';
+        $equalBob = '{"method":"equal","attribute":"name","values":["Bob"]}';
+        $equalEmail = '{"method":"equal","attribute":"email","values":["a@b.c"]}';
+        $notEqualAlice = '{"method":"notEqual","attribute":"name","values":["Alice"]}';
+        $gtAge18 = '{"method":"greaterThan","attribute":"age","values":[18]}';
+        $gtAge42 = '{"method":"greaterThan","attribute":"age","values":[42]}';
+
+        // Same shape, different values produce the same fingerprint
+        $a = Query::fingerprint([$equalAlice, $gtAge18]);
+        $b = Query::fingerprint([$equalBob, $gtAge42]);
+        $this->assertSame($a, $b);
+
+        // Different attribute produces different fingerprint
+        $c = Query::fingerprint([$equalEmail, $gtAge18]);
+        $this->assertNotSame($a, $c);
+
+        // Different method produces different fingerprint
+        $d = Query::fingerprint([$notEqualAlice, $gtAge18]);
+        $this->assertNotSame($a, $d);
+
+        // Order-independent
+        $e = Query::fingerprint([$gtAge18, $equalAlice]);
+        $this->assertSame($a, $e);
+
+        // Accepts parsed Query objects
+        $parsed = [Query::equal('name', ['Alice']), Query::greaterThan('age', 18)];
+        $f = Query::fingerprint($parsed);
+        $this->assertSame($a, $f);
+
+        // Empty array returns deterministic hash
+        $this->assertSame(\md5(''), Query::fingerprint([]));
+    }
 }

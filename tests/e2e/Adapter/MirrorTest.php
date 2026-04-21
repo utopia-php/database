@@ -13,11 +13,11 @@ use Utopia\Database\Exception\Authorization;
 use Utopia\Database\Exception\Conflict;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
-use Utopia\Database\OnDuplicate;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\PDO;
 
 class MirrorTest extends Base

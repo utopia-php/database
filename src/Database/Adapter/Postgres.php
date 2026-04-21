@@ -1962,17 +1962,6 @@ class Postgres extends SQL
         return "'" . $value . "'";
     }
 
-    /**
-     * Get SQL Type
-     *
-     * @param string $type
-     * @param int $size in chars
-     * @param bool $signed
-     * @param bool $array
-     * @param bool $required
-     * @return string
-     * @throws DatabaseException
-     */
     protected function attributeMatches(
         string $collection,
         string $id,
@@ -2022,6 +2011,17 @@ class Postgres extends SQL
         return \trim($sql);
     }
 
+    /**
+     * Get SQL Type
+     *
+     * @param string $type
+     * @param int $size in chars
+     * @param bool $signed
+     * @param bool $array
+     * @param bool $required
+     * @return string
+     * @throws DatabaseException
+     */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {

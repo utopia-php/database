@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 
 /**
@@ -1939,6 +1940,10 @@ class SQLite extends MariaDB
 
     protected function getInsertKeyword(): string
     {
-        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+        return match ($this->onDuplicate) {
+            OnDuplicate::Skip   => 'INSERT OR IGNORE INTO',
+            OnDuplicate::Upsert => 'INSERT OR REPLACE INTO',
+            OnDuplicate::Fail   => 'INSERT INTO',
+        };
     }
 }

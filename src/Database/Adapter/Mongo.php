@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -123,7 +124,8 @@ class Mongo extends Adapter
         }
 
         // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
-        if ($this->skipDuplicates) {
+        // Both Skip and Upsert modes use the no-transaction path.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
             return $callback();
         }
 
@@ -1498,7 +1500,7 @@ class Mongo extends Adapter
         }
 
         // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->skipDuplicates) {
+        if ($this->onDuplicate === OnDuplicate::Skip) {
             if (empty($records)) {
                 return [];
             }

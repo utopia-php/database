@@ -601,8 +601,9 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        $modified = $this->skipDuplicates
-            ? $this->source->skipDuplicates(
+        $modified = $this->onDuplicate !== OnDuplicate::Fail
+            ? $this->source->withOnDuplicate(
+                $this->onDuplicate,
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
             )
             : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
@@ -638,8 +639,9 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            if ($this->skipDuplicates) {
-                $this->destination->skipDuplicates(
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                $this->destination->withOnDuplicate(
+                    $this->onDuplicate,
                     fn () => $this->destination->withPreserveDates(
                         fn () => $this->destination->createDocuments($collection, $clones, $batchSize)
                     )

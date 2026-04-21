@@ -417,7 +417,7 @@ class Database
 
     protected bool $preserveDates = false;
 
-    protected bool $skipDuplicates = false;
+    protected OnDuplicate $onDuplicate = OnDuplicate::Fail;
 
     protected bool $preserveSequence = false;
 
@@ -844,15 +844,23 @@ class Database
         }
     }
 
-    public function skipDuplicates(callable $callback): mixed
+    /**
+     * Run $callback within a scope where create-style operations apply the
+     * given OnDuplicate mode. Nestable — previous mode is restored on return.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function withOnDuplicate(OnDuplicate $mode, callable $callback): mixed
     {
-        $previous = $this->skipDuplicates;
-        $this->skipDuplicates = true;
+        $previous = $this->onDuplicate;
+        $this->onDuplicate = $mode;
 
         try {
             return $callback();
         } finally {
-            $this->skipDuplicates = $previous;
+            $this->onDuplicate = $previous;
         }
     }
 
@@ -5727,8 +5735,8 @@ class Database
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
             // Set adapter flag before withTransaction so Mongo can opt out of a real txn.
-            $batch = $this->skipDuplicates
-                ? $this->adapter->skipDuplicates($insert)
+            $batch = $this->onDuplicate !== OnDuplicate::Fail
+                ? $this->adapter->withOnDuplicate($this->onDuplicate, $insert)
                 : $insert();
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);

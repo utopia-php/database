@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -1030,12 +1031,17 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
-     * Override in adapter subclasses for DB-specific syntax.
+     * Returns the INSERT keyword, varying by the active OnDuplicate mode.
+     * Override in adapter subclasses for DB-specific syntax (e.g. Postgres uses
+     * suffix ON CONFLICT instead).
      */
     protected function getInsertKeyword(): string
     {
-        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+        return match ($this->onDuplicate) {
+            OnDuplicate::Skip   => 'INSERT IGNORE INTO',
+            OnDuplicate::Upsert => 'INSERT INTO', // Upsert is realized by the ON DUPLICATE KEY UPDATE suffix on MySQL/MariaDB — handled in getInsertSuffix.
+            OnDuplicate::Fail   => 'INSERT INTO',
+        };
     }
 
     /**

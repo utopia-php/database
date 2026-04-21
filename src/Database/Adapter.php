@@ -33,7 +33,7 @@ abstract class Adapter
 
     protected bool $alterLocks = false;
 
-    protected bool $skipDuplicates = false;
+    protected OnDuplicate $onDuplicate = OnDuplicate::Fail;
 
     /**
      * @var array<string, mixed>
@@ -395,23 +395,23 @@ abstract class Adapter
     }
 
     /**
-     * Run a callback with skipDuplicates enabled.
-     * Duplicate key errors during createDocuments() will be silently skipped
-     * instead of thrown. Nestable — saves and restores previous state.
+     * Run a callback scoped to a specific OnDuplicate mode. Create-style
+     * operations (createDocument, createCollection, createAttribute, createIndex)
+     * dispatch on this mode. Nestable — saves and restores previous state.
      *
      * @template T
      * @param callable(): T $callback
      * @return T
      */
-    public function skipDuplicates(callable $callback): mixed
+    public function withOnDuplicate(OnDuplicate $mode, callable $callback): mixed
     {
-        $previous = $this->skipDuplicates;
-        $this->skipDuplicates = true;
+        $previous = $this->onDuplicate;
+        $this->onDuplicate = $mode;
 
         try {
             return $callback();
         } finally {
-            $this->skipDuplicates = $previous;
+            $this->onDuplicate = $previous;
         }
     }
 

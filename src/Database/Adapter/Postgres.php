@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -2357,18 +2358,20 @@ class Postgres extends SQL
 
     protected function getInsertSuffix(string $table): string
     {
-        if (!$this->skipDuplicates) {
+        if ($this->onDuplicate === OnDuplicate::Fail) {
             return '';
         }
 
         $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
 
+        // Upsert on Postgres uses ON CONFLICT DO UPDATE; for now Skip and Upsert
+        // both DO NOTHING until upsert SET clause generation is implemented.
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
     protected function getInsertPermissionsSuffix(): string
     {
-        if (!$this->skipDuplicates) {
+        if ($this->onDuplicate === OnDuplicate::Fail) {
             return '';
         }
 

@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Authorization;
 use Utopia\Database\Exception\Conflict;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -351,7 +352,7 @@ class MirrorTest extends Base
             $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
         );
 
-        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+        $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createDocuments($collection, [
             new Document([
                 '$id' => 'dup',
                 'name' => 'WouldBe',

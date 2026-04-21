@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Query;
 
 trait DocumentTests
@@ -7904,7 +7905,7 @@ trait DocumentTests
         // With skipDuplicates, duplicates should be silently skipped
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'doc1',
@@ -7966,7 +7967,7 @@ trait DocumentTests
         // With skipDuplicates, inserting only duplicates should succeed with no new rows
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'existing',
@@ -8000,7 +8001,7 @@ trait DocumentTests
         $database->createCollection($collection);
         $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
 
-        $count = $database->skipDuplicates(fn () => $database->createDocuments($collection, []));
+        $count = $database->withOnDuplicate(OnDuplicate::Skip,fn () => $database->createDocuments($collection, []));
 
         $this->assertSame(0, $count);
         $this->assertCount(0, $database->find($collection));
@@ -8029,9 +8030,9 @@ trait DocumentTests
         // Nested scope — inner scope runs inside outer scope.
         // After inner exits, outer state should still be "skip enabled".
         // After outer exits, state should restore to "skip disabled".
-        $countOuter = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+        $countOuter = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, $makeDoc) {
             // Inner scope: add dup + new
-            $countInner = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+            $countInner = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, $makeDoc) {
                 return $database->createDocuments($collection, [
                     $makeDoc('seed', 'Dup'),
                     $makeDoc('innerNew', 'InnerNew'),
@@ -8101,7 +8102,7 @@ trait DocumentTests
         }
 
         $emittedIds = [];
-        $count = $database->skipDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, $batch, &$emittedIds) {
             return $database->createDocuments($collection, $batch, onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -8141,13 +8142,13 @@ trait DocumentTests
         );
 
         // First call — all new
-        $firstCount = $database->skipDuplicates(
+        $firstCount = $database->withOnDuplicate(OnDuplicate::Skip,
             fn () => $database->createDocuments($collection, $makeBatch('First'))
         );
         $this->assertSame(3, $firstCount);
 
         $emittedIds = [];
-        $secondCount = $database->skipDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
+        $secondCount = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, $makeBatch, &$emittedIds) {
             return $database->createDocuments($collection, $makeBatch('Second'), onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -8237,7 +8238,7 @@ trait DocumentTests
             ]),
         ];
 
-        $database->skipDuplicates(fn () => $database->createDocuments($parent, $batch));
+        $database->withOnDuplicate(OnDuplicate::Skip,fn () => $database->createDocuments($parent, $batch));
 
         $existing = $database->getDocument($parent, 'existingParent');
         $this->assertFalse($existing->isEmpty());

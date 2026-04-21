@@ -1051,6 +1051,20 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Returns the INSERT keyword for the `_perms` side-table. Permissions have
+     * their own composite unique constraint (_document, _type, _permission),
+     * so on row Upsert we don't want to ON-DUPLICATE-KEY-UPDATE them — they're
+     * already there. Both Skip and Upsert modes should just silently ignore
+     * pre-existing permission rows.
+     */
+    protected function getInsertPermissionsKeyword(): string
+    {
+        return $this->onDuplicate === OnDuplicate::Fail
+            ? 'INSERT INTO'
+            : 'INSERT IGNORE INTO';
+    }
+
+    /**
      * Returns a suffix appended after VALUES clause for duplicate handling.
      * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
      *
@@ -2633,7 +2647,7 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    {$this->getInsertPermissionsKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
                     VALUES {$permissions}
                     {$this->getInsertPermissionsSuffix()}
                 ";

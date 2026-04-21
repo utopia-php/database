@@ -1950,4 +1950,22 @@ class SQLite extends MariaDB
             OnDuplicate::Fail   => 'INSERT INTO',
         };
     }
+
+    protected function getInsertPermissionsKeyword(): string
+    {
+        return $this->onDuplicate === OnDuplicate::Fail
+            ? 'INSERT INTO'
+            : 'INSERT OR IGNORE INTO';
+    }
+
+    /**
+     * SQLite realizes Upsert via the `INSERT OR REPLACE` keyword, so no SUFFIX
+     * clause is needed. Override MariaDB's `ON DUPLICATE KEY UPDATE` suffix.
+     *
+     * @param array<string> $columns
+     */
+    protected function getInsertSuffix(string $table, array $columns = []): string
+    {
+        return '';
+    }
 }

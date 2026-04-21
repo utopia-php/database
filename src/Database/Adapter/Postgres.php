@@ -2368,6 +2368,18 @@ class Postgres extends SQL
 
     protected function getInsertKeyword(): string
     {
+        // Postgres doesn't have INSERT IGNORE — Skip/Upsert are realized via
+        // the ON CONFLICT suffix (see getInsertSuffix).
+        return 'INSERT INTO';
+    }
+
+    /**
+     * Postgres permissions insert uses ON CONFLICT DO NOTHING via suffix; the
+     * keyword stays plain INSERT INTO. Override MariaDB's INSERT IGNORE (no-op
+     * in MySQL dialect, a syntax error in Postgres).
+     */
+    protected function getInsertPermissionsKeyword(): string
+    {
         return 'INSERT INTO';
     }
 

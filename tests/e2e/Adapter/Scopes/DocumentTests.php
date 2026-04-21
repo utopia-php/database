@@ -7902,7 +7902,7 @@ trait DocumentTests
             $this->assertNotEmpty($e->getMessage());
         }
 
-        // With skipDuplicates, duplicates should be silently skipped
+        // With OnDuplicate::Skip, duplicates should be silently skipped
         $emittedIds = [];
         $collection = __FUNCTION__;
         $count = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, &$emittedIds) {
@@ -7964,7 +7964,7 @@ trait DocumentTests
             ]),
         ]);
 
-        // With skipDuplicates, inserting only duplicates should succeed with no new rows
+        // With OnDuplicate::Skip, inserting only duplicates should succeed with no new rows
         $emittedIds = [];
         $collection = __FUNCTION__;
         $count = $database->withOnDuplicate(OnDuplicate::Skip,function () use ($database, $collection, &$emittedIds) {
@@ -8087,7 +8087,7 @@ trait DocumentTests
         }
         $database->createDocuments($collection, $seed);
 
-        // Now call skipDuplicates with 300 docs: 50 existing (0-49) + 250 new (50-299).
+        // Now call with OnDuplicate::Skip and 300 docs: 50 existing (0-49) + 250 new (50-299).
         // 300 > default INSERT_BATCH_SIZE, so this exercises the chunk loop.
         $batch = [];
         for ($i = 0; $i < 300; $i++) {
@@ -8260,5 +8260,87 @@ trait DocumentTests
         $allChildIds = \array_map(fn (Document $d) => $d->getId(), $allChildren);
         \sort($allChildIds);
         $this->assertSame(['existingChild', 'newChild', 'retryChild'], $allChildIds);
+    }
+
+    /**
+     * OnDuplicate::Upsert — existing rows are overwritten with the incoming
+     * values; new rows are inserted. The returned count reflects every input.
+     */
+    public function testCreateDocsUpsertOverwrites(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute(__FUNCTION__, 'tag', Database::VAR_STRING, 128, false);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        // Seed two docs.
+        $database->createDocuments(__FUNCTION__, [
+            new Document(['$id' => 'a', 'name' => 'original-A', 'tag' => 'keep', '$permissions' => $permissions]),
+            new Document(['$id' => 'b', 'name' => 'original-B', 'tag' => 'keep', '$permissions' => $permissions]),
+        ]);
+
+        // Upsert: overwrite 'a', leave 'b' untouched (not in batch), insert 'c'.
+        $collection = __FUNCTION__;
+        $count = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection, $permissions) {
+            return $database->createDocuments($collection, [
+                new Document(['$id' => 'a', 'name' => 'replaced-A', 'tag' => 'new', '$permissions' => $permissions]),
+                new Document(['$id' => 'c', 'name' => 'inserted-C', 'tag' => 'new', '$permissions' => $permissions]),
+            ]);
+        });
+        $this->assertSame(2, $count);
+
+        $docs = $database->find(__FUNCTION__, [Query::orderAsc('$id')]);
+        $this->assertCount(3, $docs);
+        $this->assertSame('replaced-A', $docs[0]->getAttribute('name'));
+        $this->assertSame('new', $docs[0]->getAttribute('tag'));
+        $this->assertSame('original-B', $docs[1]->getAttribute('name'));
+        $this->assertSame('keep', $docs[1]->getAttribute('tag'));
+        $this->assertSame('inserted-C', $docs[2]->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Upsert — a batch composed entirely of duplicates overwrites
+     * every existing row; zero rows are skipped.
+     */
+    public function testCreateDocsUpsertAll(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $database->createDocuments(__FUNCTION__, [
+            new Document(['$id' => 'x', 'name' => 'v1', '$permissions' => $permissions]),
+            new Document(['$id' => 'y', 'name' => 'v1', '$permissions' => $permissions]),
+        ]);
+
+        $collection = __FUNCTION__;
+        $count = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection, $permissions) {
+            return $database->createDocuments($collection, [
+                new Document(['$id' => 'x', 'name' => 'v2', '$permissions' => $permissions]),
+                new Document(['$id' => 'y', 'name' => 'v2', '$permissions' => $permissions]),
+            ]);
+        });
+        $this->assertSame(2, $count);
+
+        $docs = $database->find(__FUNCTION__, [Query::orderAsc('$id')]);
+        $this->assertCount(2, $docs);
+        $this->assertSame('v2', $docs[0]->getAttribute('name'));
+        $this->assertSame('v2', $docs[1]->getAttribute('name'));
     }
 }

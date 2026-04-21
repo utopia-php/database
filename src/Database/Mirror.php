@@ -622,8 +622,9 @@ class Mirror extends Database
 
         // Forward every input to destination. "upgraded" status means the schema
         // is mirrored, not that every row is backfilled, so a row that is a
-        // duplicate on source may not yet exist on destination. In skipDuplicates
-        // mode the destination runs its own INSERT IGNORE and decides per-row.
+        // duplicate on source may not yet exist on destination. Under
+        // OnDuplicate::Skip/Upsert the destination runs its own dialect-specific
+        // conflict handling and decides per-row.
         try {
             $clones = [];
             foreach ($documents as $document) {

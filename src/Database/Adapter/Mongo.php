@@ -1118,7 +1118,15 @@ class Mongo extends Adapter
 
             return $result;
         } catch (\Exception $e) {
-            throw $this->processException($e);
+            $err = $this->processException($e);
+            if ($err instanceof DuplicateException && $this->onDuplicate === OnDuplicate::Upsert) {
+                // Mongo raises IndexKeySpecsConflict when re-creating an index
+                // with a name that points to different keys/options. Drop the
+                // existing one and recreate with the new spec.
+                $this->deleteIndex($collection, $id);
+                return $this->client->createIndexes($name, [$indexes], $options);
+            }
+            throw $err;
         }
     }
 
@@ -3604,8 +3612,8 @@ class Mongo extends Adapter
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Index already exists
-        if ($e->getCode() === 85) {
+        // Index already exists (85 = IndexOptionsConflict, 86 = IndexKeySpecsConflict)
+        if ($e->getCode() === 85 || $e->getCode() === 86) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
         }
 

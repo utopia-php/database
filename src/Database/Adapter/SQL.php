@@ -246,9 +246,9 @@ abstract class SQL extends Adapter
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
-        $id = $this->quote($this->filter($id));
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type} {$this->getLockType()};";
+        $quoted = $this->quote($this->filter($id));
+        $sqlType = $this->getSQLType($type, $size, $signed, $array, $required);
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$quoted} {$sqlType} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
@@ -257,10 +257,18 @@ abstract class SQL extends Adapter
                 ->execute();
         } catch (PDOException $e) {
             $err = $this->processException($e);
-            // Skip/Upsert: tolerate an existing column. Schema evolution (type/size
-            // changes) must go through updateAttribute — too risky to auto-apply.
             if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
-                return true;
+                if ($this->onDuplicate === OnDuplicate::Skip) {
+                    return true;
+                }
+                // Upsert: drop + recreate only if the declared type differs from
+                // what's already in the DB — otherwise the existing column is
+                // already correct and re-creation would pointlessly lose data.
+                if ($this->attributeMatches($collection, $id, $type, $size, $signed, $array, $required) === true) {
+                    return true;
+                }
+                $this->deleteAttribute($collection, $id, $array);
+                return $this->getPDO()->prepare($sql)->execute();
             }
             throw $err;
         }
@@ -1885,6 +1893,64 @@ abstract class SQL extends Adapter
         bool $array = false,
         bool $required = false
     ): string;
+
+    /**
+     * Returns whether the existing DB column for $collection.$id matches the
+     * requested declaration. Used by createAttribute under OnDuplicate::Upsert
+     * to decide between a no-op and a drop+recreate.
+     *
+     * Return values: true = exists and matches, false = exists but differs,
+     * null = doesn't exist (shouldn't happen from the Upsert path, but
+     * subclasses should handle it).
+     *
+     * Default implementation queries INFORMATION_SCHEMA and compares
+     * COLUMN_TYPE against getSQLType(). Adapters using non-INFORMATION_SCHEMA
+     * metadata (SQLite → PRAGMA, Postgres → pg_catalog) must override.
+     */
+    protected function attributeMatches(
+        string $collection,
+        string $id,
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false,
+        bool $required = false
+    ): ?bool {
+        $stmt = $this->getPDO()->prepare('
+            SELECT COLUMN_TYPE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = :schema
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :column
+        ');
+        $stmt->bindValue(':schema', $this->getDatabase(), \PDO::PARAM_STR);
+        $stmt->bindValue(':table', "{$this->getNamespace()}_{$this->filter($collection)}", \PDO::PARAM_STR);
+        $stmt->bindValue(':column', $this->filter($id), \PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (empty($row)) {
+            return null;
+        }
+
+        $target = $this->getSQLType($type, $size, $signed, $array, $required);
+        return $this->normalizeColumnType((string) $row['COLUMN_TYPE']) === $this->normalizeColumnType($target);
+    }
+
+    /**
+     * Normalize a SQL type declaration for equality comparison: uppercase,
+     * collapse whitespace, drop MySQL's legacy integer display widths
+     * (BIGINT(20) → BIGINT) — MySQL 8+ doesn't emit them and comparing them
+     * against MariaDB's output would otherwise cause false mismatches.
+     * TINYINT(1) is intentionally preserved because it's the canonical
+     * BOOLEAN representation.
+     */
+    protected function normalizeColumnType(string $sql): string
+    {
+        $sql = \preg_replace('/\b(BIGINT|INT|SMALLINT|MEDIUMINT)\s*\(\s*\d+\s*\)/i', '$1', $sql);
+        $sql = \preg_replace('/\s+/', ' ', $sql);
+
+        return \strtoupper(\trim($sql));
+    }
 
     /**
      * @throws DatabaseException For unknown type values.

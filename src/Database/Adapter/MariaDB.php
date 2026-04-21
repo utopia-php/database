@@ -783,11 +783,16 @@ class MariaDB extends SQL
                 ->execute();
         } catch (PDOException $e) {
             $err = $this->processException($e);
-            // Skip/Upsert: tolerate an existing index. Spec changes (attributes, type,
-            // uniqueness) must go through deleteIndex+createIndex — auto-modifying
-            // indexes risks long rebuilds and uniqueness violations mid-migration.
             if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
-                return true;
+                if ($this->onDuplicate === OnDuplicate::Skip) {
+                    return true;
+                }
+                // Upsert: bring the index in line with the requested spec.
+                // Index spec comparison is adapter-specific and brittle, so we
+                // always drop and recreate here; the cost is one extra index
+                // rebuild, which is acceptable during a re-migration.
+                $this->deleteIndex($collection->getId(), $id);
+                return $this->getPDO()->prepare($sql)->execute();
             }
             throw $err;
         }

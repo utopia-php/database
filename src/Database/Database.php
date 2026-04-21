@@ -858,7 +858,12 @@ class Database
         $this->onDuplicate = $mode;
 
         try {
-            return $callback();
+            // Mirror the mode onto the adapter so schema-level operations
+            // (createAttribute / createIndex / createCollection) that run
+            // directly against the adapter can observe it. createDocuments
+            // still goes through its own adapter->withOnDuplicate dispatch,
+            // which is nestable and idempotent with this outer scope.
+            return $this->adapter->withOnDuplicate($mode, $callback);
         } finally {
             $this->onDuplicate = $previous;
         }

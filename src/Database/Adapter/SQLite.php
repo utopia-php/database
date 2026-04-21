@@ -464,22 +464,33 @@ class SQLite extends MariaDB
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $filteredId = $this->filter($id);
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
         $stmt = $this->getPDO()->prepare("
-			SELECT name 
-			FROM sqlite_master 
+			SELECT name
+			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
 		");
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
+        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$filteredId}");
         $stmt->execute();
         $index = $stmt->fetch();
+        // SQLite holds a table-level lock while the cursor is open; close it
+        // before we issue DDL in the Upsert branch or the subsequent DROP
+        // INDEX will error with "database table is locked".
+        $stmt->closeCursor();
         if (!empty($index)) {
-            return true;
+            // Upsert: blow away the existing index and recreate it so the
+            // definition matches the incoming spec. Skip/Fail keep the
+            // original pre-existing behavior (tolerate).
+            if ($this->onDuplicate === OnDuplicate::Upsert) {
+                $this->deleteIndex($collection, $id);
+            } else {
+                return true;
+            }
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sql = $this->getSQLIndex($name, $filteredId, $type, $attributes);
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
@@ -1967,5 +1978,34 @@ class SQLite extends MariaDB
     protected function getInsertSuffix(string $table, array $columns = []): string
     {
         return '';
+    }
+
+    /**
+     * SQLite stores declared types verbatim (type affinity only matters at
+     * value-storage time), so `PRAGMA table_info` returns whatever we emitted
+     * from getSQLType. Compare declared form against target after the usual
+     * normalization (strips MariaDB integer display widths, uppercases).
+     */
+    protected function attributeMatches(
+        string $collection,
+        string $id,
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false,
+        bool $required = false
+    ): ?bool {
+        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
+        $stmt = $this->getPDO()->prepare('SELECT type FROM pragma_table_info(:table) WHERE name = :column');
+        $stmt->bindValue(':table', $table, PDO::PARAM_STR);
+        $stmt->bindValue(':column', $this->filter($id), PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (empty($row)) {
+            return null;
+        }
+
+        $target = $this->getSQLType($type, $size, $signed, $array, $required);
+        return $this->normalizeColumnType((string) $row['type']) === $this->normalizeColumnType($target);
     }
 }

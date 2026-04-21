@@ -495,12 +495,12 @@ class Postgres extends SQL
         }
 
         $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+        $filteredId = $this->filter($id);
+        $sqlType = $this->getSQLType($type, $size, $signed, $array, $required);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
-			ADD COLUMN \"{$id}\" {$type}
+			ADD COLUMN \"{$filteredId}\" {$sqlType}
 		";
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
@@ -509,7 +509,18 @@ class Postgres extends SQL
             return $this->execute($this->getPDO()
                 ->prepare($sql));
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $err = $this->processException($e);
+            if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
+                if ($this->onDuplicate === OnDuplicate::Skip) {
+                    return true;
+                }
+                if ($this->attributeMatches($collection, $id, $type, $size, $signed, $array, $required) === true) {
+                    return true;
+                }
+                $this->deleteAttribute($collection, $id, $array);
+                return $this->execute($this->getPDO()->prepare($sql));
+            }
+            throw $err;
         }
     }
 
@@ -946,7 +957,10 @@ class Postgres extends SQL
             $attributes = "_tenant, {$attributes}";
         }
 
-        $createClause = $this->onDuplicate !== OnDuplicate::Fail
+        // Skip tolerates pre-existing indexes via IF NOT EXISTS; Upsert always
+        // issues a plain CREATE so the duplicate-key error triggers the
+        // drop+recreate branch below (we want the new spec, not a silent skip).
+        $createClause = $this->onDuplicate === OnDuplicate::Skip
             ? "CREATE {$sqlType} IF NOT EXISTS"
             : "CREATE {$sqlType}";
 
@@ -972,7 +986,12 @@ class Postgres extends SQL
         try {
             return $this->getPDO()->prepare($sql)->execute();
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $err = $this->processException($e);
+            if ($err instanceof DuplicateException && $this->onDuplicate === OnDuplicate::Upsert) {
+                $this->deleteIndex($collection, $id);
+                return $this->getPDO()->prepare($sql)->execute();
+            }
+            throw $err;
         }
     }
     /**
@@ -1954,6 +1973,55 @@ class Postgres extends SQL
      * @return string
      * @throws DatabaseException
      */
+    protected function attributeMatches(
+        string $collection,
+        string $id,
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false,
+        bool $required = false
+    ): ?bool {
+        // pg_catalog.format_type() emits the canonical textual form (e.g.
+        // "character varying(128)", "timestamp(3) without time zone") which
+        // normalizes more predictably than information_schema.data_type.
+        $stmt = $this->getPDO()->prepare('
+            SELECT pg_catalog.format_type(a.atttypid, a.atttypmod) AS type
+            FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+            JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+            WHERE n.nspname = :schema
+              AND c.relname = :table
+              AND a.attname = :column
+              AND a.attnum > 0
+              AND NOT a.attisdropped
+        ');
+        $stmt->bindValue(':schema', $this->getDatabase(), PDO::PARAM_STR);
+        $stmt->bindValue(':table', "{$this->getNamespace()}_{$this->filter($collection)}", PDO::PARAM_STR);
+        $stmt->bindValue(':column', $this->filter($id), PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (empty($row)) {
+            return null;
+        }
+
+        $target = $this->getSQLType($type, $size, $signed, $array, $required);
+        return $this->normalizeColumnType((string) $row['type']) === $this->normalizeColumnType($target);
+    }
+
+    protected function normalizeColumnType(string $sql): string
+    {
+        $sql = \strtoupper(\trim($sql));
+        // `character varying(128)` → `VARCHAR(128)` so it matches getSQLType output.
+        $sql = \str_replace('CHARACTER VARYING', 'VARCHAR', $sql);
+        // Postgres's format_type appends `without time zone` to timestamps; strip it.
+        $sql = \preg_replace('/\s*WITHOUT TIME ZONE\s*/', '', $sql);
+        $sql = \preg_replace('/\s*,\s*/', ',', $sql);
+        $sql = \preg_replace('/\s+/', ' ', $sql);
+
+        return \trim($sql);
+    }
+
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {

@@ -256,7 +256,13 @@ abstract class SQL extends Adapter
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $err = $this->processException($e);
+            // Skip/Upsert: tolerate an existing column. Schema evolution (type/size
+            // changes) must go through updateAttribute — too risky to auto-apply.
+            if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
+                return true;
+            }
+            throw $err;
         }
     }
 

@@ -431,10 +431,14 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // In shared-tables mode or for metadata, the physical collection may
-        // already exist for another tenant. Return early to avoid a
-        // "Collection Exists" exception from the client.
-        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode, for metadata, or when the caller opted into
+        // Skip/Upsert, the physical collection may already exist. Return early
+        // to avoid a "Collection Exists" exception from the client.
+        $tolerateExisting = $this->getSharedTables()
+            || $name === Database::METADATA
+            || $this->onDuplicate !== OnDuplicate::Fail;
+
+        if (!$this->inTransaction && $tolerateExisting && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -445,14 +449,19 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
+                // Also tolerate client-reported duplicates in Skip/Upsert mode.
+                if ($tolerateExisting) {
+                    return true;
+                }
+                // Keep existing shared-tables/metadata behavior — no-op there.
                 return true;
             }
             // Client throws code-0 "Collection Exists" when its pre-check
-            // finds the collection. In shared-tables/metadata context this
-            // is a no-op; otherwise re-throw as DuplicateException so
-            // Database::createCollection() can run orphan reconciliation.
+            // finds the collection. Tolerated contexts no-op; otherwise re-throw
+            // as DuplicateException so Database::createCollection() can run
+            // orphan reconciliation.
             if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
+                if ($tolerateExisting) {
                     return true;
                 }
                 throw new DuplicateException('Collection already exists', $e->getCode(), $e);

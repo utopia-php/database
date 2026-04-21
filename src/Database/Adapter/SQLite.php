@@ -165,8 +165,12 @@ class SQLite extends MariaDB
 
         $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
 
+        $createTable = $this->onDuplicate !== OnDuplicate::Fail
+            ? 'CREATE TABLE IF NOT EXISTS'
+            : 'CREATE TABLE';
+
         $collection = "
-			CREATE TABLE {$this->getSQLTable($id)} (
+			{$createTable} {$this->getSQLTable($id)} (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_uid` VARCHAR(36) NOT NULL,
 				{$tenantQuery}
@@ -180,7 +184,7 @@ class SQLite extends MariaDB
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
-			CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+			{$createTable} {$this->getSQLTable($id . '_perms')} (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,

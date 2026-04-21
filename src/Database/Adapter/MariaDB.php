@@ -158,8 +158,12 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
+        $createKeyword = $this->onDuplicate !== OnDuplicate::Fail
+            ? 'CREATE TABLE IF NOT EXISTS'
+            : 'CREATE TABLE';
+
         $collection = "
-			CREATE TABLE {$this->getSQLTable($id)} (
+			{$createKeyword} {$this->getSQLTable($id)} (
 				_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
@@ -190,7 +194,7 @@ class MariaDB extends SQL
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
-            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+            {$createKeyword} {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
@@ -778,7 +782,14 @@ class MariaDB extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $err = $this->processException($e);
+            // Skip/Upsert: tolerate an existing index. Spec changes (attributes, type,
+            // uniqueness) must go through deleteIndex+createIndex — auto-modifying
+            // indexes risks long rebuilds and uniqueness violations mid-migration.
+            if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
+                return true;
+            }
+            throw $err;
         }
     }
 

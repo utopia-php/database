@@ -1499,11 +1499,14 @@ class Mongo extends Adapter
             $records[] = $record;
         }
 
-        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->onDuplicate === OnDuplicate::Skip) {
+        // insertMany aborts the txn on any duplicate; Mongo's upsert path handles
+        // both Skip ($setOnInsert: insert-only no-op) and Upsert ($set: overwrite).
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
             if (empty($records)) {
                 return [];
             }
+
+            $operator = $this->onDuplicate === OnDuplicate::Upsert ? '$set' : '$setOnInsert';
 
             $operations = [];
             foreach ($records as $record) {
@@ -1512,17 +1515,17 @@ class Mongo extends Adapter
                     $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
                 }
 
-                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
-                $setOnInsert = $record;
-                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+                // Filter fields can't reappear in $setOnInsert/$set (mongo path-conflict error).
+                $payload = $record;
+                unset($payload['_uid'], $payload['_tenant']);
 
-                if (empty($setOnInsert)) {
+                if (empty($payload)) {
                     continue;
                 }
 
                 $operations[] = [
                     'filter' => $filter,
-                    'update' => ['$setOnInsert' => $setOnInsert],
+                    'update' => [$operator => $payload],
                 ];
             }
 

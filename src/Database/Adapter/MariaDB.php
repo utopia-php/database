@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -2375,5 +2376,34 @@ class MariaDB extends SQL
     public function getSupportForTTLIndexes(): bool
     {
         return false;
+    }
+
+    /**
+     * MariaDB/MySQL Upsert: append `ON DUPLICATE KEY UPDATE col = VALUES(col), ...`
+     * so the INSERT replaces the matched row's columns instead of throwing.
+     *
+     * @param array<string> $columns
+     */
+    protected function getInsertSuffix(string $table, array $columns = []): string
+    {
+        if ($this->onDuplicate !== OnDuplicate::Upsert || empty($columns)) {
+            return '';
+        }
+
+        $assignments = [];
+        foreach ($columns as $col) {
+            // Skip the primary unique key (_uid) — no need to "update" what matched.
+            // Safe to skip _id too since it's auto-increment in INSERT and untouched on update.
+            if (\in_array($col, ['`_uid`', '`_id`'], true)) {
+                continue;
+            }
+            $assignments[] = "{$col} = VALUES({$col})";
+        }
+
+        if (empty($assignments)) {
+            return '';
+        }
+
+        return 'ON DUPLICATE KEY UPDATE ' . \implode(', ', $assignments);
     }
 }

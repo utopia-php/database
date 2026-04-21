@@ -1047,8 +1047,12 @@ abstract class SQL extends Adapter
     /**
      * Returns a suffix appended after VALUES clause for duplicate handling.
      * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     *
+     * @param string $table  table name (without namespace prefix)
+     * @param array<string> $columns  quoted column names present in the INSERT — needed
+     *                                to emit ON DUPLICATE KEY UPDATE / ON CONFLICT DO UPDATE SET clauses
      */
-    protected function getInsertSuffix(string $table): string
+    protected function getInsertSuffix(string $table, array $columns = []): string
     {
         return '';
     }
@@ -2539,12 +2543,12 @@ abstract class SQL extends Adapter
                 $attributeKeys[] = '_tenant';
             }
 
-            $columns = [];
+            $columnList = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = $this->quote($this->filter($attribute));
+                $columnList[$key] = $this->quote($this->filter($attribute));
             }
 
-            $columns = '(' . \implode(', ', $columns) . ')';
+            $columns = '(' . \implode(', ', $columnList) . ')';
 
             $bindIndex = 0;
             $batchKeys = [];
@@ -2609,7 +2613,7 @@ abstract class SQL extends Adapter
             $stmt = $this->getPDO()->prepare("
                 {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
-                {$this->getInsertSuffix($name)}
+                {$this->getInsertSuffix($name, $columnList)}
             ");
 
             foreach ($bindValues as $key => $value) {

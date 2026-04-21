@@ -2356,7 +2356,10 @@ class Postgres extends SQL
         return 'INSERT INTO';
     }
 
-    protected function getInsertSuffix(string $table): string
+    /**
+     * @param array<string> $columns
+     */
+    protected function getInsertSuffix(string $table, array $columns = []): string
     {
         if ($this->onDuplicate === OnDuplicate::Fail) {
             return '';
@@ -2364,9 +2367,24 @@ class Postgres extends SQL
 
         $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
 
-        // Upsert on Postgres uses ON CONFLICT DO UPDATE; for now Skip and Upsert
-        // both DO NOTHING until upsert SET clause generation is implemented.
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        if ($this->onDuplicate === OnDuplicate::Skip) {
+            return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        }
+
+        // Upsert: DO UPDATE SET col = EXCLUDED.col for every column except the conflict key.
+        $assignments = [];
+        foreach ($columns as $col) {
+            if (\in_array($col, ['"_uid"', '"_id"', '"_tenant"'], true)) {
+                continue;
+            }
+            $assignments[] = "{$col} = EXCLUDED.{$col}";
+        }
+
+        if (empty($assignments)) {
+            return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        }
+
+        return "ON CONFLICT {$conflictTarget} DO UPDATE SET " . \implode(', ', $assignments);
     }
 
     protected function getInsertPermissionsSuffix(): string

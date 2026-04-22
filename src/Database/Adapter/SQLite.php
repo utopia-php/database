@@ -466,23 +466,16 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $filteredId = $this->filter($id);
 
-        // Workaround for no support for CREATE INDEX IF NOT EXISTS
-        $stmt = $this->getPDO()->prepare("
-			SELECT name
-			FROM sqlite_master
-			WHERE type='index' AND name=:_index;
-		");
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$filteredId}");
-        $stmt->execute();
-        $index = $stmt->fetch();
-        // SQLite holds a table-level lock while the cursor is open; close it
-        // before we issue DDL in the Upsert branch or the subsequent DROP
-        // INDEX will error with "database table is locked".
-        $stmt->closeCursor();
-        if (!empty($index)) {
-            // Upsert: blow away the existing index and recreate it so the
-            // definition matches the incoming spec. Skip/Fail keep the
-            // original pre-existing behavior (tolerate).
+        // Pre-check runs in ALL modes on SQLite: createCollection intentionally
+        // issues the same CREATE INDEX twice for _perms side-tables, relying on
+        // the historical "always idempotent" behavior of this method. Matching
+        // spec → no-op in every mode; differing spec on Upsert rebuilds, on
+        // Skip/Fail tolerates (historical contract).
+        $match = $this->indexMatches($collection, $id, $type, $attributes, $lengths, $orders);
+        if ($match === true) {
+            return true;
+        }
+        if ($match === false) {
             if ($this->onDuplicate === OnDuplicate::Upsert) {
                 $this->deleteIndex($collection, $id);
             } else {
@@ -2007,5 +2000,62 @@ class SQLite extends MariaDB
 
         $target = $this->getSQLType($type, $size, $signed, $array, $required);
         return $this->normalizeColumnType((string) $row['type']) === $this->normalizeColumnType($target);
+    }
+
+    /**
+     * SQLite has no INFORMATION_SCHEMA; indexes live in sqlite_master keyed
+     * by their fully namespaced name. PRAGMA index_list returns uniqueness,
+     * PRAGMA index_info returns columns in order. Close cursors before any
+     * DDL — SQLite holds a table-level lock while a read cursor is open.
+     *
+     * @param array<string> $attributes
+     * @param array<int>    $lengths
+     * @param array<string> $orders
+     */
+    protected function indexMatches(
+        string $collection,
+        string $id,
+        string $type,
+        array $attributes,
+        array $lengths = [],
+        array $orders = [],
+    ): ?bool {
+        $collectionFiltered = $this->filter($collection);
+        $idFiltered = $this->filter($id);
+        $table = "{$this->getNamespace()}_{$collectionFiltered}";
+        $indexName = "{$this->getNamespace()}_{$this->tenant}_{$collectionFiltered}_{$idFiltered}";
+
+        $stmt = $this->getPDO()->prepare('SELECT "unique" FROM pragma_index_list(:table) WHERE name = :index');
+        $stmt->bindValue(':table', $table, PDO::PARAM_STR);
+        $stmt->bindValue(':index', $indexName, PDO::PARAM_STR);
+        $stmt->execute();
+        $list = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+        if (empty($list)) {
+            return null;
+        }
+
+        if ((bool) $list['unique'] !== ($type === Database::INDEX_UNIQUE)) {
+            return false;
+        }
+
+        $stmt = $this->getPDO()->prepare('SELECT name FROM pragma_index_info(:index) ORDER BY seqno');
+        $stmt->bindValue(':index', $indexName, PDO::PARAM_STR);
+        $stmt->execute();
+        $existingCols = \array_map(fn ($r) => (string) $r['name'], $stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt->closeCursor();
+
+        // Mirror SQLite's getSQLIndex transformation for target column list.
+        // Shared-tables tenant prefix: SQLite follows MariaDB's behavior since
+        // it extends MariaDB — _tenant prepended for KEY/UNIQUE.
+        $targetCols = [];
+        foreach ($attributes as $attr) {
+            $targetCols[] = $this->filter($this->getInternalKeyForAttribute($attr));
+        }
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
+            \array_unshift($targetCols, '_tenant');
+        }
+
+        return $targetCols === $existingCols;
     }
 }

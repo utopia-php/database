@@ -8444,6 +8444,39 @@ trait DocumentTests
     }
 
     /**
+     * OnDuplicate::Upsert on createIndex with a matching spec is a cheap
+     * no-op — indexMatches() returns true, so no DROP / CREATE fires. Proves
+     * the symmetry with testUpsertAttributeSameTypeNoop.
+     */
+    public function testUpsertIndexSameSpecNoop(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['name']);
+
+        // Same-spec re-declare under Upsert → indexMatches returns true, no DDL.
+        // We can't directly observe "no rebuild happened" without a spy, but
+        // we can assert the operation completed and the index is still there.
+        $collection = __FUNCTION__;
+        $result = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
+            return $database->getAdapter()->createIndex($collection, 'idx', Database::INDEX_KEY, ['name'], [], []);
+        });
+        $this->assertTrue($result);
+
+        // Deleting it must succeed — confirming the index is exactly where
+        // it was before the Upsert no-op.
+        $this->assertTrue($database->getAdapter()->deleteIndex(__FUNCTION__, 'idx'));
+    }
+
+    /**
      * OnDuplicate::Skip on createAttribute / createIndex tolerates pre-existing
      * resources without modifying them.
      */

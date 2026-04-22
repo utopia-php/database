@@ -505,23 +505,23 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        try {
-            return $this->execute($this->getPDO()
-                ->prepare($sql));
-        } catch (PDOException $e) {
-            $err = $this->processException($e);
-            if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
+        // Skip/Upsert: pre-check instead of catching a duplicate from the DDL.
+        // A failed ALTER TABLE inside a transaction would abort the outer
+        // transaction on Postgres, making the catch-and-retry pattern unsafe.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
+            $match = $this->attributeMatches($collection, $id, $type, $size, $signed, $array, $required);
+            if ($match === true) {
+                return true;
+            }
+            if ($match === false) {
                 if ($this->onDuplicate === OnDuplicate::Skip) {
                     return true;
                 }
-                if ($this->attributeMatches($collection, $id, $type, $size, $signed, $array, $required) === true) {
-                    return true;
-                }
                 $this->deleteAttribute($collection, $id, $array);
-                return $this->execute($this->getPDO()->prepare($sql));
             }
-            throw $err;
         }
+
+        return $this->execute($this->getPDO()->prepare($sql));
     }
 
     /**
@@ -918,6 +918,9 @@ class Postgres extends SQL
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
+        // Preserve raw attribute list for indexMatches — the loop below
+        // mutates $attributes into SQL-formatted column fragments.
+        $attrsRaw = $attributes;
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
@@ -957,14 +960,7 @@ class Postgres extends SQL
             $attributes = "_tenant, {$attributes}";
         }
 
-        // Skip tolerates pre-existing indexes via IF NOT EXISTS; Upsert always
-        // issues a plain CREATE so the duplicate-key error triggers the
-        // drop+recreate branch below (we want the new spec, not a silent skip).
-        $createClause = $this->onDuplicate === OnDuplicate::Skip
-            ? "CREATE {$sqlType} IF NOT EXISTS"
-            : "CREATE {$sqlType}";
-
-        $sql = "{$createClause} \"{$keyName}\" ON {$this->getSQLTable($collection)}";
+        $sql = "CREATE {$sqlType} \"{$keyName}\" ON {$this->getSQLTable($collection)}";
 
         // Add USING clause for special index types
         $sql .= match ($type) {
@@ -983,16 +979,23 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        try {
-            return $this->getPDO()->prepare($sql)->execute();
-        } catch (PDOException $e) {
-            $err = $this->processException($e);
-            if ($err instanceof DuplicateException && $this->onDuplicate === OnDuplicate::Upsert) {
-                $this->deleteIndex($collection, $id);
-                return $this->getPDO()->prepare($sql)->execute();
+        // Skip/Upsert: pre-check via indexMatches() rather than catching a
+        // duplicate DDL error. A failed CREATE INDEX on Postgres aborts the
+        // surrounding transaction, so catch-and-retry is unsafe.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
+            $match = $this->indexMatches($collection, $id, $type, $attrsRaw, $lengths, $orders);
+            if ($match === true) {
+                return true;
             }
-            throw $err;
+            if ($match === false) {
+                if ($this->onDuplicate === OnDuplicate::Skip) {
+                    return true;
+                }
+                $this->deleteIndex($collection, $id);
+            }
         }
+
+        return $this->getPDO()->prepare($sql)->execute();
     }
     /**
      * Delete Index
@@ -2009,6 +2012,92 @@ class Postgres extends SQL
         $sql = \preg_replace('/\s+/', ' ', $sql);
 
         return \trim($sql);
+    }
+
+    /**
+     * Postgres stores indexes in pg_index; the relation name on disk is the
+     * short-keyed form produced by createIndex (namespace + tenant +
+     * collection + id, hashed if longer than the identifier limit).
+     *
+     * Fetches existing column list via unnest(indkey) joined to pg_attribute,
+     * and uniqueness via indisunique. Index method is looked up via pg_am
+     * (btree / gin / gist / hnsw). Lengths and per-column orders are ignored
+     * — a mismatch there yields a conservative false negative, never a false
+     * positive.
+     *
+     * @param array<string> $attributes
+     * @param array<int>    $lengths
+     * @param array<string> $orders
+     */
+    protected function indexMatches(
+        string $collection,
+        string $id,
+        string $type,
+        array $attributes,
+        array $lengths = [],
+        array $orders = [],
+    ): ?bool {
+        $collectionFiltered = $this->filter($collection);
+        $idFiltered = $this->filter($id);
+        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collectionFiltered}_{$idFiltered}");
+
+        $stmt = $this->getPDO()->prepare("
+            SELECT a.attname AS column_name, i.indisunique AS is_unique, am.amname AS method
+            FROM pg_catalog.pg_index i
+            JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_catalog.pg_am am ON am.oid = c.relam
+            CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, pos)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+            WHERE n.nspname = :schema
+              AND c.relname = :index
+            ORDER BY k.pos
+        ");
+        $stmt->bindValue(':schema', $this->getDatabase(), PDO::PARAM_STR);
+        $stmt->bindValue(':index', $keyName, PDO::PARAM_STR);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($rows)) {
+            return null;
+        }
+
+        if ((bool) $rows[0]['is_unique'] !== ($type === Database::INDEX_UNIQUE)) {
+            return false;
+        }
+
+        // Map declared index type to Postgres access method (pg_am.amname)
+        $targetMethod = match ($type) {
+            Database::INDEX_SPATIAL => 'gist',
+            Database::INDEX_HNSW_EUCLIDEAN,
+            Database::INDEX_HNSW_COSINE,
+            Database::INDEX_HNSW_DOT => 'hnsw',
+            Database::INDEX_OBJECT,
+            Database::INDEX_TRIGRAM => 'gin',
+            default => 'btree', // INDEX_KEY, INDEX_UNIQUE, INDEX_FULLTEXT
+        };
+        if (\strtolower((string) $rows[0]['method']) !== $targetMethod) {
+            return false;
+        }
+
+        // Target column list — mirror createIndex's transformation including
+        // shared-tables tenant prefix for KEY/UNIQUE indexes.
+        $targetCols = [];
+        foreach ($attributes as $attr) {
+            $targetCols[] = match ($attr) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attr),
+            };
+        }
+        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
+            \array_unshift($targetCols, '_tenant');
+        }
+
+        $existingCols = \array_map(fn ($r) => (string) $r['column_name'], $rows);
+
+        return $targetCols === $existingCols;
     }
 
     /**

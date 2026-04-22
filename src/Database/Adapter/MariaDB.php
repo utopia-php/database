@@ -736,6 +736,9 @@ class MariaDB extends SQL
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
         $id = $this->filter($id);
+        // Preserve raw attribute list for indexMatches — the loop below
+        // mutates $attributes into SQL-formatted column fragments.
+        $attrsRaw = $attributes;
 
         foreach ($attributes as $i => $attr) {
             $attribute = null;
@@ -777,25 +780,23 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (PDOException $e) {
-            $err = $this->processException($e);
-            if ($err instanceof DuplicateException && $this->onDuplicate !== OnDuplicate::Fail) {
+        // Skip/Upsert: pre-check via indexMatches() instead of reacting to a
+        // DDL duplicate. Mirrors the attributeMatches() pattern — if spec
+        // matches we no-op; if it differs we rebuild only on Upsert.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
+            $match = $this->indexMatches($collection->getId(), $id, $type, $attrsRaw, $lengths, $orders);
+            if ($match === true) {
+                return true;
+            }
+            if ($match === false) {
                 if ($this->onDuplicate === OnDuplicate::Skip) {
                     return true;
                 }
-                // Upsert: bring the index in line with the requested spec.
-                // Index spec comparison is adapter-specific and brittle, so we
-                // always drop and recreate here; the cost is one extra index
-                // rebuild, which is acceptable during a re-migration.
                 $this->deleteIndex($collection->getId(), $id);
-                return $this->getPDO()->prepare($sql)->execute();
             }
-            throw $err;
         }
+
+        return $this->getPDO()->prepare($sql)->execute();
     }
 
     /**

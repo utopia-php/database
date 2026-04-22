@@ -269,7 +269,11 @@ abstract class SQL extends Adapter
             }
         }
 
-        return $this->getPDO()->prepare($sql)->execute();
+        try {
+            return $this->getPDO()->prepare($sql)->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**

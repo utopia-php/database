@@ -521,7 +521,11 @@ class Postgres extends SQL
             }
         }
 
-        return $this->execute($this->getPDO()->prepare($sql));
+        try {
+            return $this->execute($this->getPDO()->prepare($sql));
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -995,7 +999,11 @@ class Postgres extends SQL
             }
         }
 
-        return $this->getPDO()->prepare($sql)->execute();
+        try {
+            return $this->getPDO()->prepare($sql)->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
     /**
      * Delete Index

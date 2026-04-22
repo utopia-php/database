@@ -158,12 +158,8 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $createKeyword = $this->onDuplicate !== OnDuplicate::Fail
-            ? 'CREATE TABLE IF NOT EXISTS'
-            : 'CREATE TABLE';
-
         $collection = "
-			{$createKeyword} {$this->getSQLTable($id)} (
+			CREATE TABLE {$this->getSQLTable($id)} (
 				_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
@@ -194,7 +190,7 @@ class MariaDB extends SQL
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
-            {$createKeyword} {$this->getSQLTable($id . '_perms')} (
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
@@ -736,9 +732,6 @@ class MariaDB extends SQL
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
         $id = $this->filter($id);
-        // Preserve raw attribute list for indexMatches — the loop below
-        // mutates $attributes into SQL-formatted column fragments.
-        $attrsRaw = $attributes;
 
         foreach ($attributes as $i => $attr) {
             $attribute = null;
@@ -780,24 +773,10 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        // Skip/Upsert: pre-check via indexMatches() instead of reacting to a
-        // DDL duplicate. Mirrors the attributeMatches() pattern — if spec
-        // matches we no-op; if it differs we rebuild only on Upsert.
-        if ($this->onDuplicate !== OnDuplicate::Fail) {
-            $match = $this->indexMatches($collection->getId(), $id, $type, $attrsRaw, $lengths, $orders);
-            if ($match === true) {
-                return true;
-            }
-            if ($match === false) {
-                if ($this->onDuplicate === OnDuplicate::Skip) {
-                    return true;
-                }
-                $this->deleteIndex($collection->getId(), $id);
-            }
-        }
-
         try {
-            return $this->getPDO()->prepare($sql)->execute();
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

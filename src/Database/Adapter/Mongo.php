@@ -431,12 +431,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // In shared-tables mode, for metadata, or when the caller opted into
-        // Skip/Upsert, the physical collection may already exist. Return early
-        // to avoid a "Collection Exists" exception from the client.
-        $tolerateExisting = $this->getSharedTables()
-            || $name === Database::METADATA
-            || $this->onDuplicate !== OnDuplicate::Fail;
+        // In shared-tables mode or for metadata the physical collection may
+        // already exist. Return early to avoid "Collection Exists" from the
+        // client.
+        $tolerateExisting = $this->getSharedTables() || $name === Database::METADATA;
 
         if (!$this->inTransaction && $tolerateExisting && $this->exists($this->getNamespace(), $name)) {
             return true;
@@ -449,10 +447,6 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
-                // Also tolerate client-reported duplicates in Skip/Upsert mode.
-                if ($tolerateExisting) {
-                    return true;
-                }
                 // Keep existing shared-tables/metadata behavior — no-op there.
                 return true;
             }
@@ -1118,15 +1112,7 @@ class Mongo extends Adapter
 
             return $result;
         } catch (\Exception $e) {
-            $err = $this->processException($e);
-            if ($err instanceof DuplicateException && $this->onDuplicate === OnDuplicate::Upsert) {
-                // Mongo raises IndexKeySpecsConflict when re-creating an index
-                // with a name that points to different keys/options. Drop the
-                // existing one and recreate with the new spec.
-                $this->deleteIndex($collection, $id);
-                return $this->client->createIndexes($name, [$indexes], $options);
-            }
-            throw $err;
+            throw $this->processException($e);
         }
     }
 

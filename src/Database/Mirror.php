@@ -205,12 +205,23 @@ class Mirror extends Database
 
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
-        $result = $this->source->createCollection(
-            $id,
-            $attributes,
-            $indexes,
-            $permissions,
-            $documentSecurity
+        // Forward the OnDuplicate scope to source/destination so their
+        // Database-layer dispatch observes it. Skip/Upsert tolerate an
+        // existing collection; Fail rethrows as before.
+        $forward = fn (Database $target, callable $call) =>
+            $this->onDuplicate !== OnDuplicate::Fail
+                ? $target->withOnDuplicate($this->onDuplicate, $call)
+                : $call();
+
+        $result = $forward(
+            $this->source,
+            fn () => $this->source->createCollection(
+                $id,
+                $attributes,
+                $indexes,
+                $permissions,
+                $documentSecurity
+            )
         );
 
         if ($this->destination === null) {
@@ -227,12 +238,15 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->createCollection(
-                $id,
-                $attributes,
-                $indexes,
-                $permissions,
-                $documentSecurity
+            $forward(
+                $this->destination,
+                fn () => $this->destination->createCollection(
+                    $id,
+                    $attributes,
+                    $indexes,
+                    $permissions,
+                    $documentSecurity
+                )
             );
 
             $this->silent(function () use ($id) {
@@ -303,18 +317,26 @@ class Mirror extends Database
 
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $result = $this->source->createAttribute(
-            $collection,
-            $id,
-            $type,
-            $size,
-            $required,
-            $default,
-            $signed,
-            $array,
-            $format,
-            $formatOptions,
-            $filters
+        $forward = fn (Database $target, callable $call) =>
+            $this->onDuplicate !== OnDuplicate::Fail
+                ? $target->withOnDuplicate($this->onDuplicate, $call)
+                : $call();
+
+        $result = $forward(
+            $this->source,
+            fn () => $this->source->createAttribute(
+                $collection,
+                $id,
+                $type,
+                $size,
+                $required,
+                $default,
+                $signed,
+                $array,
+                $format,
+                $formatOptions,
+                $filters
+            )
         );
 
         if ($this->destination === null) {
@@ -345,18 +367,21 @@ class Mirror extends Database
                 );
             }
 
-            $result = $this->destination->createAttribute(
-                $collection,
-                $document->getId(),
-                $document->getAttribute('type'),
-                $document->getAttribute('size'),
-                $document->getAttribute('required'),
-                $document->getAttribute('default'),
-                $document->getAttribute('signed'),
-                $document->getAttribute('array'),
-                $document->getAttribute('format'),
-                $document->getAttribute('formatOptions'),
-                $document->getAttribute('filters'),
+            $result = $forward(
+                $this->destination,
+                fn () => $this->destination->createAttribute(
+                    $collection,
+                    $document->getId(),
+                    $document->getAttribute('type'),
+                    $document->getAttribute('size'),
+                    $document->getAttribute('required'),
+                    $document->getAttribute('default'),
+                    $document->getAttribute('signed'),
+                    $document->getAttribute('array'),
+                    $document->getAttribute('format'),
+                    $document->getAttribute('formatOptions'),
+                    $document->getAttribute('filters'),
+                )
             );
         } catch (\Throwable $err) {
             $this->logError('createAttribute', $err);
@@ -480,7 +505,15 @@ class Mirror extends Database
 
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
     {
-        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl);
+        $forward = fn (Database $target, callable $call) =>
+            $this->onDuplicate !== OnDuplicate::Fail
+                ? $target->withOnDuplicate($this->onDuplicate, $call)
+                : $call();
+
+        $result = $forward(
+            $this->source,
+            fn () => $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl)
+        );
 
         if ($this->destination === null) {
             return $result;
@@ -505,14 +538,17 @@ class Mirror extends Database
                 );
             }
 
-            $result = $this->destination->createIndex(
-                $collection,
-                $document->getId(),
-                $document->getAttribute('type'),
-                $document->getAttribute('attributes'),
-                $document->getAttribute('lengths'),
-                $document->getAttribute('orders'),
-                $document->getAttribute('ttl', 0)
+            $result = $forward(
+                $this->destination,
+                fn () => $this->destination->createIndex(
+                    $collection,
+                    $document->getId(),
+                    $document->getAttribute('type'),
+                    $document->getAttribute('attributes'),
+                    $document->getAttribute('lengths'),
+                    $document->getAttribute('orders'),
+                    $document->getAttribute('ttl', 0)
+                )
             );
         } catch (\Throwable $err) {
             $this->logError('createIndex', $err);

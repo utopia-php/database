@@ -8346,153 +8346,44 @@ trait DocumentTests
     }
 
     /**
-     * OnDuplicate::Upsert on createAttribute with an existing column of the
-     * SAME type is a no-op — row data must be preserved.
+     * OnDuplicate::Skip and Upsert tolerate an existing collection — they
+     * return the current metadata document instead of throwing. Collections
+     * are never destructive at the library layer; callers that need to
+     * reconcile schema drop/recreate the individual attributes / indexes.
      */
-    public function testUpsertAttributeSameTypeNoop(): void
+    public function testCreateCollSkipUpsertTolerates(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
-
         $database->createDocument(__FUNCTION__, new Document([
             '$id' => 'doc',
-            'name' => 'preserve-me',
+            'name' => 'keep',
             '$permissions' => [Permission::read(Role::any())],
         ]));
 
         $collection = __FUNCTION__;
-        $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
-            $database->getAdapter()->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
-        });
+        $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createCollection($collection));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
 
-        $doc = $database->getDocument(__FUNCTION__, 'doc');
-        $this->assertSame('preserve-me', $doc->getAttribute('name'));
+        $database->withOnDuplicate(OnDuplicate::Upsert, fn () => $database->createCollection($collection));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
     }
 
     /**
-     * OnDuplicate::Upsert on createAttribute with a DIFFERENT type drops the
-     * existing column and recreates it with the new spec. Verified at the
-     * adapter layer via a follow-up createAttribute under Fail — which would
-     * throw DuplicateException if the column hadn't actually been dropped.
+     * OnDuplicate::Skip and Upsert tolerate an existing attribute. Caller is
+     * responsible for dropping first if the spec needs to change (migration
+     * consults source vs destination _metadata._updatedAt to decide).
      */
-    public function testUpsertAttrTypeChangedRecreates(): void
+    public function testCreateAttrSkipUpsertTolerates(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'payload', Database::VAR_STRING, 64, true);
-
-        $collection = __FUNCTION__;
-        // Upsert with a WIDER size: must drop the old VARCHAR(64) and recreate
-        // VARCHAR(256).
-        $result = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
-            return $database->getAdapter()->createAttribute($collection, 'payload', Database::VAR_STRING, 256, true);
-        });
-        $this->assertTrue($result);
-
-        // Second Upsert with the SAME (new) size must be a cheap no-op — the
-        // matches-check returns true and no DDL runs.
-        $result = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
-            return $database->getAdapter()->createAttribute($collection, 'payload', Database::VAR_STRING, 256, true);
-        });
-        $this->assertTrue($result);
-
-        // Sanity: deleteAttribute succeeds, confirming the column is really there.
-        $this->assertTrue($database->getAdapter()->deleteAttribute(__FUNCTION__, 'payload'));
-    }
-
-    /**
-     * OnDuplicate::Upsert on createIndex over an existing index name rebuilds
-     * the index — the end state matches the requested spec.
-     */
-    public function testUpsertIndexRebuilds(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'a', Database::VAR_STRING, 64, true);
-        $database->createAttribute(__FUNCTION__, 'b', Database::VAR_STRING, 64, true);
-        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['a']);
-
-        $collection = __FUNCTION__;
-        $result = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
-            return $database->getAdapter()->createIndex($collection, 'idx', Database::INDEX_KEY, ['b'], [], []);
-        });
-
-        $this->assertTrue($result);
-        $this->assertTrue($database->getAdapter()->deleteIndex(__FUNCTION__, 'idx'));
-    }
-
-    /**
-     * OnDuplicate::Upsert on createIndex with a matching spec is a cheap
-     * no-op — indexMatches() returns true, so no DROP / CREATE fires. Proves
-     * the symmetry with testUpsertAttributeSameTypeNoop.
-     */
-    public function testUpsertIndexSameSpecNoop(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
-        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['name']);
-
-        // Same-spec re-declare under Upsert → indexMatches returns true, no DDL.
-        // We can't directly observe "no rebuild happened" without a spy, but
-        // we can assert the operation completed and the index is still there.
-        $collection = __FUNCTION__;
-        $result = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection) {
-            return $database->getAdapter()->createIndex($collection, 'idx', Database::INDEX_KEY, ['name'], [], []);
-        });
-        $this->assertTrue($result);
-
-        // Deleting it must succeed — confirming the index is exactly where
-        // it was before the Upsert no-op.
-        $this->assertTrue($database->getAdapter()->deleteIndex(__FUNCTION__, 'idx'));
-    }
-
-    /**
-     * OnDuplicate::Skip on createAttribute / createIndex tolerates pre-existing
-     * resources without modifying them.
-     */
-    public function testSkipSchemaTolerates(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
-        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['name']);
 
         $database->createDocument(__FUNCTION__, new Document([
             '$id' => 'doc',
@@ -8501,12 +8392,69 @@ trait DocumentTests
         ]));
 
         $collection = __FUNCTION__;
-        $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection) {
-            $database->getAdapter()->createAttribute($collection, 'name', Database::VAR_STRING, 512, true);
-            $database->getAdapter()->createIndex($collection, 'idx', Database::INDEX_KEY, ['name'], [], []);
-        });
 
-        $doc = $database->getDocument(__FUNCTION__, 'doc');
-        $this->assertSame('keep', $doc->getAttribute('name'));
+        // Skip: same-spec re-declare is a no-op.
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true)
+        ));
+
+        // Skip: even a wider-spec re-declare is tolerated (not applied).
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 512, true)
+        ));
+
+        // Upsert: same — tolerate existing. Migration handles drop+recreate itself.
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Upsert,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 512, true)
+        ));
+
+        // Metadata still reflects the ORIGINAL spec — library didn't touch it.
+        $nameAttr = null;
+        foreach ($database->getCollection(__FUNCTION__)->getAttribute('attributes', []) as $attr) {
+            if ($attr->getAttribute('key') === 'name') {
+                $nameAttr = $attr;
+                break;
+            }
+        }
+        $this->assertNotNull($nameAttr);
+        $this->assertSame(128, (int) $nameAttr->getAttribute('size'));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Skip and Upsert tolerate an existing index. End state is
+     * always the first-declared spec; callers that need a different spec
+     * deleteIndex() first.
+     */
+    public function testCreateIdxSkipUpsertTolerates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'a', Database::VAR_STRING, 64, true);
+        $database->createAttribute(__FUNCTION__, 'b', Database::VAR_STRING, 64, true);
+        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['a']);
+
+        $collection = __FUNCTION__;
+
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createIndex($collection, 'idx', Database::INDEX_KEY, ['b'])
+        ));
+
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Upsert,
+            fn () => $database->createIndex($collection, 'idx', Database::INDEX_KEY, ['b'])
+        ));
+
+        // Metadata still reflects the original column — library tolerates,
+        // caller must drop first to change spec.
+        $indexes = $database->getCollection(__FUNCTION__)->getAttribute('indexes', []);
+        $this->assertCount(1, $indexes);
+        $this->assertSame(['a'], $indexes[0]->getAttribute('attributes'));
     }
 }

@@ -246,31 +246,15 @@ abstract class SQL extends Adapter
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
-        $quoted = $this->quote($this->filter($id));
-        $sqlType = $this->getSQLType($type, $size, $signed, $array, $required);
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$quoted} {$sqlType} {$this->getLockType()};";
+        $id = $this->quote($this->filter($id));
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        // Skip/Upsert: pre-check the existing column so we don't drive control
-        // flow through PDOException. attributeMatches returns null (doesn't
-        // exist), true (exists + matches spec), or false (exists + differs).
-        if ($this->onDuplicate !== OnDuplicate::Fail) {
-            $match = $this->attributeMatches($collection, $id, $type, $size, $signed, $array, $required);
-            if ($match === true) {
-                return true;
-            }
-            if ($match === false) {
-                if ($this->onDuplicate === OnDuplicate::Skip) {
-                    return true;
-                }
-                // Upsert: column exists with a different type — drop and
-                // recreate so migration can repopulate via row Upsert.
-                $this->deleteAttribute($collection, $id, $array);
-            }
-        }
-
         try {
-            return $this->getPDO()->prepare($sql)->execute();
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1895,142 +1879,6 @@ abstract class SQL extends Adapter
         bool $array = false,
         bool $required = false
     ): string;
-
-    /**
-     * Returns whether the existing DB column for $collection.$id matches the
-     * requested declaration. Used by createAttribute under OnDuplicate::Upsert
-     * to decide between a no-op and a drop+recreate.
-     *
-     * Return values: true = exists and matches, false = exists but differs,
-     * null = doesn't exist (shouldn't happen from the Upsert path, but
-     * subclasses should handle it).
-     *
-     * Default implementation queries INFORMATION_SCHEMA and compares
-     * COLUMN_TYPE against getSQLType(). Adapters using non-INFORMATION_SCHEMA
-     * metadata (SQLite → PRAGMA, Postgres → pg_catalog) must override.
-     */
-    protected function attributeMatches(
-        string $collection,
-        string $id,
-        string $type,
-        int $size,
-        bool $signed = true,
-        bool $array = false,
-        bool $required = false
-    ): ?bool {
-        $stmt = $this->getPDO()->prepare('
-            SELECT COLUMN_TYPE
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = :schema
-              AND TABLE_NAME = :table
-              AND COLUMN_NAME = :column
-        ');
-        $stmt->bindValue(':schema', $this->getDatabase(), \PDO::PARAM_STR);
-        $stmt->bindValue(':table', "{$this->getNamespace()}_{$this->filter($collection)}", \PDO::PARAM_STR);
-        $stmt->bindValue(':column', $this->filter($id), \PDO::PARAM_STR);
-        $stmt->execute();
-        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-        if (empty($row)) {
-            return null;
-        }
-
-        $target = $this->getSQLType($type, $size, $signed, $array, $required);
-        return $this->normalizeColumnType((string) $row['COLUMN_TYPE']) === $this->normalizeColumnType($target);
-    }
-
-    /**
-     * Normalize a SQL type declaration for equality comparison: uppercase,
-     * collapse whitespace, drop MySQL's legacy integer display widths
-     * (BIGINT(20) → BIGINT) — MySQL 8+ doesn't emit them and comparing them
-     * against MariaDB's output would otherwise cause false mismatches.
-     * TINYINT(1) is intentionally preserved because it's the canonical
-     * BOOLEAN representation.
-     */
-    protected function normalizeColumnType(string $sql): string
-    {
-        $sql = \preg_replace('/\b(BIGINT|INT|SMALLINT|MEDIUMINT)\s*\(\s*\d+\s*\)/i', '$1', $sql);
-        $sql = \preg_replace('/\s+/', ' ', $sql);
-
-        return \strtoupper(\trim($sql));
-    }
-
-    /**
-     * Returns whether the existing DB index for $collection.$id matches the
-     * requested declaration. Mirrors attributeMatches() semantics:
-     *   - null  = doesn't exist
-     *   - true  = exists and matches spec
-     *   - false = exists but differs
-     *
-     * Comparison covers column list (ordered), uniqueness flag, and index
-     * kind (BTREE/FULLTEXT/SPATIAL). Per-column lengths and sort orders are
-     * intentionally ignored — a difference there yields a false negative
-     * (unnecessary rebuild), never a false positive, so it's conservative.
-     *
-     * Default implementation uses INFORMATION_SCHEMA.STATISTICS (one row per
-     * column in the index); MariaDB/MySQL inherit. Postgres and SQLite
-     * override with dialect-specific metadata queries.
-     *
-     * @param array<string> $attributes
-     * @param array<int>    $lengths
-     * @param array<string> $orders
-     */
-    protected function indexMatches(
-        string $collection,
-        string $id,
-        string $type,
-        array $attributes,
-        array $lengths = [],
-        array $orders = [],
-    ): ?bool {
-        $stmt = $this->getPDO()->prepare('
-            SELECT COLUMN_NAME, NON_UNIQUE, INDEX_TYPE
-            FROM INFORMATION_SCHEMA.STATISTICS
-            WHERE TABLE_SCHEMA = :schema
-              AND TABLE_NAME = :table
-              AND INDEX_NAME = :index
-            ORDER BY SEQ_IN_INDEX
-        ');
-        $stmt->bindValue(':schema', $this->getDatabase(), \PDO::PARAM_STR);
-        $stmt->bindValue(':table', "{$this->getNamespace()}_{$this->filter($collection)}", \PDO::PARAM_STR);
-        $stmt->bindValue(':index', $this->filter($id), \PDO::PARAM_STR);
-        $stmt->execute();
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-        if (empty($rows)) {
-            return null;
-        }
-
-        // Uniqueness
-        if (((int) $rows[0]['NON_UNIQUE'] === 0) !== ($type === Database::INDEX_UNIQUE)) {
-            return false;
-        }
-
-        // Index kind
-        $existingKind = \strtoupper((string) $rows[0]['INDEX_TYPE']);
-        $targetKind = match ($type) {
-            Database::INDEX_FULLTEXT => 'FULLTEXT',
-            Database::INDEX_SPATIAL => 'SPATIAL',
-            default => 'BTREE',
-        };
-        if ($existingKind !== $targetKind) {
-            return false;
-        }
-
-        // Column list — reconstruct the exact sequence that createIndex would
-        // have written, including the tenant prefix for shared-tables key /
-        // unique indexes. Must stay in sync with createIndex.
-        $targetCols = [];
-        foreach ($attributes as $attr) {
-            $targetCols[] = $this->filter($this->getInternalKeyForAttribute($attr));
-        }
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
-            \array_unshift($targetCols, '_tenant');
-        }
-
-        $existingCols = \array_map(fn ($r) => (string) $r['COLUMN_NAME'], $rows);
-
-        return $targetCols === $existingCols;
-    }
 
     /**
      * @throws DatabaseException For unknown type values.

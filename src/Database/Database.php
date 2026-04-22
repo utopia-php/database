@@ -1721,6 +1721,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
+            // Skip/Upsert: collection data is never destroyed — both modes
+            // tolerate the existing collection and return its current metadata
+            // document. Per-attribute / per-index reconciliation happens via
+            // the dedicated createAttribute / createIndex paths.
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return $collection;
+            }
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
@@ -2156,6 +2163,20 @@ class Database
         if (in_array($type, self::ATTRIBUTE_FILTER_TYPES)) {
             $filters[] = $type;
             $filters = array_unique($filters);
+        }
+
+        // Skip/Upsert: if the attribute already exists in metadata, tolerate
+        // and return. Spec reconciliation (drop + recreate on type change) is
+        // a caller concern — migration consults source vs destination metadata
+        // _updatedAt and issues deleteAttribute before a re-creation itself,
+        // so by the time this is called the attribute is either truly new or
+        // intentionally unchanged.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
+            foreach ($collection->getAttribute('attributes', []) as $existing) {
+                if (\strtolower($existing->getAttribute('key', $existing->getId())) === \strtolower($id)) {
+                    return true;
+                }
+            }
         }
 
         $existsInSchema = false;
@@ -4528,9 +4549,15 @@ class Database
 
         /** @var array<Document> $indexes */
         foreach ($indexes as $index) {
-            if (\strtolower($index->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Index already exists');
+            if (\strtolower($index->getId()) !== \strtolower($id)) {
+                continue;
             }
+            // Skip/Upsert: tolerate the existing index. Caller (e.g. migration)
+            // is responsible for dropping it first if the spec needs to change.
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return true;
+            }
+            throw new DuplicateException('Index already exists');
         }
 
         if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {

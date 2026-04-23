@@ -67,9 +67,30 @@ runs:
           --dangerously-skip-permissions \
           --output-format json \
           --json-schema "$SCHEMA" \
-          "$CLASSIFY_PROMPT" 2>/dev/null)
+          "$CLASSIFY_PROMPT")
+        STATUS=$?
 
-        CLASSIFICATION=$(printf '%s' "$RAW" | jq -r '.result | fromjson? | .classification // empty' 2>/dev/null)
+        if [[ $STATUS -ne 0 ]]; then
+          echo "claude CLI exited $STATUS — routing to opus."
+          echo "CLI output: $RAW"
+        fi
+
+        # With --json-schema the structured payload lands at .structured_output as a
+        # parsed object. Older builds (or runs without schema) put the response at
+        # .result as either a plain string or a stringified JSON. Try both so the
+        # action keeps working across CLI versions.
+        CLASSIFICATION=$(printf '%s' "$RAW" | jq -r '
+          (.structured_output.classification // "") as $s
+          | if $s != "" then $s
+            else ((.result // "") | fromjson? | .classification // "")
+            end
+        ' 2>/dev/null)
+
+        # Last-ditch fallback: plain .result that happens to be the literal word.
+        if [[ -z "$CLASSIFICATION" ]]; then
+          CLASSIFICATION=$(printf '%s' "$RAW" | jq -r '.result // empty' 2>/dev/null \
+            | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' | head -c 20)
+        fi
 
         echo "Haiku classification: '$CLASSIFICATION'"
 

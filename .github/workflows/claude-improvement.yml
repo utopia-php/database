@@ -4,9 +4,9 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
 
-# Shared with claude-watcher: both mutate the PR branch (commit + push), so they
-# must not run simultaneously. Keying on head branch serializes reviewer and
-# watcher runs targeting the same PR into a single queue.
+# Shared with claude-healing and claude-comments: all three mutate the PR branch
+# (commit + push), so they must not run simultaneously. Keying on head branch
+# serializes runs targeting the same PR into a single queue.
 concurrency:
   group: claude-pr-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: false
@@ -14,7 +14,16 @@ concurrency:
 jobs:
   claude-review:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Defense in depth against prompt injection via PR title/body: require the
+    # PR author to be a trusted association in addition to the head being
+    # internal to this repo (which already blocks forks).
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        github.event.pull_request.author_association == 'OWNER' ||
+        github.event.pull_request.author_association == 'MEMBER' ||
+        github.event.pull_request.author_association == 'COLLABORATOR'
+      )
     permissions:
       contents: write
       pull-requests: write
@@ -23,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
@@ -71,7 +80,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@b4d67413279fc18c6e5de930ae307c4f108714eb # v1.0.104
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
@@ -95,12 +104,13 @@ jobs:
             You are reviewing and fixing PR #$PR_NUMBER in $REPO.
 
             ## Coordination with the CI watcher
-            The `claude-watcher` workflow also pushes to this PR branch when CI fails.
-            We share a concurrency group (branch-keyed), so only one of us runs at a time —
-            but the OTHER may have pushed between the last event and this job starting.
-            Before committing in STEP 5, `git fetch origin` and `git pull --rebase origin <branch>`.
-            If rebase conflicts, resolve them (prefer the other side's changes unless they
-            contradict a finding you're fixing), then continue.
+            The `claude-healing` and `claude-comments` workflows also push to this PR
+            branch. We share a concurrency group (branch-keyed), so only one of us runs
+            at a time — but the OTHER may have pushed between the last event and this
+            job starting. Before committing in STEP 5, `git fetch origin` and
+            `git pull --rebase origin <branch>`. If rebase conflicts, resolve them
+            (prefer the other side's changes unless they contradict a finding you're
+            fixing), then continue.
 
             ## STEP 1 — Analyze
             Run `/code-review:code-review` for all CRITICAL/HIGH/MEDIUM findings. Skip low/nits.

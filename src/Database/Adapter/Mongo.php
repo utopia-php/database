@@ -80,8 +80,7 @@ class Mongo extends Adapter
 
     public function getHostname(): string
     {
-        return 'mongo';
-        //return $this->client->host; // Private method
+        return $this->client->getHost();
     }
 
     /**

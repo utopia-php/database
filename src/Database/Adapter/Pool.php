@@ -59,6 +59,11 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
+            if ($this->skipDuplicates) {
+                return $this->pinnedAdapter->skipDuplicates(
+                    fn () => $this->pinnedAdapter->{$method}(...$args)
+                );
+            }
             return $this->pinnedAdapter->{$method}(...$args);
         }
 
@@ -93,6 +98,12 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
                 if (empty(\array_filter($adapter->getWriteHooks(), fn ($h) => $h::class === $hook::class))) {
                     $adapter->addWriteHook($hook);
                 }
+            }
+
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
             }
             return $adapter->{$method}(...$args);
         });
@@ -259,6 +270,11 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
 
             $this->pinnedAdapter = $adapter;
             try {
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->withTransaction($callback)
+                    );
+                }
                 return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;

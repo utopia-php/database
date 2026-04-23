@@ -319,6 +319,87 @@ class MirrorTest extends Base
         $this->assertTrue($destination->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
+    public function testCreateDocumentsSkipDuplicatesBackfillsDestination(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'mirrorSkipDup';
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        // Seed the SOURCE only (bypass the mirror) with the row we want to
+        // skipDuplicates over later. Destination intentionally does NOT have it —
+        // this simulates an in-flight backfill where the collection is marked
+        // 'upgraded' (schema mirrored) but not every row has reached destination.
+        $database->getSource()->createDocument($collection, new Document([
+            '$id' => 'dup',
+            'name' => 'Original',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]));
+
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
+        );
+
+        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'dup',
+                'name' => 'WouldBe',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'fresh',
+                'name' => 'Fresh',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]));
+
+        // Source: INSERT IGNORE — 'dup' is a no-op, keeps 'Original'.
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+
+        // Destination: 'dup' is NOT a duplicate there, so destination's own
+        // INSERT IGNORE inserts it. This prevents permanent divergence when
+        // destination is still catching up on rows that already exist on source.
+        $this->assertSame(
+            'WouldBe',
+            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            'Source-skipped doc must still insert on destination when absent there'
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+    }
+
     protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = '`'.self::$source->getDatabase().'`.`'.self::$source->getNamespace().'_'.$collection.'`';

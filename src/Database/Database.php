@@ -956,6 +956,25 @@ class Database
     }
 
     /**
+     * Execute a callback with skipDuplicates enabled, restoring the previous state afterward.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
+    /**
      * Set whether to preserve original sequence values instead of auto-generating them.
      *
      * @param bool $preserve True to preserve sequence values on write operations.

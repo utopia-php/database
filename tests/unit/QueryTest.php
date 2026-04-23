@@ -469,4 +469,111 @@ class QueryTest extends TestCase
         $this->assertContains(Method::NotBetween, $allMethods);
         $this->assertContains(Method::OrderRandom, $allMethods);
     }
+
+    public function testFingerprint(): void
+    {
+        $equalAlice = '{"method":"equal","attribute":"name","values":["Alice"]}';
+        $equalBob = '{"method":"equal","attribute":"name","values":["Bob"]}';
+        $equalEmail = '{"method":"equal","attribute":"email","values":["a@b.c"]}';
+        $notEqualAlice = '{"method":"notEqual","attribute":"name","values":["Alice"]}';
+        $gtAge18 = '{"method":"greaterThan","attribute":"age","values":[18]}';
+        $gtAge42 = '{"method":"greaterThan","attribute":"age","values":[42]}';
+
+        // Same shape, different values produce the same fingerprint
+        $a = Query::fingerprint([$equalAlice, $gtAge18]);
+        $b = Query::fingerprint([$equalBob, $gtAge42]);
+        $this->assertSame($a, $b);
+
+        // Different attribute produces different fingerprint
+        $c = Query::fingerprint([$equalEmail, $gtAge18]);
+        $this->assertNotSame($a, $c);
+
+        // Different method produces different fingerprint
+        $d = Query::fingerprint([$notEqualAlice, $gtAge18]);
+        $this->assertNotSame($a, $d);
+
+        // Order-independent
+        $e = Query::fingerprint([$gtAge18, $equalAlice]);
+        $this->assertSame($a, $e);
+
+        // Accepts parsed Query objects
+        $parsed = [Query::equal('name', ['Alice']), Query::greaterThan('age', 18)];
+        $f = Query::fingerprint($parsed);
+        $this->assertSame($a, $f);
+
+        // Empty array returns deterministic hash
+        $this->assertSame(\md5(''), Query::fingerprint([]));
+    }
+
+    public function testFingerprintNestedLogicalQueries(): void
+    {
+        // AND queries with different inner shapes produce different fingerprints
+        $andEqName = Query::and([Query::equal('name', ['Alice'])]);
+        $andEqEmail = Query::and([Query::equal('email', ['a@b.c'])]);
+        $this->assertNotSame(Query::fingerprint([$andEqName]), Query::fingerprint([$andEqEmail]));
+
+        // AND queries with same inner shape produce the same fingerprint (values differ)
+        $andEqNameBob = Query::and([Query::equal('name', ['Bob'])]);
+        $this->assertSame(Query::fingerprint([$andEqName]), Query::fingerprint([$andEqNameBob]));
+
+        // Order of children inside a logical query does not matter
+        $andA = Query::and([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
+        $andB = Query::and([Query::greaterThan('age', 42), Query::equal('name', ['Bob'])]);
+        $this->assertSame(Query::fingerprint([$andA]), Query::fingerprint([$andB]));
+
+        // AND of two filters differs from OR of the same two filters
+        $orA = Query::or([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
+        $this->assertNotSame(Query::fingerprint([$andA]), Query::fingerprint([$orA]));
+
+        // AND with one child differs from AND with two children
+        $andOne = Query::and([Query::equal('name', ['Alice'])]);
+        $andTwo = Query::and([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
+        $this->assertNotSame(Query::fingerprint([$andOne]), Query::fingerprint([$andTwo]));
+
+        // elemMatch attribute matters: same inner shape on different fields must NOT collide
+        $elemTags = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
+        $elemCategories = new Query(Query::TYPE_ELEM_MATCH, 'categories', [Query::equal('name', ['php'])]);
+        $this->assertNotSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemCategories]));
+
+        // elemMatch values-only change (same field, same child shape) still collides — as expected
+        $elemTagsOther = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['js'])]);
+        $this->assertSame(Query::fingerprint([$elemTags]), Query::fingerprint([$elemTagsOther]));
+    }
+
+    public function testFingerprintRejectsInvalidElements(): void
+    {
+        $this->expectException(QueryException::class);
+        Query::fingerprint([42]);
+    }
+
+    public function testShape(): void
+    {
+        // Leaf queries
+        $this->assertSame('equal:name', Query::equal('name', ['Alice'])->shape());
+        $this->assertSame('greaterThan:age', Query::greaterThan('age', 18)->shape());
+
+        // Logical with empty attribute
+        $and = Query::and([Query::equal('name', ['Alice']), Query::greaterThan('age', 18)]);
+        $this->assertSame('and:(equal:name|greaterThan:age)', $and->shape());
+
+        // elemMatch preserves the attribute (the field being matched)
+        $elem = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
+        $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
+
+        // Deeply nested — iterative traversal must match recursive result
+        $deep = Query::and([
+            Query::or([
+                Query::equal('a', ['x']),
+                Query::and([
+                    Query::equal('b', ['y']),
+                    Query::lessThan('c', 5),
+                ]),
+            ]),
+            Query::greaterThan('d', 10),
+        ]);
+        $this->assertSame(
+            'and:(greaterThan:d|or:(and:(equal:b|lessThan:c)|equal:a))',
+            $deep->shape(),
+        );
+    }
 }

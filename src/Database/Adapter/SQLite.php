@@ -1828,4 +1828,9 @@ class SQLite extends SQL
         $stmt->execute();
         $stmt->closeCursor();
     }
+
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+    }
 }

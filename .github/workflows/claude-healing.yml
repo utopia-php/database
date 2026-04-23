@@ -1,0 +1,140 @@
+name: Claude CI Watcher
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+# Shared with claude-review: both mutate the PR branch (commit + push), so they
+# must not run simultaneously. Keying on head branch serializes reviewer and
+# watcher runs targeting the same PR into a single queue.
+concurrency:
+  group: claude-pr-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  fix-failures:
+    # Only fire on PR failures (not push-to-main) and skip fork PRs.
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      actions: read
+      checks: read
+      id-token: write
+
+    steps:
+      - name: Find the PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          pr_number=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr_number" ]; then
+            echo "No open PR found — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout PR branch
+        if: steps.pr.outputs.skip != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 10
+
+      - name: Get failure logs
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh run view "$RUN_ID" --log-failed 2>&1 | tail -200 > /tmp/ci-failure-logs.txt
+          echo "Captured $(wc -l < /tmp/ci-failure-logs.txt) lines of failure logs"
+
+      - name: Extract failure log excerpt
+        if: steps.pr.outputs.skip != 'true'
+        id: excerpt
+        run: |
+          {
+            echo 'log<<__EOF__'
+            tail -120 /tmp/ci-failure-logs.txt
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Classify failure complexity with Haiku
+        if: steps.pr.outputs.skip != 'true'
+        id: classify
+        uses: ./.github/actions/classify-complexity
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Classify this CI failure's fix complexity. Reply with EXACTLY one lowercase word and nothing else: 'simple' or 'complex'.
+
+            simple = lint violation, formatting, obvious typo, missing import, trivial test assertion fix, single-file obvious mistake
+            complex = compile error with unclear cause, real test failure exposing a bug, flaky infrastructure, multi-file breakage, anything with unclear root cause or scope
+
+            FAILURE LOGS (tail):
+            ${{ steps.excerpt.outputs.log }}
+
+      - name: Claude fixes CI failures
+        if: steps.pr.outputs.skip != 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: |
+            https://github.com/anthropics/claude-code.git
+            https://github.com/abnegate/claudes.git
+          plugins: 'skills@claudes'
+          use_sticky_comment: 'false'
+          use_commit_signing: 'true'
+          show_full_output: 'true'
+          claude_args: |
+            --model ${{ steps.classify.outputs.model }}
+            --fallback-model ${{ steps.classify.outputs.fallback }}
+            --dangerously-skip-permissions
+          prompt: |
+            CI failed on PR #$PR_NUMBER (run $FAILED_RUN_ID).
+
+            The failure logs are at /tmp/ci-failure-logs.txt. Read them first.
+
+            ## Coordination with the code reviewer
+            The `claude-review` workflow also pushes to this PR branch. We share a
+            concurrency group (branch-keyed), so only one of us runs at a time — but
+            the reviewer may have pushed fix commits between the failing CI run and
+            this job starting. Before STEP 6, `git fetch origin` and
+            `git pull --rebase origin $HEAD_BRANCH`. If rebase conflicts, resolve them
+            (prefer the reviewer's changes unless they directly contradict your CI fix),
+            then continue. After rebasing, re-check whether the CI failure is still
+            reproducible — the reviewer may have already fixed it, in which case post
+            a comment saying so and STOP without pushing.
+
+            Your job:
+            1. Read the failure logs to identify the root cause (compile error, test failure, lint violation, etc.)
+            2. Read the project's CLAUDE.md for build/test/lint commands and conventions
+            3. Fix the issue directly in the codebase
+            4. Verify your fix by re-running the failed step (use whatever build system the project uses)
+            5. Post a brief PR comment explaining what failed and what you fixed:
+               `gh pr comment $PR_NUMBER --repo $GITHUB_REPOSITORY --body "..."`
+            6. `git fetch origin && git pull --rebase origin $HEAD_BRANCH`, then commit with
+               message: `(fix): CI — <short description>`
+            7. Push to the PR branch
+
+            Rules:
+            - Only fix the CI failure. Don't refactor, clean up, or improve other code.
+            - If the failure is a flaky test (passes on retry), just re-run it and comment that it was flaky.
+            - If you can't determine the root cause, post a comment asking for help instead of guessing.
+            - Never push to main. Only push to the PR head branch.

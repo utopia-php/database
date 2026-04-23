@@ -1,0 +1,27 @@
+name: Claude
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+jobs:
+  claude:
+    uses: abnegate/claude-pr-owner/.github/workflows/orchestrator.yml@main
+    secrets:
+      oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    with:
+      improvement: true
+      healing: true
+      bots: true
+      comments: true

@@ -1,0 +1,88 @@
+name: Classify task complexity with Haiku
+description: >
+  Ask Claude Haiku to classify a task as 'simple' or 'complex' and pick a model
+  pair (primary + fallback). Favours opus — sonnet is only chosen when Haiku
+  explicitly says 'simple'; any other output routes to opus.
+
+inputs:
+  oauth-token:
+    description: Claude Code OAuth token.
+    required: true
+  prompt:
+    description: >
+      Full classification prompt. Must instruct Haiku to reply with EXACTLY
+      one lowercase word — 'simple' or 'complex' — and nothing else.
+    required: true
+
+outputs:
+  model:
+    description: Selected primary model.
+    value: ${{ steps.classify.outputs.model }}
+  fallback:
+    description: Fallback model.
+    value: ${{ steps.classify.outputs.fallback }}
+  classification:
+    description: Raw classification string ('simple', 'complex', or fallback on empty/garbage).
+    value: ${{ steps.classify.outputs.classification }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Claude CLI
+      shell: bash
+      run: |
+        if ! command -v claude >/dev/null 2>&1; then
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        fi
+
+    - name: Run Haiku classification
+      id: classify
+      shell: bash
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+        CLASSIFY_PROMPT: ${{ inputs.prompt }}
+      run: |
+        set +e
+
+        # Force the model to emit a JSON object matching this schema — removes
+        # any chance of leading/trailing prose, punctuation, or casing drift.
+        SCHEMA='{
+          "type": "object",
+          "properties": {
+            "classification": {
+              "type": "string",
+              "enum": ["simple", "complex"]
+            }
+          },
+          "required": ["classification"],
+          "additionalProperties": false
+        }'
+
+        RAW=$(claude -p \
+          --model claude-haiku-4-5 \
+          --bare \
+          --max-turns 1 \
+          --tools "" \
+          --dangerously-skip-permissions \
+          --output-format json \
+          --json-schema "$SCHEMA" \
+          "$CLASSIFY_PROMPT" 2>/dev/null)
+
+        CLASSIFICATION=$(printf '%s' "$RAW" | jq -r '.result | fromjson? | .classification // empty' 2>/dev/null)
+
+        echo "Haiku classification: '$CLASSIFICATION'"
+
+        # Favour opus, sonnet only when haiku explicitly says simple.
+        if [[ "$CLASSIFICATION" == "simple" ]]; then
+          MODEL="claude-sonnet-4-6"
+          FALLBACK="claude-opus-4-7"
+        else
+          MODEL="claude-opus-4-7"
+          FALLBACK="claude-sonnet-4-6"
+        fi
+
+        echo "classification=$CLASSIFICATION" >> "$GITHUB_OUTPUT"
+        echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+        echo "fallback=$FALLBACK" >> "$GITHUB_OUTPUT"
+        echo "Selected primary=$MODEL, fallback=$FALLBACK"

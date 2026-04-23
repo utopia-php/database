@@ -81,9 +81,8 @@ trait CollectionTests
         $host = $database->getAdapter()->getHostname();
 
         if (!$database->getAdapter()->getSupportForHostname()) {
-            $this->assertEquals('', $host);
-            //            $this->expectNotToPerformAssertions();
-            //            return;
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $this->assertTrue(in_array($host, ['mysql', 'mariadb', 'postgres', 'mongo']));

@@ -117,6 +117,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getHostname(): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     /**
      * Pin a single connection from the pool for the entire transaction lifecycle.
      * This prevents startTransaction(), the callback, and commitTransaction()

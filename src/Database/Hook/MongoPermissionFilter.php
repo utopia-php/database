@@ -48,7 +48,7 @@ class MongoPermissionFilter implements Read
         $permissionsFilter = isset($filters['_permissions']) && \is_array($filters['_permissions'])
             ? $filters['_permissions']
             : [];
-        $permissionsFilter['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+        $permissionsFilter['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
         $filters['_permissions'] = $permissionsFilter;
 
         return $filters;

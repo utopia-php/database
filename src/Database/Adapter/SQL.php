@@ -628,7 +628,7 @@ abstract class SQL extends Adapter
                 $builder->set($row);
             }
 
-            $result = $builder->insert();
+            $result = $this->skipDuplicates ? $builder->insertOrIgnore() : $builder->insert();
             $stmt = $this->executeResult($result, Event::DocumentCreate);
             $this->execute($stmt);
 

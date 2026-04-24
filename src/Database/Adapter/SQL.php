@@ -2919,6 +2919,7 @@ abstract class SQL extends Adapter
             decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
             createBuilder: fn () => $this->createBuilder(),
             getTableRaw: fn (string $table) => $this->getSQLTableRaw($table),
+            skipDuplicates: $this->skipDuplicates,
         );
     }
 

@@ -298,6 +298,8 @@ class Database
 
     protected bool $preserveSequence = false;
 
+    protected bool $skipDuplicates = false;
+
     protected int $maxQueryValues = 5000;
 
     protected bool $migrating = false;

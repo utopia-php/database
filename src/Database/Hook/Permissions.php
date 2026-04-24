@@ -44,7 +44,7 @@ class Permissions extends Interceptor
         }
 
         if ($hasPermissions) {
-            $result = $permBuilder->insert();
+            $result = $context->skipDuplicates ? $permBuilder->insertOrIgnore() : $permBuilder->insert();
             $stmt = ($context->executeResult)($result, Event::PermissionsCreate);
             ($context->execute)($stmt);
         }

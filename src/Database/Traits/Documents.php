@@ -556,9 +556,10 @@ trait Documents
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection, $chunk);
-            });
+            $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
+            $batch = $this->skipDuplicates
+                ? $this->adapter->skipDuplicates($insert)
+                : $insert();
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 

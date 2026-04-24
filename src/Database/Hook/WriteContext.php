@@ -18,6 +18,7 @@ readonly class WriteContext
      * @param  Closure(array<string, mixed>, array<string, mixed>): array<string, mixed>  $decorateRow  Apply all write hooks' decorateRow to a row
      * @param  Closure(): \Utopia\Query\Builder\SQL  $createBuilder  Create a raw builder (no hooks, no table)
      * @param  Closure(string): string  $getTableRaw  Get the raw SQL table name with namespace prefix
+     * @param  bool  $skipDuplicates  Whether duplicate-key errors should be swallowed by this write
      */
     public function __construct(
         public Closure $newBuilder,
@@ -26,6 +27,7 @@ readonly class WriteContext
         public Closure $decorateRow,
         public Closure $createBuilder,
         public Closure $getTableRaw,
+        public bool $skipDuplicates = false,
     ) {
     }
 }

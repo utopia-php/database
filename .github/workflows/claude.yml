@@ -25,7 +25,7 @@ jobs:
       issues: write
       actions: read
       id-token: write
-    uses: abnegate/claude-pr-owner/.github/workflows/orchestrator.yml@d6ea746d7b7da003f6d10a67143af1a7bd88515a # v0.4.0
+    uses: abnegate/claude-pr-owner/.github/workflows/orchestrator.yml@6e883b07b6c3c8df9acca65d08909a470cb4fd4c # v0.4.1
     secrets:
       oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     with:

@@ -2428,21 +2428,23 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "3f57d89f6a62600379884cbe1b8391e9d952f107"
+                "reference": "5ca0401a121dac3b99a45fe42032a6c92ccc51fe"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/3f57d89f6a62600379884cbe1b8391e9d952f107",
-                "reference": "3f57d89f6a62600379884cbe1b8391e9d952f107",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/5ca0401a121dac3b99a45fe42032a6c92ccc51fe",
+                "reference": "5ca0401a121dac3b99a45fe42032a6c92ccc51fe",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.4"
             },
             "require-dev": {
+                "brianium/paratest": "*",
                 "laravel/pint": "*",
-                "mongodb/mongodb": "^1.20",
+                "mongodb/mongodb": "^2.0",
                 "phpstan/phpstan": "*",
+                "phpunit/phpcov": "*",
                 "phpunit/phpunit": "^12.0"
             },
             "type": "library",
@@ -2459,10 +2461,19 @@
             },
             "scripts": {
                 "test": [
-                    "vendor/bin/phpunit --testsuite Query"
+                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance"
+                ],
+                "test:coverage": [
+                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance --coverage-php coverage/unit.cov"
+                ],
+                "test:performance": [
+                    "vendor/bin/phpunit --testsuite Query --group=performance"
                 ],
                 "test:integration": [
                     "vendor/bin/phpunit --testsuite Integration"
+                ],
+                "test:integration:coverage": [
+                    "vendor/bin/phpunit --testsuite Integration --coverage-php coverage/integration.cov"
                 ],
                 "lint": [
                     "php -d memory_limit=2G ./vendor/bin/pint --test"
@@ -2489,7 +2500,7 @@
                 "source": "https://github.com/utopia-php/query/tree/feat-builder",
                 "issues": "https://github.com/utopia-php/query/issues"
             },
-            "time": "2026-03-26T01:52:53+00:00"
+            "time": "2026-04-23T10:30:18+00:00"
         },
         {
             "name": "utopia-php/telemetry",

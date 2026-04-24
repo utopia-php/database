@@ -41,9 +41,11 @@ class Filter extends Base
             /** @var string $attrKey */
             $attrKey = $attribute->getAttribute('key', $attribute->getId());
             $copy = $attribute->getArrayCopy();
-            // Convert type string to ColumnType enum for typed comparisons
+            // Convert known type strings to ColumnType enum for typed comparisons.
+            // Unknown strings are preserved as-is so the downstream switch can
+            // emit a recoverable "Unknown Data type" error instead of throwing.
             if (isset($copy['type']) && \is_string($copy['type'])) {
-                $copy['type'] = ColumnType::from($copy['type']);
+                $copy['type'] = ColumnType::tryFrom($copy['type']) ?? $copy['type'];
             }
             $this->schema[$attrKey] = $copy;
         }
@@ -135,12 +137,6 @@ class Filter extends Base
             return false;
         }
 
-        if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
-            return true;
-        }
-        /** @var array<string, mixed> $attributeSchema */
-        $attributeSchema = $this->schema[$attribute];
-
         /** @var ColumnType|null $attributeType */
         $attributeType = $attributeSchema['type'] ?? null;
 
@@ -167,10 +163,16 @@ class Filter extends Base
                 case ColumnType::Text:
                 case ColumnType::MediumText:
                 case ColumnType::LongText:
+                case ColumnType::Uuid7:
+                case ColumnType::Enum:
+                case ColumnType::Json:
+                case ColumnType::Binary:
                     $validator = new Text(0, 0);
                     break;
 
                 case ColumnType::Integer:
+                case ColumnType::Serial:
+                case ColumnType::SmallSerial:
                     /** @var int $size */
                     $size = $attributeSchema['size'] ?? 4;
                     /** @var bool $signed */
@@ -181,6 +183,12 @@ class Filter extends Base
                     $validator = new Integer(false, $bits, $unsigned);
                     break;
 
+                case ColumnType::BigInteger:
+                case ColumnType::BigSerial:
+                    $validator = new Integer(false, 64, false);
+                    break;
+
+                case ColumnType::Float:
                 case ColumnType::Double:
                     $validator = new FloatValidator();
                     break;
@@ -190,6 +198,7 @@ class Filter extends Base
                     break;
 
                 case ColumnType::Datetime:
+                case ColumnType::Timestamp:
                     $validator = new DatetimeValidator(
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate

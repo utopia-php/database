@@ -63,6 +63,16 @@ class Queries extends Validator
             return false;
         }
 
+        // Clear any aliases left over from a previous pass before collecting
+        // this call's set. Order validators persist across requests in pooled
+        // / long-lived processes; letting aliases accumulate leaks state and
+        // lets an unrelated query order by a stale alias.
+        foreach ($this->validators as $validator) {
+            if ($validator instanceof Order) {
+                $validator->resetAggregationAliases();
+            }
+        }
+
         /** @var array<string> $aggregationAliases */
         $aggregationAliases = [];
         foreach ($value as $q) {
@@ -73,10 +83,7 @@ class Queries extends Validator
                     continue;
                 }
             }
-            if (\in_array($q->getMethod(), [
-                Method::Count, Method::CountDistinct, Method::Sum, Method::Avg,
-                Method::Min, Method::Max, Method::Stddev, Method::Variance,
-            ], true)) {
+            if ($q->getMethod()->isAggregate()) {
                 $alias = $q->getValue('');
                 if (\is_string($alias) && $alias !== '') {
                     $aggregationAliases[] = $alias;
@@ -102,7 +109,11 @@ class Queries extends Validator
                 }
             }
 
-            if ($query->isNested() && $query->getMethod() !== Method::Having) {
+            // Only logical filter wrappers carry a list of sibling filters to
+            // re-validate. Having has its own handling; Union/UnionAll wrap
+            // sub-SELECTs whose children are not filters for this collection
+            // and must not be recursed into here.
+            if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
                 /** @var array<Query|string> $nestedValues */
                 $nestedValues = $query->getValues();
                 if (! self::isValid($nestedValues)) {
@@ -111,79 +122,80 @@ class Queries extends Validator
             }
 
             $method = $query->getMethod();
-            $methodType = match ($method) {
-                Method::Select => Base::METHOD_TYPE_SELECT,
-                Method::Limit => Base::METHOD_TYPE_LIMIT,
-                Method::Offset => Base::METHOD_TYPE_OFFSET,
-                Method::CursorAfter,
-                Method::CursorBefore => Base::METHOD_TYPE_CURSOR,
-                Method::OrderAsc,
-                Method::OrderDesc,
-                Method::OrderRandom => Base::METHOD_TYPE_ORDER,
-                Method::Equal,
-                Method::NotEqual,
-                Method::LessThan,
-                Method::LessThanEqual,
-                Method::GreaterThan,
-                Method::GreaterThanEqual,
-                Method::Search,
-                Method::NotSearch,
-                Method::IsNull,
-                Method::IsNotNull,
-                Method::Between,
-                Method::NotBetween,
-                Method::StartsWith,
-                Method::NotStartsWith,
-                Method::EndsWith,
-                Method::NotEndsWith,
-                Method::Contains,
-                Method::ContainsAny,
-                Method::NotContains,
-                Method::And,
-                Method::Or,
-                Method::ContainsAll,
-                Method::ElemMatch,
-                Method::Crosses,
-                Method::NotCrosses,
-                Method::DistanceEqual,
-                Method::DistanceNotEqual,
-                Method::DistanceGreaterThan,
-                Method::DistanceLessThan,
-                Method::Intersects,
-                Method::NotIntersects,
-                Method::Overlaps,
-                Method::NotOverlaps,
-                Method::Touches,
-                Method::NotTouches,
-                Method::Covers,
-                Method::NotCovers,
-                Method::SpatialEquals,
-                Method::NotSpatialEquals,
-                Method::VectorDot,
-                Method::VectorCosine,
-                Method::VectorEuclidean,
-                Method::Regex,
-                Method::Exists,
-                Method::NotExists => Base::METHOD_TYPE_FILTER,
-                Method::Count,
-                Method::CountDistinct,
-                Method::Sum,
-                Method::Avg,
-                Method::Min,
-                Method::Max,
-                Method::Stddev,
-                Method::Variance => Base::METHOD_TYPE_AGGREGATE,
-                Method::Distinct => Base::METHOD_TYPE_DISTINCT,
-                Method::GroupBy => Base::METHOD_TYPE_GROUP_BY,
-                Method::Having => Base::METHOD_TYPE_HAVING,
-                Method::Join,
-                Method::LeftJoin,
-                Method::RightJoin,
-                Method::CrossJoin,
-                Method::FullOuterJoin,
-                Method::NaturalJoin => Base::METHOD_TYPE_JOIN,
-                default => '',
-            };
+
+            // Route every aggregate method through the single source of truth
+            // on the base enum. Previously this match hand-listed only half
+            // of the aggregate methods, silently rejecting stddevPop, varPop,
+            // bitAnd, etc. with "Invalid query method".
+            if ($method->isAggregate()) {
+                $methodType = Base::METHOD_TYPE_AGGREGATE;
+            } else {
+                $methodType = match ($method) {
+                    Method::Select => Base::METHOD_TYPE_SELECT,
+                    Method::Limit => Base::METHOD_TYPE_LIMIT,
+                    Method::Offset => Base::METHOD_TYPE_OFFSET,
+                    Method::CursorAfter,
+                    Method::CursorBefore => Base::METHOD_TYPE_CURSOR,
+                    Method::OrderAsc,
+                    Method::OrderDesc,
+                    Method::OrderRandom => Base::METHOD_TYPE_ORDER,
+                    Method::Equal,
+                    Method::NotEqual,
+                    Method::LessThan,
+                    Method::LessThanEqual,
+                    Method::GreaterThan,
+                    Method::GreaterThanEqual,
+                    Method::Search,
+                    Method::NotSearch,
+                    Method::IsNull,
+                    Method::IsNotNull,
+                    Method::Between,
+                    Method::NotBetween,
+                    Method::StartsWith,
+                    Method::NotStartsWith,
+                    Method::EndsWith,
+                    Method::NotEndsWith,
+                    Method::Contains,
+                    Method::ContainsAny,
+                    Method::NotContains,
+                    Method::And,
+                    Method::Or,
+                    Method::ContainsAll,
+                    Method::ElemMatch,
+                    Method::Crosses,
+                    Method::NotCrosses,
+                    Method::DistanceEqual,
+                    Method::DistanceNotEqual,
+                    Method::DistanceGreaterThan,
+                    Method::DistanceLessThan,
+                    Method::Intersects,
+                    Method::NotIntersects,
+                    Method::Overlaps,
+                    Method::NotOverlaps,
+                    Method::Touches,
+                    Method::NotTouches,
+                    Method::Covers,
+                    Method::NotCovers,
+                    Method::SpatialEquals,
+                    Method::NotSpatialEquals,
+                    Method::VectorDot,
+                    Method::VectorCosine,
+                    Method::VectorEuclidean,
+                    Method::Regex,
+                    Method::Exists,
+                    Method::NotExists => Base::METHOD_TYPE_FILTER,
+                    Method::Distinct => Base::METHOD_TYPE_DISTINCT,
+                    Method::GroupBy => Base::METHOD_TYPE_GROUP_BY,
+                    Method::Having => Base::METHOD_TYPE_HAVING,
+                    Method::Join,
+                    Method::LeftJoin,
+                    Method::RightJoin,
+                    Method::CrossJoin,
+                    Method::FullOuterJoin,
+                    Method::NaturalJoin => Base::METHOD_TYPE_JOIN,
+                    default => '',
+                };
+            }
 
             $methodIsValid = false;
             foreach ($this->validators as $validator) {

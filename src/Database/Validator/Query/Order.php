@@ -17,6 +17,17 @@ class Order extends Base
     protected array $schema = [];
 
     /**
+     * Transient aggregation aliases registered by Queries::isValid for the
+     * current validation pass. Kept separate from $schema so it can be reset
+     * per-call without clobbering the real attribute schema — prior versions
+     * mutated $schema directly, leaking aliases across requests in long-lived
+     * processes (Swoole) and pooled validator instances.
+     *
+     * @var array<string, true>
+     */
+    protected array $aggregationAliases = [];
+
+    /**
      * @param  array<Document>  $attributes
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
@@ -45,6 +56,11 @@ class Order extends Base
 
                 return false;
             }
+        }
+
+        // Accept transient aggregation aliases registered by Queries::isValid
+        if (isset($this->aggregationAliases[$attribute])) {
+            return true;
         }
 
         // Search for attribute in schema
@@ -87,13 +103,25 @@ class Order extends Base
     }
 
     /**
+     * Register aggregation aliases that become valid order targets for the
+     * current validation pass. Callers (see Queries::isValid) must invoke
+     * resetAggregationAliases() before the pass to avoid cross-call leakage.
+     *
      * @param array<string> $aliases
      */
     public function addAggregationAliases(array $aliases): void
     {
         foreach ($aliases as $alias) {
-            $this->schema[$alias] = ['$id' => $alias, 'key' => $alias];
+            $this->aggregationAliases[$alias] = true;
         }
+    }
+
+    /**
+     * Clear any aggregation aliases added by a previous validation pass.
+     */
+    public function resetAggregationAliases(): void
+    {
+        $this->aggregationAliases = [];
     }
 
     /**

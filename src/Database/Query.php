@@ -26,11 +26,13 @@ class Query extends BaseQuery
 
     /**
      * Methods that compose child queries and contribute their inner
-     * structure to a shape/fingerprint.
+     * structure to a shape/fingerprint. Widened from parent's protected
+     * declaration so external validators (Queries.php) can reuse it
+     * without redeclaring the list.
      *
-     * @var array<Method>
+     * @var list<Method>
      */
-    private const LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
+    public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
 
     public const TYPE_ELEM_MATCH = 'elemMatch';
 
@@ -51,10 +53,10 @@ class Query extends BaseQuery
     /**
      * @throws QueryException
      */
-    public static function parse(string $query): static
+    public static function parse(string $query, bool $allowRaw = false): static
     {
         try {
-            $parsed = parent::parse($query);
+            $parsed = parent::parse($query, $allowRaw);
 
             return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
         } catch (BaseQueryException $e) {
@@ -67,10 +69,10 @@ class Query extends BaseQuery
      *
      * @throws QueryException
      */
-    public static function parseQuery(array $query): static
+    public static function parseQuery(array $query, bool $allowRaw = false): static
     {
         try {
-            $parsed = parent::parseQuery($query);
+            $parsed = parent::parseQuery($query, $allowRaw);
 
             return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
         } catch (BaseQueryException $e) {
@@ -213,9 +215,13 @@ class Query extends BaseQuery
             $array['attribute'] = $this->attribute;
         }
 
-        if (\in_array($this->method, [Method::And, Method::Or, Method::ElemMatch])) {
+        if (\in_array($this->method, self::LOGICAL_TYPES, true)) {
             foreach ($this->values as $index => $value) {
-                /** @var Query $value */
+                if (! $value instanceof self) {
+                    throw new QueryException(
+                        'Invalid child query in '.$this->method->value.' at index '.$index.': expected Query, got '.\get_debug_type($value)
+                    );
+                }
                 $array['values'][$index] = $value->toArray();
             }
         } else {
@@ -270,18 +276,42 @@ class Query extends BaseQuery
         /** @var Document|null $cursor */
         $cursor = $grouped->cursor;
 
+        // The base library's groupByType no longer tracks order attributes on
+        // ParsedQuery — order clauses are consumed directly by the compiler.
+        // Database adapters still take orderAttributes/orderTypes, so rebuild
+        // them here from the pending query list.
+        $orderAttributes = [];
+        $orderTypes = [];
+        foreach ($queries as $query) {
+            $direction = match ($query->getMethod()) {
+                Method::OrderAsc => OrderDirection::Asc,
+                Method::OrderDesc => OrderDirection::Desc,
+                Method::OrderRandom => OrderDirection::Random,
+                default => null,
+            };
+
+            if ($direction === null) {
+                continue;
+            }
+
+            $orderAttributes[] = $query->getAttribute();
+            $orderTypes[] = $direction;
+        }
+        /** @var list<string> $groupBy */
+        $groupBy = $grouped->groupBy;
+
         return [
             'filters' => $filters,
             'selections' => $selections,
             'aggregations' => $aggregations,
-            'groupBy' => $grouped->groupBy,
+            'groupBy' => $groupBy,
             'having' => $having,
             'joins' => $joins,
             'distinct' => $grouped->distinct,
             'limit' => $grouped->limit,
             'offset' => $grouped->offset,
-            'orderAttributes' => $grouped->orderAttributes,
-            'orderTypes' => $grouped->orderTypes,
+            'orderAttributes' => $orderAttributes,
+            'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $grouped->cursorDirection,
         ];

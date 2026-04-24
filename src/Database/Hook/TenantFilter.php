@@ -35,7 +35,7 @@ class TenantFilter implements Filter, JoinFilter
         // Check the actual collection name against the metadata collection, not the alias
         $name = $this->collection !== '' ? $this->collection : $table;
 
-        if (! empty($this->metadataCollection) && \str_contains($name, $this->metadataCollection)) {
+        if (! empty($this->metadataCollection) && $name === $this->metadataCollection) {
             return new Condition("({$prefix}_tenant IN (?) OR {$prefix}_tenant IS NULL)", [$this->tenant]);
         }
 

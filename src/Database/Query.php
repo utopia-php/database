@@ -25,6 +25,16 @@ class Query extends BaseQuery
     public const DEFAULT_ALIAS = 'table_main';
 
     /**
+     * Methods that compose child queries and contribute their inner
+     * structure to a shape/fingerprint.
+     *
+     * @var array<Method>
+     */
+    private const LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
+
+    public const TYPE_ELEM_MATCH = 'elemMatch';
+
+    /**
      * @param  array<mixed>  $values
      */
     public function __construct(Method|string $method, string $attribute = '', array $values = [])
@@ -174,7 +184,7 @@ class Query extends BaseQuery
             $id = \spl_object_id($node);
 
             if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
-                $shapes[$id] = $node->method . ':' . $node->attribute;
+                $shapes[$id] = $node->method->value . ':' . $node->attribute;
                 continue;
             }
 
@@ -186,7 +196,7 @@ class Query extends BaseQuery
             }
             \sort($childShapes);
             // Attribute is empty for and/or; meaningful for elemMatch (the field being matched).
-            $shapes[$id] = $node->method . ':' . $node->attribute . '(' . \implode('|', $childShapes) . ')';
+            $shapes[$id] = $node->method->value . ':' . $node->attribute . '(' . \implode('|', $childShapes) . ')';
         }
 
         return $shapes[\spl_object_id($this)];

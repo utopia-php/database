@@ -325,12 +325,7 @@ class MirrorTest extends Base
         $collection = 'mirrorSkipDup';
 
         $database->createCollection($collection, attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'required' => true,
-                'size' => Database::LENGTH_KEY,
-            ]),
+            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

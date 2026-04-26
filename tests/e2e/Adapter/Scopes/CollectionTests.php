@@ -78,14 +78,14 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $host = $database->getAdapter()->getHostname();
 
         if (!$database->getAdapter()->getSupportForHostname()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $this->assertTrue(in_array($host, ['mysql', 'mariadb', 'postgres', 'mongo']));
+        $host = $database->getAdapter()->getHostname();
+        $this->assertContains($host, ['mysql', 'mariadb', 'postgres', 'mongo']);
     }
 
     public function testCreateCollectionWithSchema(): void

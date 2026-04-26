@@ -9343,11 +9343,17 @@ class Database
     {
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();
+            $parts = parse_url($hostname);
+            $hostname = $parts['host'] ?? $hostname;
         }
 
         $tenantSegment = $this->adapter->getTenant();
 
-        if ($collectionId === self::METADATA && isset($this->globalCollections[$documentId])) {
+        if (
+            $collectionId === self::METADATA &&
+            $this->adapter->getSharedTables() &&
+            isset($this->globalCollections[$documentId])
+        ) {
             $tenantSegment = null;
         }
 

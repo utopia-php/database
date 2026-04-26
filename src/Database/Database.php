@@ -9344,7 +9344,7 @@ class Database
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();
             $parts = parse_url($hostname);
-            $hostname = $parts['host'] ?? $hostname;
+            //$hostname = $parts['host'] ?? $hostname;
         }
 
         $tenantSegment = $this->adapter->getTenant();

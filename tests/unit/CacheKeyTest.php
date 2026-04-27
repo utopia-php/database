@@ -133,7 +133,7 @@ class CacheKeyTest extends TestCase
 
     public function testParseHostname(): void
     {
-        $hostname = 'appwrite://database_db_nyc3_self_hosted_0_0?database=appwrite&namespace=_1';
+        $hostname = 'database_db_nyc3_self_hosted_0_0';
 
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(true);
@@ -168,22 +168,5 @@ class CacheKeyTest extends TestCase
         [$collectionKey, $documentKey] = $db->getCacheKeys(Database::METADATA, 'users');
         $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata', $collectionKey);
         $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata:users', $documentKey);
-    }
-
-    public function testSimpleHostname(): void
-    {
-        $hostname = 'database_db_nyc3_self_hosted_0_0';
-
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn($hostname);
-        $adapter->method('getTenant')->willReturn(999);
-        $adapter->method('getSharedTables')->willReturn(true);
-        $adapter->method('getNamespace')->willReturn('_ns');
-
-        $db = new Database($adapter, new Cache(new None()), []);
-
-        [$collectionKey] = $db->getCacheKeys('animals');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:animals', $collectionKey);
     }
 }

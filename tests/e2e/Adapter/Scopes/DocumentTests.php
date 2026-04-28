@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Query;
 
 trait DocumentTests
@@ -7901,10 +7902,10 @@ trait DocumentTests
             $this->assertNotEmpty($e->getMessage());
         }
 
-        // With skipDuplicates, duplicates should be silently skipped
+        // With OnDuplicate::Skip, duplicates should be silently skipped
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'doc1',
@@ -7963,10 +7964,10 @@ trait DocumentTests
             ]),
         ]);
 
-        // With skipDuplicates, inserting only duplicates should succeed with no new rows
+        // With OnDuplicate::Skip, inserting only duplicates should succeed with no new rows
         $emittedIds = [];
         $collection = __FUNCTION__;
-        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, &$emittedIds) {
             return $database->createDocuments($collection, [
                 new Document([
                     '$id' => 'existing',
@@ -8000,7 +8001,7 @@ trait DocumentTests
         $database->createCollection($collection);
         $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
 
-        $count = $database->skipDuplicates(fn () => $database->createDocuments($collection, []));
+        $count = $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createDocuments($collection, []));
 
         $this->assertSame(0, $count);
         $this->assertCount(0, $database->find($collection));
@@ -8029,9 +8030,9 @@ trait DocumentTests
         // Nested scope — inner scope runs inside outer scope.
         // After inner exits, outer state should still be "skip enabled".
         // After outer exits, state should restore to "skip disabled".
-        $countOuter = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+        $countOuter = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, $makeDoc) {
             // Inner scope: add dup + new
-            $countInner = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+            $countInner = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, $makeDoc) {
                 return $database->createDocuments($collection, [
                     $makeDoc('seed', 'Dup'),
                     $makeDoc('innerNew', 'InnerNew'),
@@ -8086,7 +8087,7 @@ trait DocumentTests
         }
         $database->createDocuments($collection, $seed);
 
-        // Now call skipDuplicates with 300 docs: 50 existing (0-49) + 250 new (50-299).
+        // Now call with OnDuplicate::Skip and 300 docs: 50 existing (0-49) + 250 new (50-299).
         // 300 > default INSERT_BATCH_SIZE, so this exercises the chunk loop.
         $batch = [];
         for ($i = 0; $i < 300; $i++) {
@@ -8101,7 +8102,7 @@ trait DocumentTests
         }
 
         $emittedIds = [];
-        $count = $database->skipDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
+        $count = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, $batch, &$emittedIds) {
             return $database->createDocuments($collection, $batch, onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -8141,13 +8142,14 @@ trait DocumentTests
         );
 
         // First call — all new
-        $firstCount = $database->skipDuplicates(
+        $firstCount = $database->withOnDuplicate(
+            OnDuplicate::Skip,
             fn () => $database->createDocuments($collection, $makeBatch('First'))
         );
         $this->assertSame(3, $firstCount);
 
         $emittedIds = [];
-        $secondCount = $database->skipDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
+        $secondCount = $database->withOnDuplicate(OnDuplicate::Skip, function () use ($database, $collection, $makeBatch, &$emittedIds) {
             return $database->createDocuments($collection, $makeBatch('Second'), onNext: function (Document $doc) use (&$emittedIds) {
                 $emittedIds[] = $doc->getId();
             });
@@ -8237,7 +8239,7 @@ trait DocumentTests
             ]),
         ];
 
-        $database->skipDuplicates(fn () => $database->createDocuments($parent, $batch));
+        $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createDocuments($parent, $batch));
 
         $existing = $database->getDocument($parent, 'existingParent');
         $this->assertFalse($existing->isEmpty());
@@ -8259,5 +8261,200 @@ trait DocumentTests
         $allChildIds = \array_map(fn (Document $d) => $d->getId(), $allChildren);
         \sort($allChildIds);
         $this->assertSame(['existingChild', 'newChild', 'retryChild'], $allChildIds);
+    }
+
+    /**
+     * OnDuplicate::Upsert — existing rows are overwritten with the incoming
+     * values; new rows are inserted. The returned count reflects every input.
+     */
+    public function testCreateDocsUpsertOverwrites(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute(__FUNCTION__, 'tag', Database::VAR_STRING, 128, false);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        // Seed two docs.
+        $database->createDocuments(__FUNCTION__, [
+            new Document(['$id' => 'a', 'name' => 'original-A', 'tag' => 'keep', '$permissions' => $permissions]),
+            new Document(['$id' => 'b', 'name' => 'original-B', 'tag' => 'keep', '$permissions' => $permissions]),
+        ]);
+
+        // Upsert: overwrite 'a', leave 'b' untouched (not in batch), insert 'c'.
+        $collection = __FUNCTION__;
+        $count = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection, $permissions) {
+            return $database->createDocuments($collection, [
+                new Document(['$id' => 'a', 'name' => 'replaced-A', 'tag' => 'new', '$permissions' => $permissions]),
+                new Document(['$id' => 'c', 'name' => 'inserted-C', 'tag' => 'new', '$permissions' => $permissions]),
+            ]);
+        });
+        $this->assertSame(2, $count);
+
+        $docs = $database->find(__FUNCTION__, [Query::orderAsc('$id')]);
+        $this->assertCount(3, $docs);
+        $this->assertSame('replaced-A', $docs[0]->getAttribute('name'));
+        $this->assertSame('new', $docs[0]->getAttribute('tag'));
+        $this->assertSame('original-B', $docs[1]->getAttribute('name'));
+        $this->assertSame('keep', $docs[1]->getAttribute('tag'));
+        $this->assertSame('inserted-C', $docs[2]->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Upsert — a batch composed entirely of duplicates overwrites
+     * every existing row; zero rows are skipped.
+     */
+    public function testCreateDocsUpsertAll(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $database->createDocuments(__FUNCTION__, [
+            new Document(['$id' => 'x', 'name' => 'v1', '$permissions' => $permissions]),
+            new Document(['$id' => 'y', 'name' => 'v1', '$permissions' => $permissions]),
+        ]);
+
+        $collection = __FUNCTION__;
+        $count = $database->withOnDuplicate(OnDuplicate::Upsert, function () use ($database, $collection, $permissions) {
+            return $database->createDocuments($collection, [
+                new Document(['$id' => 'x', 'name' => 'v2', '$permissions' => $permissions]),
+                new Document(['$id' => 'y', 'name' => 'v2', '$permissions' => $permissions]),
+            ]);
+        });
+        $this->assertSame(2, $count);
+
+        $docs = $database->find(__FUNCTION__, [Query::orderAsc('$id')]);
+        $this->assertCount(2, $docs);
+        $this->assertSame('v2', $docs[0]->getAttribute('name'));
+        $this->assertSame('v2', $docs[1]->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Skip and Upsert tolerate an existing collection — they
+     * return the current metadata document instead of throwing. Collections
+     * are never destructive at the library layer; callers that need to
+     * reconcile schema drop/recreate the individual attributes / indexes.
+     */
+    public function testCreateCollSkipUpsertTolerates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'doc',
+            'name' => 'keep',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $collection = __FUNCTION__;
+        $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createCollection($collection));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
+
+        $database->withOnDuplicate(OnDuplicate::Upsert, fn () => $database->createCollection($collection));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Skip and Upsert tolerate an existing attribute. Caller is
+     * responsible for dropping first if the spec needs to change (migration
+     * consults source vs destination _metadata._updatedAt to decide).
+     */
+    public function testCreateAttrSkipUpsertTolerates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'doc',
+            'name' => 'keep',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $collection = __FUNCTION__;
+
+        // Skip: same-spec re-declare is a no-op.
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true)
+        ));
+
+        // Skip: even a wider-spec re-declare is tolerated (not applied).
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 512, true)
+        ));
+
+        // Upsert: same — tolerate existing. Migration handles drop+recreate itself.
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Upsert,
+            fn () => $database->createAttribute($collection, 'name', Database::VAR_STRING, 512, true)
+        ));
+
+        // Metadata still reflects the ORIGINAL spec — library didn't touch it.
+        $nameAttr = null;
+        foreach ($database->getCollection(__FUNCTION__)->getAttribute('attributes', []) as $attr) {
+            if ($attr->getAttribute('key') === 'name') {
+                $nameAttr = $attr;
+                break;
+            }
+        }
+        $this->assertNotNull($nameAttr);
+        $this->assertSame(128, (int) $nameAttr->getAttribute('size'));
+        $this->assertSame('keep', $database->getDocument(__FUNCTION__, 'doc')->getAttribute('name'));
+    }
+
+    /**
+     * OnDuplicate::Skip and Upsert tolerate an existing index. End state is
+     * always the first-declared spec; callers that need a different spec
+     * deleteIndex() first.
+     */
+    public function testCreateIdxSkipUpsertTolerates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'a', Database::VAR_STRING, 64, true);
+        $database->createAttribute(__FUNCTION__, 'b', Database::VAR_STRING, 64, true);
+        $database->createIndex(__FUNCTION__, 'idx', Database::INDEX_KEY, ['a']);
+
+        $collection = __FUNCTION__;
+
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Skip,
+            fn () => $database->createIndex($collection, 'idx', Database::INDEX_KEY, ['b'])
+        ));
+
+        $this->assertTrue($database->withOnDuplicate(
+            OnDuplicate::Upsert,
+            fn () => $database->createIndex($collection, 'idx', Database::INDEX_KEY, ['b'])
+        ));
+
+        // Metadata still reflects the original column — library tolerates,
+        // caller must drop first to change spec.
+        $indexes = $database->getCollection(__FUNCTION__)->getAttribute('indexes', []);
+        $this->assertCount(1, $indexes);
+        $this->assertSame(['a'], $indexes[0]->getAttribute('attributes'));
     }
 }

@@ -417,7 +417,7 @@ class Database
 
     protected bool $preserveDates = false;
 
-    protected bool $skipDuplicates = false;
+    protected OnDuplicate $onDuplicate = OnDuplicate::Fail;
 
     protected bool $preserveSequence = false;
 
@@ -844,15 +844,28 @@ class Database
         }
     }
 
-    public function skipDuplicates(callable $callback): mixed
+    /**
+     * Run $callback within a scope where create-style operations apply the
+     * given OnDuplicate mode. Nestable — previous mode is restored on return.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function withOnDuplicate(OnDuplicate $mode, callable $callback): mixed
     {
-        $previous = $this->skipDuplicates;
-        $this->skipDuplicates = true;
+        $previous = $this->onDuplicate;
+        $this->onDuplicate = $mode;
 
         try {
-            return $callback();
+            // Mirror the mode onto the adapter so schema-level operations
+            // (createAttribute / createIndex / createCollection) that run
+            // directly against the adapter can observe it. createDocuments
+            // still goes through its own adapter->withOnDuplicate dispatch,
+            // which is nestable and idempotent with this outer scope.
+            return $this->adapter->withOnDuplicate($mode, $callback);
         } finally {
-            $this->skipDuplicates = $previous;
+            $this->onDuplicate = $previous;
         }
     }
 
@@ -1708,6 +1721,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
+            // Skip/Upsert: collection data is never destroyed — both modes
+            // tolerate the existing collection and return its current metadata
+            // document. Per-attribute / per-index reconciliation happens via
+            // the dedicated createAttribute / createIndex paths.
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return $collection;
+            }
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
@@ -2143,6 +2163,20 @@ class Database
         if (in_array($type, self::ATTRIBUTE_FILTER_TYPES)) {
             $filters[] = $type;
             $filters = array_unique($filters);
+        }
+
+        // Skip/Upsert: if the attribute already exists in metadata, tolerate
+        // and return. Spec reconciliation (drop + recreate on type change) is
+        // a caller concern — migration consults source vs destination metadata
+        // _updatedAt and issues deleteAttribute before a re-creation itself,
+        // so by the time this is called the attribute is either truly new or
+        // intentionally unchanged.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
+            foreach ($collection->getAttribute('attributes', []) as $existing) {
+                if (\strtolower($existing->getAttribute('key', $existing->getId())) === \strtolower($id)) {
+                    return true;
+                }
+            }
         }
 
         $existsInSchema = false;
@@ -4515,9 +4549,15 @@ class Database
 
         /** @var array<Document> $indexes */
         foreach ($indexes as $index) {
-            if (\strtolower($index->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Index already exists');
+            if (\strtolower($index->getId()) !== \strtolower($id)) {
+                continue;
             }
+            // Skip/Upsert: tolerate the existing index. Caller (e.g. migration)
+            // is responsible for dropping it first if the spec needs to change.
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return true;
+            }
+            throw new DuplicateException('Index already exists');
         }
 
         if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {
@@ -5727,8 +5767,8 @@ class Database
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
             // Set adapter flag before withTransaction so Mongo can opt out of a real txn.
-            $batch = $this->skipDuplicates
-                ? $this->adapter->skipDuplicates($insert)
+            $batch = $this->onDuplicate !== OnDuplicate::Fail
+                ? $this->adapter->withOnDuplicate($this->onDuplicate, $insert)
                 : $insert();
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);

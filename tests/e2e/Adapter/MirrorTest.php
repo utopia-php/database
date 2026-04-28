@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\PDO;
 
 class MirrorTest extends Base
@@ -331,7 +332,7 @@ class MirrorTest extends Base
         ], documentSecurity: false);
 
         // Seed the SOURCE only (bypass the mirror) with the row we want to
-        // skipDuplicates over later. Destination intentionally does NOT have it —
+        // apply OnDuplicate::Skip over later. Destination intentionally does NOT have it —
         // this simulates an in-flight backfill where the collection is marked
         // 'upgraded' (schema mirrored) but not every row has reached destination.
         $database->getSource()->createDocument($collection, new Document([
@@ -351,7 +352,7 @@ class MirrorTest extends Base
             $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
         );
 
-        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+        $database->withOnDuplicate(OnDuplicate::Skip, fn () => $database->createDocuments($collection, [
             new Document([
                 '$id' => 'dup',
                 'name' => 'WouldBe',

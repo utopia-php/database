@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -1030,19 +1031,42 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
-     * Override in adapter subclasses for DB-specific syntax.
+     * Returns the INSERT keyword, varying by the active OnDuplicate mode.
+     * Override in adapter subclasses for DB-specific syntax (e.g. Postgres uses
+     * suffix ON CONFLICT instead).
      */
     protected function getInsertKeyword(): string
     {
-        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+        return match ($this->onDuplicate) {
+            OnDuplicate::Skip   => 'INSERT IGNORE INTO',
+            OnDuplicate::Upsert => 'INSERT INTO', // Upsert is realized by the ON DUPLICATE KEY UPDATE suffix on MySQL/MariaDB — handled in getInsertSuffix.
+            OnDuplicate::Fail   => 'INSERT INTO',
+        };
+    }
+
+    /**
+     * Returns the INSERT keyword for the `_perms` side-table. Permissions have
+     * their own composite unique constraint (_document, _type, _permission),
+     * so on row Upsert we don't want to ON-DUPLICATE-KEY-UPDATE them — they're
+     * already there. Both Skip and Upsert modes should just silently ignore
+     * pre-existing permission rows.
+     */
+    protected function getInsertPermissionsKeyword(): string
+    {
+        return $this->onDuplicate === OnDuplicate::Fail
+            ? 'INSERT INTO'
+            : 'INSERT IGNORE INTO';
     }
 
     /**
      * Returns a suffix appended after VALUES clause for duplicate handling.
      * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     *
+     * @param string $table  table name (without namespace prefix)
+     * @param array<string> $columns  quoted column names present in the INSERT — needed
+     *                                to emit ON DUPLICATE KEY UPDATE / ON CONFLICT DO UPDATE SET clauses
      */
-    protected function getInsertSuffix(string $table): string
+    protected function getInsertSuffix(string $table, array $columns = []): string
     {
         return '';
     }
@@ -2533,12 +2557,12 @@ abstract class SQL extends Adapter
                 $attributeKeys[] = '_tenant';
             }
 
-            $columns = [];
+            $columnList = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = $this->quote($this->filter($attribute));
+                $columnList[$key] = $this->quote($this->filter($attribute));
             }
 
-            $columns = '(' . \implode(', ', $columns) . ')';
+            $columns = '(' . \implode(', ', $columnList) . ')';
 
             $bindIndex = 0;
             $batchKeys = [];
@@ -2603,7 +2627,7 @@ abstract class SQL extends Adapter
             $stmt = $this->getPDO()->prepare("
                 {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
-                {$this->getInsertSuffix($name)}
+                {$this->getInsertSuffix($name, $columnList)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2617,7 +2641,7 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    {$this->getInsertPermissionsKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
                     VALUES {$permissions}
                     {$this->getInsertPermissionsSuffix()}
                 ";

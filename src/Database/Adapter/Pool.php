@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -43,8 +44,9 @@ class Pool extends Adapter
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return $this->pinnedAdapter->withOnDuplicate(
+                    $this->onDuplicate,
                     fn () => $this->pinnedAdapter->{$method}(...$args)
                 );
             }
@@ -71,8 +73,9 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            if ($this->skipDuplicates) {
-                return $adapter->skipDuplicates(
+            if ($this->onDuplicate !== OnDuplicate::Fail) {
+                return $adapter->withOnDuplicate(
+                    $this->onDuplicate,
                     fn () => $adapter->{$method}(...$args)
                 );
             }
@@ -161,8 +164,9 @@ class Pool extends Adapter
 
             $this->pinnedAdapter = $adapter;
             try {
-                if ($this->skipDuplicates) {
-                    return $adapter->skipDuplicates(
+                if ($this->onDuplicate !== OnDuplicate::Fail) {
+                    return $adapter->withOnDuplicate(
+                        $this->onDuplicate,
                         fn () => $adapter->withTransaction($callback)
                     );
                 }

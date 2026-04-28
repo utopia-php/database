@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -128,7 +129,8 @@ class Mongo extends Adapter
         }
 
         // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
-        if ($this->skipDuplicates) {
+        // Both Skip and Upsert modes use the no-transaction path.
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
             return $callback();
         }
 
@@ -434,10 +436,12 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // In shared-tables mode or for metadata, the physical collection may
-        // already exist for another tenant. Return early to avoid a
-        // "Collection Exists" exception from the client.
-        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata the physical collection may
+        // already exist. Return early to avoid "Collection Exists" from the
+        // client.
+        $tolerateExisting = $this->getSharedTables() || $name === Database::METADATA;
+
+        if (!$this->inTransaction && $tolerateExisting && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -448,14 +452,15 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
+                // Keep existing shared-tables/metadata behavior — no-op there.
                 return true;
             }
             // Client throws code-0 "Collection Exists" when its pre-check
-            // finds the collection. In shared-tables/metadata context this
-            // is a no-op; otherwise re-throw as DuplicateException so
-            // Database::createCollection() can run orphan reconciliation.
+            // finds the collection. Tolerated contexts no-op; otherwise re-throw
+            // as DuplicateException so Database::createCollection() can run
+            // orphan reconciliation.
             if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
+                if ($tolerateExisting) {
                     return true;
                 }
                 throw new DuplicateException('Collection already exists', $e->getCode(), $e);
@@ -1502,11 +1507,14 @@ class Mongo extends Adapter
             $records[] = $record;
         }
 
-        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
-        if ($this->skipDuplicates) {
+        // insertMany aborts the txn on any duplicate; Mongo's upsert path handles
+        // both Skip ($setOnInsert: insert-only no-op) and Upsert ($set: overwrite).
+        if ($this->onDuplicate !== OnDuplicate::Fail) {
             if (empty($records)) {
                 return [];
             }
+
+            $operator = $this->onDuplicate === OnDuplicate::Upsert ? '$set' : '$setOnInsert';
 
             $operations = [];
             foreach ($records as $record) {
@@ -1515,17 +1523,17 @@ class Mongo extends Adapter
                     $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
                 }
 
-                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
-                $setOnInsert = $record;
-                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+                // Filter fields can't reappear in $setOnInsert/$set (mongo path-conflict error).
+                $payload = $record;
+                unset($payload['_uid'], $payload['_tenant']);
 
-                if (empty($setOnInsert)) {
+                if (empty($payload)) {
                     continue;
                 }
 
                 $operations[] = [
                     'filter' => $filter,
-                    'update' => ['$setOnInsert' => $setOnInsert],
+                    'update' => [$operator => $payload],
                 ];
             }
 
@@ -3595,8 +3603,8 @@ class Mongo extends Adapter
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Index already exists
-        if ($e->getCode() === 85) {
+        // Index already exists (85 = IndexOptionsConflict, 86 = IndexKeySpecsConflict)
+        if ($e->getCode() === 85 || $e->getCode() === 86) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
         }
 

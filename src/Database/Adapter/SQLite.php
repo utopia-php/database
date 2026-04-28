@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\OnDuplicate;
 use Utopia\Database\Operator;
 
 /**
@@ -463,13 +464,14 @@ class SQLite extends MariaDB
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
         $stmt = $this->getPDO()->prepare("
-			SELECT name 
-			FROM sqlite_master 
+			SELECT name
+			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
 		");
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
         $stmt->execute();
         $index = $stmt->fetch();
+        $stmt->closeCursor();
         if (!empty($index)) {
             return true;
         }
@@ -1939,6 +1941,29 @@ class SQLite extends MariaDB
 
     protected function getInsertKeyword(): string
     {
-        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+        return match ($this->onDuplicate) {
+            OnDuplicate::Skip   => 'INSERT OR IGNORE INTO',
+            OnDuplicate::Upsert => 'INSERT OR REPLACE INTO',
+            OnDuplicate::Fail   => 'INSERT INTO',
+        };
     }
+
+    protected function getInsertPermissionsKeyword(): string
+    {
+        return $this->onDuplicate === OnDuplicate::Fail
+            ? 'INSERT INTO'
+            : 'INSERT OR IGNORE INTO';
+    }
+
+    /**
+     * SQLite realizes Upsert via the `INSERT OR REPLACE` keyword, so no SUFFIX
+     * clause is needed. Override MariaDB's `ON DUPLICATE KEY UPDATE` suffix.
+     *
+     * @param array<string> $columns
+     */
+    protected function getInsertSuffix(string $table, array $columns = []): string
+    {
+        return '';
+    }
+
 }

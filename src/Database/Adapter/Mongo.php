@@ -78,6 +78,11 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function getHostname(): string
+    {
+        return $this->client->getHost();
+    }
+
     /**
      * Returns the current Mongo client
      * @return mixed

@@ -1178,12 +1178,12 @@ class SQLite extends MariaDB
 
     public function getSupportForUpdateLock(): bool
     {
-        // SQLite serialises writes globally, so SELECT ... FOR UPDATE is a
-        // semantic no-op — and the parser has accepted it as syntactic
-        // sugar since 3.39. PHP 8.3 ships SQLite 3.40+, so claiming
-        // support keeps adapter-level callers happy without breaking the
-        // SELECT statements that emit the clause.
-        return true;
+        // SQLite has no row-level locking. The parser accepts FOR UPDATE
+        // as syntactic sugar but the planner still escalates to a
+        // RESERVED/EXCLUSIVE lock on the database, which deadlocks
+        // subsequent DDL like DROP INDEX inside the same transaction.
+        // Stay false so the SELECT path doesn't append the clause.
+        return false;
     }
 
     /**

@@ -400,6 +400,8 @@ trait Indexes
             operationDescription: "index metadata update '{$id}'"
         );
 
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+
         return $indexDoc;
     }
 

@@ -36,6 +36,15 @@ use Utopia\Database\Query;
 class SQLite extends MariaDB
 {
     /**
+     * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
+     * introspection produces the same characterMaximumLength values that
+     * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
+     */
+    private const MARIADB_TEXT_BYTES = '65535';
+    private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
+    private const MARIADB_LONGTEXT_BYTES = '4294967295';
+
+    /**
      * @inheritDoc
      */
     public function startTransaction(): bool
@@ -250,12 +259,12 @@ class SQLite extends MariaDB
         // FTS5 virtual tables don't show up in dbstat themselves — their
         // storage is backed by shadow tables named `<vtable>_data`,
         // `<vtable>_idx`, `<vtable>_docsize`, and `<vtable>_config`. Match
-        // the prefix and let LIKE pull in all of them. Sum "payload" rather
-        // than "pgsize" so the result tracks actual stored bytes — page
-        // allocation is granular at 4KB, which would let small inserts
+        // the prefix and let LIKE pull in all of them. Sum (pgsize - unused)
+        // so the result tracks bytes actually used inside each page rather
+        // than full 4KB page allocations, which would let small inserts
         // appear as a no-op against the parent assertions.
         $stmt = $this->getPDO()->prepare("
-             SELECT COALESCE(SUM(\"payload\"), 0) + COALESCE(SUM(\"pgsize\" - \"unused\" - \"payload\"), 0)
+             SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern;
         ");
@@ -520,34 +529,45 @@ class SQLite extends MariaDB
         $newColumnList = \implode(', ', \array_map(fn (string $c) => "NEW.`{$c}`", $columns));
         $oldColumnList = \implode(', ', \array_map(fn (string $c) => "OLD.`{$c}`", $columns));
 
-        $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$columnList}, content=`{$parentTable}`, content_rowid=`_id`)";
-        $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
-        $this->getPDO()->prepare($createSql)->execute();
+        // Wrap setup + backfill in a transaction so a mid-backfill failure
+        // doesn't leave triggers wired up to a partially populated FTS5
+        // index — the next document write would silently desync.
+        $this->startTransaction();
+        try {
+            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$columnList}, content=`{$parentTable}`, content_rowid=`_id`)";
+            $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
+            $this->getPDO()->prepare($createSql)->execute();
 
-        $insertTrigger = "
-            CREATE TRIGGER `{$ftsTable}_ai` AFTER INSERT ON `{$parentTable}` BEGIN
-                INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
-            END
-        ";
-        $this->getPDO()->prepare($insertTrigger)->execute();
+            $insertTrigger = "
+                CREATE TRIGGER `{$ftsTable}_ai` AFTER INSERT ON `{$parentTable}` BEGIN
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                END
+            ";
+            $this->getPDO()->prepare($insertTrigger)->execute();
 
-        $deleteTrigger = "
-            CREATE TRIGGER `{$ftsTable}_ad` AFTER DELETE ON `{$parentTable}` BEGIN
-                INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
-            END
-        ";
-        $this->getPDO()->prepare($deleteTrigger)->execute();
+            $deleteTrigger = "
+                CREATE TRIGGER `{$ftsTable}_ad` AFTER DELETE ON `{$parentTable}` BEGIN
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+                END
+            ";
+            $this->getPDO()->prepare($deleteTrigger)->execute();
 
-        $updateTrigger = "
-            CREATE TRIGGER `{$ftsTable}_au` AFTER UPDATE ON `{$parentTable}` BEGIN
-                INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
-                INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
-            END
-        ";
-        $this->getPDO()->prepare($updateTrigger)->execute();
+            $updateTrigger = "
+                CREATE TRIGGER `{$ftsTable}_au` AFTER UPDATE ON `{$parentTable}` BEGIN
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                END
+            ";
+            $this->getPDO()->prepare($updateTrigger)->execute();
 
-        $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`";
-        $this->getPDO()->prepare($backfill)->execute();
+            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`";
+            $this->getPDO()->prepare($backfill)->execute();
+
+            $this->commitTransaction();
+        } catch (PDOException $e) {
+            $this->rollbackTransaction();
+            throw $e;
+        }
 
         return true;
     }
@@ -583,14 +603,23 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        // FTS5 indexes live as a virtual table named after the indexed
-        // attributes, not the index id, so probe by index id first to find
-        // the matching table and drop it together with its triggers.
-        if ($this->dropFulltextIndexById($name, $id)) {
+        // If a regular SQLite index with this id exists, take the normal
+        // DROP INDEX path. Otherwise the index is either an FTS5 virtual
+        // table (whose name is keyed off attributes, not the id) or
+        // already absent — try the FTS5 path before erroring.
+        $regularIndex = "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}";
+        $stmt = $this->getPDO()->prepare("
+            SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
+        ");
+        $stmt->bindValue(':_index', $regularIndex);
+        $stmt->execute();
+        $hasRegular = $stmt->fetchColumn() !== false;
+
+        if (!$hasRegular && $this->dropFulltextIndexById($name, $id)) {
             return true;
         }
 
-        $sql = "DROP INDEX `{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}`";
+        $sql = "DROP INDEX `{$regularIndex}`";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
         try {
@@ -2368,7 +2397,10 @@ class SQLite extends MariaDB
 
     /**
      * Introspect a collection's indexes via PRAGMA index_list +
-     * PRAGMA index_info. Mirrors MariaDB's INFORMATION_SCHEMA shape.
+     * PRAGMA index_info. Returns one Document per index with a `columns`
+     * array, matching the grouped shape MariaDB::getSchemaIndexes returns
+     * so Database::createIndex can compare `columns` against the requested
+     * attributes without special-casing the adapter.
      *
      * @return array<Document>
      */
@@ -2379,7 +2411,6 @@ class SQLite extends MariaDB
         $stmt = $this->getPDO()->prepare("PRAGMA index_list(`{$table}`)");
         $stmt->execute();
         $indexes = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         $results = [];
         foreach ($indexes as $index) {
@@ -2389,22 +2420,24 @@ class SQLite extends MariaDB
             $colStmt = $this->getPDO()->prepare("PRAGMA index_info(`{$name}`)");
             $colStmt->execute();
             $cols = $colStmt->fetchAll();
-            $colStmt->closeCursor();
+
+            \usort($cols, fn ($a, $b) => ((int) $a['seqno']) <=> ((int) $b['seqno']));
 
             $columns = [];
+            $lengths = [];
             foreach ($cols as $col) {
-                $columns[] = new Document([
-                    '$id' => $name,
-                    'indexName' => $name,
-                    'columnName' => $col['name'],
-                    'nonUnique' => $unique ? '0' : '1',
-                    'seqInIndex' => (string) ($col['seqno'] + 1),
-                    'indexType' => 'BTREE',
-                    'subPart' => null,
-                ]);
+                $columns[] = $col['name'];
+                $lengths[] = null;
             }
 
-            $results = \array_merge($results, $columns);
+            $results[] = new Document([
+                '$id' => $name,
+                'indexName' => $name,
+                'indexType' => 'BTREE',
+                'nonUnique' => $unique ? 0 : 1,
+                'columns' => $columns,
+                'lengths' => $lengths,
+            ]);
         }
 
         return $results;
@@ -2433,9 +2466,13 @@ class SQLite extends MariaDB
 
         $base = $declaration;
         $argument = null;
-        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)/', $declaration, $matches) === 1) {
+        $secondArgument = null;
+        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)(?:\s*,\s*(\d+))?/', $declaration, $matches) === 1) {
             $base = $matches[1];
             $argument = (int) $matches[2];
+            if (isset($matches[3]) && $matches[3] !== '') {
+                $secondArgument = (int) $matches[3];
+            }
         }
 
         $dataType = \strtolower($base);
@@ -2463,16 +2500,16 @@ class SQLite extends MariaDB
                 break;
 
             case 'text':
-                $result['characterMaximumLength'] = '65535';
+                $result['characterMaximumLength'] = self::MARIADB_TEXT_BYTES;
                 break;
 
             case 'mediumtext':
-                $result['characterMaximumLength'] = '16777215';
+                $result['characterMaximumLength'] = self::MARIADB_MEDIUMTEXT_BYTES;
                 break;
 
             case 'longtext':
             case 'json':
-                $result['characterMaximumLength'] = '4294967295';
+                $result['characterMaximumLength'] = self::MARIADB_LONGTEXT_BYTES;
                 break;
 
             case 'datetime':
@@ -2507,7 +2544,7 @@ class SQLite extends MariaDB
             case 'decimal':
             case 'numeric':
                 $result['numericPrecision'] = $argument !== null ? (string) $argument : '10';
-                $result['numericScale'] = '0';
+                $result['numericScale'] = $secondArgument !== null ? (string) $secondArgument : '0';
                 break;
 
             case 'float':
@@ -2573,12 +2610,56 @@ class SQLite extends MariaDB
             return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
         }
 
-        $ftsTable = $this->getFulltextTableName($collection, $attribute);
+        // Look the FTS5 table up by attribute rather than computing the
+        // name from the attribute alone — multi-column fulltext indexes
+        // encode their full sorted attribute set in the table name, so
+        // single-attribute searches against them would otherwise miss.
+        $ftsTable = $this->findFulltextTableForAttribute($collection, $attribute);
+        if ($ftsTable === null) {
+            $binds[":{$placeholder}_0"] = '%' . $value . '%';
+            $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
+
+            return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
+        }
+
         $binds[":{$placeholder}_0"] = $value;
 
         $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
 
         return $method === Query::TYPE_SEARCH ? $subquery : "NOT ({$subquery})";
+    }
+
+    /**
+     * Find the FTS5 virtual table on `$collection` that covers `$attribute`,
+     * or null if none exists. Resolves the multi-column case where the
+     * stored table name is keyed off the full sorted attribute set and
+     * can't be reconstructed from a single attribute.
+     */
+    protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
+    {
+        $prefix = "{$this->getNamespace()}_{$this->tenant}_{$collection}_";
+        $stmt = $this->getPDO()->prepare("
+            SELECT name FROM sqlite_master
+            WHERE type='table'
+              AND name LIKE :_prefix
+              AND name LIKE '%_fts'
+        ");
+        $stmt->bindValue(':_prefix', $prefix . '%');
+        $stmt->execute();
+        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($tables as $table) {
+            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
+            $info->execute();
+            $cols = $info->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($cols as $col) {
+                if (($col['name'] ?? null) === $attribute) {
+                    return $table;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

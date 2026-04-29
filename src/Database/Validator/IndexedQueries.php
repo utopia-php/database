@@ -57,6 +57,29 @@ class IndexedQueries extends Queries
     }
 
     /**
+     * Count vector queries across entire query tree
+     *
+     * @param array<Query> $queries
+     * @return int
+     */
+    private function countVectorQueries(array $queries): int
+    {
+        $count = 0;
+
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $count++;
+            }
+
+            if ($query->isNested()) {
+                $count += $this->countVectorQueries($query->getValues());
+            }
+        }
+
+        return $count;
+    }
+
+    /**
      * @param mixed $value
      * @return bool
      * @throws Exception
@@ -87,11 +110,20 @@ class IndexedQueries extends Queries
             $queries[] = $query;
         }
 
+        $vectorQueryCount = $this->countVectorQueries($queries);
+        if ($vectorQueryCount > 1) {
+            $this->message = 'Cannot use multiple vector queries in a single request';
+            return false;
+        }
+
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
 
         foreach ($filters as $filter) {
-            if ($filter->getMethod() === Query::TYPE_SEARCH) {
+            if (
+                $filter->getMethod() === Query::TYPE_SEARCH ||
+                $filter->getMethod() === Query::TYPE_NOT_SEARCH
+            ) {
                 $matched = false;
 
                 foreach ($this->indexes as $index) {

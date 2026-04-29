@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -16,7 +17,7 @@ trait ManyToOneTests
     public function testManyToOneOneWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -350,7 +351,7 @@ trait ManyToOneTests
     public function testManyToOneTwoWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -818,7 +819,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_OneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -919,7 +920,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_OneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1030,7 +1031,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_ManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1132,7 +1133,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_ManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1203,7 +1204,7 @@ trait ManyToOneTests
     public function testExceedMaxDepthManyToOneParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1286,7 +1287,7 @@ trait ManyToOneTests
     public function testManyToOneRelationshipKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1330,7 +1331,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1396,7 +1397,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneOneWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1462,7 +1463,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneTwoWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1529,7 +1530,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1597,7 +1598,7 @@ trait ManyToOneTests
     public function testDeleteBulkDocumentsManyToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -1676,5 +1677,279 @@ trait ManyToOneTests
 
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2o');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_m2o'));
+    }
+    public function testUpdateParentAndChild_ManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (
+            !$database->getAdapter()->getSupportForRelationships() ||
+            !$database->getAdapter()->getSupportForBatchOperations()
+        ) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parentCollection = 'parent_combined_m2o';
+        $childCollection = 'child_combined_m2o';
+
+        $database->createCollection($parentCollection);
+        $database->createCollection($childCollection);
+
+        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($childCollection, 'parentNumber', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: $childCollection,
+            relatedCollection: $parentCollection,
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $database->createDocument($parentCollection, new Document([
+            '$id' => 'parent1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Parent 1',
+        ]));
+
+        $database->createDocument($childCollection, new Document([
+            '$id' => 'child1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Child 1',
+            'parentNumber' => null,
+        ]));
+
+        $database->updateDocuments(
+            $parentCollection,
+            new Document(['name' => 'Parent 1 Updated']),
+            [Query::equal('$id', ['parent1'])]
+        );
+
+        $parentDoc = $database->getDocument($parentCollection, 'parent1');
+        $this->assertEquals('Parent 1 Updated', $parentDoc->getAttribute('name'), 'Parent should be updated');
+
+        $childDoc = $database->getDocument($childCollection, 'child1');
+        $this->assertEquals('Child 1', $childDoc->getAttribute('name'), 'Child should remain unchanged');
+
+        // invalid update to child
+        try {
+            $database->updateDocuments(
+                $childCollection,
+                new Document(['parentNumber' => 'not-a-number']),
+                [Query::equal('$id', ['child1'])]
+            );
+            $this->fail('Expected exception was not thrown for invalid parentNumber type');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(Structure::class, $e);
+        }
+
+        // parent remains unaffected
+        $parentDocAfter = $database->getDocument($parentCollection, 'parent1');
+        $this->assertEquals('Parent 1 Updated', $parentDocAfter->getAttribute('name'), 'Parent should not be affected by failed child update');
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
+
+    public function testDeleteDocumentsRelationshipErrorDoesNotDeleteParent_ManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parentCollection = 'parent_relationship_error_many_to_one';
+        $childCollection = 'child_relationship_error_many_to_one';
+
+        $database->createCollection($parentCollection);
+        $database->createCollection($childCollection);
+        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: $childCollection,
+            relatedCollection: $parentCollection,
+            type: Database::RELATION_MANY_TO_ONE,
+            onDelete: Database::RELATION_MUTATE_RESTRICT
+        );
+
+        $parent = $database->createDocument($parentCollection, new Document([
+            '$id' => 'parent1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Parent 1',
+        ]));
+
+        $child = $database->createDocument($childCollection, new Document([
+            '$id' => 'child1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Child 1',
+            $parentCollection => 'parent1'
+        ]));
+
+        try {
+            $database->deleteDocuments($parentCollection, [Query::equal('$id', ['parent1'])]);
+            $this->fail('Expected exception was not thrown');
+        } catch (RestrictedException $e) {
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
+        }
+        $parentDoc = $database->getDocument($parentCollection, 'parent1');
+        $childDoc = $database->getDocument($childCollection, 'child1');
+        $this->assertFalse($parentDoc->isEmpty(), 'Parent should not be deleted');
+        $this->assertFalse($childDoc->isEmpty(), 'Child should not be deleted');
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
+
+    public function testPartialUpdateManyToOneParentSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('companies');
+        $database->createCollection('employees');
+
+        $database->createAttribute('companies', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('employees', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: 'employees',
+            relatedCollection: 'companies',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'company',
+            twoWayKey: 'employees'
+        );
+
+        // Create company
+        $database->createDocument('companies', new Document([
+            '$id' => 'company1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Tech Corp',
+        ]));
+
+        $database->createDocument('companies', new Document([
+            '$id' => 'company2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Design Inc',
+        ]));
+
+        // Create employee with company (MANY_TO_ONE from employee side)
+        $database->createDocument('employees', new Document([
+            '$id' => 'emp1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Alice',
+            'salary' => 100000,
+            'company' => 'company1',
+        ]));
+
+        // Partial update from child (employee) side - update only salary, preserve company
+        $database->updateDocument('employees', 'emp1', new Document([
+            '$id' => 'emp1',
+            '$collection' => 'employees',
+            'salary' => 120000,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $emp = $database->getDocument('employees', 'emp1');
+        $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be updated');
+        $this->assertEquals('company1', $emp->getAttribute('company')->getId(), 'Company relationship should be preserved');
+
+        // Partial update - change only company relationship
+        $database->updateDocument('employees', 'emp1', new Document([
+            '$id' => 'emp1',
+            '$collection' => 'employees',
+            'company' => 'company2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $emp = $database->getDocument('employees', 'emp1');
+        $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be preserved');
+        $this->assertEquals('company2', $emp->getAttribute('company')->getId(), 'Company should be updated');
+
+        $database->deleteCollection('companies');
+        $database->deleteCollection('employees');
+    }
+
+    public function testPartialUpdateManyToOneChildSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('departments');
+        $database->createCollection('staff');
+
+        $database->createAttribute('departments', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('departments', 'budget', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('staff', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'staff',
+            relatedCollection: 'departments',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'department',
+            twoWayKey: 'staff'
+        );
+
+        // Create department with staff
+        $database->createDocument('departments', new Document([
+            '$id' => 'dept1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Engineering',
+            'budget' => 1000000,
+            'staff' => [
+                ['$id' => 'staff1', '$permissions' => [Permission::read(Role::any())], 'name' => 'Bob'],
+                ['$id' => 'staff2', '$permissions' => [Permission::read(Role::any())], 'name' => 'Carol'],
+            ],
+        ]));
+
+        // Partial update from parent (department) side - update budget only, preserve staff
+        $database->updateDocument('departments', 'dept1', new Document([
+            '$id' => 'dept1',
+            '$collection' => 'departments',
+            'budget' => 1200000,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $dept = $database->getDocument('departments', 'dept1');
+        $this->assertEquals('Engineering', $dept->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(1200000, $dept->getAttribute('budget'), 'Budget should be updated');
+        $this->assertCount(2, $dept->getAttribute('staff'), 'Staff should be preserved');
+
+        $database->deleteCollection('departments');
+        $database->deleteCollection('staff');
     }
 }

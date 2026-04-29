@@ -40,6 +40,16 @@ class RoleTest extends TestCase
         $this->assertEquals('123', $role->getIdentifier());
         $this->assertEquals('456', $role->getDimension());
 
+        $role = Role::parse('team:123/project-456-owner');
+        $this->assertEquals('team', $role->getRole());
+        $this->assertEquals('123', $role->getIdentifier());
+        $this->assertEquals('project-456-owner', $role->getDimension());
+
+        $role = Role::parse('team:123/project-456');
+        $this->assertEquals('team', $role->getRole());
+        $this->assertEquals('123', $role->getIdentifier());
+        $this->assertEquals('project-456', $role->getDimension());
+
         $role = Role::parse('user:123/verified');
         $this->assertEquals('user', $role->getRole());
         $this->assertEquals('123', $role->getIdentifier());
@@ -76,6 +86,12 @@ class RoleTest extends TestCase
         $role = new Role('team', '123', '456');
         $this->assertEquals('team:123/456', $role->toString());
 
+        $role = new Role('team', '123', 'project-456-owner');
+        $this->assertEquals('team:123/project-456-owner', $role->toString());
+
+        $role = new Role('team', '123', 'project-456');
+        $this->assertEquals('team:123/project-456', $role->toString());
+
         $role = new Role('label', 'vip');
         $this->assertEquals('label:vip', $role->toString());
     }
@@ -99,6 +115,12 @@ class RoleTest extends TestCase
 
         $role = Role::team(ID::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
+
+        $role = Role::team(ID::custom('123'), 'project-456-owner');
+        $this->assertEquals('team:123/project-456-owner', $role->toString());
+
+        $role = Role::team(ID::custom('123'), 'project-456');
+        $this->assertEquals('team:123/project-456', $role->toString());
 
         $role = Role::label('vip');
         $this->assertEquals('label:vip', $role->toString());

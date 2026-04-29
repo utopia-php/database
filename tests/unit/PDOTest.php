@@ -41,44 +41,44 @@ class PDOTest extends TestCase
         $this->assertSame($pdoStatementMock, $result);
     }
 
-    //    public function testLostConnectionRetriesCall(): void
-    //    {
-    //        $dsn = 'sqlite::memory:';
-    //        $pdoWrapper = $this->getMockBuilder(PDO::class)
-    //            ->setConstructorArgs([$dsn, null, null, []])
-    //            ->onlyMethods(['reconnect'])
-    //            ->getMock();
-    //
-    //        $pdoMock = $this->getMockBuilder(\PDO::class)
-    //            ->disableOriginalConstructor()
-    //            ->getMock();
-    //        $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
-    //            ->disableOriginalConstructor()
-    //            ->getMock();
-    //
-    //        $pdoMock->expects($this->exactly(2))
-    //            ->method('query')
-    //            ->with('SELECT 1')
-    //            ->will($this->onConsecutiveCalls(
-    //                $this->throwException(new \Exception("Lost connection")),
-    //                $pdoStatementMock
-    //            ));
-    //
-    //        $reflection = new ReflectionClass($pdoWrapper);
-    //        $pdoProperty = $reflection->getProperty('pdo');
-    //        $pdoProperty->setAccessible(true);
-    //        $pdoProperty->setValue($pdoWrapper, $pdoMock);
-    //
-    //        $pdoWrapper->expects($this->once())
-    //            ->method('reconnect')
-    //            ->willReturnCallback(function () use ($pdoWrapper, $pdoMock, $pdoProperty) {
-    //                $pdoProperty->setValue($pdoWrapper, $pdoMock);
-    //            });
-    //
-    //        $result = $pdoWrapper->query('SELECT 1');
-    //
-    //        $this->assertSame($pdoStatementMock, $result);
-    //    }
+    public function testLostConnectionRetriesCall(): void
+    {
+        $dsn = 'sqlite::memory:';
+        $pdoWrapper = $this->getMockBuilder(PDO::class)
+            ->setConstructorArgs([$dsn, null, null, []])
+            ->onlyMethods(['reconnect'])
+            ->getMock();
+
+        $pdoMock = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $pdoMock->expects($this->exactly(2))
+            ->method('query')
+            ->with('SELECT 1')
+            ->will($this->onConsecutiveCalls(
+                $this->throwException(new \Exception("Lost connection")),
+                $pdoStatementMock
+            ));
+
+        $reflection = new ReflectionClass($pdoWrapper);
+        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoProperty->setAccessible(true);
+        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+
+        $pdoWrapper->expects($this->once())
+            ->method('reconnect')
+            ->willReturnCallback(function () use ($pdoWrapper, $pdoMock, $pdoProperty) {
+                $pdoProperty->setValue($pdoWrapper, $pdoMock);
+            });
+
+        $result = $pdoWrapper->query('SELECT 1');
+
+        $this->assertSame($pdoStatementMock, $result);
+    }
 
     public function testNonLostConnectionExceptionIsRethrown(): void
     {

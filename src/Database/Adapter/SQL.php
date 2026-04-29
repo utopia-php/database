@@ -3155,6 +3155,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
+        $this->currentQueryCollection = $name;
         $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
@@ -3299,6 +3300,7 @@ abstract class SQL extends Adapter
             }
         }
 
+        $this->currentQueryCollection = $name;
         $conditions = $this->getSQLConditions($otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
@@ -3385,6 +3387,7 @@ abstract class SQL extends Adapter
             }
         }
 
+        $this->currentQueryCollection = $name;
         $conditions = $this->getSQLConditions($otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;

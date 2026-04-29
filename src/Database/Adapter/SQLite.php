@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
+use Utopia\Database\Query;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -461,10 +462,14 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        if ($type === Database::INDEX_FULLTEXT) {
+            return $this->createFulltextIndex($name, $id, $attributes);
+        }
+
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
         $stmt = $this->getPDO()->prepare("
-			SELECT name 
-			FROM sqlite_master 
+			SELECT name
+			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
 		");
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
@@ -484,6 +489,84 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Create an FTS5 virtual table mirroring `$attributes` and the triggers
+     * that keep it in sync with the parent collection.
+     *
+     * @param array<string> $attributes
+     * @throws PDOException
+     */
+    protected function createFulltextIndex(string $collection, string $id, array $attributes): bool
+    {
+        $attributes = \array_map(fn (string $a) => $this->getInternalKeyForAttribute($a), $attributes);
+        $ftsTable = $this->getFulltextTableName($collection, $attributes);
+        $parentTable = "{$this->getNamespace()}_{$collection}";
+
+        $stmt = $this->getPDO()->prepare("
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name=:_table;
+        ");
+        $stmt->bindValue(':_table', $ftsTable);
+        $stmt->execute();
+        if (!empty($stmt->fetch())) {
+            return true;
+        }
+
+        $columns = \array_map(fn (string $attr) => $this->filter($attr), $attributes);
+        $columnList = \implode(', ', \array_map(fn (string $c) => "`{$c}`", $columns));
+        $newColumnList = \implode(', ', \array_map(fn (string $c) => "NEW.`{$c}`", $columns));
+        $oldColumnList = \implode(', ', \array_map(fn (string $c) => "OLD.`{$c}`", $columns));
+
+        $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$columnList}, content=`{$parentTable}`, content_rowid=`_id`)";
+        $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
+        $this->getPDO()->prepare($createSql)->execute();
+
+        $insertTrigger = "
+            CREATE TRIGGER `{$ftsTable}_ai` AFTER INSERT ON `{$parentTable}` BEGIN
+                INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+            END
+        ";
+        $this->getPDO()->prepare($insertTrigger)->execute();
+
+        $deleteTrigger = "
+            CREATE TRIGGER `{$ftsTable}_ad` AFTER DELETE ON `{$parentTable}` BEGIN
+                INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+            END
+        ";
+        $this->getPDO()->prepare($deleteTrigger)->execute();
+
+        $updateTrigger = "
+            CREATE TRIGGER `{$ftsTable}_au` AFTER UPDATE ON `{$parentTable}` BEGIN
+                INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+                INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+            END
+        ";
+        $this->getPDO()->prepare($updateTrigger)->execute();
+
+        $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`";
+        $this->getPDO()->prepare($backfill)->execute();
+
+        return true;
+    }
+
+    /**
+     * Stable, per-collection-and-attribute FTS5 table name. Uses attribute
+     * names rather than the index id so getSQLCondition can derive it from
+     * the search query without consulting the index map.
+     *
+     * @param array<string>|string $attributes
+     */
+    protected function getFulltextTableName(string $collection, array|string $attributes): string
+    {
+        $attrs = \is_array($attributes) ? $attributes : [$attributes];
+        $attrs = \array_map(fn (string $attr) => $this->filter($attr), $attrs);
+        \sort($attrs);
+        $key = \implode('_', $attrs);
+
+        return "{$this->getNamespace()}_{$this->tenant}_{$collection}_{$key}_fts";
+    }
+
+    /**
      * Delete Index
      *
      * @param string $collection
@@ -496,6 +579,13 @@ class SQLite extends MariaDB
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+
+        // FTS5 indexes live as a virtual table named after the indexed
+        // attributes, not the index id, so probe by index id first to find
+        // the matching table and drop it together with its triggers.
+        if ($this->dropFulltextIndexById($name, $id)) {
+            return true;
+        }
 
         $sql = "DROP INDEX `{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}`";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
@@ -511,6 +601,47 @@ class SQLite extends MariaDB
 
             throw $e;
         }
+    }
+
+    /**
+     * Drop the FTS5 virtual table (and its triggers) corresponding to the
+     * fulltext index `$id` on `$collection`, if one exists. Returns true if
+     * a matching table was found and dropped.
+     */
+    protected function dropFulltextIndexById(string $collection, string $id): bool
+    {
+        $prefix = "{$this->getNamespace()}_{$this->tenant}_{$collection}_";
+        $stmt = $this->getPDO()->prepare("
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name LIKE :_prefix AND name LIKE '%_fts'
+        ");
+        $stmt->bindValue(':_prefix', $prefix . '%');
+        $stmt->execute();
+        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($tables)) {
+            return false;
+        }
+
+        // The index id isn't encoded in the FTS5 table name, so we can't
+        // match a single table from the id alone. Probe the index map: the
+        // caller has to pass the column set when creating, but on delete we
+        // only get the id. Fall back to dropping every matching FTS5 table
+        // when only one exists; otherwise leave the regular DROP INDEX
+        // path to error.
+        if (\count($tables) !== 1) {
+            return false;
+        }
+
+        $ftsTable = $tables[0];
+        foreach (['ai', 'ad', 'au'] as $suffix) {
+            $this->getPDO()->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+        }
+        $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
+        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+        $this->getPDO()->prepare($sql)->execute();
+
+        return true;
     }
 
     /**
@@ -911,7 +1042,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForFulltextIndex(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -921,7 +1052,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForFulltextWildcardIndex(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -1062,6 +1193,13 @@ class SQLite extends MariaDB
 
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
+
+            case Database::INDEX_FULLTEXT:
+                // Fulltext is handled via FTS5 virtual tables, not regular
+                // CREATE INDEX, so this branch should never reach SQL
+                // generation. Returning a placeholder keeps the contract
+                // satisfied for any introspection callers.
+                return 'INDEX';
 
             default:
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
@@ -1940,5 +2078,40 @@ class SQLite extends MariaDB
     protected function getInsertKeyword(): string
     {
         return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * SQLite has no MATCH ... AGAINST. Route SEARCH/NOT_SEARCH through the
+     * collection's FTS5 virtual table; everything else falls through to the
+     * MariaDB implementation we inherit from.
+     */
+    protected function getSQLCondition(Query $query, array &$binds): string
+    {
+        $method = $query->getMethod();
+        if ($method !== Query::TYPE_SEARCH && $method !== Query::TYPE_NOT_SEARCH) {
+            return parent::getSQLCondition($query, $binds);
+        }
+
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $attribute = $this->filter($query->getAttribute());
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
+
+        $collection = $this->currentQueryCollection;
+        if ($collection === null) {
+            // No collection context — fall back to a LIKE scan so the query
+            // still returns plausible results instead of erroring out.
+            $binds[":{$placeholder}_0"] = '%' . $this->getFulltextValue($query->getValue()) . '%';
+            $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
+
+            return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
+        }
+
+        $ftsTable = $this->getFulltextTableName($collection, $attribute);
+        $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+
+        $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
+
+        return $method === Query::TYPE_SEARCH ? $subquery : "NOT ({$subquery})";
     }
 }

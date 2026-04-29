@@ -36,6 +36,14 @@ abstract class Adapter
     protected bool $skipDuplicates = false;
 
     /**
+     * Filtered collection id of the query currently being built. Set by
+     * find/count/sum (and similar) before delegating to getSQLConditions so
+     * adapter overrides can resolve auxiliary tables (e.g. SQLite's FTS5
+     * virtual tables) for the active collection.
+     */
+    protected ?string $currentQueryCollection = null;
+
+    /**
      * @var array<string, mixed>
      */
     protected array $debug = [];

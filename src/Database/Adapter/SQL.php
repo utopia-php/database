@@ -2434,13 +2434,18 @@ abstract class SQL extends Adapter
             '$permissions',
             '$createdAt',
             '$updatedAt',
-            '$deletedAt',
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $hasDeletedAt = \in_array('$deletedAt', $selections);
+
+        $selections = \array_diff($selections, [...$internalKeys, '$deletedAt', '$collection']);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
+        }
+
+        if ($hasDeletedAt) {
+            $selections[] = $this->getInternalKeyForAttribute('$deletedAt');
         }
 
         $projections = [];

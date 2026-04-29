@@ -245,26 +245,22 @@ class SQLite extends MariaDB
         $namespace = $this->getNamespace();
         $name = $namespace . '_' . $collection;
         $permissions = $namespace . '_' . $collection . '_perms';
+        $ftsPrefix = "{$namespace}_{$this->tenant}_{$collection}_";
 
-        $collectionSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
-             FROM \"dbstat\" 
-             WHERE name = :name;
-        ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
+        $stmt = $this->getPDO()->prepare("
+             SELECT COALESCE(SUM(\"pgsize\"), 0)
              FROM \"dbstat\"
-             WHERE name = :name;
+             WHERE name = :name OR name = :perms OR (name LIKE :fts_prefix AND name LIKE '%_fts');
         ");
 
-        $collectionSize->bindParam(':name', $name);
-        $permissionsSize->bindParam(':name', $permissions);
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':perms', $permissions);
+        $ftsLike = $ftsPrefix . '%';
+        $stmt->bindParam(':fts_prefix', $ftsLike);
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $stmt->execute();
+            $size = (int) $stmt->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
@@ -1062,10 +1058,11 @@ class SQLite extends MariaDB
      */
     public function getSupportForTimeouts(): bool
     {
-        // PRAGMA busy_timeout is set globally during connection setup; the
-        // adapter doesn't honour per-query timeouts, but the contract only
-        // requires that setTimeout is callable without erroring.
-        return true;
+        // The adapter does no per-query timeout enforcement and therefore
+        // can't translate a tripped budget into Utopia\Database\Exception\Timeout
+        // the way MariaDB/Postgres do. Stay false rather than mislead callers
+        // that rely on Database::setTimeout() actually firing.
+        return false;
     }
 
     public function getSupportForRelationships(): bool
@@ -1088,10 +1085,11 @@ class SQLite extends MariaDB
      */
     public function getSupportForAttributeResizing(): bool
     {
-        // SQLite uses dynamic typing — a column declared VARCHAR(255) will
-        // happily store a million characters. Resizing is a documented
-        // no-op rather than a structural change.
-        return true;
+        // SQLite's dynamic typing means resize-to-smaller silently succeeds
+        // even when existing values exceed the new size — the upstream test
+        // suite explicitly relies on the adapter rejecting that, so opt
+        // out rather than pretend to honour the contract.
+        return false;
     }
 
     /**
@@ -2160,6 +2158,93 @@ class SQLite extends MariaDB
     /**
      * Same multi-statement split rationale as createRelationship.
      */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        if (!\is_null($newKey)) {
+            $newKey = $this->filter($newKey);
+        }
+        if (!\is_null($newTwoWayKey)) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $statements = [];
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($key !== $newKey) {
+                    $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                    $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
+
+                if (!\is_null($newKey)) {
+                    $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $statements[] = "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        foreach ($statements as $stmt) {
+            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $stmt);
+            $this->getPDO()->prepare($stmt)->execute();
+        }
+
+        return true;
+    }
+
+    /**
+     * Same multi-statement split rationale as createRelationship.
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,
@@ -2258,7 +2343,7 @@ class SQLite extends MariaDB
                 'numericPrecision' => null,
                 'numericScale' => null,
                 'datetimePrecision' => null,
-                'columnType' => $rawType,
+                'columnType' => \strtolower($rawType),
                 'columnKey' => !empty($row['pk']) ? 'PRI' : '',
                 'extra' => '',
             ]);
@@ -2346,21 +2431,60 @@ class SQLite extends MariaDB
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
 
+        $value = $this->getFTS5Value($query->getValue());
+
+        if ($value === '') {
+            // Empty term — match nothing on SEARCH and everything on NOT_SEARCH
+            // rather than handing FTS5 an empty string that triggers a
+            // syntax error.
+            return $method === Query::TYPE_SEARCH ? '1 = 0' : '1 = 1';
+        }
+
         $collection = $this->currentQueryCollection;
         if ($collection === null) {
             // No collection context — fall back to a LIKE scan so the query
             // still returns plausible results instead of erroring out.
-            $binds[":{$placeholder}_0"] = '%' . $this->getFulltextValue($query->getValue()) . '%';
+            $binds[":{$placeholder}_0"] = '%' . $value . '%';
             $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
 
             return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
         }
 
         $ftsTable = $this->getFulltextTableName($collection, $attribute);
-        $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+        $binds[":{$placeholder}_0"] = $value;
 
         $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
 
         return $method === Query::TYPE_SEARCH ? $subquery : "NOT ({$subquery})";
+    }
+
+    /**
+     * Sanitise a SEARCH term for FTS5. The inherited getFulltextValue keeps
+     * dots and other characters that FTS5 treats as syntax — strip anything
+     * that isn't a token character, collapse whitespace, and append the
+     * trailing prefix wildcard the boolean-mode contract relies on.
+     *
+     * Returns '' when the input has no token characters; callers should
+     * short-circuit instead of binding the empty string.
+     */
+    protected function getFTS5Value(string $value): string
+    {
+        $exact = \str_starts_with($value, '"') && \str_ends_with($value, '"');
+
+        // FTS5 reserves a number of characters as syntax. Replacing them
+        // with whitespace lets multi-word search terms still split into
+        // separate tokens instead of becoming one giant prefix.
+        $sanitized = \preg_replace('/[^\p{L}\p{N}_\s]+/u', ' ', $value) ?? '';
+        $sanitized = \trim((string) \preg_replace('/\s+/', ' ', $sanitized));
+
+        if ($sanitized === '') {
+            return '';
+        }
+
+        if ($exact) {
+            return '"' . $sanitized . '"';
+        }
+
+        return $sanitized . '*';
     }
 }

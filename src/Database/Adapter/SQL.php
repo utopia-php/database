@@ -3156,7 +3156,11 @@ abstract class SQL extends Adapter
         }
 
         $this->currentQueryCollection = $name;
-        $conditions = $this->getSQLConditions($queries, $binds);
+        try {
+            $conditions = $this->getSQLConditions($queries, $binds);
+        } finally {
+            $this->currentQueryCollection = null;
+        }
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3301,7 +3305,11 @@ abstract class SQL extends Adapter
         }
 
         $this->currentQueryCollection = $name;
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        try {
+            $conditions = $this->getSQLConditions($otherQueries, $binds);
+        } finally {
+            $this->currentQueryCollection = null;
+        }
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3388,7 +3396,11 @@ abstract class SQL extends Adapter
         }
 
         $this->currentQueryCollection = $name;
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        try {
+            $conditions = $this->getSQLConditions($otherQueries, $binds);
+        } finally {
+            $this->currentQueryCollection = null;
+        }
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

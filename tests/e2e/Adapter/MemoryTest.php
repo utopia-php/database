@@ -580,6 +580,42 @@ class MemoryTest extends Base
     }
 
     /**
+     * The inherited scope test asserts a doc's $updatedAt after an
+     * immediate update differs from its initial $updatedAt. The
+     * in-memory adapter's create+update sequence can land inside the
+     * same millisecond, so the timestamps coincide. Wait one
+     * millisecond between the two writes to keep the inherited
+     * assertion honest without changing semantics for slower adapters.
+     */
+    public function testSingleDocumentDateOperations(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'single_date_operations_memory';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
+
+        $database->setPreserveDates(true);
+        $created = $database->createDocument($collection, new Document([
+            '$id' => 'doc11',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())],
+            'string' => 'no_dates',
+            '$createdAt' => '2000-01-01T10:00:00.000+00:00',
+        ]));
+
+        $newUpdatedAt = $created->getUpdatedAt();
+
+        \usleep(1100);
+
+        $updated = $database->updateDocument($collection, 'doc11', new Document([
+            'string' => 'no_dates_update',
+        ]));
+        $this->assertNotEquals($newUpdatedAt, $updated->getAttribute('$updatedAt'));
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    /**
      * Regression: under shared tables a unique index must scope per-tenant.
      * Two tenants storing the same value in a unique-indexed attribute must
      * not collide — MariaDB models this as a composite (attr, _tenant) index.

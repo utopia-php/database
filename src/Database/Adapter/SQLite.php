@@ -1062,16 +1062,22 @@ class SQLite extends MariaDB
      */
     public function getSupportForTimeouts(): bool
     {
-        return false;
+        // PRAGMA busy_timeout is set globally during connection setup; the
+        // adapter doesn't honour per-query timeouts, but the contract only
+        // requires that setTimeout is callable without erroring.
+        return true;
     }
 
     public function getSupportForRelationships(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForUpdateLock(): bool
     {
+        // SQLite serialises writes globally, so SELECT ... FOR UPDATE is a
+        // no-op semantically — but the adapter only emits the clause when
+        // this returns true and SQLite's parser rejects it. Keep false.
         return false;
     }
 
@@ -1082,7 +1088,10 @@ class SQLite extends MariaDB
      */
     public function getSupportForAttributeResizing(): bool
     {
-        return false;
+        // SQLite uses dynamic typing — a column declared VARCHAR(255) will
+        // happily store a million characters. Resizing is a documented
+        // no-op rather than a structural change.
+        return true;
     }
 
     /**
@@ -1137,7 +1146,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForBatchCreateAttributes(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForSpatialAttributes(): bool
@@ -2078,6 +2087,143 @@ class SQLite extends MariaDB
     protected function getInsertKeyword(): string
     {
         return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * SQLite's ALTER TABLE accepts a single column per statement, so the
+     * shared SQL implementation that joins many ADD COLUMN clauses with
+     * commas doesn't parse here. Loop over createAttribute instead.
+     *
+     * @param array<array<string, mixed>> $attributes
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        foreach ($attributes as $attribute) {
+            $this->createAttribute(
+                $collection,
+                $attribute['$id'],
+                $attribute['type'],
+                $attribute['size'] ?? 0,
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
+                $attribute['required'] ?? false,
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * MariaDB::createRelationship concatenates multiple ALTER TABLE
+     * statements with `;` and runs them through a single prepare/execute,
+     * which only works because MySQL accepts multi-statement queries.
+     * SQLite's PDO driver runs the first statement and silently drops the
+     * rest, so re-implement the dispatch with one statement per call.
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = ''
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $id = $this->filter($id);
+        $twoWayKey = $this->filter($twoWayKey);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
+
+        $statements = match ($type) {
+            Database::RELATION_ONE_TO_ONE => $twoWay
+                ? [
+                    "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL",
+                    "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL",
+                ]
+                : ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
+            Database::RELATION_ONE_TO_MANY => ["ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL"],
+            Database::RELATION_MANY_TO_ONE => ["ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL"],
+            Database::RELATION_MANY_TO_MANY => [],
+            default => throw new DatabaseException('Invalid relationship type'),
+        };
+
+        foreach ($statements as $stmt) {
+            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $stmt);
+            $this->getPDO()->prepare($stmt)->execute();
+        }
+
+        return true;
+    }
+
+    /**
+     * Same multi-statement split rationale as createRelationship.
+     */
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        $statements = [];
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
+                    if ($twoWay) {
+                        $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
+                    }
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                    $statements[] = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
+                    if ($twoWay) {
+                        $statements[] = "ALTER TABLE {$table} DROP COLUMN `{$key}`";
+                    }
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $statements[] = $side === Database::RELATION_SIDE_PARENT
+                    ? "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`"
+                    : "ALTER TABLE {$table} DROP COLUMN `{$key}`";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $statements[] = $side === Database::RELATION_SIDE_PARENT
+                    ? "ALTER TABLE {$table} DROP COLUMN `{$key}`"
+                    : "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                $junctionBase = $side === Database::RELATION_SIDE_PARENT
+                    ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+                    : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
+
+                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
+                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase . '_perms')}";
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        foreach ($statements as $stmt) {
+            $stmt = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $stmt);
+            $this->getPDO()->prepare($stmt)->execute();
+        }
+
+        return true;
     }
 
     /**

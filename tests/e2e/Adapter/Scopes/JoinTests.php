@@ -1383,8 +1383,8 @@ trait JoinTests
             return;
         }
 
-        $pCol = 'jtc_p';
-        $oCol = 'jtc_o';
+        $pCol = 'jtc_p_'.$joinMethod;
+        $oCol = 'jtc_o_'.$joinMethod;
         $cols = [$pCol, $oCol];
         $this->cleanupAggCollections($database, $cols);
 
@@ -1519,8 +1519,8 @@ trait JoinTests
             return;
         }
 
-        $oCol = 'jho_o';
-        $cCol = 'jho_c';
+        $oCol = 'jho_o_'.$operator;
+        $cCol = 'jho_c_'.$operator;
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 

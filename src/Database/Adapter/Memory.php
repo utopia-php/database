@@ -454,10 +454,6 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        if ($type === Database::INDEX_FULLTEXT) {
-            throw new DatabaseException('Fulltext indexes are not implemented in the Memory adapter');
-        }
-
         if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
             // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing
             // rows contain duplicates; Database::createIndex catches the resulting
@@ -1109,7 +1105,7 @@ class Memory extends Adapter
 
     public function getSupportForFulltextIndex(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForFulltextWildcardIndex(): bool
@@ -1396,7 +1392,7 @@ class Memory extends Adapter
 
     public function getSupportForPCRERegex(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForPOSIXRegex(): bool
@@ -1762,12 +1758,110 @@ class Memory extends Adapter
                 return true;
 
             case Query::TYPE_SEARCH:
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $needle = (string) ($queryValues[0] ?? '');
+                if ($needle === '') {
+                    return false;
+                }
+
+                return $this->matchesFulltext($value, $needle);
+
             case Query::TYPE_NOT_SEARCH:
+                if (! \is_string($value)) {
+                    return true;
+                }
+                $needle = (string) ($queryValues[0] ?? '');
+                if ($needle === '') {
+                    return true;
+                }
+
+                return ! $this->matchesFulltext($value, $needle);
+
             case Query::TYPE_REGEX:
-                throw new DatabaseException('Search and regex queries are not implemented in the Memory adapter');
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $pattern = (string) ($queryValues[0] ?? '');
+
+                return $this->matchesRegex($value, $pattern);
         }
 
         throw new DatabaseException('Query method not implemented in the Memory adapter: '.$method);
+    }
+
+    /**
+     * Tokenize a value and a needle on whitespace/punctuation and return true
+     * if any needle token appears in the value's token set (MariaDB
+     * MATCH AGAINST natural-language semantics — any matching word is
+     * enough to surface the row). Quoted phrases enforce a contiguous
+     * substring match, mirroring boolean-mode `"phrase"` queries.
+     */
+    protected function matchesFulltext(string $haystack, string $needle): bool
+    {
+        // Quoted phrase: exact substring match (case-insensitive).
+        if (\preg_match('/^"(.*)"$/u', \trim($needle), $matches) === 1) {
+            $phrase = \mb_strtolower($matches[1]);
+            if ($phrase === '') {
+                return false;
+            }
+
+            return \str_contains(\mb_strtolower($haystack), $phrase);
+        }
+
+        $haystackTokens = $this->tokenize($haystack);
+        $needleTokens = $this->tokenize($needle);
+        if (empty($needleTokens) || empty($haystackTokens)) {
+            return false;
+        }
+        $set = \array_flip($haystackTokens);
+        foreach ($needleTokens as $token) {
+            // Mirror MariaDB MATCH AGAINST IN BOOLEAN MODE wildcard suffix
+            // semantics — `term*` matches any token starting with `term`.
+            if (\str_ends_with($token, '*')) {
+                $prefix = \substr($token, 0, -1);
+                if ($prefix === '') {
+                    continue;
+                }
+                foreach ($haystackTokens as $candidate) {
+                    if (\str_starts_with($candidate, $prefix)) {
+                        return true;
+                    }
+                }
+
+                continue;
+            }
+            if (isset($set[$token])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string>
+     */
+    protected function tokenize(string $text): array
+    {
+        $lower = \mb_strtolower($text);
+        $parts = \preg_split('/[^\p{L}\p{N}*]+/u', $lower) ?: [];
+
+        return \array_values(\array_filter($parts, fn (string $p) => $p !== ''));
+    }
+
+    /**
+     * Apply the supplied regex against $value. Pattern is the raw expression
+     * — wrap it in delimiters before passing to preg_match, mirroring how
+     * MariaDB's REGEXP operator accepts the pattern verbatim.
+     */
+    protected function matchesRegex(string $value, string $pattern): bool
+    {
+        $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
+        $matched = @\preg_match($delimited, $value);
+
+        return $matched === 1;
     }
 
     protected function looseEquals(mixed $a, mixed $b): bool

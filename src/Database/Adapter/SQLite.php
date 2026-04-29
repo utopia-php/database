@@ -163,7 +163,7 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
+        $tenantQuery = $this->sharedTables ? '`_tenant` "INT(11) UNSIGNED" DEFAULT NULL,' : '';
 
         $collection = "
 			CREATE TABLE {$this->getSQLTable($id)} (

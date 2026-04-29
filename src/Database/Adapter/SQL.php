@@ -2878,6 +2878,7 @@ abstract class SQL extends Adapter
     protected function newBuilder(string $table, string $alias = ''): SQLBuilder
     {
         $builder = $this->createBuilder()->from($this->getSQLTableRaw($table), $alias);
+      
         // AttributeMap is a readonly stateless config object — share one
         // instance across builders to avoid allocating it on every read.
         $this->attributeMap ??= new AttributeMap([
@@ -2887,6 +2888,7 @@ abstract class SQL extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
         ]);
         $builder->addHook($this->attributeMap);

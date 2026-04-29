@@ -179,7 +179,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3307", "-u", "root", "-ppassword"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P $$MYSQL_TCP_PORT -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -202,7 +202,7 @@ services:
     cap_add:
       - SYS_NICE
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3307", "-u", "root", "-ppassword"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P $$MYSQL_TCP_PORT -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 5

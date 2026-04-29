@@ -2789,6 +2789,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             '$version' => '_version',
             default => $attribute

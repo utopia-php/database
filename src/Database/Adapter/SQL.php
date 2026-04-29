@@ -106,6 +106,37 @@ abstract class SQL extends Adapter
         return $this->appliedTimeout;
     }
 
+    /**
+     * Bind builder-produced positional parameters onto a prepared statement.
+     *
+     * Centralises the find / count / sum binding loops so the
+     * IntegerBooleans capability check is resolved once per call rather
+     * than once per binding. Mirrors the find() superset (handles arrays
+     * via json_encode, floats via float-precision string binding, and
+     * booleans via int coercion when the adapter expects integers).
+     *
+     * @param  PDOStatement|PDOStatementProxy  $stmt
+     * @param  array<int, mixed>  $bindings
+     */
+    protected function bindStatement(mixed $stmt, array $bindings): void
+    {
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
+        foreach ($bindings as $i => $value) {
+            if ($intBools && \is_bool($value)) {
+                $value = (int) $value;
+            }
+            if (\is_array($value)) {
+                $value = \json_encode($value);
+            }
+            if (\is_float($value)) {
+                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
+            } else {
+                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
+            }
+        }
+    }
+
     protected function setAppliedTimeout(int $milliseconds): void
     {
         $this->appliedTimeout = $milliseconds;
@@ -1339,19 +1370,7 @@ abstract class SQL extends Adapter
 
         try {
             $stmt = $this->getPDO()->prepare($sql);
-            foreach ($result->bindings as $i => $value) {
-                if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
-                    $value = (int) $value;
-                }
-                if (\is_array($value)) {
-                    $value = \json_encode($value);
-                }
-                if (\is_float($value)) {
-                    $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
-                }
-            }
+            $this->bindStatement($stmt, $result->bindings);
             $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1461,16 +1480,7 @@ abstract class SQL extends Adapter
         $sql = $result->query;
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($result->bindings as $i => $value) {
-            if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
-                $value = (int) $value;
-            }
-            if (\is_float($value)) {
-                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } else {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
-            }
-        }
+        $this->bindStatement($stmt, $result->bindings);
 
         try {
             $this->execute($stmt);
@@ -1541,16 +1551,7 @@ abstract class SQL extends Adapter
         $sql = $result->query;
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($result->bindings as $i => $value) {
-            if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
-                $value = (int) $value;
-            }
-            if (\is_float($value)) {
-                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } else {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
-            }
-        }
+        $this->bindStatement($stmt, $result->bindings);
 
         try {
             $this->execute($stmt);

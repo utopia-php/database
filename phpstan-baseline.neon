@@ -357,7 +357,7 @@ parameters:
 		-
 			message: '#^Cannot call method bindValue\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 12
+			count: 6
 			path: src/Database/Adapter/SQL.php
 
 		-

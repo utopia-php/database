@@ -2233,7 +2233,7 @@ class SQLite extends MariaDB
      * Database::analyzeCollection() doesn't have to special-case the
      * adapter.
      *
-     * @return array<array<string, mixed>>
+     * @return array<Document>
      */
     public function getSchemaAttributes(string $collection): array
     {
@@ -2249,7 +2249,7 @@ class SQLite extends MariaDB
             $rawType = (string) ($row['type'] ?? '');
             [$dataType, $length] = $this->parseSqliteColumnType($rawType);
 
-            $results[] = [
+            $results[] = new Document([
                 '$id' => $row['name'],
                 'columnDefault' => $row['dflt_value'] ?? null,
                 'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
@@ -2261,7 +2261,7 @@ class SQLite extends MariaDB
                 'columnType' => $rawType,
                 'columnKey' => !empty($row['pk']) ? 'PRI' : '',
                 'extra' => '',
-            ];
+            ]);
         }
 
         return $results;
@@ -2271,7 +2271,7 @@ class SQLite extends MariaDB
      * Introspect a collection's indexes via PRAGMA index_list +
      * PRAGMA index_info. Mirrors MariaDB's INFORMATION_SCHEMA shape.
      *
-     * @return array<array<string, mixed>>
+     * @return array<Document>
      */
     public function getSchemaIndexes(string $collection): array
     {
@@ -2294,7 +2294,7 @@ class SQLite extends MariaDB
 
             $columns = [];
             foreach ($cols as $col) {
-                $columns[] = [
+                $columns[] = new Document([
                     '$id' => $name,
                     'indexName' => $name,
                     'columnName' => $col['name'],
@@ -2302,7 +2302,7 @@ class SQLite extends MariaDB
                     'seqInIndex' => (string) ($col['seqno'] + 1),
                     'indexType' => 'BTREE',
                     'subPart' => null,
-                ];
+                ]);
             }
 
             $results = \array_merge($results, $columns);

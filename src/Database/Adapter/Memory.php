@@ -61,9 +61,12 @@ class Memory extends Adapter
         return $this->getNamespace() . '_' . $this->filter($collection);
     }
 
-    protected function documentKey(string $id): string
+    protected function documentKey(string $id, int|string|null $tenant = null): string
     {
-        return $this->sharedTables ? $this->getTenant() . '|' . $id : $id;
+        if (!$this->sharedTables) {
+            return $id;
+        }
+        return ($tenant ?? $this->getTenant()) . '|' . $id;
     }
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
@@ -388,6 +391,11 @@ class Memory extends Adapter
         }
 
         if ($type === Database::INDEX_UNIQUE && !empty($attributes)) {
+            // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing
+            // rows contain duplicates; Database::createIndex catches the resulting
+            // DuplicateException and treats it as an "orphan index" (the metadata
+            // is registered but the physical index is absent). Mirror that contract:
+            // throw DuplicateException so callers see identical end-state behavior.
             $seen = [];
             foreach ($this->data[$key]['documents'] as $row) {
                 $signature = [];
@@ -399,7 +407,7 @@ class Memory extends Adapter
                 }
                 $hash = \json_encode($signature);
                 if (isset($seen[$hash])) {
-                    throw new DatabaseException('Cannot create unique index: existing rows already contain duplicate values');
+                    throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
                 }
                 $seen[$hash] = true;
             }
@@ -542,7 +550,7 @@ class Memory extends Adapter
 
         $key = $this->key($collection->getId());
         if (!isset($this->data[$key])) {
-            return 0;
+            throw new NotFoundException('Collection not found');
         }
 
         $attrs = $updates->getAttributes();
@@ -621,7 +629,12 @@ class Memory extends Adapter
         }
 
         foreach ($documents as $index => $doc) {
-            $existing = $this->data[$key]['documents'][$this->documentKey($doc->getId())] ?? null;
+            if (!empty($doc->getSequence())) {
+                continue;
+            }
+            // Mirror MariaDB::getSequences which binds :_tenant_$i to $document->getTenant()
+            // — the lookup must use each document's own tenant, not the adapter's current tenant.
+            $existing = $this->data[$key]['documents'][$this->documentKey($doc->getId(), $doc->getTenant())] ?? null;
             if ($existing !== null) {
                 $documents[$index]->setAttribute('$sequence', (string) $existing['_id']);
             }
@@ -633,7 +646,10 @@ class Memory extends Adapter
     {
         $key = $this->key($collection);
         if (!isset($this->data[$key])) {
-            return false;
+            // MariaDB throws when the collection itself is gone (PDO unknown
+            // table → NotFoundException). A missing document inside an existing
+            // collection still returns false to mirror rowCount() == 0.
+            throw new NotFoundException('Collection not found');
         }
 
         $docKey = $this->documentKey($id);
@@ -653,7 +669,7 @@ class Memory extends Adapter
     {
         $key = $this->key($collection);
         if (!isset($this->data[$key])) {
-            return 0;
+            throw new NotFoundException('Collection not found');
         }
 
         $seqSet = [];
@@ -664,6 +680,12 @@ class Memory extends Adapter
         $count = 0;
         $deletedIds = [];
         foreach ($this->data[$key]['documents'] as $uid => $row) {
+            // With sharedTables the row map is keyed by "tenant|uid" so sequence
+            // collisions across tenants are possible. Skip rows that don't belong
+            // to the current tenant so we never delete another tenant's data.
+            if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
+                continue;
+            }
             if (isset($seqSet[(string) ($row['_id'] ?? '')])) {
                 $deletedIds[(string) ($row['_uid'] ?? $uid)] = true;
                 unset($this->data[$key]['documents'][$uid]);
@@ -689,7 +711,7 @@ class Memory extends Adapter
     {
         $key = $this->key($collection->getId());
         if (!isset($this->data[$key])) {
-            return [];
+            throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
@@ -706,9 +728,10 @@ class Memory extends Adapter
             $rows = \array_slice($rows, 0, $limit);
         }
 
+        $selections = $this->extractSelections($queries);
         $results = [];
         foreach ($rows as $row) {
-            $results[] = new Document($this->rowToDocument($row));
+            $results[] = new Document($this->rowToDocument($row, $selections));
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -722,7 +745,7 @@ class Memory extends Adapter
     {
         $key = $this->key($collection->getId());
         if (!isset($this->data[$key])) {
-            return 0;
+            throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
@@ -730,18 +753,19 @@ class Memory extends Adapter
         $rows = $this->applyQueries($rows, $queries);
         $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
 
-        $total = \count($rows);
-        if (!is_null($max) && $max > 0 && $total > $max) {
-            return $max;
+        if (!is_null($max)) {
+            // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
+            // legitimately yields 0. Honour zero rather than ignoring it.
+            $rows = \array_slice($rows, 0, $max);
         }
-        return $total;
+        return \count($rows);
     }
 
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $key = $this->key($collection->getId());
         if (!isset($this->data[$key])) {
-            return 0;
+            throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
@@ -749,7 +773,7 @@ class Memory extends Adapter
         $rows = $this->applyQueries($rows, $queries);
         $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
 
-        if (!is_null($max) && $max > 0) {
+        if (!is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
         }
 
@@ -782,11 +806,14 @@ class Memory extends Adapter
         $current = is_numeric($current) ? $current + 0 : 0;
         $next = $current + $value;
 
+        // MariaDB encodes the bound check as part of the WHERE clause; when the
+        // bound is violated the UPDATE simply matches zero rows and the call
+        // still returns true. Mirror that — silent no-op on bound violation.
         if (!is_null($min) && $next < $min) {
-            return false;
+            return true;
         }
         if (!is_null($max) && $next > $max) {
-            return false;
+            return true;
         }
 
         $this->data[$key]['documents'][$docKey][$column] = $next;
@@ -911,7 +938,11 @@ class Memory extends Adapter
 
     public function getSupportForCasting(): bool
     {
-        return false;
+        // Memory stores native PHP types where possible but JSON-encodes array
+        // attributes on write. Returning true asks the Database layer's
+        // `casting` step to JSON-decode array columns and coerce scalar types
+        // — same behaviour as the SQL adapters.
+        return true;
     }
 
     public function getSupportForQueryContains(): bool
@@ -1240,11 +1271,28 @@ class Memory extends Adapter
     }
 
     /**
+     * Translate a stored row into a Document payload. Array attributes are kept
+     * as JSON strings so the Database layer's `casting`/`decode` filters do the
+     * decoding (mirroring how the SQL adapters return raw column values). Only
+     * a SELECT projection — when supplied — is enforced here, restricting the
+     * returned payload to the requested attributes plus the internal columns
+     * MariaDB always projects (`$id`, `$sequence`, `$createdAt`, `$updatedAt`,
+     * `$permissions`, `$tenant`, `$collection`).
+     *
      * @param array<string, mixed> $row
+     * @param array<int, string>|null $selections
      * @return array<string, mixed>
      */
-    protected function rowToDocument(array $row): array
+    protected function rowToDocument(array $row, ?array $selections = null): array
     {
+        $allowed = null;
+        if ($selections !== null && $selections !== [] && !\in_array('*', $selections, true)) {
+            $allowed = [];
+            foreach ($selections as $selection) {
+                $allowed[$this->filter($selection)] = true;
+            }
+        }
+
         $document = [];
         foreach ($row as $key => $value) {
             switch ($key) {
@@ -1267,17 +1315,32 @@ class Memory extends Adapter
                     $document['$permissions'] = \is_string($value) ? (\json_decode($value, true) ?? []) : ($value ?? []);
                     break;
                 default:
-                    if (\is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
-                        $decoded = \json_decode($value, true);
-                        if (\is_array($decoded)) {
-                            $document[$key] = $decoded;
-                            break;
-                        }
+                    if ($allowed !== null && !isset($allowed[$key])) {
+                        break;
                     }
                     $document[$key] = $value;
             }
         }
         return $document;
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<int, string>
+     */
+    protected function extractSelections(array $queries): array
+    {
+        $selections = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    if (\is_string($value)) {
+                        $selections[] = $value;
+                    }
+                }
+            }
+        }
+        return $selections;
     }
 
     /**
@@ -1535,17 +1598,34 @@ class Memory extends Adapter
      */
     protected function applyOrdering(array $rows, array $orderAttributes, array $orderTypes, string $cursorDirection): array
     {
+        // Random ordering must short-circuit: a non-deterministic comparator
+        // breaks usort's transitivity invariant. Shuffle once and return.
+        foreach ($orderTypes as $type) {
+            if ($type === Database::ORDER_RANDOM) {
+                \shuffle($rows);
+                return $rows;
+            }
+        }
+
         if (empty($orderAttributes)) {
+            // Mirror MariaDB's clustered-index ordering when no explicit ORDER BY
+            // is supplied — sort by the auto-incrementing _id ascending so
+            // pagination via limit/offset is stable across calls.
+            \usort($rows, function (array $a, array $b) use ($cursorDirection) {
+                $av = $a['_id'] ?? 0;
+                $bv = $b['_id'] ?? 0;
+                if ($av === $bv) {
+                    return 0;
+                }
+                $cmp = ($av < $bv) ? -1 : 1;
+                return $cursorDirection === Database::CURSOR_BEFORE ? -$cmp : $cmp;
+            });
             return $rows;
         }
 
         \usort($rows, function (array $a, array $b) use ($orderAttributes, $orderTypes, $cursorDirection) {
             foreach ($orderAttributes as $i => $attribute) {
                 $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
-                if ($direction === Database::ORDER_RANDOM) {
-                    return \random_int(-1, 1);
-                }
-
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
@@ -1633,7 +1713,7 @@ class Memory extends Adapter
                 if ($docValue === null) {
                     $docValue = $document->getAttribute($column);
                 }
-                $signature[] = \is_array($docValue) ? \json_encode($docValue) : $docValue;
+                $signature[] = $this->normalizeIndexValue($docValue);
             }
 
             if (\in_array(null, $signature, true)) {
@@ -1655,7 +1735,7 @@ class Memory extends Adapter
                 $rowSignature = [];
                 foreach ($attributes as $attribute) {
                     $column = $this->mapAttribute($attribute);
-                    $rowSignature[] = $row[$column] ?? null;
+                    $rowSignature[] = $this->normalizeIndexValue($row[$column] ?? null);
                 }
 
                 if ($rowSignature === $signature) {
@@ -1663,5 +1743,32 @@ class Memory extends Adapter
                 }
             }
         }
+    }
+
+    /**
+     * Normalize values for unique-index signature comparison.
+     *
+     * Documents store native PHP types (e.g. true) while stored rows often
+     * have casted equivalents (e.g. 1). To avoid false negatives:
+     * - bools are cast to int (true → 1, false → 0)
+     * - numeric strings are coerced to numbers ("3" → 3, "3.0" → 3.0)
+     * - arrays are JSON-encoded (canonical key/value order is the caller's job)
+     * - null is preserved so callers can skip null signatures
+     */
+    protected function normalizeIndexValue(mixed $value): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (\is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+        if (\is_array($value)) {
+            return \json_encode($value);
+        }
+        if (\is_string($value) && \is_numeric($value)) {
+            return $value + 0;
+        }
+        return $value;
     }
 }

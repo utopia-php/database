@@ -10,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -536,6 +537,10 @@ class MemoryTest extends TestCase
 
     public function testCreateUniqueIndexRejectsExistingDuplicates(): void
     {
+        // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing rows
+        // contain duplicates; the adapter surfaces that as DuplicateException
+        // and Database::createIndex silently treats it as an "orphan" index.
+        // Memory mirrors that contract — DuplicateException at the adapter level.
         $adapter = new Memory();
         $adapter->setNamespace('uniqdup_' . \uniqid());
         $adapter->createCollection('emails', [], []);
@@ -548,7 +553,7 @@ class MemoryTest extends TestCase
             new Document(['$id' => 'b', 'addr' => 'dup@example.com', '$permissions' => []])
         );
 
-        $this->expectException(DatabaseException::class);
+        $this->expectException(DuplicateException::class);
         $adapter->createIndex('emails', 'unique_addr', Database::INDEX_UNIQUE, ['addr'], [], []);
     }
 
@@ -736,6 +741,271 @@ class MemoryTest extends TestCase
         $adapter->setTenant(1);
         $tenant1Doc = $adapter->getDocument($collection, 'same');
         $this->assertEquals('tenant1', $tenant1Doc->getAttribute('name'));
+    }
+
+    public function testFindThrowsWhenCollectionMissing(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('missing_' . \uniqid());
+
+        $this->expectException(NotFoundException::class);
+        $adapter->find(new Document(['$id' => 'ghost']));
+    }
+
+    public function testCountThrowsWhenCollectionMissing(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('missing_' . \uniqid());
+
+        $this->expectException(NotFoundException::class);
+        $adapter->count(new Document(['$id' => 'ghost']));
+    }
+
+    public function testSumThrowsWhenCollectionMissing(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('missing_' . \uniqid());
+
+        $this->expectException(NotFoundException::class);
+        $adapter->sum(new Document(['$id' => 'ghost']), 'value');
+    }
+
+    public function testDeleteDocumentThrowsWhenCollectionMissing(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('missing_' . \uniqid());
+
+        $this->expectException(NotFoundException::class);
+        $adapter->deleteDocument('ghost', 'x');
+    }
+
+    public function testDeleteDocumentReturnsFalseForMissingDoc(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('miss_' . \uniqid());
+        $adapter->createCollection('here', [], []);
+
+        // Collection exists, document does not — mirrors MariaDB rowCount() == 0.
+        $this->assertFalse($adapter->deleteDocument('here', 'never-created'));
+    }
+
+    public function testDeleteDocumentsThrowsWhenCollectionMissing(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('missing_' . \uniqid());
+
+        $this->expectException(NotFoundException::class);
+        $adapter->deleteDocuments('ghost', [], []);
+    }
+
+    public function testDeleteDocumentsHonoursTenantBoundary(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('shared_del_' . \uniqid());
+        $adapter->setSharedTables(true);
+
+        $collection = new Document(['$id' => 'box']);
+
+        $adapter->setTenant(1);
+        $adapter->createCollection('box', [], []);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a',
+            '$permissions' => [],
+            'name' => 'tenant1-doc',
+        ]));
+
+        $adapter->setTenant(2);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'b',
+            '$permissions' => [],
+            'name' => 'tenant2-doc',
+        ]));
+
+        // Tenant 1 and 2 each own a single row whose auto-incrementing _id
+        // sequences may collide. Asking tenant 1 to delete sequence 1 must not
+        // touch tenant 2's row, even though they share the underlying map.
+        $adapter->setTenant(1);
+        $deleted = $adapter->deleteDocuments('box', ['1'], []);
+
+        $this->assertEquals(1, $deleted);
+
+        $adapter->setTenant(2);
+        $survivor = $adapter->getDocument($collection, 'b');
+        $this->assertEquals('tenant2-doc', $survivor->getAttribute('name'));
+    }
+
+    public function testFindAppliesSelectProjection(): void
+    {
+        $this->database->createCollection('proj', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'secret',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ]);
+
+        $this->database->createDocument('proj', new Document([
+            '$id' => 'p1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'visible',
+            'secret' => 'hidden',
+        ]));
+
+        $results = $this->database->find('proj', [Query::select(['name'])]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('visible', $results[0]->getAttribute('name'));
+        $this->assertNull($results[0]->getAttribute('secret'));
+        // Internals always survive.
+        $this->assertEquals('p1', $results[0]->getId());
+        $this->assertNotEmpty($results[0]->getSequence());
+    }
+
+    public function testFindDefaultOrderingIsSequenceAscending(): void
+    {
+        $this->seedNumbers();
+
+        // No explicit order: results should follow insertion (clustered _id) order.
+        $results = $this->database->find('numbers', [Query::limit(3)]);
+        $values = \array_map(fn (Document $d) => $d->getAttribute('value'), $results);
+        $this->assertEquals([1, 2, 3], $values);
+    }
+
+    public function testCountHonoursMaxZero(): void
+    {
+        $this->seedNumbers();
+        // LIMIT 0 returns zero rows on MariaDB.
+        $this->assertEquals(0, $this->database->count('numbers', [], 0));
+    }
+
+    public function testSumHonoursMaxZero(): void
+    {
+        $this->seedNumbers();
+        $this->assertEquals(0, $this->database->sum('numbers', 'value', [], 0));
+    }
+
+    public function testIncreaseSilentlyNoopsOnBoundViolation(): void
+    {
+        $this->database->createCollection('clamped', [
+            new Document([
+                '$id' => 'count',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ]);
+
+        $this->database->createDocument('clamped', new Document([
+            '$id' => 'c1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 5,
+        ]));
+
+        // Bound violated: MariaDB's UPDATE matches zero rows but still returns true.
+        $this->assertTrue(
+            $this->database->getAdapter()->increaseDocumentAttribute(
+                'clamped',
+                'c1',
+                'count',
+                10,
+                (new \DateTime())->format('Y-m-d H:i:s.u'),
+                null,
+                10,
+            )
+        );
+
+        $fetched = $this->database->getDocument('clamped', 'c1');
+        $this->assertEquals(5, $fetched->getAttribute('count'));
+    }
+
+    public function testGetSequencesUsesDocumentTenant(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('seq_tenant_' . \uniqid());
+        $adapter->setSharedTables(true);
+
+        $collection = new Document(['$id' => 'box']);
+        $adapter->setTenant(1);
+        $adapter->createCollection('box', [], []);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a',
+            '$permissions' => [],
+            'name' => 'tenant1',
+        ]));
+
+        $adapter->setTenant(7);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a',
+            '$permissions' => [],
+            'name' => 'tenant7',
+        ]));
+
+        // Adapter currently scoped to tenant 7; ask for sequence of a doc that
+        // claims tenant 1 — must use the document's tenant, not the adapter's.
+        $probe = new Document(['$id' => 'a', '$tenant' => 1]);
+        [$result] = $adapter->getSequences('box', [$probe]);
+        $this->assertNotEmpty($result->getSequence());
+    }
+
+    public function testRandomOrderingShufflesResults(): void
+    {
+        $this->seedNumbers();
+
+        // Random order is non-deterministic; we just verify the path returns
+        // the same set of rows without blowing up usort's transitivity.
+        $results = $this->database->find('numbers', [Query::orderRandom()]);
+        $this->assertCount(10, $results);
+    }
+
+    public function testUniqueIndexNormalizesBoolAndNumericString(): void
+    {
+        $this->database->createCollection('flags', [
+            new Document([
+                '$id' => 'active',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'unique_active',
+                'type' => Database::INDEX_UNIQUE,
+                'attributes' => ['active'],
+            ]),
+        ]);
+
+        $this->database->createDocument('flags', new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'active' => true,
+        ]));
+
+        // Document attr is bool true; the casting layer may normalise this on
+        // disk — adapter must compare type-normalised values to catch the dup.
+        $this->expectException(DuplicateException::class);
+        $this->database->createDocument('flags', new Document([
+            '$id' => 'second',
+            '$permissions' => [Permission::read(Role::any())],
+            'active' => true,
+        ]));
     }
 
     protected function seedNumbers(): void

@@ -108,7 +108,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
 
-        if (!$database->getAdapter()->getSupportForHostname()) {
+        if (!$database->getAdapter()->supports(Capability::Hostname)) {
             $this->expectNotToPerformAssertions();
             return;
         }

@@ -3,33 +3,27 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-
     <title>utopia-php/database</title>
     <meta name="description" content="utopia-php/database">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/vue@next"></script>
-
 </head>
 
 <body>
-
     <div class="chartcontainer">
         <canvas id="radarchart"></canvas>
     </div>
-
     <div id="datatables" class="datatables">
-        <table v-for="n in 4" :key="n">
+        <table v-for="n in queries.length" :key="n">
             <tr>
                 <!-- v-for is base 1 index  -->
                 <th colspan="6">{{ queries[n-1] }}</th>
             </tr>
             <tr>
-                <th></th> 
-                <th>1 role</th>
-                <th>100 roles</th>
-                <th>500 roles</th>
-                <th>1000 roles</th>
-                <th>2000 roles</th>
+                <th></th>
+                <th v-for="set in results[0].data" :key="set.roles">
+                    {{ set.roles }} {{ set.roles === 1 ? 'role' : 'roles' }}
+                </th>
             </tr>
             <tr v-for="(result, index) in results" :key="result.name" v-bind:style="{ backgroundColor: colors[index].table }">
                 <!-- grab just the timestamp from result.name -->
@@ -42,20 +36,21 @@
 <script>
 
 const results = <?php
-    $directory = './results';
-$scanned_directory = array_diff(scandir($directory), array('..', '.'));
 
+$directory = './results';
+$scanned_directory = \array_diff(\scandir($directory), array('..', '.'));
 $results = [];
 foreach ($scanned_directory as $path) {
     $results[] = [
         'name' => $path,
-        'data' => json_decode(file_get_contents("{$directory}/{$path}"), true)
+        'data' => \json_decode(\file_get_contents("{$directory}/{$path}"), true)
     ];
 }
-echo json_encode($results);
-?>
 
-console.log(results)
+echo \json_encode($results);
+?>;
+
+console.info('Loaded results:', results);
 
 const colors = [
     {
@@ -97,7 +92,7 @@ const colors = [
 
 // Radar chart
 let datasets = [];
-for (i=0; i < results.length; i++) {
+for (let i = 0; i < results.length; i++) {
     datasets[i] = {
         label: results[i].name,
         data: results[i].data[0].results,
@@ -107,8 +102,8 @@ for (i=0; i < results.length; i++) {
         pointBackgroundColor: colors[i].line,
         pointBorderColor: '#fff',
         pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: colors[i].line
-    }
+        pointHoverBorderColor: colors[i].line,
+    };
 }
 
 const chartData = {
@@ -127,11 +122,11 @@ const config = {
   options: {
     elements: {
       line: {
-        borderWidth: 2
-      }
+        borderWidth: 2,
+      },
     },
     responsive: true,
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
   },
 };
 
@@ -146,12 +141,12 @@ const datatables = {
         return {
             results: results,
             queries: chartData.labels,
-            colors: colors
-        }
-    }
-}
+            colors: colors,
+        };
+    },
+};
 
-Vue.createApp(datatables).mount('#datatables')
+Vue.createApp(datatables).mount('#datatables');
 
 </script>
 

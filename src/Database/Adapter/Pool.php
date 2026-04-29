@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
@@ -16,36 +17,17 @@ class Pool extends Adapter
     protected UtopiaPool $pool;
 
     /**
+     * When a transaction is active, all delegate calls are routed through
+     * this pinned adapter to ensure they run on the same connection.
+     */
+    protected ?Adapter $pinnedAdapter = null;
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
-     * @throws DatabaseException
      */
     public function __construct(UtopiaPool $pool)
     {
         $this->pool = $pool;
-
-        $this->pool->use(function (mixed $resource) {
-            if (!($resource instanceof Adapter)) {
-                throw new DatabaseException('Pool must contain instances of ' . Adapter::class);
-            }
-
-            // Run setters in case the pooled adapter has its own config
-            $this->setDatabase($resource->getDatabase());
-            $this->setNamespace($resource->getNamespace());
-            $this->setSharedTables($resource->getSharedTables());
-            $this->setTenant($resource->getTenant());
-
-            if ($resource->getTimeout() > 0) {
-                $this->setTimeout($resource->getTimeout());
-            }
-            $this->resetDebug();
-            foreach ($resource->getDebug() as $key => $value) {
-                $this->setDebug($key, $value);
-            }
-            $this->resetMetadata();
-            foreach ($resource->getMetadata() as $key => $value) {
-                $this->setMetadata($key, $value);
-            }
-        });
     }
 
     /**
@@ -60,12 +42,22 @@ class Pool extends Adapter
      */
     public function delegate(string $method, array $args): mixed
     {
+        if ($this->pinnedAdapter !== null) {
+            if ($this->skipDuplicates) {
+                return $this->pinnedAdapter->skipDuplicates(
+                    fn () => $this->pinnedAdapter->{$method}(...$args)
+                );
+            }
+            return $this->pinnedAdapter->{$method}(...$args);
+        }
+
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
             // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -79,8 +71,18 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
             return $adapter->{$method}(...$args);
         });
+    }
+
+    public function getDriver(): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function before(string $event, string $name = '', ?callable $callback = null): static
@@ -113,6 +115,62 @@ class Pool extends Adapter
     public function rollbackTransaction(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getHostname(): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * Pin a single connection from the pool for the entire transaction lifecycle.
+     * This prevents startTransaction(), the callback, and commitTransaction()
+     * from running on different connections.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        // If already inside a transaction, reuse the pinned adapter
+        // so nested withTransaction calls use the same connection
+        if ($this->pinnedAdapter !== null) {
+            return $this->pinnedAdapter->withTransaction($callback);
+        }
+
+        return $this->pool->use(function (Adapter $adapter) use ($callback) {
+            $adapter->setDatabase($this->getDatabase());
+            $adapter->setNamespace($this->getNamespace());
+            $adapter->setSharedTables($this->getSharedTables());
+            $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
+
+            if ($this->getTimeout() > 0) {
+                $adapter->setTimeout($this->getTimeout());
+            }
+            $adapter->resetDebug();
+            foreach ($this->getDebug() as $key => $value) {
+                $adapter->setDebug($key, $value);
+            }
+            $adapter->resetMetadata();
+            foreach ($this->getMetadata() as $key => $value) {
+                $adapter->setMetadata($key, $value);
+            }
+
+            $this->pinnedAdapter = $adapter;
+            try {
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->withTransaction($callback)
+                    );
+                }
+                return $adapter->withTransaction($callback);
+            } finally {
+                $this->pinnedAdapter = null;
+            }
+        });
     }
 
     protected function quote(string $string): string
@@ -165,7 +223,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -175,7 +233,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -210,7 +268,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -220,32 +278,32 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createDocuments(string $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocuments(string $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -260,17 +318,17 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $forPermission = Database::PERMISSION_READ): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -306,6 +364,16 @@ class Pool extends Adapter
     }
 
     public function getMaxIndexLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getMaxVarcharLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getMaxUIDLength(): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -360,6 +428,21 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForPCRERegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForPOSIXRegex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForTrigramIndex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -395,12 +478,22 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForOperators(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForGetConnectionId(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForVectors(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -421,6 +514,16 @@ class Pool extends Adapter
     }
 
     public function getSupportForBatchCreateAttributes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialIndexNull(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -485,6 +588,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -495,7 +608,143 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getIdAttributeType(): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSequences(string $collection, array $documents): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOrderRandom(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePoint(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePolygon(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForObject(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForObjectIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForUTCCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportNonUtfCharacters(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForTTLIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForTransactionRetries(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForNestedTransactions(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

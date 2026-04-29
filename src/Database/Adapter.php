@@ -4,9 +4,15 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -17,13 +23,17 @@ abstract class Adapter
 
     protected bool $sharedTables = false;
 
-    protected ?int $tenant = null;
+    protected int|string|null $tenant = null;
 
     protected bool $tenantPerDocument = false;
 
     protected int $timeout = 0;
 
     protected int $inTransaction = 0;
+
+    protected bool $alterLocks = false;
+
+    protected bool $skipDuplicates = false;
 
     /**
      * @var array<string, mixed>
@@ -42,6 +52,27 @@ abstract class Adapter
      */
     protected array $metadata = [];
 
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
+
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
+    }
     /**
      * @param string $key
      * @param mixed $value
@@ -190,11 +221,11 @@ abstract class Adapter
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      *
      * @return bool
      */
-    public function setTenant(?int $tenant): bool
+    public function setTenant(int|string|null $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -206,9 +237,9 @@ abstract class Adapter
      *
      * Get tenant to use for shared tables
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->tenant;
     }
@@ -364,6 +395,27 @@ abstract class Adapter
     }
 
     /**
+     * Run a callback with skipDuplicates enabled.
+     * Duplicate key errors during createDocuments() will be silently skipped
+     * instead of thrown. Nestable — saves and restores previous state.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
+    /**
      * @template T
      * @param callable(): T $callback
      * @return T
@@ -371,7 +423,10 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        for ($attempts = 0; $attempts < 3; $attempts++) {
+        $sleep = 50_000; // 50 milliseconds
+        $retries = 2;
+
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
             try {
                 $this->startTransaction();
                 $result = $callback();
@@ -381,8 +436,8 @@ abstract class Adapter
                 try {
                     $this->rollbackTransaction();
                 } catch (\Throwable $rollback) {
-                    if ($attempts < 2) {
-                        \usleep(5000); // 5ms
+                    if ($attempts < $retries) {
+                        \usleep($sleep * ($attempts + 1));
                         continue;
                     }
 
@@ -390,12 +445,22 @@ abstract class Adapter
                     throw $rollback;
                 }
 
-                if ($attempts < 2) {
-                    \usleep(5000); // 5ms
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    throw $action;
+                }
+
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
                     continue;
                 }
 
-                $this->inTransaction = 0;
                 throw $action;
             }
         }
@@ -534,7 +599,7 @@ abstract class Adapter
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
 
     /**
      * Create Attributes
@@ -557,10 +622,11 @@ abstract class Adapter
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
 
     /**
      * Delete Attribute
@@ -643,10 +709,12 @@ abstract class Adapter
      * @param array<int> $lengths
      * @param array<string> $orders
      * @param array<string,string> $indexAttributeTypes
+     * @param array<string, mixed> $collation
+     * @param int $ttl
      *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool;
 
     /**
      * Delete Index
@@ -661,54 +729,54 @@ abstract class Adapter
     /**
      * Get Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param array<Query> $queries
      * @param bool $forUpdate
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
+    abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      *
      * @return Document
      */
-    abstract public function createDocument(string $collection, Document $document): Document;
+    abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
      * Create Documents in batches
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Document> $documents
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(string $collection, array $documents): array;
+    abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
      * Update Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document;
+    abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
      * Update documents
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -716,20 +784,20 @@ abstract class Adapter
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
+    abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
      * Create documents if they do not exist, otherwise update them.
      *
      * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      */
-    abstract public function createOrUpdateDocuments(
-        string $collection,
+    abstract public function upsertDocuments(
+        Document $collection,
         string $attribute,
         array $changes
     ): array;
@@ -767,7 +835,7 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
@@ -775,33 +843,32 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $forPermission
-     *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
 
     /**
      * Count Documents
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
 
     /**
      * Get Collection Size of the raw data
@@ -855,11 +922,32 @@ abstract class Adapter
     abstract public function getMaxIndexLength(): int;
 
     /**
+     * Get the maximum VARCHAR length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxVarcharLength(): int;
+
+    /**
+     * Get the maximum UID length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxUIDLength(): int;
+
+    /**
      * Get the minimum supported DateTime value
      *
      * @return \DateTime
      */
     abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get the primitive type of the primary key type for this adapter
+     *
+     * @return string
+     */
+    abstract public function getIdAttributeType(): string;
 
     /**
      * Get the maximum supported DateTime value
@@ -891,6 +979,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForSchemaAttributes(): bool;
+
+    /**
+     * Are schema indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaIndexes(): bool;
 
     /**
      * Is index supported?
@@ -994,6 +1089,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForVectors(): bool;
+
+    /**
      * Is Cache Fallback supported?
      *
      * @return bool
@@ -1020,6 +1122,98 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForBatchCreateAttributes(): bool;
+
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAttributes(): bool;
+
+    /**
+     * Are object (JSON) attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForObject(): bool;
+
+    /**
+     * Are object (JSON) indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForObjectIndexes(): bool;
+
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexNull(): bool;
+
+    /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOperators(): bool;
+
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
+
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexOrder(): bool;
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAxisOrder(): bool;
+
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBoundaryInclusiveContains(): bool;
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
+
+    /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForMultipleFulltextIndexes(): bool;
+
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIdenticalIndexes(): bool;
+
+    /**
+     * Does the adapter support random order by?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOrderRandom(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1201,6 +1395,37 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get Schema Indexes
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
+     * Get the expected column type for a given attribute type.
+     *
+     * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
+     * that would be used when creating a column for the given attribute parameters.
+     * Returns an empty string if the adapter does not support this operation.
+     *
+     * @param string $type
+     * @param int $size
+     * @param bool $signed
+     * @param bool $array
+     * @param bool $required
+     * @return string
+     * @throws \Utopia\Database\Exception For unknown types on adapters that support column-type resolution.
+     */
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        return '';
+    }
+
+    /**
      * Get the query to check for tenant when in shared tables mode
      *
      * @param string $collection   The collection being queried
@@ -1214,4 +1439,173 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * Decode a WKB or textual POINT into [x, y]
+     *
+     * @param string $wkb
+     * @return float[] Array with two elements: [x, y]
+     */
+    abstract public function decodePoint(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+    abstract public function decodeLinestring(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    abstract public function decodePolygon(string $wkb): array;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+     * Is UTC casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUTCCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
+    /**
+    * Set support for attributes
+    *
+    * @param bool $support
+    * @return bool
+    */
+    abstract public function setSupportForAttributes(bool $support): bool;
+
+    /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIntegerBooleans(): bool;
+
+    /**
+     * Does the adapter have support for ALTER TABLE locking modes?
+     *
+     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
+     * during ALTER TABLE operations to control concurrent access.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAlterLocks(): bool;
+
+    /**
+     * @param bool $enable
+     *
+     * @return $this
+     */
+    public function enableAlterLocks(bool $enable): self
+    {
+        $this->alterLocks = $enable;
+
+        return $this;
+    }
+
+    /**
+     * Handle non utf characters supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportNonUtfCharacters(): bool;
+
+    /**
+     * Does the adapter support trigram index?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTrigramIndex(): bool;
+
+    /**
+     * Is PCRE regex supported?
+     * PCRE (Perl Compatible Regular Expressions) supports \b for word boundaries
+     *
+     * @return bool
+     */
+    abstract public function getSupportForPCRERegex(): bool;
+
+    /**
+     * Is POSIX regex supported?
+     * POSIX regex uses \y for word boundaries instead of \b
+     *
+     * @return bool
+     */
+    abstract public function getSupportForPOSIXRegex(): bool;
+
+    /**
+     * Is regex supported at all?
+     * Returns true if either PCRE or POSIX regex is supported
+     *
+     * @return bool
+     */
+    public function getSupportForRegex(): bool
+    {
+        return $this->getSupportForPCRERegex() || $this->getSupportForPOSIXRegex();
+    }
+
+    /**
+     * Are ttl indexes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTTLIndexes(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support transaction retries?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTransactionRetries(): bool;
+
+    /**
+     * Does the adapter support nested transactions?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract public function getDriver(): mixed;
 }

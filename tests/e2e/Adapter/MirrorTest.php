@@ -33,7 +33,7 @@ class MirrorTest extends Base
      * @throws \RedisException
      * @throws Exception
      */
-    protected static function getDatabase(bool $fresh = false): Mirror
+    protected function getDatabase(bool $fresh = false): Mirror
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -71,33 +71,32 @@ class MirrorTest extends Base
 
         $database = new Mirror(self::$source, self::$destination);
 
-        // Handle cases where the source and destination databases are not in sync because of previous tests
-        if ($database->getSource()->exists('schema1')) {
-            $database->getSource()->setDatabase('schema1')->delete();
-        }
-        if ($database->getDestination()->exists('schema1')) {
-            $database->getDestination()->setDatabase('schema1')->delete();
-        }
-        if ($database->getSource()->exists('schema2')) {
-            $database->getSource()->setDatabase('schema2')->delete();
-        }
-        if ($database->getDestination()->exists('schema2')) {
-            $database->getDestination()->setDatabase('schema2')->delete();
-        }
-        if ($database->getSource()->exists('sharedTables')) {
-            $database->getSource()->setDatabase('sharedTables')->delete();
-        }
-        if ($database->getDestination()->exists('sharedTables')) {
-            $database->getDestination()->setDatabase('sharedTables')->delete();
+        $schemas = [
+            'utopiaTests',
+            'schema1',
+            'schema2',
+            'sharedTables',
+            'sharedTablesTenantPerDocument'
+        ];
+
+        /**
+         * Handle cases where the source and destination databases are not in sync because of previous tests
+         */
+        foreach ($schemas as $schema) {
+            if ($database->getSource()->exists($schema)) {
+                $database->getSource()->setAuthorization(self::$authorization);
+                $database->getSource()->setDatabase($schema)->delete();
+            }
+            if ($database->getDestination()->exists($schema)) {
+                $database->getDestination()->setAuthorization(self::$authorization);
+                $database->getDestination()->setDatabase($schema)->delete();
+            }
         }
 
         $database
             ->setDatabase('utopiaTests')
+            ->setAuthorization(self::$authorization)
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
-
-        if ($database->exists()) {
-            $database->delete();
-        }
 
         $database->create();
 
@@ -110,7 +109,7 @@ class MirrorTest extends Base
      */
     public function testGetMirrorSource(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
         $source = $database->getSource();
         $this->assertInstanceOf(Database::class, $source);
         $this->assertEquals(self::$source, $source);
@@ -122,7 +121,7 @@ class MirrorTest extends Base
      */
     public function testGetMirrorDestination(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
         $destination = $database->getDestination();
         $this->assertInstanceOf(Database::class, $destination);
         $this->assertEquals(self::$destination, $destination);
@@ -136,7 +135,7 @@ class MirrorTest extends Base
      */
     public function testCreateMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredCollection');
 
@@ -154,7 +153,7 @@ class MirrorTest extends Base
      */
     public function testUpdateMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredCollection', permissions: [
             Permission::read(Role::any()),
@@ -184,7 +183,7 @@ class MirrorTest extends Base
 
     public function testDeleteMirroredCollection(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredCollection');
 
@@ -205,7 +204,7 @@ class MirrorTest extends Base
      */
     public function testCreateMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredDocument', attributes: [
             new Document([
@@ -247,7 +246,7 @@ class MirrorTest extends Base
      */
     public function testUpdateMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredDocument', attributes: [
             new Document([
@@ -287,7 +286,7 @@ class MirrorTest extends Base
 
     public function testDeleteMirroredDocument(): void
     {
-        $database = self::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredDocument', attributes: [
             new Document([
@@ -314,7 +313,88 @@ class MirrorTest extends Base
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    public function testCreateDocumentsSkipDuplicatesBackfillsDestination(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'mirrorSkipDup';
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        // Seed the SOURCE only (bypass the mirror) with the row we want to
+        // skipDuplicates over later. Destination intentionally does NOT have it —
+        // this simulates an in-flight backfill where the collection is marked
+        // 'upgraded' (schema mirrored) but not every row has reached destination.
+        $database->getSource()->createDocument($collection, new Document([
+            '$id' => 'dup',
+            'name' => 'Original',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]));
+
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertTrue(
+            $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
+        );
+
+        $database->skipDuplicates(fn () => $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'dup',
+                'name' => 'WouldBe',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'fresh',
+                'name' => 'Fresh',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]));
+
+        // Source: INSERT IGNORE — 'dup' is a no-op, keeps 'Original'.
+        $this->assertSame(
+            'Original',
+            $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getSource()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+
+        // Destination: 'dup' is NOT a duplicate there, so destination's own
+        // INSERT IGNORE inserts it. This prevents permanent divergence when
+        // destination is still catching up on rows that already exist on source.
+        $this->assertSame(
+            'WouldBe',
+            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            'Source-skipped doc must still insert on destination when absent there'
+        );
+        $this->assertSame(
+            'Fresh',
+            $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
+        );
+    }
+
+    protected function deleteColumn(string $collection, string $column): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
@@ -329,7 +409,7 @@ class MirrorTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
         $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";

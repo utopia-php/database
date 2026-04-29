@@ -8,7 +8,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 2
 
@@ -16,5 +16,5 @@ jobs:
 
       - name: Run Linter
         run: |
-          docker run --rm -v $PWD:/app composer sh -c \
+          docker run --rm -v $PWD:/app -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
           "composer install --profile --ignore-platform-reqs && composer lint"

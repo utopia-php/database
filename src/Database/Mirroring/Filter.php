@@ -359,4 +359,40 @@ abstract class Filter
         array $queries
     ): void {
     }
+
+    /**
+     * Called before document is upserted in the destination database
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $document
+     * @return Document
+     */
+    public function beforeCreateOrUpdateDocument(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $document,
+    ): Document {
+        return $document;
+    }
+
+    /**
+     * Called after document is upserted in the destination database
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $document
+     * @return Document
+     */
+    public function afterCreateOrUpdateDocument(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $document,
+    ): Document {
+        return $document;
+    }
 }

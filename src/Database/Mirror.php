@@ -123,7 +123,7 @@ class Mirror extends Database
         return $this;
     }
 
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
@@ -135,6 +135,15 @@ class Mirror extends Database
         $this->delegate(__FUNCTION__, \func_get_args());
 
         $this->preserveDates = $preserve;
+
+        return $this;
+    }
+
+    public function setPreserveSequence(bool $preserve): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        $this->preserveSequence = $preserve;
 
         return $this;
     }
@@ -469,9 +478,9 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = [], int $ttl = 1): bool
     {
-        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders);
+        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders, $ttl);
 
         if ($this->destination === null) {
             return $result;
@@ -502,7 +511,8 @@ class Mirror extends Database
                 $document->getAttribute('type'),
                 $document->getAttribute('attributes'),
                 $document->getAttribute('lengths'),
-                $document->getAttribute('orders')
+                $document->getAttribute('orders'),
+                $document->getAttribute('ttl', 0)
             );
         } catch (\Throwable $err) {
             $this->logError('createIndex', $err);
@@ -589,18 +599,13 @@ class Mirror extends Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->createDocuments(
-            $collection,
-            $documents,
-            $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
-                $modified++;
-            },
-        );
+        $modified = $this->skipDuplicates
+            ? $this->source->skipDuplicates(
+                fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
+            )
+            : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -614,12 +619,14 @@ class Mirror extends Database
             return $modified;
         }
 
+        // Forward every input to destination. "upgraded" status means the schema
+        // is mirrored, not that every row is backfilled, so a row that is a
+        // duplicate on source may not yet exist on destination. In skipDuplicates
+        // mode the destination runs its own INSERT IGNORE and decides per-row.
         try {
             $clones = [];
-
             foreach ($documents as $document) {
                 $clone = clone $document;
-
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(
                         source: $this->source,
@@ -628,19 +635,25 @@ class Mirror extends Database
                         document: $clone,
                     );
                 }
-
                 $clones[] = $clone;
             }
 
-            $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->createDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                    null,
-                )
-            );
+            if ($this->skipDuplicates) {
+                $this->destination->skipDuplicates(
+                    fn () => $this->destination->withPreserveDates(
+                        fn () => $this->destination->createDocuments($collection, $clones, $batchSize)
+                    )
+                );
+            } else {
+                $this->destination->withPreserveDates(
+                    fn () =>
+                    $this->destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+            }
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {
@@ -713,18 +726,15 @@ class Mirror extends Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->updateDocuments(
+        $modified = $this->source->updateDocuments(
             $collection,
             $updates,
             $queries,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
-                $modified++;
-            }
+            $onNext,
+            $onError,
         );
 
         if (
@@ -752,14 +762,13 @@ class Mirror extends Database
                 );
             }
 
-            $modified = $this->destination->withPreserveDates(
+            $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->updateDocuments(
                     $collection,
                     $clone,
                     $queries,
                     $batchSize,
-                    null,
                 )
             );
 
@@ -774,6 +783,77 @@ class Mirror extends Database
             }
         } catch (\Throwable $err) {
             $this->logError('updateDocuments', $err);
+        }
+
+        return $modified;
+    }
+
+    public function upsertDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = Database::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
+        ?callable $onError = null,
+    ): int {
+        $modified = $this->source->upsertDocuments(
+            $collection,
+            $documents,
+            $batchSize,
+            $onNext,
+            $onError,
+        );
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $modified;
+        }
+
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $modified;
+        }
+
+        try {
+            $clones = [];
+
+            foreach ($documents as $document) {
+                $clone = clone $document;
+
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
+            }
+
+            $this->destination->withPreserveDates(
+                fn () =>
+                $this->destination->upsertDocuments(
+                    $collection,
+                    $clones,
+                    $batchSize,
+                )
+            );
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            }
+        } catch (\Throwable $err) {
+            $this->logError('upsertDocuments', $err);
         }
 
         return $modified;
@@ -827,17 +907,14 @@ class Mirror extends Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->deleteDocuments(
+        $modified = $this->source->deleteDocuments(
             $collection,
             $queries,
             $batchSize,
-            function ($doc) use (&$modified, $onNext) {
-                $onNext && $onNext($doc);
-                $modified++;
-            },
+            $onNext,
+            $onError,
         );
 
         if (
@@ -862,11 +939,10 @@ class Mirror extends Database
                 );
             }
 
-            $modified = $this->destination->deleteDocuments(
+            $this->destination->deleteDocuments(
                 $collection,
                 $queries,
                 $batchSize,
-                null,
             );
 
             foreach ($this->writeFilters as $filter) {
@@ -948,12 +1024,12 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -1025,7 +1101,7 @@ class Mirror extends Database
             return new Document();
         }
 
-        return Authorization::skip(function () use ($collection) {
+        return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
@@ -1040,4 +1116,61 @@ class Mirror extends Database
             $callback($action, $err);
         }
     }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+
+        parent::setAuthorization($authorization);
+
+        if (isset($this->source)) {
+            $this->source->setAuthorization($authorization);
+        }
+        if (isset($this->destination)) {
+            $this->destination->setAuthorization($authorization);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Set custom document class for a collection
+     *
+     * @param string $collection Collection ID
+     * @param class-string<Document> $className Fully qualified class name that extends Document
+     * @return static
+     */
+    public function setDocumentType(string $collection, string $className): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->documentTypes[$collection] = $className;
+        return $this;
+    }
+
+    /**
+     * Clear document type mapping for a collection
+     *
+     * @param string $collection Collection ID
+     * @return static
+     */
+    public function clearDocumentType(string $collection): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+        unset($this->documentTypes[$collection]);
+
+        return $this;
+    }
+
+    /**
+     * Clear all document type mappings
+     *
+     * @return static
+     */
+    public function clearAllDocumentTypes(): static
+    {
+        $this->delegate(__FUNCTION__);
+        $this->documentTypes = [];
+
+        return $this;
+    }
+
 }

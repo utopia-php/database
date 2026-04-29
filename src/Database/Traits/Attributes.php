@@ -1130,7 +1130,7 @@ trait Attributes
             throw new NotFoundException('Attribute not found');
         }
 
-        if ($attribute->getAttribute('type') === ColumnType::Relationship->value) {
+        if (Attribute::isRelationship($attribute)) {
             throw new DatabaseException('Cannot delete relationship as an attribute');
         }
 

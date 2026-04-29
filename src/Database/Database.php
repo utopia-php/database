@@ -262,6 +262,26 @@ class Database
     protected static array $filters = [];
 
     /**
+     * Process-lifetime cache of internal attribute definitions as typed Attribute objects.
+     * Built once from {@see self::INTERNAL_ATTRIBUTES} (a class constant) and reused across calls.
+     *
+     * Returned arrays/objects MUST NOT be mutated by callers — they are shared singletons.
+     *
+     * @var array<Attribute>|null
+     */
+    private static ?array $internalAttributes = null;
+
+    /**
+     * Process-lifetime cache of internal attribute definitions as Document instances.
+     * Built once from {@see self::INTERNAL_ATTRIBUTES} (a class constant) and reused across calls.
+     *
+     * Returned Documents MUST NOT be mutated by callers — they are shared singletons.
+     *
+     * @var array<Document>|null
+     */
+    private static ?array $internalAttributeDocuments = null;
+
+    /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
@@ -1809,13 +1829,7 @@ class Database
          */
         $attributes = $collection->getAttribute('attributes', []);
 
-        if (self::$internalAttributeDocuments === null) {
-            self::$internalAttributeDocuments = [];
-            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-                self::$internalAttributeDocuments[] = new Document($attribute);
-            }
-        }
-        foreach (self::$internalAttributeDocuments as $attribute) {
+        foreach (self::internalAttributeDocuments() as $attribute) {
             $attributes[] = $attribute;
         }
 
@@ -1903,11 +1917,25 @@ class Database
         return self::$internalAttributes;
     }
 
-    /** @var array<Attribute>|null */
-    private static ?array $internalAttributes = null;
+    /**
+     * Get the internal attribute definitions as Document instances. Reuses a
+     * process-lifetime cache to avoid re-allocating these on every read.
+     *
+     * Returned Documents MUST NOT be mutated by callers — they are shared singletons.
+     *
+     * @return array<Document>
+     */
+    private static function internalAttributeDocuments(): array
+    {
+        if (self::$internalAttributeDocuments === null) {
+            self::$internalAttributeDocuments = [];
+            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+                self::$internalAttributeDocuments[] = new Document($attribute);
+            }
+        }
 
-    /** @var array<Document>|null */
-    private static ?array $internalAttributeDocuments = null;
+        return self::$internalAttributeDocuments;
+    }
 
     /**
      * Get the internal attribute definitions for the current adapter, excluding tenant if shared tables are disabled.

@@ -111,6 +111,24 @@ class Attribute
     }
 
     /**
+     * Cheap relationship-type check that avoids materializing a typed Attribute.
+     * Use in hot read paths where only the type matters.
+     *
+     * Mirrors the normalization in {@see self::fromDocument()} — accepts both
+     * the (always-stored) string form and the defensive ColumnType-enum form.
+     */
+    public static function isRelationship(Document $attribute): bool
+    {
+        $type = $attribute->getAttribute('type');
+
+        if ($type instanceof ColumnType) {
+            return $type === ColumnType::Relationship;
+        }
+
+        return $type === ColumnType::Relationship->value;
+    }
+
+    /**
      * Create from an associative array (used by batch operations).
      *
      * @param  array<string, mixed>  $data

@@ -1111,12 +1111,12 @@ class SQLite extends MariaDB
      */
     public function getSupportForSchemaAttributes(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForSchemaIndexes(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -2224,6 +2224,109 @@ class SQLite extends MariaDB
         }
 
         return true;
+    }
+
+    /**
+     * Introspect a collection's columns via PRAGMA table_info instead of
+     * MariaDB's INFORMATION_SCHEMA.COLUMNS, which doesn't exist in SQLite.
+     * Returned shape matches the MariaDB result enough that
+     * Database::analyzeCollection() doesn't have to special-case the
+     * adapter.
+     *
+     * @return array<array<string, mixed>>
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
+
+        $stmt = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        $results = [];
+        foreach ($rows as $row) {
+            $rawType = (string) ($row['type'] ?? '');
+            [$dataType, $length] = $this->parseSqliteColumnType($rawType);
+
+            $results[] = [
+                '$id' => $row['name'],
+                'columnDefault' => $row['dflt_value'] ?? null,
+                'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
+                'dataType' => $dataType,
+                'characterMaximumLength' => $length,
+                'numericPrecision' => null,
+                'numericScale' => null,
+                'datetimePrecision' => null,
+                'columnType' => $rawType,
+                'columnKey' => !empty($row['pk']) ? 'PRI' : '',
+                'extra' => '',
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
+     * Introspect a collection's indexes via PRAGMA index_list +
+     * PRAGMA index_info. Mirrors MariaDB's INFORMATION_SCHEMA shape.
+     *
+     * @return array<array<string, mixed>>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
+
+        $stmt = $this->getPDO()->prepare("PRAGMA index_list(`{$table}`)");
+        $stmt->execute();
+        $indexes = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        $results = [];
+        foreach ($indexes as $index) {
+            $name = $index['name'];
+            $unique = !empty($index['unique']);
+
+            $colStmt = $this->getPDO()->prepare("PRAGMA index_info(`{$name}`)");
+            $colStmt->execute();
+            $cols = $colStmt->fetchAll();
+            $colStmt->closeCursor();
+
+            $columns = [];
+            foreach ($cols as $col) {
+                $columns[] = [
+                    '$id' => $name,
+                    'indexName' => $name,
+                    'columnName' => $col['name'],
+                    'nonUnique' => $unique ? '0' : '1',
+                    'seqInIndex' => (string) ($col['seqno'] + 1),
+                    'indexType' => 'BTREE',
+                    'subPart' => null,
+                ];
+            }
+
+            $results = \array_merge($results, $columns);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Parse a SQLite type declaration like `VARCHAR(36)` into
+     * [dataType, length]. Length is null when no parenthesised size is
+     * present.
+     *
+     * @return array{0: string, 1: int|null}
+     */
+    private function parseSqliteColumnType(string $declaration): array
+    {
+        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)/', $declaration, $matches) === 1) {
+            return [\strtolower($matches[1]), (int) $matches[2]];
+        }
+
+        $type = \trim(\preg_replace('/\s+/', ' ', $declaration) ?? '');
+
+        return [\strtolower($type), null];
     }
 
     /**

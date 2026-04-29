@@ -420,6 +420,10 @@ abstract class SQL extends Adapter
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
         }
+        if (\array_key_exists('_deletedAt', $document)) {
+            $document['$deletedAt'] = $document['_deletedAt'];
+            unset($document['_deletedAt']);
+        }
         if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
@@ -2432,10 +2436,16 @@ abstract class SQL extends Adapter
             '$updatedAt',
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $hasDeletedAt = \in_array('$deletedAt', $selections);
+
+        $selections = \array_diff($selections, [...$internalKeys, '$deletedAt', '$collection']);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
+        }
+
+        if ($hasDeletedAt) {
+            $selections[] = $this->getInternalKeyForAttribute('$deletedAt');
         }
 
         $projections = [];
@@ -2457,6 +2467,7 @@ abstract class SQL extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };

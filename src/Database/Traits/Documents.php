@@ -175,7 +175,7 @@ trait Documents
         $allAttributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $allAttributes,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Document $attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
         );
 
         $selects = Query::groupForDatabase($queries)['selections'];
@@ -273,7 +273,7 @@ trait Documents
         $cacheCheckAttrs = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $cacheCheckAttrs,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Document $attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
         );
 
         // Don't save to cache if it's part of a relationship
@@ -701,7 +701,7 @@ trait Documents
             /** @var array<Document> $updateAttrs */
             $updateAttrs = $collection->getAttribute('attributes', []);
             $relationships = \array_filter($updateAttrs, function (Document $attribute) {
-                return Attribute::fromDocument($attribute)->type === ColumnType::Relationship;
+                return $attribute->getAttribute('type') === ColumnType::Relationship->value;
             });
 
             $shouldUpdate = false;
@@ -2130,7 +2130,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Document $attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
         );
 
         $grouped = Query::groupForDatabase($queries);
@@ -2480,7 +2480,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Document $attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
         );
 
         $queries = Query::groupForDatabase($queries)['filters'];
@@ -2544,7 +2544,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Document $attribute) => $attribute->getAttribute('type') === ColumnType::Relationship->value
         );
 
         $queries = $this->convertQueries($collection, $queries);

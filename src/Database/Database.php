@@ -1809,8 +1809,14 @@ class Database
          */
         $attributes = $collection->getAttribute('attributes', []);
 
-        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-            $attributes[] = new Document($attribute);
+        if (self::$internalAttributeDocuments === null) {
+            self::$internalAttributeDocuments = [];
+            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+                self::$internalAttributeDocuments[] = new Document($attribute);
+            }
+        }
+        foreach (self::$internalAttributeDocuments as $attribute) {
+            $attributes[] = $attribute;
         }
 
         $queryAttribute = $query->getAttribute();
@@ -1887,11 +1893,21 @@ class Database
      */
     public static function internalAttributes(): array
     {
-        return \array_map(
-            fn (array $attr): Attribute => Attribute::fromDocument(new Document($attr)),
-            self::INTERNAL_ATTRIBUTES
-        );
+        if (self::$internalAttributes === null) {
+            self::$internalAttributes = \array_map(
+                fn (array $attr): Attribute => Attribute::fromDocument(new Document($attr)),
+                self::INTERNAL_ATTRIBUTES
+            );
+        }
+
+        return self::$internalAttributes;
     }
+
+    /** @var array<Attribute>|null */
+    private static ?array $internalAttributes = null;
+
+    /** @var array<Document>|null */
+    private static ?array $internalAttributeDocuments = null;
 
     /**
      * Get the internal attribute definitions for the current adapter, excluding tenant if shared tables are disabled.

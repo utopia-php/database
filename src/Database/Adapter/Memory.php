@@ -20,7 +20,9 @@ use Utopia\Database\Query;
 class Memory extends Adapter
 {
     /**
-     * @var array<string, bool>
+     * Map of database name to the set of collection storage keys it owns.
+     *
+     * @var array<string, array<string, true>>
      */
     protected array $databases = [];
 
@@ -41,9 +43,6 @@ class Memory extends Adapter
      */
     protected array $snapshots = [];
 
-    /**
-     * @var bool
-     */
     protected bool $supportForAttributes = true;
 
     public function __construct()
@@ -58,7 +57,10 @@ class Memory extends Adapter
 
     protected function key(string $collection): string
     {
-        return $this->getNamespace() . '_' . $this->filter($collection);
+        // Schema scoping: prefix the storage key with the current database
+        // so two databases can hold collections under the same namespace
+        // without colliding (mirrors MariaDB's separate `CREATE DATABASE`).
+        return $this->getDatabase().'.'.$this->getNamespace().'_'.$this->filter($collection);
     }
 
     protected function documentKey(string $id, int|string|null $tenant = null): string
@@ -67,10 +69,38 @@ class Memory extends Adapter
         // case-insensitively. Lower-casing here keeps collisions consistent
         // across read/write paths.
         $id = \strtolower($id);
-        if (!$this->sharedTables) {
+        if (! $this->sharedTables) {
             return $id;
         }
-        return ($tenant ?? $this->getTenant()) . '|' . $id;
+
+        return ($tenant ?? $this->getTenant()).'|'.$id;
+    }
+
+    /**
+     * Locate a stored row in $key by uid honouring the metadata-collection
+     * fallback to a NULL-tenant copy under shared tables.
+     *
+     * @return array{0: string, 1: array<string, mixed>}|null [storageKey, row] or null if not found
+     */
+    protected function locateDocument(string $key, string $collectionId, string $id): ?array
+    {
+        $primary = $this->documentKey($id);
+        if (isset($this->data[$key]['documents'][$primary])) {
+            return [$primary, $this->data[$key]['documents'][$primary]];
+        }
+        if ($this->sharedTables && $collectionId === Database::METADATA) {
+            $lower = \strtolower($id);
+            foreach ($this->data[$key]['documents'] as $storageKey => $candidate) {
+                if (
+                    \strtolower((string) ($candidate['_uid'] ?? '')) === $lower
+                    && ($candidate['_tenant'] ?? null) === null
+                ) {
+                    return [$storageKey, $candidate];
+                }
+            }
+        }
+
+        return null;
     }
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
@@ -95,6 +125,7 @@ class Memory extends Adapter
             'permissions' => $this->deepCopy($this->permissions),
         ];
         $this->inTransaction++;
+
         return true;
     }
 
@@ -106,6 +137,7 @@ class Memory extends Adapter
 
         \array_pop($this->snapshots);
         $this->inTransaction--;
+
         return true;
     }
 
@@ -121,12 +153,16 @@ class Memory extends Adapter
             $this->permissions = $snapshot['permissions'];
         }
         $this->inTransaction--;
+
         return true;
     }
 
     public function create(string $name): bool
     {
-        $this->databases[$name] = true;
+        if (! isset($this->databases[$name])) {
+            $this->databases[$name] = [];
+        }
+
         return true;
     }
 
@@ -136,7 +172,11 @@ class Memory extends Adapter
             return isset($this->databases[$database]);
         }
 
-        return isset($this->data[$this->key($collection)]);
+        if (! isset($this->databases[$database])) {
+            return false;
+        }
+
+        return isset($this->databases[$database][$this->key($collection)]);
     }
 
     public function list(): array
@@ -145,28 +185,22 @@ class Memory extends Adapter
         foreach (\array_keys($this->databases) as $name) {
             $databases[] = new Document(['name' => $name]);
         }
+
         return $databases;
     }
 
     public function delete(string $name): bool
     {
-        // Memory does not implement schemas, so delete() is namespace-scoped:
-        // wipe every collection under the current namespace and forget the
-        // database flag. Tests that try to drop a sibling database (e.g.
-        // 'hellodb') hit a no-op since nothing under that name was ever
-        // tracked in our $databases map.
-        if (!isset($this->databases[$name])) {
+        if (! isset($this->databases[$name])) {
             return true;
         }
 
-        unset($this->databases[$name]);
-        $prefix = $this->getNamespace() . '_';
-        foreach (\array_keys($this->data) as $key) {
-            if (\str_starts_with($key, $prefix)) {
-                unset($this->data[$key]);
-                unset($this->permissions[$key]);
-            }
+        foreach (\array_keys($this->databases[$name]) as $collectionKey) {
+            unset($this->data[$collectionKey]);
+            unset($this->permissions[$collectionKey]);
         }
+        unset($this->databases[$name]);
+
         return true;
     }
 
@@ -184,6 +218,14 @@ class Memory extends Adapter
             'sequence' => 0,
         ];
         $this->permissions[$key] = [];
+
+        $database = $this->getDatabase();
+        if ($database !== '') {
+            if (! isset($this->databases[$database])) {
+                $this->databases[$database] = [];
+            }
+            $this->databases[$database][$key] = true;
+        }
 
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
@@ -214,6 +256,12 @@ class Memory extends Adapter
         $key = $this->key($id);
         unset($this->data[$key]);
         unset($this->permissions[$key]);
+        foreach ($this->databases as $name => $collections) {
+            if (isset($collections[$key])) {
+                unset($this->databases[$name][$key]);
+            }
+        }
+
         return true;
     }
 
@@ -225,7 +273,7 @@ class Memory extends Adapter
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -237,6 +285,7 @@ class Memory extends Adapter
             'array' => $array,
             'required' => $required,
         ];
+
         return true;
     }
 
@@ -253,18 +302,19 @@ class Memory extends Adapter
                 (bool) ($attribute['required'] ?? false),
             );
         }
+
         return true;
     }
 
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $id = $this->filter($id);
-        if (!empty($newKey) && $newKey !== $id) {
+        if (! empty($newKey) && $newKey !== $id) {
             $this->renameAttribute($collection, $id, $newKey);
             $id = $this->filter($newKey);
         }
@@ -276,13 +326,14 @@ class Memory extends Adapter
             'array' => $array,
             'required' => $required,
         ];
+
         return true;
     }
 
     public function deleteAttribute(string $collection, string $id): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             return true;
         }
 
@@ -322,14 +373,14 @@ class Memory extends Adapter
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        if (!isset($this->data[$key]['attributes'][$old])) {
+        if (! isset($this->data[$key]['attributes'][$old])) {
             return true;
         }
 
@@ -376,26 +427,27 @@ class Memory extends Adapter
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        if (!isset($this->data[$key]['indexes'][$old])) {
+        if (! isset($this->data[$key]['indexes'][$old])) {
             return true;
         }
 
         $this->data[$key]['indexes'][$new] = $this->data[$key]['indexes'][$old];
         unset($this->data[$key]['indexes'][$old]);
+
         return true;
     }
 
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -403,7 +455,7 @@ class Memory extends Adapter
             throw new DatabaseException('Fulltext indexes are not implemented in the Memory adapter');
         }
 
-        if ($type === Database::INDEX_UNIQUE && !empty($attributes)) {
+        if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
             // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing
             // rows contain duplicates; Database::createIndex catches the resulting
             // DuplicateException and treats it as an "orphan index" (the metadata
@@ -433,40 +485,42 @@ class Memory extends Adapter
             'lengths' => $lengths,
             'orders' => $orders,
         ];
+
         return true;
     }
 
     public function deleteIndex(string $collection, string $id): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             return true;
         }
 
         $id = $this->filter($id);
         unset($this->data[$key]['indexes'][$id]);
+
         return true;
     }
 
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             return new Document([]);
         }
 
-        $doc = $this->data[$key]['documents'][$this->documentKey($id)] ?? null;
-        if ($doc === null) {
+        $located = $this->locateDocument($key, $collection->getId(), $id);
+        if ($located === null) {
             return new Document([]);
         }
 
-        $row = $this->rowToDocument($doc);
+        $row = $this->rowToDocument($located[1]);
 
         // Apply Query::select projection — drop user attributes that were not
         // requested but always retain the document internals ($id, $sequence,
         // permissions etc.) the caller depends on.
         $selections = $this->getSelectAttributes($queries);
-        if (!empty($selections)) {
+        if (! empty($selections)) {
             $row = $this->projectRow($row, $selections);
         }
 
@@ -474,28 +528,29 @@ class Memory extends Adapter
     }
 
     /**
-     * @param array<\Utopia\Database\Query> $queries
+     * @param  array<Query>  $queries
      * @return array<string>
      */
     private function getSelectAttributes(array $queries): array
     {
         $selected = [];
         foreach ($queries as $query) {
-            if (!$query instanceof \Utopia\Database\Query) {
+            if (! $query instanceof Query) {
                 continue;
             }
-            if ($query->getMethod() === \Utopia\Database\Query::TYPE_SELECT) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
                     $selected[] = (string) $value;
                 }
             }
         }
+
         return $selected;
     }
 
     /**
-     * @param array<string, mixed> $row
-     * @param array<string> $selections
+     * @param  array<string, mixed>  $row
+     * @param  array<string>  $selections
      * @return array<string, mixed>
      */
     private function projectRow(array $row, array $selections): array
@@ -511,29 +566,32 @@ class Memory extends Adapter
             // Always preserve internals — they are namespaced with `$` or `_`.
             if (\str_starts_with($field, '$') || \str_starts_with($field, '_')) {
                 $projected[$field] = $value;
+
                 continue;
             }
             if (\in_array($field, $selections, true)) {
                 $projected[$field] = $value;
             }
         }
+
         return $projected;
     }
 
     public function createDocument(Document $collection, Document $document): Document
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $docKey = $this->documentKey($document->getId());
+        $docKey = $this->documentKey($document->getId(), $document->getTenant());
         if (isset($this->data[$key]['documents'][$docKey])) {
             if ($this->skipDuplicates) {
                 // Mirrors MariaDB's `INSERT IGNORE` — duplicate primary key is
                 // silently dropped and the existing row's sequence is returned.
                 $existing = $this->data[$key]['documents'][$docKey];
                 $document['$sequence'] = (string) $existing['_id'];
+
                 return $document;
             }
             throw new DuplicateException('Document already exists');
@@ -566,6 +624,7 @@ class Memory extends Adapter
         $this->writePermissions($key, $document);
 
         $document['$sequence'] = (string) $sequence;
+
         return $document;
     }
 
@@ -575,21 +634,22 @@ class Memory extends Adapter
         foreach ($documents as $document) {
             $created[] = $this->createDocument($collection, $document);
         }
+
         return $created;
     }
 
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $oldKey = $this->documentKey($id);
-        $existing = $this->data[$key]['documents'][$oldKey] ?? null;
-        if ($existing === null) {
+        $located = $this->locateDocument($key, $collection->getId(), $id);
+        if ($located === null) {
             throw new NotFoundException('Document not found');
         }
+        [$oldKey, $existing] = $located;
 
         $newId = $document->getId();
         $newKey = $this->documentKey($newId);
@@ -601,13 +661,23 @@ class Memory extends Adapter
 
         $row = $this->documentToRow($document);
         $row['_id'] = $existing['_id'];
+        if ($this->sharedTables && \array_key_exists('_tenant', $existing)) {
+            // Preserve the row's stored tenant — MariaDB's UPDATE statements
+            // never rewrite `_tenant` and tests rely on the original tenant
+            // (e.g. the metadata NULL-tenant rows) surviving an update.
+            $row['_tenant'] = $existing['_tenant'];
+        }
 
-        if ($newId !== $id) {
+        $newKey = $this->sharedTables
+            ? ($existing['_tenant'] ?? $this->getTenant()).'|'.\strtolower($newId)
+            : \strtolower($newId);
+
+        if ($newId !== $id || $newKey !== $oldKey) {
             unset($this->data[$key]['documents'][$oldKey]);
         }
         $this->data[$key]['documents'][$newKey] = $row;
 
-        if (!$skipPermissions) {
+        if (! $skipPermissions) {
             // Remove any permissions keyed to the old uid and rewrite.
             $this->permissions[$key] = \array_values(\array_filter(
                 $this->permissions[$key],
@@ -633,15 +703,15 @@ class Memory extends Adapter
         }
 
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $attrs = $updates->getAttributes();
-        $hasCreatedAt = !empty($updates->getCreatedAt());
-        $hasUpdatedAt = !empty($updates->getUpdatedAt());
+        $hasCreatedAt = ! empty($updates->getCreatedAt());
+        $hasUpdatedAt = ! empty($updates->getUpdatedAt());
         $hasPermissions = $updates->offsetExists('$permissions');
-        if (empty($attrs) && !$hasCreatedAt && !$hasUpdatedAt && !$hasPermissions) {
+        if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
 
@@ -649,11 +719,11 @@ class Memory extends Adapter
         foreach ($documents as $doc) {
             $uid = $doc->getId();
             $docKey = $this->documentKey($uid);
-            if (!isset($this->data[$key]['documents'][$docKey])) {
+            if (! isset($this->data[$key]['documents'][$docKey])) {
                 continue;
             }
 
-            if (!empty($attrs)) {
+            if (! empty($attrs)) {
                 $merged = new Document(\array_merge(
                     $this->rowToDocument($this->data[$key]['documents'][$docKey]),
                     $attrs,
@@ -708,12 +778,12 @@ class Memory extends Adapter
     public function getSequences(string $collection, array $documents): array
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             return $documents;
         }
 
         foreach ($documents as $index => $doc) {
-            if (!empty($doc->getSequence())) {
+            if (! empty($doc->getSequence())) {
                 continue;
             }
             // Mirror MariaDB::getSequences which binds :_tenant_$i to $document->getTenant()
@@ -723,13 +793,14 @@ class Memory extends Adapter
                 $documents[$index]->setAttribute('$sequence', (string) $existing['_id']);
             }
         }
+
         return $documents;
     }
 
     public function deleteDocument(string $collection, string $id): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             // MariaDB throws when the collection itself is gone (PDO unknown
             // table → NotFoundException). A missing document inside an existing
             // collection still returns false to mirror rowCount() == 0.
@@ -737,7 +808,7 @@ class Memory extends Adapter
         }
 
         $docKey = $this->documentKey($id);
-        if (!isset($this->data[$key]['documents'][$docKey])) {
+        if (! isset($this->data[$key]['documents'][$docKey])) {
             return false;
         }
 
@@ -746,13 +817,14 @@ class Memory extends Adapter
             $this->permissions[$key] ?? [],
             fn (array $p) => $p['document'] !== $id
         ));
+
         return true;
     }
 
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -777,14 +849,14 @@ class Memory extends Adapter
             }
         }
 
-        $permSet = !empty($permissionIds)
+        $permSet = ! empty($permissionIds)
             ? \array_flip(\array_map('strval', $permissionIds))
             : [];
 
-        if (!empty($deletedIds) || !empty($permSet)) {
+        if (! empty($deletedIds) || ! empty($permSet)) {
             $this->permissions[$key] = \array_values(\array_filter(
                 $this->permissions[$key] ?? [],
-                fn (array $p) => !isset($deletedIds[$p['document']]) && !isset($permSet[$p['document']])
+                fn (array $p) => ! isset($deletedIds[$p['document']]) && ! isset($permSet[$p['document']])
             ));
         }
 
@@ -794,21 +866,21 @@ class Memory extends Adapter
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows);
+        $rows = $this->applyTenantFilter($rows, $collection->getId());
         $rows = $this->applyQueries($rows, $queries);
         $rows = $this->applyPermissions($collection, $rows, $forPermission);
         $rows = $this->applyOrdering($rows, $orderAttributes, $orderTypes, $cursorDirection);
         $rows = $this->applyCursor($rows, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
-        if (!is_null($offset)) {
+        if (! is_null($offset)) {
             $rows = \array_slice($rows, $offset);
         }
-        if (!is_null($limit)) {
+        if (! is_null($limit)) {
             $rows = \array_slice($rows, 0, $limit);
         }
 
@@ -828,36 +900,37 @@ class Memory extends Adapter
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows);
+        $rows = $this->applyTenantFilter($rows, $collection->getId());
         $rows = $this->applyQueries($rows, $queries);
         $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
 
-        if (!is_null($max)) {
+        if (! is_null($max)) {
             // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
             // legitimately yields 0. Honour zero rather than ignoring it.
             $rows = \array_slice($rows, 0, $max);
         }
+
         return \count($rows);
     }
 
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $key = $this->key($collection->getId());
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
         $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows);
+        $rows = $this->applyTenantFilter($rows, $collection->getId());
         $rows = $this->applyQueries($rows, $queries);
         $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
 
-        if (!is_null($max)) {
+        if (! is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
         }
 
@@ -865,7 +938,7 @@ class Memory extends Adapter
         $isFloat = false;
         $column = $this->filter($attribute);
         foreach ($rows as $row) {
-            if (!\array_key_exists($column, $row) || $row[$column] === null) {
+            if (! \array_key_exists($column, $row) || $row[$column] === null) {
                 continue;
             }
             if (\is_float($row[$column])) {
@@ -881,7 +954,7 @@ class Memory extends Adapter
     {
         $key = $this->key($collection);
         $docKey = $this->documentKey($id);
-        if (!isset($this->data[$key]['documents'][$docKey])) {
+        if (! isset($this->data[$key]['documents'][$docKey])) {
             throw new NotFoundException('Document not found');
         }
 
@@ -895,24 +968,26 @@ class Memory extends Adapter
         // still returns true. Mirror that — silent no-op on bound violation.
         // The Database layer pre-subtracts $value from $max (and adds it to
         // $min), so the comparison stays against the pre-update value.
-        if (!is_null($min) && $current < $min) {
+        if (! is_null($min) && $current < $min) {
             return true;
         }
-        if (!is_null($max) && $current > $max) {
+        if (! is_null($max) && $current > $max) {
             return true;
         }
 
         $this->data[$key]['documents'][$docKey][$column] = $current + $value;
         $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
+
         return true;
     }
 
     public function getSizeOfCollection(string $collection): int
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key])) {
+        if (! isset($this->data[$key])) {
             return 0;
         }
+
         return \strlen(\serialize($this->data[$key]));
     }
 
@@ -971,7 +1046,7 @@ class Memory extends Adapter
 
     public function getSupportForSchemas(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForAttributes(): bool
@@ -982,6 +1057,7 @@ class Memory extends Adapter
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
+
         return $this->supportForAttributes;
     }
 
@@ -1236,7 +1312,7 @@ class Memory extends Adapter
 
     protected function quote(string $string): string
     {
-        return '"' . $string . '"';
+        return '"'.$string.'"';
     }
 
     public function decodePoint(string $wkb): array
@@ -1327,7 +1403,7 @@ class Memory extends Adapter
     // -----------------------------------------------------------------
 
     /**
-     * @param array<mixed> $value
+     * @param  array<mixed>  $value
      * @return array<mixed>
      */
     protected function deepCopy(array $value): array
@@ -1357,8 +1433,12 @@ class Memory extends Adapter
         $row['_updatedAt'] = $document->getUpdatedAt();
         $row['_permissions'] = \json_encode($document->getPermissions());
         if ($this->sharedTables) {
-            $row['_tenant'] = $this->getTenant();
+            // Mirror MariaDB: the row's `_tenant` follows the document's own
+            // tenant — that matters in tenantPerDocument mode where the
+            // adapter's current tenant is null but each document is tagged.
+            $row['_tenant'] = $document->getTenant() ?? $this->getTenant();
         }
+
         return $row;
     }
 
@@ -1371,14 +1451,14 @@ class Memory extends Adapter
      * MariaDB always projects (`$id`, `$sequence`, `$createdAt`, `$updatedAt`,
      * `$permissions`, `$tenant`, `$collection`).
      *
-     * @param array<string, mixed> $row
-     * @param array<int, string>|null $selections
+     * @param  array<string, mixed>  $row
+     * @param  array<int, string>|null  $selections
      * @return array<string, mixed>
      */
     protected function rowToDocument(array $row, ?array $selections = null): array
     {
         $allowed = null;
-        if ($selections !== null && $selections !== [] && !\in_array('*', $selections, true)) {
+        if ($selections !== null && $selections !== [] && ! \in_array('*', $selections, true)) {
             $allowed = [];
             foreach ($selections as $selection) {
                 $allowed[$this->filter($selection)] = true;
@@ -1407,17 +1487,18 @@ class Memory extends Adapter
                     $document['$permissions'] = \is_string($value) ? (\json_decode($value, true) ?? []) : ($value ?? []);
                     break;
                 default:
-                    if ($allowed !== null && !isset($allowed[$key])) {
+                    if ($allowed !== null && ! isset($allowed[$key])) {
                         break;
                     }
                     $document[$key] = $value;
             }
         }
+
         return $document;
     }
 
     /**
-     * @param array<Query> $queries
+     * @param  array<Query>  $queries
      * @return array<int, string>
      */
     protected function extractSelections(array $queries): array
@@ -1432,48 +1513,58 @@ class Memory extends Adapter
                 }
             }
         }
+
         return $selections;
     }
 
-    /**
-     * @param string $key
-     * @param Document $document
-     */
     protected function writePermissions(string $key, Document $document): void
     {
         $uid = $document->getId();
+        $tenant = $document->getTenant() ?? $this->getTenant();
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $this->permissions[$key][] = [
                     'document' => $uid,
                     'type' => $type,
                     'permission' => \str_replace('"', '', $permission),
-                    'tenant' => $this->getTenant(),
+                    'tenant' => $tenant,
                 ];
             }
         }
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
+     * @param  array<array<string, mixed>>  $rows
      * @return array<array<string, mixed>>
      */
-    protected function applyTenantFilter(array $rows): array
+    protected function applyTenantFilter(array $rows, string $collectionId = ''): array
     {
-        if (!$this->sharedTables) {
+        if (! $this->sharedTables) {
             return $rows;
         }
 
         $tenant = $this->getTenant();
+        // Mirror MariaDB: rows in the metadata collection are visible across
+        // tenants when their _tenant is NULL — the schema bookkeeping is
+        // global, even with shared tables enabled.
+        $allowNull = $collectionId === Database::METADATA;
+
         return \array_values(\array_filter(
             $rows,
-            fn (array $row) => ($row['_tenant'] ?? null) === $tenant
+            function (array $row) use ($tenant, $allowNull) {
+                $rowTenant = $row['_tenant'] ?? null;
+                if ($allowNull && $rowTenant === null) {
+                    return true;
+                }
+
+                return $rowTenant === $tenant;
+            }
         ));
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
-     * @param array<Query> $queries
+     * @param  array<array<string, mixed>>  $rows
+     * @param  array<Query>  $queries
      * @return array<array<string, mixed>>
      */
     protected function applyQueries(array $rows, array $queries): array
@@ -1487,11 +1578,12 @@ class Memory extends Adapter
 
             $rows = \array_values(\array_filter($rows, fn (array $row) => $this->matches($row, $query)));
         }
+
         return $rows;
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     protected function matches(array $row, Query $query): bool
     {
@@ -1499,10 +1591,11 @@ class Memory extends Adapter
 
         if ($method === Query::TYPE_AND) {
             foreach ($query->getValues() as $sub) {
-                if (!($sub instanceof Query) || !$this->matches($row, $sub)) {
+                if (! ($sub instanceof Query) || ! $this->matches($row, $sub)) {
                     return false;
                 }
             }
+
             return true;
         }
 
@@ -1512,6 +1605,7 @@ class Memory extends Adapter
                     return true;
                 }
             }
+
             return false;
         }
 
@@ -1526,6 +1620,7 @@ class Memory extends Adapter
                         return true;
                     }
                 }
+
                 return false;
 
             case Query::TYPE_NOT_EQUAL:
@@ -1534,6 +1629,7 @@ class Memory extends Adapter
                         return false;
                     }
                 }
+
                 return true;
 
             case Query::TYPE_LESSER:
@@ -1564,13 +1660,13 @@ class Memory extends Adapter
                 return \is_string($value) && \is_string($queryValues[0]) && \str_starts_with($value, $queryValues[0]);
 
             case Query::TYPE_NOT_STARTS_WITH:
-                return !\is_string($value) || !\is_string($queryValues[0]) || !\str_starts_with($value, $queryValues[0]);
+                return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_starts_with($value, $queryValues[0]);
 
             case Query::TYPE_ENDS_WITH:
                 return \is_string($value) && \is_string($queryValues[0]) && \str_ends_with($value, $queryValues[0]);
 
             case Query::TYPE_NOT_ENDS_WITH:
-                return !\is_string($value) || !\is_string($queryValues[0]) || !\str_ends_with($value, $queryValues[0]);
+                return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_ends_with($value, $queryValues[0]);
 
             case Query::TYPE_CONTAINS:
                 $haystack = $this->decodeArrayValue($value);
@@ -1583,9 +1679,10 @@ class Memory extends Adapter
                             return true;
                         }
                     }
+
                     return false;
                 }
-                if (!\is_array($haystack)) {
+                if (! \is_array($haystack)) {
                     return false;
                 }
                 foreach ($queryValues as $needle) {
@@ -1595,10 +1692,11 @@ class Memory extends Adapter
                         }
                     }
                 }
+
                 return false;
 
             case Query::TYPE_NOT_CONTAINS:
-                return !$this->matches($row, new Query(Query::TYPE_CONTAINS, $query->getAttribute(), $queryValues));
+                return ! $this->matches($row, new Query(Query::TYPE_CONTAINS, $query->getAttribute(), $queryValues));
 
             case Query::TYPE_CONTAINS_ANY:
                 // containsAny behaves like contains: array attributes match
@@ -1611,9 +1709,10 @@ class Memory extends Adapter
                             return true;
                         }
                     }
+
                     return false;
                 }
-                if (!\is_array($haystack)) {
+                if (! \is_array($haystack)) {
                     return false;
                 }
                 foreach ($queryValues as $needle) {
@@ -1623,11 +1722,12 @@ class Memory extends Adapter
                         }
                     }
                 }
+
                 return false;
 
             case Query::TYPE_CONTAINS_ALL:
                 $haystack = $this->decodeArrayValue($value);
-                if (!\is_array($haystack)) {
+                if (! \is_array($haystack)) {
                     return false;
                 }
                 foreach ($queryValues as $needle) {
@@ -1638,10 +1738,11 @@ class Memory extends Adapter
                             break;
                         }
                     }
-                    if (!$found) {
+                    if (! $found) {
                         return false;
                     }
                 }
+
                 return true;
 
             case Query::TYPE_SEARCH:
@@ -1650,7 +1751,7 @@ class Memory extends Adapter
                 throw new DatabaseException('Search and regex queries are not implemented in the Memory adapter');
         }
 
-        throw new DatabaseException('Query method not implemented in the Memory adapter: ' . $method);
+        throw new DatabaseException('Query method not implemented in the Memory adapter: '.$method);
     }
 
     protected function looseEquals(mixed $a, mixed $b): bool
@@ -1661,6 +1762,7 @@ class Memory extends Adapter
         if (\is_numeric($a) && \is_numeric($b)) {
             return $a + 0 === $b + 0;
         }
+
         return false;
     }
 
@@ -1677,8 +1779,10 @@ class Memory extends Adapter
         }
         if (\is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
             $decoded = \json_decode($value, true);
+
             return \is_array($decoded) ? $decoded : null;
         }
+
         return null;
     }
 
@@ -1696,13 +1800,12 @@ class Memory extends Adapter
     }
 
     /**
-     * @param Document $collection
-     * @param array<array<string, mixed>> $rows
+     * @param  array<array<string, mixed>>  $rows
      * @return array<array<string, mixed>>
      */
     protected function applyPermissions(Document $collection, array $rows, string $forPermission): array
     {
-        if (!$this->authorization->getStatus()) {
+        if (! $this->authorization->getStatus()) {
             return $rows;
         }
 
@@ -1730,9 +1833,9 @@ class Memory extends Adapter
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
+     * @param  array<array<string, mixed>>  $rows
+     * @param  array<string>  $orderAttributes
+     * @param  array<string>  $orderTypes
      * @return array<array<string, mixed>>
      */
     protected function applyOrdering(array $rows, array $orderAttributes, array $orderTypes, string $cursorDirection): array
@@ -1742,6 +1845,7 @@ class Memory extends Adapter
         foreach ($orderTypes as $type) {
             if ($type === Database::ORDER_RANDOM) {
                 \shuffle($rows);
+
                 return $rows;
             }
         }
@@ -1757,8 +1861,10 @@ class Memory extends Adapter
                     return 0;
                 }
                 $cmp = ($av < $bv) ? -1 : 1;
+
                 return $cursorDirection === Database::CURSOR_BEFORE ? -$cmp : $cmp;
             });
+
             return $rows;
         }
 
@@ -1778,8 +1884,10 @@ class Memory extends Adapter
                 }
 
                 $cmp = ($av < $bv) ? -1 : 1;
+
                 return $direction === Database::ORDER_ASC ? $cmp : -$cmp;
             }
+
             return 0;
         });
 
@@ -1787,10 +1895,10 @@ class Memory extends Adapter
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
+     * @param  array<array<string, mixed>>  $rows
+     * @param  array<string>  $orderAttributes
+     * @param  array<string>  $orderTypes
+     * @param  array<string, mixed>  $cursor
      * @return array<array<string, mixed>>
      */
     protected function applyCursor(array $rows, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
@@ -1821,17 +1929,14 @@ class Memory extends Adapter
                 if ($direction === Database::ORDER_ASC) {
                     return $current > $ref;
                 }
+
                 return $current < $ref;
             }
+
             return false;
         }));
     }
 
-    /**
-     * @param string $key
-     * @param Document $document
-     * @param string|null $previousId
-     */
     protected function enforceUniqueIndexes(string $key, Document $document, ?string $previousId): void
     {
         $indexes = $this->data[$key]['indexes'] ?? [];
@@ -1908,6 +2013,7 @@ class Memory extends Adapter
         if (\is_string($value) && \is_numeric($value)) {
             return $value + 0;
         }
+
         return $value;
     }
 }

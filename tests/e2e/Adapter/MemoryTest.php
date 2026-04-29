@@ -335,7 +335,7 @@ class MemoryTest extends Base
         $adapter->updateAttribute('renames', 'old', Database::VAR_STRING, 256, true, false, 'fresh');
 
         $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getNamespace() . '_renames';
+        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_renames';
 
         $this->assertArrayHasKey('fresh', $store[$key]['attributes']);
         $this->assertArrayNotHasKey('old', $store[$key]['attributes']);
@@ -357,7 +357,7 @@ class MemoryTest extends Base
         $adapter->renameAttribute('indexed', 'name', 'title');
 
         $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getNamespace() . '_indexed';
+        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_indexed';
 
         $this->assertEquals(['title'], $store[$key]['indexes']['idx_name']['attributes']);
     }
@@ -378,7 +378,7 @@ class MemoryTest extends Base
         $adapter->deleteAttribute('drops', 'a');
 
         $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getNamespace() . '_drops';
+        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_drops';
 
         $this->assertEquals(['b'], $store[$key]['indexes']['idx_ab']['attributes']);
     }
@@ -465,7 +465,7 @@ class MemoryTest extends Base
 
         $adapter = $database->getAdapter();
         $permissions = (new \ReflectionClass($adapter))->getProperty('permissions')->getValue($adapter);
-        $key = $database->getNamespace() . '_cleanup';
+        $key = $database->getDatabase() . '.' . $database->getNamespace() . '_cleanup';
 
         $this->assertEmpty($permissions[$key] ?? []);
     }

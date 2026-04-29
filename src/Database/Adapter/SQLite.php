@@ -2439,6 +2439,12 @@ class SQLite extends MariaDB
         }
 
         $dataType = \strtolower($base);
+        // SQLite spells INT and INTEGER interchangeably for declared types,
+        // but MariaDB's INFORMATION_SCHEMA always reports `int`. Canonicalise
+        // so getSchemaAttributes matches the parent contract.
+        if ($dataType === 'integer') {
+            $dataType = 'int';
+        }
 
         $result = [
             'dataType' => $dataType,

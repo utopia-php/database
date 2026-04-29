@@ -61,6 +61,11 @@ class Memory extends Adapter
         return $this->getNamespace() . '_' . $this->filter($collection);
     }
 
+    protected function documentKey(string $id): string
+    {
+        return $this->sharedTables ? $this->getTenant() . '|' . $id : $id;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         // No-op: nothing to time out in-memory
@@ -108,8 +113,7 @@ class Memory extends Adapter
             $this->data = $snapshot['data'];
             $this->permissions = $snapshot['permissions'];
         }
-        $this->inTransaction = 0;
-        $this->snapshots = [];
+        $this->inTransaction--;
         return true;
     }
 
@@ -245,7 +249,8 @@ class Memory extends Adapter
 
         $id = $this->filter($id);
         if (!empty($newKey) && $newKey !== $id) {
-            return $this->renameAttribute($collection, $id, $newKey);
+            $this->renameAttribute($collection, $id, $newKey);
+            $id = $this->filter($newKey);
         }
 
         $this->data[$key]['attributes'][$id] = [
@@ -271,6 +276,30 @@ class Memory extends Adapter
             unset($document[$id]);
         }
         unset($document);
+
+        foreach ($this->data[$key]['indexes'] as &$index) {
+            $attributes = $index['attributes'] ?? [];
+            $filtered = [];
+            $lengths = [];
+            $orders = [];
+            foreach ($attributes as $i => $attribute) {
+                if ($this->filter($attribute) === $id) {
+                    continue;
+                }
+                $filtered[] = $attribute;
+                if (isset($index['lengths'][$i])) {
+                    $lengths[] = $index['lengths'][$i];
+                }
+                if (isset($index['orders'][$i])) {
+                    $orders[] = $index['orders'][$i];
+                }
+            }
+            $index['attributes'] = $filtered;
+            $index['lengths'] = $lengths;
+            $index['orders'] = $orders;
+        }
+        unset($index);
+
         return true;
     }
 
@@ -298,6 +327,18 @@ class Memory extends Adapter
             }
         }
         unset($document);
+
+        foreach ($this->data[$key]['indexes'] as &$index) {
+            $attributes = $index['attributes'] ?? [];
+            foreach ($attributes as $i => $attribute) {
+                if ($this->filter($attribute) === $old) {
+                    $attributes[$i] = $new;
+                }
+            }
+            $index['attributes'] = $attributes;
+        }
+        unset($index);
+
         return true;
     }
 
@@ -346,6 +387,24 @@ class Memory extends Adapter
             throw new DatabaseException('Fulltext indexes are not implemented in the Memory adapter');
         }
 
+        if ($type === Database::INDEX_UNIQUE && !empty($attributes)) {
+            $seen = [];
+            foreach ($this->data[$key]['documents'] as $row) {
+                $signature = [];
+                foreach ($attributes as $attribute) {
+                    $signature[] = $row[$this->mapAttribute($attribute)] ?? null;
+                }
+                if (\in_array(null, $signature, true)) {
+                    continue;
+                }
+                $hash = \json_encode($signature);
+                if (isset($seen[$hash])) {
+                    throw new DatabaseException('Cannot create unique index: existing rows already contain duplicate values');
+                }
+                $seen[$hash] = true;
+            }
+        }
+
         $id = $this->filter($id);
         $this->data[$key]['indexes'][$id] = [
             'type' => $type,
@@ -375,12 +434,8 @@ class Memory extends Adapter
             return new Document([]);
         }
 
-        $doc = $this->data[$key]['documents'][$id] ?? null;
+        $doc = $this->data[$key]['documents'][$this->documentKey($id)] ?? null;
         if ($doc === null) {
-            return new Document([]);
-        }
-
-        if ($this->sharedTables && ($doc['_tenant'] ?? null) !== $this->getTenant()) {
             return new Document([]);
         }
 
@@ -394,11 +449,9 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        if (isset($this->data[$key]['documents'][$document->getId()])) {
-            $existing = $this->data[$key]['documents'][$document->getId()];
-            if (!$this->sharedTables || ($existing['_tenant'] ?? null) === $this->getTenant()) {
-                throw new DuplicateException('Document already exists');
-            }
+        $docKey = $this->documentKey($document->getId());
+        if (isset($this->data[$key]['documents'][$docKey])) {
+            throw new DuplicateException('Document already exists');
         }
 
         $this->enforceUniqueIndexes($key, $document, null);
@@ -417,7 +470,7 @@ class Memory extends Adapter
         $row = $this->documentToRow($document);
         $row['_id'] = $sequence;
 
-        $this->data[$key]['documents'][$document->getId()] = $row;
+        $this->data[$key]['documents'][$docKey] = $row;
         $this->writePermissions($key, $document);
 
         $document['$sequence'] = (string) $sequence;
@@ -440,13 +493,15 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $existing = $this->data[$key]['documents'][$id] ?? null;
+        $oldKey = $this->documentKey($id);
+        $existing = $this->data[$key]['documents'][$oldKey] ?? null;
         if ($existing === null) {
             throw new NotFoundException('Document not found');
         }
 
         $newId = $document->getId();
-        if ($newId !== $id && isset($this->data[$key]['documents'][$newId])) {
+        $newKey = $this->documentKey($newId);
+        if ($newId !== $id && isset($this->data[$key]['documents'][$newKey])) {
             throw new DuplicateException('Document already exists');
         }
 
@@ -456,9 +511,9 @@ class Memory extends Adapter
         $row['_id'] = $existing['_id'];
 
         if ($newId !== $id) {
-            unset($this->data[$key]['documents'][$id]);
+            unset($this->data[$key]['documents'][$oldKey]);
         }
-        $this->data[$key]['documents'][$newId] = $row;
+        $this->data[$key]['documents'][$newKey] = $row;
 
         if (!$skipPermissions) {
             // Remove any permissions keyed to the old uid and rewrite.
@@ -501,11 +556,21 @@ class Memory extends Adapter
         $count = 0;
         foreach ($documents as $doc) {
             $uid = $doc->getId();
-            if (!isset($this->data[$key]['documents'][$uid])) {
+            $docKey = $this->documentKey($uid);
+            if (!isset($this->data[$key]['documents'][$docKey])) {
                 continue;
             }
 
-            $row = &$this->data[$key]['documents'][$uid];
+            if (!empty($attrs)) {
+                $merged = new Document(\array_merge(
+                    $this->rowToDocument($this->data[$key]['documents'][$docKey]),
+                    $attrs,
+                    ['$id' => $uid]
+                ));
+                $this->enforceUniqueIndexes($key, $merged, $uid);
+            }
+
+            $row = &$this->data[$key]['documents'][$docKey];
             foreach ($attrs as $attribute => $value) {
                 if (\is_array($value)) {
                     $value = \json_encode($value);
@@ -556,7 +621,7 @@ class Memory extends Adapter
         }
 
         foreach ($documents as $index => $doc) {
-            $existing = $this->data[$key]['documents'][$doc->getId()] ?? null;
+            $existing = $this->data[$key]['documents'][$this->documentKey($doc->getId())] ?? null;
             if ($existing !== null) {
                 $documents[$index]->setAttribute('$sequence', (string) $existing['_id']);
             }
@@ -571,11 +636,12 @@ class Memory extends Adapter
             return false;
         }
 
-        if (!isset($this->data[$key]['documents'][$id])) {
+        $docKey = $this->documentKey($id);
+        if (!isset($this->data[$key]['documents'][$docKey])) {
             return false;
         }
 
-        unset($this->data[$key]['documents'][$id]);
+        unset($this->data[$key]['documents'][$docKey]);
         $this->permissions[$key] = \array_values(\array_filter(
             $this->permissions[$key] ?? [],
             fn (array $p) => $p['document'] !== $id
@@ -596,18 +662,23 @@ class Memory extends Adapter
         }
 
         $count = 0;
+        $deletedIds = [];
         foreach ($this->data[$key]['documents'] as $uid => $row) {
             if (isset($seqSet[(string) ($row['_id'] ?? '')])) {
+                $deletedIds[(string) ($row['_uid'] ?? $uid)] = true;
                 unset($this->data[$key]['documents'][$uid]);
                 $count++;
             }
         }
 
-        if (!empty($permissionIds)) {
-            $permSet = \array_flip(\array_map('strval', $permissionIds));
+        $permSet = !empty($permissionIds)
+            ? \array_flip(\array_map('strval', $permissionIds))
+            : [];
+
+        if (!empty($deletedIds) || !empty($permSet)) {
             $this->permissions[$key] = \array_values(\array_filter(
                 $this->permissions[$key] ?? [],
-                fn (array $p) => !isset($permSet[$p['document']])
+                fn (array $p) => !isset($deletedIds[$p['document']]) && !isset($permSet[$p['document']])
             ));
         }
 
@@ -701,12 +772,13 @@ class Memory extends Adapter
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $key = $this->key($collection);
-        if (!isset($this->data[$key]['documents'][$id])) {
+        $docKey = $this->documentKey($id);
+        if (!isset($this->data[$key]['documents'][$docKey])) {
             throw new NotFoundException('Document not found');
         }
 
         $column = $this->filter($attribute);
-        $current = $this->data[$key]['documents'][$id][$column] ?? 0;
+        $current = $this->data[$key]['documents'][$docKey][$column] ?? 0;
         $current = is_numeric($current) ? $current + 0 : 0;
         $next = $current + $value;
 
@@ -717,8 +789,8 @@ class Memory extends Adapter
             return false;
         }
 
-        $this->data[$key]['documents'][$id][$column] = $next;
-        $this->data[$key]['documents'][$id]['_updatedAt'] = $updatedAt;
+        $this->data[$key]['documents'][$docKey][$column] = $next;
+        $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
         return true;
     }
 
@@ -1195,6 +1267,13 @@ class Memory extends Adapter
                     $document['$permissions'] = \is_string($value) ? (\json_decode($value, true) ?? []) : ($value ?? []);
                     break;
                 default:
+                    if (\is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
+                        $decoded = \json_decode($value, true);
+                        if (\is_array($decoded)) {
+                            $document[$key] = $decoded;
+                            break;
+                        }
+                    }
                     $document[$key] = $value;
             }
         }
@@ -1557,11 +1636,16 @@ class Memory extends Adapter
                 $signature[] = \is_array($docValue) ? \json_encode($docValue) : $docValue;
             }
 
-            foreach ($this->data[$key]['documents'] as $uid => $row) {
-                if ($previousId !== null && $uid === $previousId) {
+            if (\in_array(null, $signature, true)) {
+                continue;
+            }
+
+            foreach ($this->data[$key]['documents'] as $row) {
+                $rowUid = (string) ($row['_uid'] ?? '');
+                if ($previousId !== null && $rowUid === $previousId) {
                     continue;
                 }
-                if ($uid === $document->getId() && $previousId === null) {
+                if ($rowUid === $document->getId() && $previousId === null) {
                     continue;
                 }
                 if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {

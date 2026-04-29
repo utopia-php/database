@@ -473,6 +473,271 @@ class MemoryTest extends TestCase
         $this->database->getAdapter()->upsertDocuments($collection, '', []);
     }
 
+    public function testNestedTransactionRollbackOnlyDiscardsInner(): void
+    {
+        $this->database->createCollection('nested', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ]);
+
+        $adapter = $this->database->getAdapter();
+        $adapter->startTransaction();
+        $this->database->createDocument('nested', new Document([
+            '$id' => 'outer',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'outer',
+        ]));
+
+        $adapter->startTransaction();
+        $this->database->createDocument('nested', new Document([
+            '$id' => 'inner',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'inner',
+        ]));
+        $adapter->rollbackTransaction();
+
+        $this->assertTrue($adapter->inTransaction());
+        $adapter->commitTransaction();
+
+        $this->assertFalse($this->database->getDocument('nested', 'outer')->isEmpty());
+        $this->assertTrue($this->database->getDocument('nested', 'inner')->isEmpty());
+    }
+
+    public function testArrayAttributeRoundTrip(): void
+    {
+        $this->database->createCollection('lists', [
+            new Document([
+                '$id' => 'tags',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => [],
+            ]),
+        ]);
+
+        $this->database->createDocument('lists', new Document([
+            '$id' => 'l1',
+            '$permissions' => [Permission::read(Role::any())],
+            'tags' => ['php', 'memory', 'adapter'],
+        ]));
+
+        $fetched = $this->database->getDocument('lists', 'l1');
+        $this->assertSame(['php', 'memory', 'adapter'], $fetched->getAttribute('tags'));
+    }
+
+    public function testCreateUniqueIndexRejectsExistingDuplicates(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('uniqdup_' . \uniqid());
+        $adapter->createCollection('emails', [], []);
+        $adapter->createDocument(
+            new Document(['$id' => 'emails']),
+            new Document(['$id' => 'a', 'addr' => 'dup@example.com', '$permissions' => []])
+        );
+        $adapter->createDocument(
+            new Document(['$id' => 'emails']),
+            new Document(['$id' => 'b', 'addr' => 'dup@example.com', '$permissions' => []])
+        );
+
+        $this->expectException(DatabaseException::class);
+        $adapter->createIndex('emails', 'unique_addr', Database::INDEX_UNIQUE, ['addr'], [], []);
+    }
+
+    public function testUniqueIndexAllowsMultipleNulls(): void
+    {
+        $this->database->createCollection('optional', [
+            new Document([
+                '$id' => 'token',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'unique_token',
+                'type' => Database::INDEX_UNIQUE,
+                'attributes' => ['token'],
+            ]),
+        ]);
+
+        $this->database->createDocument('optional', new Document([
+            '$id' => 'a',
+            '$permissions' => [Permission::read(Role::any())],
+            'token' => null,
+        ]));
+        $this->database->createDocument('optional', new Document([
+            '$id' => 'b',
+            '$permissions' => [Permission::read(Role::any())],
+            'token' => null,
+        ]));
+
+        $this->assertEquals(2, $this->database->count('optional'));
+    }
+
+    public function testUpdateAttributeAppliesMetadataAfterRename(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('rename_' . \uniqid());
+        $adapter->createCollection('renames', [], []);
+        $adapter->createAttribute('renames', 'old', Database::VAR_STRING, 64);
+
+        $adapter->updateAttribute('renames', 'old', Database::VAR_STRING, 256, true, false, 'fresh');
+
+        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
+        $key = $adapter->getNamespace() . '_renames';
+
+        $this->assertArrayHasKey('fresh', $store[$key]['attributes']);
+        $this->assertArrayNotHasKey('old', $store[$key]['attributes']);
+        $this->assertEquals(256, $store[$key]['attributes']['fresh']['size']);
+    }
+
+    public function testRenameAttributeUpdatesIndexReferences(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('idxrn_' . \uniqid());
+        $adapter->createCollection('indexed', [], []);
+        $adapter->createAttribute('indexed', 'name', Database::VAR_STRING, 64);
+        $adapter->createIndex('indexed', 'idx_name', Database::INDEX_KEY, ['name'], [], []);
+
+        $adapter->renameAttribute('indexed', 'name', 'title');
+
+        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
+        $key = $adapter->getNamespace() . '_indexed';
+
+        $this->assertEquals(['title'], $store[$key]['indexes']['idx_name']['attributes']);
+    }
+
+    public function testDeleteAttributeRemovesFromIndex(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('idxdrop_' . \uniqid());
+        $adapter->createCollection('drops', [], []);
+        $adapter->createAttribute('drops', 'a', Database::VAR_STRING, 64);
+        $adapter->createAttribute('drops', 'b', Database::VAR_STRING, 64);
+        $adapter->createIndex('drops', 'idx_ab', Database::INDEX_KEY, ['a', 'b'], [], []);
+
+        $adapter->deleteAttribute('drops', 'a');
+
+        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
+        $key = $adapter->getNamespace() . '_drops';
+
+        $this->assertEquals(['b'], $store[$key]['indexes']['idx_ab']['attributes']);
+    }
+
+    public function testBatchUpdateEnforcesUniqueIndexes(): void
+    {
+        $this->database->createCollection('handles', [
+            new Document([
+                '$id' => 'handle',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'unique_handle',
+                'type' => Database::INDEX_UNIQUE,
+                'attributes' => ['handle'],
+            ]),
+        ]);
+
+        $this->database->createDocument('handles', new Document([
+            '$id' => 'h1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'handle' => 'taken',
+        ]));
+        $this->database->createDocument('handles', new Document([
+            '$id' => 'h2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'handle' => 'free',
+        ]));
+
+        $this->expectException(DuplicateException::class);
+        $this->database->updateDocuments('handles', new Document(['handle' => 'taken']), [
+            Query::equal('$id', ['h2']),
+        ]);
+    }
+
+    public function testBulkDeleteRemovesPermissions(): void
+    {
+        $this->database->createCollection('cleanup', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->database->createDocument('cleanup', new Document([
+                '$id' => "c{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::delete(Role::any())],
+                'name' => "n{$i}",
+            ]));
+        }
+
+        $this->database->deleteDocuments('cleanup');
+
+        $adapter = $this->database->getAdapter();
+        $permissions = (new \ReflectionClass($adapter))->getProperty('permissions')->getValue($adapter);
+        $key = $this->database->getNamespace() . '_cleanup';
+
+        $this->assertEmpty($permissions[$key] ?? []);
+    }
+
+    public function testSharedTablesIsolatesTenants(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('shared_' . \uniqid());
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(1);
+        $adapter->createCollection('shared', [], []);
+
+        $collection = new Document(['$id' => 'shared']);
+
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'same',
+            'name' => 'tenant1',
+            '$permissions' => [],
+        ]));
+
+        $adapter->setTenant(2);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'same',
+            'name' => 'tenant2',
+            '$permissions' => [],
+        ]));
+
+        $tenant2Doc = $adapter->getDocument($collection, 'same');
+        $this->assertEquals('tenant2', $tenant2Doc->getAttribute('name'));
+
+        $adapter->setTenant(1);
+        $tenant1Doc = $adapter->getDocument($collection, 'same');
+        $this->assertEquals('tenant1', $tenant1Doc->getAttribute('name'));
+    }
+
     protected function seedNumbers(): void
     {
         $this->database->createCollection('numbers', [

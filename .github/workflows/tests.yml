@@ -81,6 +81,8 @@ jobs:
             profiles: "--profile postgres"
           - adapter: SQLite
             profiles: ""
+          - adapter: Memory
+            profiles: ""
           - adapter: Mirror
             profiles: "--profile mariadb --profile mariadb-mirror --profile redis-mirror"
           - adapter: Pool

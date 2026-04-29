@@ -14,11 +14,17 @@ use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 /**
- * A simple adapter that keeps all data in-process in PHP arrays.
+ * In-process drop-in for the SQL adapters that keeps all data in PHP
+ * arrays. Intended for tests, fixtures, and ephemeral workloads.
  *
- * Intended for ephemeral use cases like tests, fixtures, and development.
- * Only basic operations are implemented - relationships, spatial, vectors,
- * operators, fulltext search and regex throw a DatabaseException.
+ * Implements the full adapter surface — schemas, collections, attributes,
+ * indexes (including unique and fulltext), CRUD, transactions, query
+ * operators (including SEARCH and PCRE regex), permissions, tenancy
+ * (shared tables), object/nested attributes, schemaless mode, and
+ * relationships (one-to-one, one-to-many, many-to-one, many-to-many).
+ *
+ * Spatial types and vector search throw a DatabaseException — those
+ * features only make sense against a real engine.
  */
 class Memory extends Adapter
 {

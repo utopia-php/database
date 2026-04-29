@@ -107,6 +107,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->client->connect();
     }
 
+    public function getHostname(): string
+    {
+        return $this->client->getHost();
+    }
+
     /**
      * Returns the current Mongo client
      * @return mixed

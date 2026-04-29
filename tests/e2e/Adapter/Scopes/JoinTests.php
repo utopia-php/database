@@ -1450,8 +1450,8 @@ trait JoinTests
             return;
         }
 
-        $oCol = 'jat_o';
-        $cCol = 'jat_c';
+        $oCol = 'jat_o_'.$aggMethod;
+        $cCol = 'jat_c_'.$aggMethod;
         $cols = [$oCol, $cCol];
         $this->cleanupAggCollections($database, $cols);
 

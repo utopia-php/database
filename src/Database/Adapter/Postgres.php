@@ -561,7 +561,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $tableRaw = $this->getSQLTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
-            $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3) without time zone', "TO_TIMESTAMP(\"{$id}\", 'YYYY-MM-DD HH24:MI:SS.MS')");
+            $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3)', "TO_TIMESTAMP(\"{$id}\", 'YYYY-MM-DD HH24:MI:SS.MS')");
         } else {
             $result = $schema->alterColumnType($tableRaw, $id, $sqlType);
         }

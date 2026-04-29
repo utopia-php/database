@@ -56,7 +56,7 @@ class MemoryTest extends Base
         $authorization = self::$authorization ?? throw new \RuntimeException('Authorization not initialised');
         $database
             ->setAuthorization($authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setNamespace(static::$namespace = 'memory_' . uniqid());
 
         if ($database->exists()) {

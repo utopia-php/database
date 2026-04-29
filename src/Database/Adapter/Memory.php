@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -109,6 +110,31 @@ class Memory extends Adapter
     public function getDriver(): mixed
     {
         return 'memory';
+    }
+
+    /**
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Schemas,
+            Capability::Fulltext,
+            Capability::Casting,
+            Capability::QueryContains,
+            Capability::BatchOperations,
+            Capability::BatchCreateAttributes,
+            Capability::AttributeResizing,
+            Capability::Objects,
+            Capability::ObjectIndexes,
+            Capability::Operators,
+            Capability::OrderRandom,
+            Capability::DefinedAttributes,
+            Capability::NestedTransactions,
+            Capability::PCRE,
+            Capability::Regex,
+            Capability::BoundaryInclusive,
+        ]);
     }
 
     protected function key(string $collection): string
@@ -1265,6 +1291,20 @@ class Memory extends Adapter
 
     public function createDocuments(Document $collection, array $documents): array
     {
+        // Mirror SQL's batch-level sequence consistency check: every document
+        // in a batch must either set $sequence or omit it. SQL adapters reject
+        // mixed batches up front; Memory must match so application code that
+        // catches the resulting DatabaseException behaves the same.
+        $hasSequence = null;
+        foreach ($documents as $document) {
+            $sequenceSet = ! empty($document->getSequence());
+            if ($hasSequence === null) {
+                $hasSequence = $sequenceSet;
+            } elseif ($hasSequence !== $sequenceSet) {
+                throw new DatabaseException('All documents must have an sequence if one is set');
+            }
+        }
+
         $created = [];
         foreach ($documents as $document) {
             $created[] = $this->createDocument($collection, $document);

@@ -1108,29 +1108,34 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        // Extract vector queries for ORDER BY
+        // Single pass partitioning: pull vector queries out for ORDER BY and
+        // detect aggregation/join shape in the same walk. Each Method::value
+        // is checked once per query rather than three times.
         $vectorQueries = [];
         $otherQueries = [];
+        $hasAggregation = false;
+        $hasJoins = false;
+
         foreach ($queries as $query) {
-            if ($query->getMethod()->isVector()) {
+            $method = $query->getMethod();
+
+            if ($method->isVector()) {
                 $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+
+                continue;
+            }
+
+            $otherQueries[] = $query;
+
+            if ($method->isAggregate() || $method === Method::GroupBy) {
+                $hasAggregation = true;
+            }
+            if ($method->isJoin()) {
+                $hasJoins = true;
             }
         }
 
         $queries = $otherQueries;
-
-        $hasAggregation = false;
-        $hasJoins = false;
-        foreach ($queries as $query) {
-            if ($query->getMethod()->isAggregate() || $query->getMethod() === Method::GroupBy) {
-                $hasAggregation = true;
-            }
-            if ($query->getMethod()->isJoin()) {
-                $hasJoins = true;
-            }
-        }
 
         $builder = $this->newBuilder($name, $alias);
 
@@ -1176,16 +1181,16 @@ abstract class SQL extends Adapter
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
             /** @var array<Document> $collectionAttrs */
             $collectionAttrs = $collectionDoc->getAttribute('attributes', []);
-            $mainAttributeIds = \array_map(
-                fn (Document $attr) => $attr->getId(),
-                $collectionAttrs
-            );
+            $mainAttributeSet = [];
+            foreach ($collectionAttrs as $attr) {
+                $mainAttributeSet[$attr->getId()] = true;
+            }
             $defaultJoinPrefix = \array_values($joinTablePrefixes)[0];
 
             foreach ($queries as $query) {
                 if ($query->getMethod()->isAggregate()) {
                     $attr = $query->getAttribute();
-                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! \in_array($attr, $mainAttributeIds)) {
+                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! isset($mainAttributeSet[$attr])) {
                         $internalAttr = $this->getInternalKeyForAttribute($attr);
                         $query->setAttribute($defaultJoinPrefix . '.' . $internalAttr);
                     }
@@ -1193,7 +1198,7 @@ abstract class SQL extends Adapter
                     $values = $query->getValues();
                     $qualified = false;
                     foreach ($values as $i => $col) {
-                        if (\is_string($col) && ! \str_contains($col, '.') && ! \in_array($col, $mainAttributeIds)) {
+                        if (\is_string($col) && ! \str_contains($col, '.') && ! isset($mainAttributeSet[$col])) {
                             $internalCol = $this->getInternalKeyForAttribute($col);
                             $values[$i] = $defaultJoinPrefix . '.' . $internalCol;
                             $qualified = true;
@@ -1238,6 +1243,16 @@ abstract class SQL extends Adapter
             }
         }
 
+        // Memoize internal-key resolution for the duration of this find().
+        // Cursor pagination and order-by both walk $orderAttributes; without
+        // this, every order column passes through filter()+
+        // getInternalKeyForAttribute() multiple times.
+        $internalKeyCache = [];
+        $resolveInternalKey = function (string $attribute) use (&$internalKeyCache): string {
+            return $internalKeyCache[$attribute]
+                ??= $this->filter($this->getInternalKeyForAttribute($attribute));
+        };
+
         // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
         if (! empty($cursor)) {
             $cursorConditions = [];
@@ -1256,7 +1271,7 @@ abstract class SQL extends Adapter
                         : OrderDirection::Asc;
                 }
 
-                $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
+                $internalAttr = $resolveInternalKey($originalAttribute);
 
                 // Special case: single attribute on unique primary key
                 if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
@@ -1275,7 +1290,7 @@ abstract class SQL extends Adapter
 
                 for ($j = 0; $j < $i; $j++) {
                     $prevOriginal = $orderAttributes[$j];
-                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+                    $prevAttr = $resolveInternalKey($prevOriginal);
                     /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
                     $prevCursorVals = [$cursor[$prevOriginal]];
                     $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
@@ -1336,7 +1351,7 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
+            $internalAttr = $resolveInternalKey($originalAttribute);
             $direction = $orderType;
 
             if ($cursorDirection === CursorDirection::Before) {
@@ -1448,8 +1463,8 @@ abstract class SQL extends Adapter
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
+        // count() forwards queries to filter() without mutating individual
+        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         foreach ($queries as $query) {
             if (! $query->getMethod()->isVector()) {
@@ -1519,8 +1534,8 @@ abstract class SQL extends Adapter
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
+        // sum() forwards queries to filter() without mutating individual
+        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         foreach ($queries as $query) {
             if (! $query->getMethod()->isVector()) {

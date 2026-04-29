@@ -73,16 +73,29 @@ class Queries extends Validator
             }
         }
 
+        // Parse raw query strings once. Both the alias pre-pass and the main
+        // dispatch loop need Query objects, so doing this here avoids parsing
+        // every string twice.
+        /** @var list<Query> $parsedQueries */
+        $parsedQueries = [];
+        foreach ($value as $q) {
+            if ($q instanceof Query) {
+                $parsedQueries[] = $q;
+
+                continue;
+            }
+            try {
+                $parsedQueries[] = Query::parse($q);
+            } catch (Throwable $e) {
+                $this->message = 'Invalid query: '.$e->getMessage();
+
+                return false;
+            }
+        }
+
         /** @var array<string> $aggregationAliases */
         $aggregationAliases = [];
-        foreach ($value as $q) {
-            if (! $q instanceof Query) {
-                try {
-                    $q = Query::parse($q);
-                } catch (Throwable) {
-                    continue;
-                }
-            }
+        foreach ($parsedQueries as $q) {
             if ($q->getMethod()->isAggregate()) {
                 $alias = $q->getValue('');
                 if (\is_string($alias) && $alias !== '') {
@@ -98,16 +111,7 @@ class Queries extends Validator
             }
         }
 
-        foreach ($value as $query) {
-            if (! $query instanceof Query) {
-                try {
-                    $query = Query::parse($query);
-                } catch (Throwable $e) {
-                    $this->message = 'Invalid query: '.$e->getMessage();
-
-                    return false;
-                }
-            }
+        foreach ($parsedQueries as $query) {
 
             // Only logical filter wrappers carry a list of sibling filters to
             // re-validate. Having has its own handling; Union/UnionAll wrap

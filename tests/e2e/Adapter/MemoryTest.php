@@ -449,10 +449,18 @@ class MemoryTest extends Base
             'handle' => 'free',
         ]));
 
-        $this->expectException(DuplicateException::class);
-        $database->updateDocuments('handles', new Document(['handle' => 'taken']), [
-            Query::equal('$id', ['h2']),
-        ]);
+        $threw = false;
+        try {
+            $database->updateDocuments('handles', new Document(['handle' => 'taken']), [
+                Query::equal('$id', ['h2']),
+            ]);
+        } catch (DuplicateException) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'updateDocuments should reject the duplicate write');
+        $this->assertSame('taken', $database->getDocument('handles', 'h1')->getAttribute('handle'));
+        $this->assertSame('free', $database->getDocument('handles', 'h2')->getAttribute('handle'));
     }
 
     /**
@@ -498,10 +506,18 @@ class MemoryTest extends Base
             'handle' => 'b',
         ]));
 
-        $this->expectException(DuplicateException::class);
-        $database->updateDocuments('siblings', new Document(['handle' => 'shared']), [
-            Query::equal('$id', ['s1', 's2']),
-        ]);
+        $threw = false;
+        try {
+            $database->updateDocuments('siblings', new Document(['handle' => 'shared']), [
+                Query::equal('$id', ['s1', 's2']),
+            ]);
+        } catch (DuplicateException) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'sibling collision should be rejected before any write');
+        $this->assertSame('a', $database->getDocument('siblings', 's1')->getAttribute('handle'));
+        $this->assertSame('b', $database->getDocument('siblings', 's2')->getAttribute('handle'));
     }
 
     /**
@@ -756,30 +772,35 @@ class MemoryTest extends Base
         $collection = new Document(['$id' => 'box']);
         $adapter->setTenant(1);
         $adapter->createCollection('box', [], []);
-        $adapter->createDocument($collection, new Document([
-            '$id' => 'a',
+        $tenant1Doc = $adapter->createDocument($collection, new Document([
+            '$id' => 'tenant1-only',
             '$permissions' => [],
             'name' => 'tenant1',
         ]));
 
         $adapter->setTenant(7);
         $adapter->createDocument($collection, new Document([
-            '$id' => 'a',
+            '$id' => 'tenant7-only',
             '$permissions' => [],
             'name' => 'tenant7',
         ]));
 
-        $probe = new Document(['$id' => 'a', '$tenant' => 1]);
+        // Adapter is currently scoped to tenant 7, but the probe carries
+        // $tenant => 1. If getSequences fell back to the adapter tenant,
+        // 'tenant1-only' would not be found and $sequence would stay
+        // empty — this assertion would fail. The discriminating signal is
+        // that the doc resolves *against* the current adapter tenant.
+        $probe = new Document(['$id' => 'tenant1-only', '$tenant' => 1]);
         [$result] = $adapter->getSequences('box', [$probe]);
-        $this->assertNotEmpty($result->getSequence());
+        $this->assertSame((string) $tenant1Doc->getSequence(), $result->getSequence());
     }
 
     /**
-     * Regression: unique-index dedupe must compare type-normalised values so
-     * two documents storing `true` collide even after the casting layer maps
-     * booleans to integers on write.
+     * Regression: unique-index dedupe must normalise booleans to integers so
+     * two documents storing `true` still collide after the casting layer
+     * maps booleans to integers on write.
      */
-    public function testUniqueIndexNormalizesBoolAndNumericString(): void
+    public function testUniqueIndexNormalizesBool(): void
     {
         $database = $this->freshDatabase();
 
@@ -815,6 +836,36 @@ class MemoryTest extends Base
             '$id' => 'second',
             '$permissions' => [Permission::read(Role::any())],
             'active' => true,
+        ]));
+    }
+
+    /**
+     * Regression: unique-index dedupe must coerce numeric strings to numbers
+     * before comparison. Bypass the Database casting layer by writing to the
+     * adapter directly so a stored row with string `"3"` and a candidate
+     * with int `3` actually meet at the normaliser.
+     */
+    public function testUniqueIndexNormalizesNumericString(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('numstr_' . \uniqid());
+        $adapter->createCollection('codes', [], []);
+        $adapter->createAttribute('codes', 'code', Database::VAR_STRING, 16, true, false, true);
+        $adapter->createIndex('codes', 'unique_code', Database::INDEX_UNIQUE, ['code'], [], []);
+
+        $collection = new Document(['$id' => 'codes']);
+
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a',
+            '$permissions' => [],
+            'code' => '3',
+        ]));
+
+        $this->expectException(DuplicateException::class);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'b',
+            '$permissions' => [],
+            'code' => 3,
         ]));
     }
 }

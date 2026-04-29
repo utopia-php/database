@@ -1194,12 +1194,12 @@ class Memory extends Adapter
 
     public function getSupportForObject(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForObjectIndexes(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForSpatialIndexNull(): bool
@@ -1621,9 +1621,14 @@ class Memory extends Adapter
             return false;
         }
 
-        $attribute = $this->mapAttribute($query->getAttribute());
-        $value = \array_key_exists($attribute, $row) ? $row[$attribute] : null;
+        $rawAttribute = $query->getAttribute();
+        $isObjectQuery = $query->isObjectAttribute() && ! \str_contains($rawAttribute, '.');
+        $value = $this->resolveAttributeValue($row, $rawAttribute);
         $queryValues = $query->getValues();
+
+        if ($isObjectQuery) {
+            return $this->matchesObject($value, $query);
+        }
 
         switch ($method) {
             case Query::TYPE_EQUAL:
@@ -1896,6 +1901,244 @@ class Memory extends Adapter
         return null;
     }
 
+    /**
+     * Object-typed query semantics — equal/notEqual treat the supplied value
+     * as a containment check (Postgres `@>` JSONB operator). contains/
+     * containsAny/containsAll treat single-key entries with scalar values
+     * as a wrapping shorthand for array containment.
+     */
+    protected function matchesObject(mixed $value, Query $query): bool
+    {
+        $haystack = $this->decodeObjectValue($value);
+        $values = $query->getValues();
+        $method = $query->getMethod();
+
+        switch ($method) {
+            case Query::TYPE_EQUAL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContains($haystack, $candidate)) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_NOT_EQUAL:
+                if ($haystack === null) {
+                    return true;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContains($haystack, $candidate)) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
+            case Query::TYPE_CONTAINS_ALL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContains($haystack, $this->wrapScalarObjectValue($candidate))) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_NOT_CONTAINS:
+                if ($haystack === null) {
+                    return true;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContains($haystack, $this->wrapScalarObjectValue($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_IS_NULL:
+                return $value === null;
+
+            case Query::TYPE_IS_NOT_NULL:
+                return $value !== null;
+        }
+
+        throw new DatabaseException('Query method '.$method.' not supported for object attributes');
+    }
+
+    protected function decodeObjectValue(mixed $value): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (\is_array($value)) {
+            return $value;
+        }
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Postgres `@>` JSONB containment in PHP. A subset arrayKey/value is
+     * considered contained when every key in the candidate is also present
+     * in the haystack with the same (or recursively contained) value, OR
+     * when the haystack is a list and contains the candidate item.
+     */
+    protected function jsonContains(mixed $haystack, mixed $candidate): bool
+    {
+        if (\is_array($haystack) && \array_is_list($haystack)) {
+            if (\is_array($candidate) && \array_is_list($candidate)) {
+                foreach ($candidate as $needle) {
+                    $matched = false;
+                    foreach ($haystack as $item) {
+                        if ($this->jsonContains($item, $needle)) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if (! $matched) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            foreach ($haystack as $item) {
+                if ($this->jsonContains($item, $candidate)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if (\is_array($haystack) && \is_array($candidate)) {
+            foreach ($candidate as $key => $value) {
+                if (! \array_key_exists($key, $haystack)) {
+                    return false;
+                }
+                if (! $this->jsonContains($haystack[$key], $value)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if ($haystack === $candidate) {
+            return true;
+        }
+        if (\is_numeric($haystack) && \is_numeric($candidate)) {
+            return $haystack + 0 === $candidate + 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * Mirror Postgres' contains/containsAny/containsAll wrapping convention —
+     * a candidate of the form `['skills' => 'typescript']` is rewritten to
+     * `['skills' => ['typescript']]` so containment hits an array element.
+     */
+    protected function wrapScalarObjectValue(mixed $candidate): mixed
+    {
+        if (! \is_array($candidate) || \count($candidate) !== 1) {
+            return $candidate;
+        }
+        $key = \array_key_first($candidate);
+        $value = $candidate[$key];
+        if (\is_array($value)) {
+            return $candidate;
+        }
+
+        return [$key => [$value]];
+    }
+
+    /**
+     * Mirror resolveAttributeValue but read from a Document — used by
+     * enforceUniqueIndexes when checking the new payload.
+     */
+    protected function resolveDocumentValue(Document $document, string $attribute): mixed
+    {
+        if (! \str_contains($attribute, '.')) {
+            $value = $document->getAttribute($attribute);
+            if ($value === null) {
+                $value = $document->getAttribute($this->mapAttribute($attribute));
+            }
+
+            return $value;
+        }
+
+        [$head, $rest] = \explode('.', $attribute, 2);
+        $value = $document->getAttribute($head);
+        // Database::encode may have JSON-encoded the head attribute — decode
+        // so the dotted-path walk descends into the underlying structure.
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+
+        return $this->resolveNestedPath($value, $rest);
+    }
+
+    /**
+     * Resolve an attribute reference (dotted path, internal alias, or bare
+     * column) against a stored row. JSON-encoded blobs are decoded on demand
+     * so dotted paths can descend into them.
+     *
+     * @param array<string, mixed> $row
+     */
+    protected function resolveAttributeValue(array $row, string $attribute): mixed
+    {
+        if (! \str_contains($attribute, '.')) {
+            $column = $this->mapAttribute($attribute);
+
+            return \array_key_exists($column, $row) ? $row[$column] : null;
+        }
+
+        [$head, $rest] = \explode('.', $attribute, 2);
+        $column = $this->mapAttribute($head);
+        $value = \array_key_exists($column, $row) ? $row[$column] : null;
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+
+        return $this->resolveNestedPath($value, $rest);
+    }
+
+    protected function resolveNestedPath(mixed $value, string $path): mixed
+    {
+        $parts = \explode('.', $path);
+        foreach ($parts as $part) {
+            if (\is_array($value) && \array_key_exists($part, $value)) {
+                $value = $value[$part];
+
+                continue;
+            }
+
+            return null;
+        }
+
+        return $value;
+    }
+
     protected function mapAttribute(string $attribute): string
     {
         return match ($attribute) {
@@ -2062,12 +2305,7 @@ class Memory extends Adapter
 
             $signature = [];
             foreach ($attributes as $attribute) {
-                $column = $this->mapAttribute($attribute);
-                $docValue = $document->getAttribute($attribute);
-                if ($docValue === null) {
-                    $docValue = $document->getAttribute($column);
-                }
-                $signature[] = $this->normalizeIndexValue($docValue);
+                $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
             }
 
             if (\in_array(null, $signature, true)) {
@@ -2088,8 +2326,7 @@ class Memory extends Adapter
 
                 $rowSignature = [];
                 foreach ($attributes as $attribute) {
-                    $column = $this->mapAttribute($attribute);
-                    $rowSignature[] = $this->normalizeIndexValue($row[$column] ?? null);
+                    $rowSignature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
                 }
 
                 if ($rowSignature === $signature) {

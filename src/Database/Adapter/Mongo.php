@@ -3666,6 +3666,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         foreach ($values as $attribute => $value) {
             $flattendQuery = $this->flattenWithDotNotation(is_string($attribute) ? $attribute : '', $value);
             $flattenedObjectKey = array_key_first($flattendQuery);
+            if ($flattenedObjectKey === null) {
+                continue;
+            }
             $queryValue = $flattendQuery[$flattenedObjectKey];
             $queryAttribute = $query->getAttribute();
             $flattenedQueryField = array_key_first($flattendQuery);

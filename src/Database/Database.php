@@ -1993,6 +1993,7 @@ class Database
         if (
             $collectionId === self::METADATA &&
             $this->adapter->getSharedTables() &&
+            $documentId !== null &&
             isset($this->globalCollections[$documentId])
         ) {
             $tenantSegment = null;

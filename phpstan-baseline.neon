@@ -159,7 +159,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
-			count: 1
+			count: 2
 			path: src/Database/Adapter/MySQL.php
 
 		-

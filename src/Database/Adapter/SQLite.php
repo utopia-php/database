@@ -209,11 +209,19 @@ class SQLite extends MariaDB
                 ->prepare($permissions)
                 ->execute();
 
-            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+            // For shared tables the same `_uid` legitimately appears across
+            // tenants — make the UNIQUE constraint composite so cross-tenant
+            // documents don't collide and `ON CONFLICT(_uid, _tenant)` from
+            // the upsert path has a matching index to land on.
+            $uidColumns = $this->sharedTables ? ['_uid', '_tenant'] : ['_uid'];
+            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, $uidColumns, [], []);
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $permsColumns = $this->sharedTables
+                ? ['_document', '_type', '_permission', '_tenant']
+                : ['_document', '_type', '_permission'];
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, $permsColumns, [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {
@@ -1167,7 +1175,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForUpserts(): bool
     {
-        return false;
+        return true;
     }
 
     /**

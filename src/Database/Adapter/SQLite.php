@@ -45,42 +45,6 @@ class SQLite extends MariaDB
     private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
     private const MARIADB_LONGTEXT_BYTES = '4294967295';
 
-    public function __construct(mixed $pdo)
-    {
-        parent::__construct($pdo);
-
-        $this->registerUserFunctions();
-    }
-
-    /**
-     * SQLite has no built-in regex operator — the inherited REGEXP path
-     * relies on the connection supplying one. Register a PHP-implemented
-     * REGEXP UDF that calls preg_match (PCRE), forwarding through the
-     * Utopia PDO wrapper / pool proxies via __call. Failures are
-     * swallowed so a non-SQLite PDO doesn't blow up adapter
-     * construction.
-     */
-    private function registerUserFunctions(): void
-    {
-        $pcre = static function (?string $pattern, ?string $value): int {
-            if ($pattern === null || $value === null) {
-                return 0;
-            }
-            $delimited = '/' . \str_replace('/', '\/', $pattern) . '/u';
-
-            return @\preg_match($delimited, $value) === 1 ? 1 : 0;
-        };
-
-        try {
-            $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
-        } catch (\Throwable) {
-            // Either the PDO isn't SQLite or the proxy doesn't expose
-            // the create-function hook — treat REGEXP as unsupported on
-            // this connection and let the support flag take care of
-            // gating queries.
-        }
-    }
-
     /**
      * @inheritDoc
      */
@@ -2172,7 +2136,10 @@ class SQLite extends MariaDB
      */
     public function getSupportForPCRERegex(): bool
     {
-        return true;
+        // SQLite has no built-in REGEXP. Re-enable once we figure out a
+        // safe place to register the PHP UDF that doesn't trip the test
+        // harness's connection lifecycle.
+        return false;
     }
 
     /**

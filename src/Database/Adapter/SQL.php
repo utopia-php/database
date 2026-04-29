@@ -95,18 +95,6 @@ abstract class SQL extends Adapter
     private ?AttributeMap $attributeMap = null;
 
     /**
-     * Last applied query timeout in milliseconds, or null when unknown / never
-     * applied. Tracked so execute() can skip redundant SET statements when the
-     * timeout hasn't changed since the previous execute on this connection.
-     */
-    private ?int $appliedTimeout = null;
-
-    protected function getAppliedTimeout(): ?int
-    {
-        return $this->appliedTimeout;
-    }
-
-    /**
      * Bind builder-produced positional parameters onto a prepared statement.
      *
      * Centralises the find / count / sum binding loops so the
@@ -137,22 +125,6 @@ abstract class SQL extends Adapter
         }
     }
 
-    protected function setAppliedTimeout(int $milliseconds): void
-    {
-        $this->appliedTimeout = $milliseconds;
-    }
-
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
-    {
-        $this->appliedTimeout = null;
-        parent::setTimeout($milliseconds, $event);
-    }
-
-    public function clearTimeout(Event $event = Event::All): void
-    {
-        $this->appliedTimeout = null;
-        parent::clearTimeout($event);
-    }
 
     /**
      * Accepts Utopia\Database\PDO or any PDO-compatible proxy (e.g. Swoole\Database\PDOProxy).

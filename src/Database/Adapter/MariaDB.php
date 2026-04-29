@@ -826,16 +826,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
     protected function execute(mixed $stmt): bool
     {
-        // Skip the SET round-trip when the timeout hasn't changed since the
-        // last execute on this connection. The Pool adapter resets timeout
-        // (and therefore the cached value) per checkout via setTimeout /
-        // clearTimeout, so this can't leak across pooled requests.
-        if ($this->timeout !== $this->getAppliedTimeout()) {
-            $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
-            $pdo = $this->getPDO();
-            $pdo->exec("SET max_statement_time = " . (float) $seconds);
-            $this->setAppliedTimeout($this->timeout);
-        }
+        $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
+        $this->getPDO()->exec("SET max_statement_time = " . (float) $seconds);
 
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();

@@ -179,6 +179,8 @@ trait Indexes
             operationDescription: "index creation '{$id}'"
         );
 
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+
         $this->trigger(Event::IndexCreate, $indexDoc);
 
         return true;
@@ -350,6 +352,8 @@ trait Indexes
             operationDescription: "index deletion '{$id}'",
             silentRollback: true
         );
+
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
         $this->trigger(Event::IndexDelete, $indexDeleted);
 

@@ -552,6 +552,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $result = $this->execute($this->getPDO()
                 ->prepare($sql));
 
+            // Rename mutates the schema. Invalidate now so a subsequent
+            // alterColumnType failure can't leave the cache pointing at the
+            // pre-rename column id.
+            $this->invalidateSpatialAttributesCache($collection);
+
             if (! $result) {
                 return false;
             }
@@ -578,6 +583,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
             return $ok;
         } catch (PDOException $e) {
+            // alterColumnType can partially modify the column; drop the cache
+            // so the next read rescans live schema.
+            $this->invalidateSpatialAttributesCache($collection);
             throw $this->processException($e);
         }
     }

@@ -79,9 +79,10 @@ abstract class SQL extends Adapter
     protected int $floatPrecision = 17;
 
     /**
-     * Memoized spatial column ids per collection. Spatial columns can only
-     * change via schema mutations (createAttribute / deleteAttribute), so the
-     * cache is invalidated only on those paths via invalidateSpatialAttributesCache().
+     * Memoized spatial column ids, keyed by database/namespace/collection so
+     * that Pool sibling adapters reusing the same instance across tenants
+     * never cross-contaminate. Invalidated on schema mutations via
+     * invalidateSpatialAttributesCache().
      *
      * @var array<string, list<string>>
      */
@@ -682,8 +683,14 @@ abstract class SQL extends Adapter
                 $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
             }
 
+            // Hoist per-row guards out of the document loop so a 1k-doc batch
+            // doesn't reallocate the spatial map and re-resolve the capability
+            // 1k times.
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+            $intBools = $this->supports(Capability::IntegerBooleans);
+
             foreach ($documents as $document) {
-                $row = $this->buildDocumentRow($document, $attributeKeys, $spatialAttributes);
+                $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
                 $row = $this->decorateRow($row, $this->documentMetadata($document));
                 $builder->set($row);
             }
@@ -2171,7 +2178,12 @@ abstract class SQL extends Adapter
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
-        return $this->getPDO()->prepare($sql)->execute();
+        $ok = $this->getPDO()->prepare($sql)->execute();
+        // Schema is gone; drop any memoized spatial column list so a later
+        // recreate-with-different-schema doesn't see the stale entry.
+        $this->invalidateSpatialAttributesCache($id);
+
+        return $ok;
     }
 
     /**
@@ -3332,10 +3344,12 @@ abstract class SQL extends Adapter
      * value (the caller must handle ST_GeomFromText wrapping separately).
      *
      * @param  list<string>  $attributeKeys
-     * @param  list<string>  $spatialAttributes
+     * @param  array<string, true>  $spatialMap  Pre-built lookup map; the caller
+     *         hoists this out of the per-document loop so we don't allocate it
+     *         per row in batch inserts.
      * @return array<string, mixed>
      */
-    protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialAttributes = []): array
+    protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialMap = [], ?bool $intBools = null): array
     {
         $attributes = $document->getAttributes();
         $row = [
@@ -3354,10 +3368,7 @@ abstract class SQL extends Adapter
             $row['_id'] = $document->getSequence();
         }
 
-        // Hoist per-row guards out of the cell loop: O(1) spatial lookup and
-        // a constant adapter capability check.
-        $spatialMap = \array_fill_keys($spatialAttributes, true);
-        $intBools = $this->supports(Capability::IntegerBooleans);
+        $intBools ??= $this->supports(Capability::IntegerBooleans);
 
         foreach ($attributeKeys as $key) {
             if (isset($row[$key])) {
@@ -3386,7 +3397,7 @@ abstract class SQL extends Adapter
      */
     protected function getSpatialAttributes(Document $collection): array
     {
-        $key = $collection->getId();
+        $key = $this->spatialCacheKey($collection->getId());
         if (isset($this->spatialAttributesCache[$key])) {
             return $this->spatialAttributesCache[$key];
         }
@@ -3408,12 +3419,22 @@ abstract class SQL extends Adapter
 
     /**
      * Invalidate the spatial attributes cache for a collection. Called from
-     * createAttribute / deleteAttribute paths so the next write rescans the
-     * column list.
+     * createAttribute / deleteAttribute / updateAttribute / renameAttribute /
+     * deleteCollection paths so the next write rescans the column list.
      */
     protected function invalidateSpatialAttributesCache(string $collectionId): void
     {
-        unset($this->spatialAttributesCache[$collectionId]);
+        unset($this->spatialAttributesCache[$this->spatialCacheKey($collectionId)]);
+    }
+
+    /**
+     * Compose a cache key scoped to the current database/namespace/tenant so
+     * that Pool sibling adapters reused across tenants never collide on a
+     * shared collection id.
+     */
+    private function spatialCacheKey(string $collectionId): string
+    {
+        return $this->database.'/'.$this->namespace.'/'.$collectionId;
     }
 
     /**

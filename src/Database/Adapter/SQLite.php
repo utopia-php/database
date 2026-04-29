@@ -247,16 +247,20 @@ class SQLite extends MariaDB
         $permissions = $namespace . '_' . $collection . '_perms';
         $ftsPrefix = "{$namespace}_{$this->tenant}_{$collection}_";
 
+        // FTS5 virtual tables don't show up in dbstat themselves — their
+        // storage is backed by shadow tables named `<vtable>_data`,
+        // `<vtable>_idx`, `<vtable>_docsize`, and `<vtable>_config`. Match
+        // the prefix and let LIKE pull in all of them.
         $stmt = $this->getPDO()->prepare("
              SELECT COALESCE(SUM(\"pgsize\"), 0)
              FROM \"dbstat\"
-             WHERE name = :name OR name = :perms OR (name LIKE :fts_prefix AND name LIKE '%_fts');
+             WHERE name = :name OR name = :perms OR name LIKE :fts_pattern;
         ");
 
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':perms', $permissions);
-        $ftsLike = $ftsPrefix . '%';
-        $stmt->bindParam(':fts_prefix', $ftsLike);
+        $ftsPattern = $ftsPrefix . '%_fts%';
+        $stmt->bindParam(':fts_pattern', $ftsPattern);
 
         try {
             $stmt->execute();
@@ -1048,7 +1052,14 @@ class SQLite extends MariaDB
      */
     public function getSupportForFulltextWildcardIndex(): bool
     {
-        return true;
+        // FTS5's unicode61 tokenizer strips characters like `@` and `.`
+        // before indexing, so a search for "al@ba.io" applied as a prefix
+        // wildcard ("al ba io*") matches a doc containing "al@ba.io" the
+        // same way the non-wildcard branch does. The upstream test gates
+        // its expectations on this flag and the false branch matches
+        // SQLite's actual tokenisation behaviour; flagging as true would
+        // claim a behavioural distinction we don't deliver.
+        return false;
     }
 
     /**
@@ -2332,17 +2343,17 @@ class SQLite extends MariaDB
         $results = [];
         foreach ($rows as $row) {
             $rawType = (string) ($row['type'] ?? '');
-            [$dataType, $length] = $this->parseSqliteColumnType($rawType);
+            $parsed = $this->parseSqliteColumnType($rawType);
 
             $results[] = new Document([
                 '$id' => $row['name'],
                 'columnDefault' => $row['dflt_value'] ?? null,
                 'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
-                'dataType' => $dataType,
-                'characterMaximumLength' => $length,
-                'numericPrecision' => null,
-                'numericScale' => null,
-                'datetimePrecision' => null,
+                'dataType' => $parsed['dataType'],
+                'characterMaximumLength' => $parsed['characterMaximumLength'],
+                'numericPrecision' => $parsed['numericPrecision'],
+                'numericScale' => $parsed['numericScale'],
+                'datetimePrecision' => $parsed['datetimePrecision'],
                 'columnType' => \strtolower($rawType),
                 'columnKey' => !empty($row['pk']) ? 'PRI' : '',
                 'extra' => '',
@@ -2397,21 +2408,109 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Parse a SQLite type declaration like `VARCHAR(36)` into
-     * [dataType, length]. Length is null when no parenthesised size is
-     * present.
+     * Parse a SQLite type declaration like `VARCHAR(36)` into the column-info
+     * shape exposed by getSchemaAttributes. Mirrors what MariaDB returns from
+     * INFORMATION_SCHEMA.COLUMNS so callers don't have to special-case the
+     * adapter — TEXT family types report their MariaDB byte ceilings,
+     * VARCHAR/CHAR thread the parenthesised size into characterMaximumLength,
+     * DATETIME's parenthesised value routes to datetimePrecision, and
+     * integer types fall back to MariaDB's default precision values.
      *
-     * @return array{0: string, 1: int|null}
+     * @return array{
+     *     dataType: string,
+     *     characterMaximumLength: ?string,
+     *     numericPrecision: ?string,
+     *     numericScale: ?string,
+     *     datetimePrecision: ?string,
+     * }
      */
     private function parseSqliteColumnType(string $declaration): array
     {
+        $declaration = \trim(\preg_replace('/\s+/', ' ', $declaration) ?? '');
+
+        $base = $declaration;
+        $argument = null;
         if (\preg_match('/^([A-Za-z]+)\s*\((\d+)/', $declaration, $matches) === 1) {
-            return [\strtolower($matches[1]), (int) $matches[2]];
+            $base = $matches[1];
+            $argument = (int) $matches[2];
         }
 
-        $type = \trim(\preg_replace('/\s+/', ' ', $declaration) ?? '');
+        $dataType = \strtolower($base);
 
-        return [\strtolower($type), null];
+        $result = [
+            'dataType' => $dataType,
+            'characterMaximumLength' => null,
+            'numericPrecision' => null,
+            'numericScale' => null,
+            'datetimePrecision' => null,
+        ];
+
+        switch ($dataType) {
+            case 'varchar':
+            case 'char':
+                if ($argument !== null) {
+                    $result['characterMaximumLength'] = (string) $argument;
+                }
+                break;
+
+            case 'text':
+                $result['characterMaximumLength'] = '65535';
+                break;
+
+            case 'mediumtext':
+                $result['characterMaximumLength'] = '16777215';
+                break;
+
+            case 'longtext':
+            case 'json':
+                $result['characterMaximumLength'] = '4294967295';
+                break;
+
+            case 'datetime':
+            case 'timestamp':
+            case 'time':
+                if ($argument !== null) {
+                    $result['datetimePrecision'] = (string) $argument;
+                }
+                break;
+
+            case 'tinyint':
+                $result['numericPrecision'] = '3';
+                break;
+
+            case 'smallint':
+                $result['numericPrecision'] = '5';
+                break;
+
+            case 'mediumint':
+                $result['numericPrecision'] = '7';
+                break;
+
+            case 'int':
+            case 'integer':
+                $result['numericPrecision'] = '10';
+                break;
+
+            case 'bigint':
+                $result['numericPrecision'] = '19';
+                break;
+
+            case 'decimal':
+            case 'numeric':
+                $result['numericPrecision'] = $argument !== null ? (string) $argument : '10';
+                $result['numericScale'] = '0';
+                break;
+
+            case 'float':
+                $result['numericPrecision'] = '12';
+                break;
+
+            case 'double':
+                $result['numericPrecision'] = '22';
+                break;
+        }
+
+        return $result;
     }
 
     /**

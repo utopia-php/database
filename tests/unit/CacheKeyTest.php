@@ -142,7 +142,12 @@ class CacheKeyTest extends TestCase
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
+            return match ($capability) {
+                Capability::Hostname => true,
+                default => false,
+            };
+        });
         $adapter->method('getHostname')->willReturn($hostname);
         $adapter->method('getTenant')->willReturn(999);
         $adapter->method('getSharedTables')->willReturn(true);

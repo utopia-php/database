@@ -412,7 +412,7 @@ abstract class SQL extends Adapter
     {
         $schema = $this->createSchemaBuilder();
         $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
-            $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         });
 
         $sql = $result->query;
@@ -442,7 +442,7 @@ abstract class SQL extends Adapter
         $schema = $this->createSchemaBuilder();
         $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attributes) {
             foreach ($attributes as $attribute) {
-                $this->addBlueprintColumn(
+                $this->addTableColumn(
                     $table,
                     $attribute->key,
                     $attribute->type,
@@ -3185,7 +3185,7 @@ abstract class SQL extends Adapter
      *
      * @throws DatabaseException
      */
-    protected function addBlueprintColumn(
+    protected function addTableColumn(
         Table $table,
         string $id,
         ColumnType $type,

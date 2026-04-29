@@ -655,7 +655,7 @@ class Database
     public function from(string $collection): \Utopia\Query\Builder
     {
         $builder = $this->adapter->getBuilder($collection);
-        $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $plan) => $this->execute($plan));
+        $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
         return $builder;
     }
@@ -666,7 +666,7 @@ class Database
     public function schema(): \Utopia\Query\Schema
     {
         $schema = $this->adapter->getSchema();
-        $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $plan) => $this->execute($plan));
+        $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
         return $schema;
     }

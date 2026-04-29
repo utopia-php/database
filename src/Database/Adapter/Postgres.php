@@ -287,7 +287,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                     }
                 }
 
-                $this->addBlueprintColumn(
+                $this->addTableColumn(
                     $table,
                     $attribute->key,
                     $attribute->type,
@@ -499,7 +499,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         $schema = $this->createSchemaBuilder();
         $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
-            $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         });
 
         // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended

@@ -250,9 +250,12 @@ class SQLite extends MariaDB
         // FTS5 virtual tables don't show up in dbstat themselves — their
         // storage is backed by shadow tables named `<vtable>_data`,
         // `<vtable>_idx`, `<vtable>_docsize`, and `<vtable>_config`. Match
-        // the prefix and let LIKE pull in all of them.
+        // the prefix and let LIKE pull in all of them. Sum "payload" rather
+        // than "pgsize" so the result tracks actual stored bytes — page
+        // allocation is granular at 4KB, which would let small inserts
+        // appear as a no-op against the parent assertions.
         $stmt = $this->getPDO()->prepare("
-             SELECT COALESCE(SUM(\"pgsize\"), 0)
+             SELECT COALESCE(SUM(\"payload\"), 0) + COALESCE(SUM(\"pgsize\" - \"unused\" - \"payload\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern;
         ");
@@ -2515,12 +2518,27 @@ class SQLite extends MariaDB
 
     /**
      * SQLite has no MATCH ... AGAINST. Route SEARCH/NOT_SEARCH through the
-     * collection's FTS5 virtual table; everything else falls through to the
-     * MariaDB implementation we inherit from.
+     * collection's FTS5 virtual table; for LIKE-using comparisons append
+     * an explicit ESCAPE clause because SQLite — unlike MariaDB — does
+     * not honour `\` as a default escape and the inherited
+     * escapeWildcards() emits backslash escapes on every wildcard.
+     * Everything else falls through to the MariaDB implementation.
      */
     protected function getSQLCondition(Query $query, array &$binds): string
     {
         $method = $query->getMethod();
+
+        $likeMethods = [
+            Query::TYPE_STARTS_WITH,
+            Query::TYPE_NOT_STARTS_WITH,
+            Query::TYPE_ENDS_WITH,
+            Query::TYPE_NOT_ENDS_WITH,
+        ];
+
+        if (\in_array($method, $likeMethods, true)) {
+            return $this->getLikeCondition($query, $binds);
+        }
+
         if ($method !== Query::TYPE_SEARCH && $method !== Query::TYPE_NOT_SEARCH) {
             return parent::getSQLCondition($query, $binds);
         }
@@ -2558,10 +2576,53 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Compile STARTS_WITH / ENDS_WITH (and their NOT variants) into LIKE
+     * with an explicit ESCAPE '\' clause. Inherited escapeWildcards()
+     * backslash-escapes every wildcard before binding; SQLite needs the
+     * ESCAPE clause to honour those backslashes the way MariaDB does
+     * implicitly.
+     *
+     * @param array<string,mixed> $binds
+     */
+    protected function getLikeCondition(Query $query, array &$binds): string
+    {
+        $method = $query->getMethod();
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->quote($this->filter($query->getAttribute()));
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
+
+        $isNotQuery = \in_array($method, [
+            Query::TYPE_NOT_STARTS_WITH,
+            Query::TYPE_NOT_ENDS_WITH,
+        ], true);
+
+        $conditions = [];
+        foreach ($query->getValues() as $key => $value) {
+            $bound = match ($method) {
+                Query::TYPE_STARTS_WITH, Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                Query::TYPE_ENDS_WITH, Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                default => $value,
+            };
+
+            $binds[":{$placeholder}_{$key}"] = $bound;
+            $operator = $isNotQuery ? 'NOT LIKE' : 'LIKE';
+            $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key} ESCAPE '\\'";
+        }
+
+        $separator = $isNotQuery ? ' AND ' : ' OR ';
+
+        return empty($conditions) ? '' : '(' . \implode($separator, $conditions) . ')';
+    }
+
+    /**
      * Sanitise a SEARCH term for FTS5. The inherited getFulltextValue keeps
      * dots and other characters that FTS5 treats as syntax — strip anything
-     * that isn't a token character, collapse whitespace, and append the
-     * trailing prefix wildcard the boolean-mode contract relies on.
+     * that isn't a token character, collapse whitespace, OR-join the
+     * remaining terms, and prefix-match the trailing token. This matches
+     * MariaDB's BOOLEAN MODE contract: terms without operators are OR'd
+     * together and the final term is treated as a prefix.
      *
      * Returns '' when the input has no token characters; callers should
      * short-circuit instead of binding the empty string.
@@ -2584,6 +2645,10 @@ class SQLite extends MariaDB
             return '"' . $sanitized . '"';
         }
 
-        return $sanitized . '*';
+        $tokens = \explode(' ', $sanitized);
+        $last = \array_pop($tokens) . '*';
+        $tokens[] = $last;
+
+        return \implode(' OR ', $tokens);
     }
 }

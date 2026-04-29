@@ -2515,11 +2515,20 @@ class Memory extends Adapter
                 $av = $a[$column] ?? null;
                 $bv = $b[$column] ?? null;
 
-                if ($av == $bv) {
+                if ($av === $bv) {
                     continue;
                 }
 
-                $cmp = ($av < $bv) ? -1 : 1;
+                // SQL collation sorts NULLs first under ASC; mirror that
+                // explicitly so PHP's loose ordering does not equate
+                // null with 0 / "".
+                if ($av === null) {
+                    $cmp = -1;
+                } elseif ($bv === null) {
+                    $cmp = 1;
+                } else {
+                    $cmp = ($av < $bv) ? -1 : 1;
+                }
 
                 return $direction === Database::ORDER_ASC ? $cmp : -$cmp;
             }
@@ -2558,8 +2567,16 @@ class Memory extends Adapter
                 $current = $row[$column] ?? null;
                 $ref = $cursor[$attribute] ?? null;
 
-                if ($current == $ref) {
+                if ($current === $ref) {
                     continue;
+                }
+
+                // Match applyOrdering: NULLs sort first under ASC.
+                if ($current === null) {
+                    return $direction === Database::ORDER_DESC;
+                }
+                if ($ref === null) {
+                    return $direction === Database::ORDER_ASC;
                 }
 
                 if ($direction === Database::ORDER_ASC) {

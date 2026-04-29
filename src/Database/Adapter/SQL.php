@@ -386,6 +386,10 @@ abstract class SQL extends Adapter
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
         }
+        if (\array_key_exists('_deletedAt', $document)) {
+            $document['$deletedAt'] = $document['_deletedAt'];
+            unset($document['_deletedAt']);
+        }
         if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
@@ -1706,6 +1710,10 @@ abstract class SQL extends Adapter
         if (\in_array('$updatedAt', $selections)) {
             $selections[] = $this->getInternalKeyForAttribute('$updatedAt');
             $selections = \array_diff($selections, ['$updatedAt']);
+        }
+        if (\in_array('$deletedAt', $selections)) {
+            $selections[] = $this->getInternalKeyForAttribute('$deletedAt');
+            $selections = \array_diff($selections, ['$deletedAt']);
         }
         if (\in_array('$collection', $selections)) {
             $selections[] = $this->getInternalKeyForAttribute('$collection');

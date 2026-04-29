@@ -105,6 +105,31 @@ class MemoryTest extends Base
     }
 
     /**
+     * Operator scope tests that combine upserts with operators only gate on
+     * getSupportForOperators() — Memory doesn't implement upserts, so we
+     * skip the upsert variants explicitly.
+     */
+    public function testBulkUpsertWithOperatorsCallbackReceivesFreshData(): void
+    {
+        $this->markTestSkipped('Memory adapter does not implement upserts.');
+    }
+
+    public function testSingleUpsertWithOperators(): void
+    {
+        $this->markTestSkipped('Memory adapter does not implement upserts.');
+    }
+
+    public function testUpsertOperatorsOnNewDocuments(): void
+    {
+        $this->markTestSkipped('Memory adapter does not implement upserts.');
+    }
+
+    public function testUpsertDocumentsWithAllOperators(): void
+    {
+        $this->markTestSkipped('Memory adapter does not implement upserts.');
+    }
+
+    /**
      * Inherited test creates a self-relationship; Memory has no relationships.
      */
     public function testAttributeNamesWithDots(): void

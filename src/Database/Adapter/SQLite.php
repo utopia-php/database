@@ -286,6 +286,7 @@ class SQLite extends MariaDB
         try {
             $stmt->execute();
             $size = (int) $stmt->fetchColumn();
+            $stmt->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
@@ -378,7 +379,10 @@ class SQLite extends MariaDB
             $stmt->bindValue(':max', $size, PDO::PARAM_INT);
             $stmt->execute();
 
-            if ($stmt->fetchColumn() !== false) {
+            $exceeds = $stmt->fetchColumn() !== false;
+            $stmt->closeCursor();
+
+            if ($exceeds) {
                 throw new TruncateException("Attribute '{$id}' has values exceeding new size {$size}");
             }
         }
@@ -642,6 +646,11 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_index', $regularIndex);
         $stmt->execute();
         $hasRegular = $stmt->fetchColumn() !== false;
+        // Free the read cursor before issuing DDL — SQLite holds a SHARED
+        // lock on the database while a statement has unfetched rows, and
+        // any subsequent DROP INDEX / ALTER TABLE under emulated prepares
+        // will trip "database table is locked".
+        $stmt->closeCursor();
 
         if (!$hasRegular && $this->dropFulltextIndexById($name, $id)) {
             return true;
@@ -678,6 +687,7 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_prefix', $prefix . '%');
         $stmt->execute();
         $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt->closeCursor();
 
         if (empty($tables)) {
             return false;
@@ -2449,6 +2459,7 @@ class SQLite extends MariaDB
         $stmt = $this->getPDO()->prepare("PRAGMA index_list(`{$table}`)");
         $stmt->execute();
         $indexes = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         $results = [];
         foreach ($indexes as $index) {
@@ -2458,6 +2469,7 @@ class SQLite extends MariaDB
             $colStmt = $this->getPDO()->prepare("PRAGMA index_info(`{$name}`)");
             $colStmt->execute();
             $cols = $colStmt->fetchAll();
+            $colStmt->closeCursor();
 
             \usort($cols, fn ($a, $b) => ((int) $a['seqno']) <=> ((int) $b['seqno']));
 
@@ -2685,11 +2697,13 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_prefix', $prefix . '%');
         $stmt->execute();
         $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt->closeCursor();
 
         foreach ($tables as $table) {
             $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
+            $info->closeCursor();
             foreach ($cols as $col) {
                 if (($col['name'] ?? null) === $attribute) {
                     return $table;

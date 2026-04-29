@@ -667,18 +667,6 @@ parameters:
 			path: src/Database/Cache/QueryCache.php
 
 		-
-			message: '#^Binary operation "\." between mixed and ''\:\:'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Database/Database.php
-
-		-
-			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Database/Database.php
-
-		-
 			message: '#^Call to function is_null\(\) with mixed will always evaluate to false\.$#'
 			identifier: function.impossibleType
 			count: 1
@@ -1921,13 +1909,13 @@ parameters:
 			path: tests/e2e/Adapter/Base.php
 
 		-
-			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1084\:\:__construct\(\) has parameter \$events with no value type specified in iterable type array\.$#'
+			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1099\:\:__construct\(\) has parameter \$events with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/e2e/Adapter/Base.php
 
 		-
-			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1084\:\:__construct\(\) has parameter \$test with no type specified\.$#'
+			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1099\:\:__construct\(\) has parameter \$test with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
 			path: tests/e2e/Adapter/Base.php

@@ -223,7 +223,9 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
 
     public function getHostname(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**

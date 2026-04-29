@@ -220,9 +220,6 @@ trait Attributes
             if (empty($attribute->key)) {
                 throw new DatabaseException('Missing attribute key');
             }
-            if (empty($attribute->type)) {
-                throw new DatabaseException('Missing attribute type');
-            }
 
             $existsInSchema = false;
 

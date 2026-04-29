@@ -213,6 +213,7 @@ trait Relationships
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
 
+        /** @var ?string $junctionCollection */
         $junctionCollection = null;
         if ($type === RelationType::ManyToMany) {
             $junctionCollection = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();

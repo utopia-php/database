@@ -104,12 +104,22 @@ class Permissions extends Interceptor
         $addBuilder = ($context->createBuilder)()->into(($context->getTableRaw)($collection.'_perms'));
         $hasAdditions = false;
 
+        $eligible = [];
         foreach ($documents as $document) {
             if ($document->getAttribute('$skipPermissionsUpdate', false)) {
                 continue;
             }
+            $eligible[] = $document;
+        }
 
-            $permissions = $this->readCurrentPermissions($collection, $document, $context);
+        if (empty($eligible)) {
+            return;
+        }
+
+        $permissionsMap = $this->readCurrentPermissionsBatch($collection, $eligible, $context);
+
+        foreach ($eligible as $document) {
+            $permissions = $permissionsMap[$document->getId()] ?? $this->emptyPermissions();
 
             foreach (self::PERM_TYPES as $type) {
                 $diff = \array_diff($permissions[$type->value], $updates->getPermissionsByType($type));
@@ -249,9 +259,32 @@ class Permissions extends Interceptor
      */
     private function readCurrentPermissions(string $collection, Document $document, WriteContext $context): array
     {
+        $map = $this->readCurrentPermissionsBatch($collection, [$document], $context);
+
+        return $map[$document->getId()] ?? $this->emptyPermissions();
+    }
+
+    /**
+     * Batched version of readCurrentPermissions — issues a single SELECT scoped
+     * to all document ids and groups rows into the same shape per document.
+     *
+     * @param  array<Document>  $documents
+     * @return array<string, array<string, list<string>>>
+     */
+    private function readCurrentPermissionsBatch(string $collection, array $documents, WriteContext $context): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $documentIds = [];
+        foreach ($documents as $document) {
+            $documentIds[] = $document->getId();
+        }
+
         $readBuilder = ($context->newBuilder)($collection.'_perms');
-        $readBuilder->select(['_type', '_permission']);
-        $readBuilder->filter([Query::equal('_document', [$document->getId()])]);
+        $readBuilder->select(['_document', '_type', '_permission']);
+        $readBuilder->filter([Query::equal('_document', $documentIds)]);
 
         $readResult = $readBuilder->build();
         /** @var PDOStatement $readStmt */
@@ -261,21 +294,38 @@ class Permissions extends Interceptor
         $rows = (array) $readStmt->fetchAll();
         $readStmt->closeCursor();
 
-        /** @var array<string, list<string>> $initial */
+        $result = [];
+        foreach ($documentIds as $id) {
+            $result[$id] = $this->emptyPermissions();
+        }
+
+        foreach ($rows as $row) {
+            $docId = $row['_document'] ?? null;
+            $type = $row['_type'] ?? null;
+            $permission = $row['_permission'] ?? null;
+            if ($docId === null || $type === null || $permission === null) {
+                continue;
+            }
+            if (! isset($result[$docId])) {
+                $result[$docId] = $this->emptyPermissions();
+            }
+            $result[$docId][$type][] = $permission;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function emptyPermissions(): array
+    {
         $initial = [];
         foreach (self::PERM_TYPES as $type) {
             $initial[$type->value] = [];
         }
 
-        /** @var array<string, list<string>> $result */
-        $result = \array_reduce($rows, function (array $carry, array $item) {
-            /** @var array<string, list<string>> $carry */
-            $carry[$item['_type']][] = $item['_permission'];
-
-            return $carry;
-        }, $initial);
-
-        return $result;
+        return $initial;
     }
 
     /**

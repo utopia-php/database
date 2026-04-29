@@ -572,8 +572,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            return $this->execute($this->getPDO()
+            $ok = $this->execute($this->getPDO()
                 ->prepare($sql));
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -626,8 +629,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         $sql = $result->query;
 
-        return $this->execute($this->getPDO()
+        $ok = $this->execute($this->getPDO()
             ->prepare($sql));
+        $this->invalidateSpatialAttributesCache($collection);
+
+        return $ok;
     }
 
     /**

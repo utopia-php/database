@@ -566,9 +566,12 @@ abstract class SQL extends Adapter
         $sql = $result->query;
 
         try {
-            return $this->getPDO()
+            $ok = $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

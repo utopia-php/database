@@ -579,6 +579,50 @@ class MemoryTest extends Base
         $this->assertEquals('tenant1', $tenant1Doc->getAttribute('name'));
     }
 
+    /**
+     * Regression: under shared tables a unique index must scope per-tenant.
+     * Two tenants storing the same value in a unique-indexed attribute must
+     * not collide — MariaDB models this as a composite (attr, _tenant) index.
+     */
+    public function testSharedTablesUniqueIndexPerTenant(): void
+    {
+        $adapter = new Memory();
+        $adapter->setNamespace('share_uniq_' . \uniqid());
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(1);
+        $adapter->createCollection('emails', [], []);
+        $adapter->createAttribute('emails', 'addr', Database::VAR_STRING, 128, true, false, true);
+        $adapter->createIndex('emails', 'unique_addr', Database::INDEX_UNIQUE, ['addr'], [], []);
+
+        $collection = new Document(['$id' => 'emails']);
+
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a',
+            'addr' => 'shared@example.com',
+            '$permissions' => [],
+        ]));
+
+        $adapter->setTenant(2);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'b',
+            'addr' => 'shared@example.com',
+            '$permissions' => [],
+        ]));
+
+        $this->assertEquals('shared@example.com', $adapter->getDocument($collection, 'b')->getAttribute('addr'));
+
+        $adapter->setTenant(1);
+        $this->assertEquals('shared@example.com', $adapter->getDocument($collection, 'a')->getAttribute('addr'));
+
+        // Same-tenant duplicate must still throw.
+        $this->expectException(DuplicateException::class);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'a-dup',
+            'addr' => 'shared@example.com',
+            '$permissions' => [],
+        ]));
+    }
+
     public function testFindThrowsWhenCollectionMissing(): void
     {
         $adapter = new Memory();

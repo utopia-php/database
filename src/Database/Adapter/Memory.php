@@ -1003,9 +1003,6 @@ class Memory extends Adapter
             // Build the hash table while we scan so we can reuse it for fast
             // probes after the index lands — no second pass over the rows.
             foreach ($this->data[$key]['documents'] as $docKey => $row) {
-                if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
-                    continue;
-                }
                 $signature = [];
                 foreach ($attributes as $attribute) {
                     $signature[] = $this->normalizeIndexValue(
@@ -1014,6 +1011,9 @@ class Memory extends Adapter
                 }
                 if (\in_array(null, $signature, true)) {
                     continue;
+                }
+                if ($this->sharedTables) {
+                    \array_unshift($signature, $row['_tenant'] ?? null);
                 }
                 $hash = \serialize($signature);
                 if (isset($hashTable[$hash])) {
@@ -2465,6 +2465,13 @@ class Memory extends Adapter
             if (\in_array(null, $signature, true)) {
                 continue;
             }
+            // Under shared tables uniqueness is per-tenant (MariaDB models
+            // this as a composite (attr, _tenant) index). Bake the row's
+            // tenant into the hash key so two tenants holding the same
+            // value do not collide.
+            if ($this->sharedTables) {
+                \array_unshift($signature, $row['_tenant'] ?? null);
+            }
             $result[$indexId] = \serialize($signature);
         }
 
@@ -2493,6 +2500,11 @@ class Memory extends Adapter
             }
             if (\in_array(null, $signature, true)) {
                 continue;
+            }
+            // Match rowUniqueSignatures: under shared tables, scope by the
+            // current adapter tenant so cross-tenant collisions never throw.
+            if ($this->sharedTables) {
+                \array_unshift($signature, $this->getTenant());
             }
             $result[$indexId] = \serialize($signature);
         }

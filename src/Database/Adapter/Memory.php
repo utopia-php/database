@@ -2647,6 +2647,13 @@ class Memory extends Adapter
                     return false;
                 }
                 foreach ($queryValues as $candidate) {
+                    // SQL three-valued logic: `col NOT IN (..., NULL, ...)`
+                    // is unknown for every row — exclude. Mirrors the null-
+                    // candidate handling in TYPE_EQUAL above. Use
+                    // `Query::isNotNull()` for the explicit not-null intent.
+                    if ($candidate === null) {
+                        return false;
+                    }
                     if ($this->looseEquals($value, $candidate)) {
                         return false;
                     }

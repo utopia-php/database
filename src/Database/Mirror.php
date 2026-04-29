@@ -76,6 +76,17 @@ class Mirror extends Database
     }
 
     /**
+     * Delegate validator caching to the source database so Mirror reuses the
+     * source's cache and inherits its invalidation. Mirror's own mutator
+     * overrides bypass the inherited traits, so its local
+     * `documentsValidatorCache` would otherwise go stale on schema changes.
+     */
+    protected function getDocumentsValidator(Document $collection): Validator\Queries\Documents
+    {
+        return $this->source->getDocumentsValidator($collection);
+    }
+
+    /**
      * Get the destination database instance, if configured.
      *
      * @return Database|null

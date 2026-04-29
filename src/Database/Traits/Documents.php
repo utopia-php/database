@@ -68,7 +68,7 @@ trait Documents
      * first request and caching the instance for subsequent calls. The cache
      * is purged when the collection's schema changes.
      */
-    private function getDocumentsValidator(Document $collection): DocumentsValidator
+    protected function getDocumentsValidator(Document $collection): DocumentsValidator
     {
         $key = $collection->getId();
 

@@ -36,8 +36,8 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
-use Utopia\Query\Builder\Plan;
 use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Exception\ValidationException;
 use Utopia\Query\Hook\Attribute\Map as AttributeMap;
@@ -45,11 +45,11 @@ use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema;
-use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
+use Utopia\Query\Schema\Table;
 
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
@@ -411,7 +411,7 @@ abstract class SQL extends Adapter
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($attribute) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
             $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         });
 
@@ -440,7 +440,7 @@ abstract class SQL extends Adapter
     public function createAttributes(string $collection, array $attributes): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($attributes) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attributes) {
             foreach ($attributes as $attribute) {
                 $this->addBlueprintColumn(
                     $table,
@@ -478,7 +478,7 @@ abstract class SQL extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id) {
             $table->dropColumn($this->filter($id));
         });
 
@@ -502,7 +502,7 @@ abstract class SQL extends Adapter
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($old, $new) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($old, $new) {
             $table->renameColumn($this->filter($old), $this->filter($new));
         });
 
@@ -2146,7 +2146,7 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($columnId) {
                 $table->string($columnId, 255)->nullable()->default(null);
             });
 
@@ -2198,7 +2198,7 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($from, $to) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($from, $to) {
                 $table->renameColumn($from, $to);
             });
 
@@ -2284,7 +2284,7 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $dropCol = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Blueprint $table) use ($columnId) {
+            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($columnId) {
                 $table->dropColumn($columnId);
             });
 
@@ -2914,7 +2914,7 @@ abstract class SQL extends Adapter
 
         return new WriteContext(
             newBuilder: fn (string $table, string $alias = '') => $this->newBuilder($table, $alias),
-            executeResult: fn (Plan $result, ?Event $event = null) => $this->executeResult($result, $event),
+            executeResult: fn (Statement $result, ?Event $event = null) => $this->executeResult($result, $event),
             execute: fn (mixed $stmt) => $this->execute($stmt),
             decorateRow: fn (array $row, array $metadata) => $this->decorateRow($row, $metadata),
             createBuilder: fn () => $this->createBuilder(),
@@ -2924,15 +2924,15 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Execute a Plan through the transformation system with positional bindings.
+     * Execute a Statement through the transformation system with positional bindings.
      *
-     * Prepares the SQL statement and binds positional parameters from the Plan.
+     * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  Event|null  $event  Optional event to run through transformation system
      * @return PDOStatement|PDOStatementProxy
      */
-    protected function executeResult(Plan $result, ?Event $event = null): PDOStatement|PDOStatementProxy
+    protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|PDOStatementProxy
     {
         $sql = $result->query;
         if ($event !== null) {
@@ -3181,12 +3181,12 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Map Database type constants to Schema Blueprint column definitions.
+     * Map Database type constants to Schema Table column definitions.
      *
      * @throws DatabaseException
      */
     protected function addBlueprintColumn(
-        Blueprint $table,
+        Table $table,
         string $id,
         ColumnType $type,
         int $size,

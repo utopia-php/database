@@ -30,10 +30,10 @@ use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
-use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
+use Utopia\Query\Schema\Table;
 
 /**
  * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
@@ -133,7 +133,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         // Build main collection table using schema builder
-        $collectionResult = $schema->create($this->getSQLTableRaw($id), function (Blueprint $table) use ($attributes, $indexes, $hash, $sharedTables) {
+        $collectionResult = $schema->create($this->getSQLTableRaw($id), function (Table $table) use ($attributes, $indexes, $hash, $sharedTables) {
             // System columns
             $table->id('_id');
             $table->string('_uid', 255);
@@ -241,7 +241,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $collection = $collectionResult->query;
 
         // Build permissions table using schema builder
-        $permsResult = $schema->create($this->getSQLTableRaw($id.'_perms'), function (Blueprint $table) use ($sharedTables) {
+        $permsResult = $schema->create($this->getSQLTableRaw($id.'_perms'), function (Table $table) use ($sharedTables) {
             $table->id('_id');
             $table->string('_type', 12);
             $table->string('_permission', 255);

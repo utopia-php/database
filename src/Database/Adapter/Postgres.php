@@ -32,10 +32,10 @@ use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
-use Utopia\Query\Schema\Blueprint;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
+use Utopia\Query\Schema\Table;
 
 /**
  * Differences between MariaDB and Postgres
@@ -258,7 +258,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $schema = $this->createSchemaBuilder();
 
         // Build main collection table using schema builder
-        $collectionResult = $schema->create($tableRaw, function (Blueprint $table) use ($attributes) {
+        $collectionResult = $schema->create($tableRaw, function (Table $table) use ($attributes) {
             $table->id('_id');
             $table->string('_uid', 255);
 
@@ -326,7 +326,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
 
         // Build permissions table using schema builder
-        $permsResult = $schema->create($permsTableRaw, function (Blueprint $table) {
+        $permsResult = $schema->create($permsTableRaw, function (Table $table) {
             $table->id('_id');
             $table->integer('_tenant')->nullable()->default(null);
             $table->string('_type', 12);
@@ -498,7 +498,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($attribute) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
             $this->addBlueprintColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         });
 
@@ -540,7 +540,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
 
-            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id, $newKey) {
+            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id, $newKey) {
                 $table->renameColumn($id, $newKey);
             });
 
@@ -585,7 +585,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     public function deleteAttribute(string $collection, string $id): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($id) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id) {
             $table->dropColumn($this->filter($id));
         });
 
@@ -612,7 +612,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Blueprint $table) use ($old, $new) {
+        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($old, $new) {
             $table->renameColumn($this->filter($old), $this->filter($new));
         });
 

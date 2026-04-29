@@ -655,7 +655,7 @@ class Database
     public function from(string $collection): \Utopia\Query\Builder
     {
         $builder = $this->adapter->getBuilder($collection);
-        $builder->setExecutor(fn (\Utopia\Query\Builder\Plan $plan) => $this->execute($plan));
+        $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $plan) => $this->execute($plan));
 
         return $builder;
     }
@@ -666,7 +666,7 @@ class Database
     public function schema(): \Utopia\Query\Schema
     {
         $schema = $this->adapter->getSchema();
-        $schema->setExecutor(fn (\Utopia\Query\Builder\Plan $plan) => $this->execute($plan));
+        $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $plan) => $this->execute($plan));
 
         return $schema;
     }
@@ -674,9 +674,9 @@ class Database
     /**
      * @return array<Document>|int
      */
-    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Plan $query): array|int
+    public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array|int
     {
-        $result = $query instanceof \Utopia\Query\Builder\Plan ? $query : $query->build();
+        $result = $query instanceof \Utopia\Query\Builder\Statement ? $query : $query->build();
 
         if ($result->readOnly) {
             return $this->adapter->rawQuery($result->query, $result->bindings);

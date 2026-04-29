@@ -344,12 +344,15 @@ class MirrorTest extends Base
             ],
         ]));
 
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+
         $this->assertSame(
             'Original',
             $database->getSource()->getDocument($collection, 'dup')->getAttribute('name')
         );
         $this->assertTrue(
-            $database->getDestination()->getDocument($collection, 'dup')->isEmpty()
+            $destination->getDocument($collection, 'dup')->isEmpty()
         );
 
         $database->skipDuplicates(fn () => $database->createDocuments($collection, [
@@ -386,12 +389,12 @@ class MirrorTest extends Base
         // destination is still catching up on rows that already exist on source.
         $this->assertSame(
             'WouldBe',
-            $database->getDestination()->getDocument($collection, 'dup')->getAttribute('name'),
+            $destination->getDocument($collection, 'dup')->getAttribute('name'),
             'Source-skipped doc must still insert on destination when absent there'
         );
         $this->assertSame(
             'Fresh',
-            $database->getDestination()->getDocument($collection, 'fresh')->getAttribute('name')
+            $destination->getDocument($collection, 'fresh')->getAttribute('name')
         );
     }
 

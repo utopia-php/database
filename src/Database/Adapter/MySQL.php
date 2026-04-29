@@ -54,32 +54,27 @@ class MySQL extends MariaDB
      *
      * @throws DatabaseException
      */
-    private bool $timeoutDirty = false;
-
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
+        // Apply eagerly so direct $stmt->execute() paths (e.g. exists()) inherit the new timeout
+        // even before the next $this->execute() runs. Lazy application leaked stale 1ms timeouts
+        // across pool checkouts under paratest, surfacing as cross-test timeouts in unrelated tests.
+        $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$milliseconds}");
         $this->timeout = $milliseconds;
-        $this->timeoutDirty = true;
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
-        if ($this->timeout > 0) {
-            $this->timeoutDirty = true;
-        }
+        $this->getPDO()->exec('SET SESSION MAX_EXECUTION_TIME = 0');
         $this->timeout = 0;
     }
 
     protected function execute(mixed $stmt): bool
     {
-        if ($this->timeoutDirty) {
-            $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$this->timeout}");
-            $this->timeoutDirty = false;
-        }
         /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
         return $stmt->execute();
     }

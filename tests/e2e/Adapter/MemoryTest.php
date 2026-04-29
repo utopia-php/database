@@ -456,6 +456,55 @@ class MemoryTest extends Base
     }
 
     /**
+     * Regression: when a batch updates two documents to the same unique
+     * value, neither will conflict with the other's pre-update row, but
+     * the two pending writes conflict with each other. The phase-1
+     * validator must cross-check sibling pending values.
+     */
+    public function testBatchUpdateRejectsSiblingCollision(): void
+    {
+        $database = $this->freshDatabase();
+
+        $database->createCollection('siblings', [
+            new Document([
+                '$id' => 'handle',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'unique_handle',
+                'type' => Database::INDEX_UNIQUE,
+                'attributes' => ['handle'],
+            ]),
+        ], [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+
+        $database->createDocument('siblings', new Document([
+            '$id' => 's1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'handle' => 'a',
+        ]));
+        $database->createDocument('siblings', new Document([
+            '$id' => 's2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'handle' => 'b',
+        ]));
+
+        $this->expectException(DuplicateException::class);
+        $database->updateDocuments('siblings', new Document(['handle' => 'shared']), [
+            Query::equal('$id', ['s1', 's2']),
+        ]);
+    }
+
+    /**
      * Regression: bulk delete clears the in-memory permissions index for the
      * affected collection.
      */

@@ -958,6 +958,7 @@ class Memory extends Adapter
         // before any write lands, so a uniqueness violation on document N
         // does not leave documents 0..N-1 partially committed.
         $prepared = [];
+        $batchUids = [];
         foreach ($documents as $doc) {
             $uid = $doc->getId();
             $docKey = $this->documentKey($uid);
@@ -970,16 +971,33 @@ class Memory extends Adapter
             // once and reused.
             $resolvedAttrs = $this->applyOperators($attrs, $this->data[$key]['documents'][$docKey]);
 
-            if (! empty($resolvedAttrs)) {
-                $merged = new Document(\array_merge(
+            $merged = ! empty($resolvedAttrs)
+                ? new Document(\array_merge(
                     $this->rowToDocument($this->data[$key]['documents'][$docKey]),
                     $resolvedAttrs,
                     ['$id' => $uid]
-                ));
-                $this->enforceUniqueIndexes($key, $merged, $uid);
-            }
+                ))
+                : null;
 
-            $prepared[] = ['uid' => $uid, 'docKey' => $docKey, 'attrs' => $resolvedAttrs];
+            $prepared[] = ['uid' => $uid, 'docKey' => $docKey, 'attrs' => $resolvedAttrs, 'merged' => $merged];
+            $batchUids[$uid] = true;
+        }
+
+        // Validate against the stored rows (excluding rows we are about to
+        // overwrite — they conflict with themselves trivially) and against
+        // the other pending merges in this batch, so two siblings updated
+        // to the same unique-indexed value in one call are caught.
+        foreach ($prepared as $i => $entry) {
+            if ($entry['merged'] === null) {
+                continue;
+            }
+            $this->enforceUniqueIndexesAgainstBatch(
+                $key,
+                $entry['merged'],
+                $entry['uid'],
+                $batchUids,
+                \array_filter($prepared, fn ($p, $j) => $j !== $i && $p['merged'] !== null, ARRAY_FILTER_USE_BOTH),
+            );
         }
 
         $tenant = $this->getTenant();
@@ -2588,6 +2606,71 @@ class Memory extends Adapter
 
             return false;
         }));
+    }
+
+    /**
+     * Variant of enforceUniqueIndexes for batch updates: the existing-row
+     * scan skips every uid being updated in the batch (their pre-update
+     * values are stale), and a sibling scan checks the candidate against
+     * the other pending merges in the same batch.
+     *
+     * @param  array<string, true>  $batchUids
+     * @param  array<int, array{uid: string, docKey: string, attrs: array<string, mixed>, merged: ?Document}>  $siblings
+     */
+    protected function enforceUniqueIndexesAgainstBatch(string $key, Document $document, string $uid, array $batchUids, array $siblings): void
+    {
+        $indexes = $this->data[$key]['indexes'] ?? [];
+        foreach ($indexes as $index) {
+            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+                continue;
+            }
+
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes)) {
+                continue;
+            }
+
+            $signature = [];
+            foreach ($attributes as $attribute) {
+                $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
+            }
+
+            if (\in_array(null, $signature, true)) {
+                continue;
+            }
+
+            foreach ($this->data[$key]['documents'] as $row) {
+                $rowUid = (string) ($row['_uid'] ?? '');
+                if (isset($batchUids[$rowUid])) {
+                    continue;
+                }
+                if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
+                    continue;
+                }
+
+                $rowSignature = [];
+                foreach ($attributes as $attribute) {
+                    $rowSignature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
+                }
+
+                if ($rowSignature === $signature) {
+                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                }
+            }
+
+            foreach ($siblings as $sibling) {
+                if ($sibling['merged'] === null || $sibling['uid'] === $uid) {
+                    continue;
+                }
+                $siblingSignature = [];
+                foreach ($attributes as $attribute) {
+                    $siblingSignature[] = $this->normalizeIndexValue($this->resolveDocumentValue($sibling['merged'], $attribute));
+                }
+                if ($siblingSignature === $signature) {
+                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                }
+            }
+        }
     }
 
     protected function enforceUniqueIndexes(string $key, Document $document, ?string $previousId): void

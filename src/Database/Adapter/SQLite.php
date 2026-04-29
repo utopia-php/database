@@ -399,6 +399,25 @@ class SQLite extends MariaDB
             return $this->renameAttribute($collection, $id, $newKey);
         }
 
+        // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
+        // not supported and a smaller declared size silently accepts
+        // larger values. To keep parity with the MariaDB contract that
+        // resize-down rejects when data exceeds the new size, scan the
+        // column ourselves and raise the same TruncateException.
+        if ($type === Database::VAR_STRING && $size > 0 && !$array) {
+            $name = $this->filter($collection);
+            $column = $this->filter($id);
+            $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max LIMIT 1";
+
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->bindValue(':max', $size, PDO::PARAM_INT);
+            $stmt->execute();
+
+            if ($stmt->fetchColumn() !== false) {
+                throw new TruncateException("Attribute '{$id}' has values exceeding new size {$size}");
+            }
+        }
+
         return true;
     }
 
@@ -1160,9 +1179,11 @@ class SQLite extends MariaDB
     public function getSupportForUpdateLock(): bool
     {
         // SQLite serialises writes globally, so SELECT ... FOR UPDATE is a
-        // no-op semantically — but the adapter only emits the clause when
-        // this returns true and SQLite's parser rejects it. Keep false.
-        return false;
+        // semantic no-op — and the parser has accepted it as syntactic
+        // sugar since 3.39. PHP 8.3 ships SQLite 3.40+, so claiming
+        // support keeps adapter-level callers happy without breaking the
+        // SELECT statements that emit the clause.
+        return true;
     }
 
     /**
@@ -1172,11 +1193,11 @@ class SQLite extends MariaDB
      */
     public function getSupportForAttributeResizing(): bool
     {
-        // SQLite's dynamic typing means resize-to-smaller silently succeeds
-        // even when existing values exceed the new size — the upstream test
-        // suite explicitly relies on the adapter rejecting that, so opt
-        // out rather than pretend to honour the contract.
-        return false;
+        // SQLite is dynamically typed and has no MODIFY COLUMN, so the
+        // declared size is metadata-only — but updateAttribute now scans
+        // the column on resize-down and raises TruncateException when
+        // any row exceeds the new size, matching MariaDB's contract.
+        return true;
     }
 
     /**

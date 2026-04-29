@@ -53,6 +53,49 @@ use Utopia\Query\Schema\IndexType;
 trait Documents
 {
     /**
+     * Cached validator instances keyed by collection id.
+     *
+     * Building DocumentsValidator deep-copies every collection attribute via
+     * Attribute::getArrayCopy(), which is expensive on the find/count/sum
+     * hot path. Cached entries are invalidated through purgeCachedCollection.
+     *
+     * @var array<string, DocumentsValidator>
+     */
+    private array $documentsValidatorCache = [];
+
+    /**
+     * Return a DocumentsValidator for the given collection, building it on
+     * first request and caching the instance for subsequent calls. The cache
+     * is purged when the collection's schema changes.
+     */
+    private function getDocumentsValidator(Document $collection): DocumentsValidator
+    {
+        $key = $collection->getId();
+
+        if (isset($this->documentsValidatorCache[$key])) {
+            return $this->documentsValidatorCache[$key];
+        }
+
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<Document> $indexes */
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator(
+            $attributes,
+            $indexes,
+            $this->adapter->getIdAttributeType(),
+            $this->maxQueryValues,
+            $this->adapter->getMaxUIDLength(),
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+            $this->adapter->supports(Capability::DefinedAttributes)
+        );
+
+        return $this->documentsValidatorCache[$key] = $validator;
+    }
+
+    /**
      * @param  array<Document>  $documents
      * @return array<Document>
      *
@@ -941,16 +984,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
-            );
+            $validator = $this->getDocumentsValidator($collection);
 
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -1861,16 +1895,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
-            );
+            $validator = $this->getDocumentsValidator($collection);
 
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -2007,6 +2032,8 @@ trait Documents
 
         $this->cache->purge($collectionKey);
 
+        unset($this->documentsValidatorCache[$collectionId]);
+
         return true;
     }
 
@@ -2087,16 +2114,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
-            );
+            $validator = $this->getDocumentsValidator($collection);
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -2446,16 +2464,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
-            );
+            $validator = $this->getDocumentsValidator($collection);
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -2519,16 +2528,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
-            );
+            $validator = $this->getDocumentsValidator($collection);
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

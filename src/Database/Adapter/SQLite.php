@@ -219,10 +219,12 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $permsColumns = $this->sharedTables
-                ? ['_document', '_type', '_permission', '_tenant']
-                : ['_document', '_type', '_permission'];
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, $permsColumns, [], []);
+            // Permissions UNIQUE stays on (_document, _type, _permission)
+            // for now even under shared tables: composite unique with
+            // _tenant trips upsert flows that re-insert permissions
+            // without first re-loading the existing rows. Revisit once
+            // the upsert permission diff is hardened.
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {

@@ -53,11 +53,14 @@ use Utopia\Query\Schema\IndexType;
 trait Documents
 {
     /**
-     * Cached validator instances keyed by collection id.
+     * Cached validator instances keyed by `namespace:tenant:maxQueryValues:collectionId`.
      *
      * Building DocumentsValidator deep-copies every collection attribute via
      * Attribute::getArrayCopy(), which is expensive on the find/count/sum
-     * hot path. Cached entries are invalidated through purgeCachedCollection.
+     * hot path. The composite key keeps the cache coherent when the same
+     * Database instance is reused across namespaces, tenants, or with a
+     * different max-query-values cap. Cached entries are invalidated through
+     * purgeCachedCollection.
      *
      * @var array<string, DocumentsValidator>
      */
@@ -70,7 +73,7 @@ trait Documents
      */
     protected function getDocumentsValidator(Document $collection): DocumentsValidator
     {
-        $key = $collection->getId();
+        $key = $this->documentsValidatorCacheKey($collection->getId());
 
         if (isset($this->documentsValidatorCache[$key])) {
             return $this->documentsValidatorCache[$key];
@@ -93,6 +96,20 @@ trait Documents
         );
 
         return $this->documentsValidatorCache[$key] = $validator;
+    }
+
+    /**
+     * Build the composite cache key for the DocumentsValidator cache. Scoping
+     * by namespace + tenant + max-query-values keeps two collections that
+     * share an id (different tenant schemas, different namespace prefixes,
+     * or different per-request limits) from aliasing onto the same validator.
+     */
+    private function documentsValidatorCacheKey(string $collectionId): string
+    {
+        return $this->adapter->getNamespace().':'
+            .($this->adapter->getTenant() ?? '').':'
+            .$this->maxQueryValues.':'
+            .$collectionId;
     }
 
     /**
@@ -2032,7 +2049,15 @@ trait Documents
 
         $this->cache->purge($collectionKey);
 
-        unset($this->documentsValidatorCache[$collectionId]);
+        // Drop every cached validator scoped to this collection id, regardless
+        // of the namespace/tenant/maxQueryValues prefix that was active when
+        // the entry was built.
+        $suffix = ':'.$collectionId;
+        foreach (\array_keys($this->documentsValidatorCache) as $cachedKey) {
+            if (\str_ends_with((string) $cachedKey, $suffix)) {
+                unset($this->documentsValidatorCache[$cachedKey]);
+            }
+        }
 
         return true;
     }

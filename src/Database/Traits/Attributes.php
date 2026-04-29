@@ -550,6 +550,10 @@ trait Attributes
             operationDescription: "attribute metadata update '{$id}'"
         );
 
+        // Drop the cached DocumentsValidator so subsequent find/count/sum
+        // see the updated required/format/options/filters/default state.
+        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+
         $this->trigger(Event::AttributeUpdate, $attributeDoc);
 
         return $attributeDoc;

@@ -2509,9 +2509,12 @@ class Memory extends Adapter
                 continue;
             }
             // Match rowUniqueSignatures: under shared tables, scope by the
-            // current adapter tenant so cross-tenant collisions never throw.
+            // tenant the row will actually be stored under. documentToRow
+            // writes `_tenant = $document->getTenant() ?? $this->getTenant()`,
+            // so the read- and write-side signatures must agree on that
+            // fallback or duplicate detection skips across tenants.
             if ($this->sharedTables) {
-                \array_unshift($signature, $this->getTenant());
+                \array_unshift($signature, $document->getTenant() ?? $this->getTenant());
             }
             $result[$indexId] = \serialize($signature);
         }
@@ -2621,7 +2624,16 @@ class Memory extends Adapter
 
         switch ($method) {
             case Query::TYPE_EQUAL:
+                // SQL three-valued logic: `col = NULL` is unknown — null rows
+                // never match an explicit equality, even when callers pass
+                // `[null]`. Use `Query::isNull()` for that case.
+                if ($value === null) {
+                    return false;
+                }
                 foreach ($queryValues as $candidate) {
+                    if ($candidate === null) {
+                        continue;
+                    }
                     if ($this->looseEquals($value, $candidate)) {
                         return true;
                     }
@@ -2891,7 +2903,11 @@ class Memory extends Adapter
             return true;
         }
         if (\is_numeric($a) && \is_numeric($b)) {
-            return $a + 0 === $b + 0;
+            // Compare numerically with `==` so cross-type pairs like
+            // ("3", "3.0") or (3, 3.0) match the way SQL `WHERE col = '3.0'`
+            // matches an int column holding 3. Strict `===` after `+0`
+            // splits int/float and silently misses parity.
+            return $a == $b;
         }
 
         return false;
@@ -3452,11 +3468,10 @@ class Memory extends Adapter
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($max !== null) {
-                    // Compare *remaining headroom* against $by so we never
-                    // overflow PHP's int range (which would silently demote
-                    // the result to float and corrupt downstream Range
-                    // validators).
-                    if ($base >= $max || ($max - $base) <= $by) {
+                    // SQL allows the cap exactly (`col <= max - by`), so use a
+                    // strict `<` for the headroom guard. `<=` would short the
+                    // increment by one boundary step versus MariaDB.
+                    if ($base >= $max || ($max - $base) < $by) {
                         return $this->preserveNumericType($base, $max);
                     }
                 }
@@ -3468,7 +3483,7 @@ class Memory extends Adapter
                 $min = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($min !== null) {
-                    if ($base <= $min || ($base - $min) <= $by) {
+                    if ($base <= $min || ($base - $min) < $by) {
                         return $this->preserveNumericType($base, $min);
                     }
                 }

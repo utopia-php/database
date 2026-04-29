@@ -79,6 +79,51 @@ abstract class SQL extends Adapter
     protected int $floatPrecision = 17;
 
     /**
+     * Memoized spatial column ids per collection. Spatial columns can only
+     * change via schema mutations (createAttribute / deleteAttribute), so the
+     * cache is invalidated only on those paths via invalidateSpatialAttributesCache().
+     *
+     * @var array<string, list<string>>
+     */
+    private array $spatialAttributesCache = [];
+
+    /**
+     * Lazily constructed AttributeMap shared by every newBuilder() call.
+     * AttributeMap is a readonly stateless config object, so it can safely
+     * be reused across queries on the same adapter.
+     */
+    private ?AttributeMap $attributeMap = null;
+
+    /**
+     * Last applied query timeout in milliseconds, or null when unknown / never
+     * applied. Tracked so execute() can skip redundant SET statements when the
+     * timeout hasn't changed since the previous execute on this connection.
+     */
+    private ?int $appliedTimeout = null;
+
+    protected function getAppliedTimeout(): ?int
+    {
+        return $this->appliedTimeout;
+    }
+
+    protected function setAppliedTimeout(int $milliseconds): void
+    {
+        $this->appliedTimeout = $milliseconds;
+    }
+
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        $this->appliedTimeout = null;
+        parent::setTimeout($milliseconds, $event);
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->appliedTimeout = null;
+        parent::clearTimeout($event);
+    }
+
+    /**
      * Accepts Utopia\Database\PDO or any PDO-compatible proxy (e.g. Swoole\Database\PDOProxy).
      */
     public function __construct(object $pdo)
@@ -422,9 +467,12 @@ abstract class SQL extends Adapter
         }
 
         try {
-            return $this->getPDO()
+            $ok = $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -461,9 +509,12 @@ abstract class SQL extends Adapter
         }
 
         try {
-            return $this->getPDO()
+            $ok = $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -485,9 +536,12 @@ abstract class SQL extends Adapter
         $sql = $result->query;
 
         try {
-            return $this->getPDO()
+            $ok = $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -681,25 +735,33 @@ abstract class SQL extends Adapter
 
         $name = $this->filter($collection);
 
-        // Separate regular attributes from operators
-        $operators = [];
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
-            }
-        }
-
         // Build the UPDATE using the query builder
         $builder = $this->newBuilder($name);
 
-        // Regular (non-operator, non-spatial) attributes go into set()
+        // Single pass over update attributes, bucketing into regular / spatial /
+        // operator and applying JSON / boolean conversions inline. Hoisted
+        // guards keep the hot path branch-light.
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
         $regularRow = [];
+        $spatialRows = [];
+        $operators = [];
+
         foreach ($attributes as $attribute => $value) {
-            if (isset($operators[$attribute])) {
-                continue; // Handled via setRaw below
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+
+                continue;
             }
-            if (\in_array($attribute, $spatialAttributes)) {
-                continue; // Handled via setRaw below
+
+            if (isset($spatialMap[$attribute])) {
+                if (\is_array($value)) {
+                    $value = $this->convertArrayToWKT($value);
+                }
+                $spatialRows[$this->filter($attribute)] = $value;
+
+                continue;
             }
 
             $column = $this->filter($attribute);
@@ -707,8 +769,8 @@ abstract class SQL extends Adapter
             if (\is_array($value)) {
                 $value = \json_encode($value);
             }
-            if ($this->supports(Capability::IntegerBooleans)) {
-                $value = (\is_bool($value)) ? (int) $value : $value;
+            if ($intBools && \is_bool($value)) {
+                $value = (int) $value;
             }
 
             $regularRow[$column] = $value;
@@ -719,16 +781,7 @@ abstract class SQL extends Adapter
         }
 
         // Spatial attributes use setRaw with ST_GeomFromText(?)
-        foreach ($attributes as $attribute => $value) {
-            if (! \in_array($attribute, $spatialAttributes)) {
-                continue;
-            }
-            $column = $this->filter($attribute);
-
-            if (\is_array($value)) {
-                $value = $this->convertArrayToWKT($value);
-            }
-
+        foreach ($spatialRows as $column => $value) {
             $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
         }
 
@@ -2822,7 +2875,9 @@ abstract class SQL extends Adapter
     protected function newBuilder(string $table, string $alias = ''): SQLBuilder
     {
         $builder = $this->createBuilder()->from($this->getSQLTableRaw($table), $alias);
-        $builder->addHook(new AttributeMap([
+        // AttributeMap is a readonly stateless config object — share one
+        // instance across builders to avoid allocating it on every read.
+        $this->attributeMap ??= new AttributeMap([
             '$id' => '_uid',
             '$sequence' => '_id',
             '$collection' => '_collection',
@@ -2830,7 +2885,8 @@ abstract class SQL extends Adapter
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             '$permissions' => '_permissions',
-        ]));
+        ]);
+        $builder->addHook($this->attributeMap);
         if ($this->sharedTables && $this->tenant !== null) {
             $builder->addHook(new TenantFilter($this->tenant, Database::METADATA, $table));
         }
@@ -2983,7 +3039,7 @@ abstract class SQL extends Adapter
      *
      * @param  string  $name  The filtered collection name
      * @param  array<Change>  $changes  The changes to upsert
-     * @param  array<string>  $spatialAttributes  Spatial column names
+     * @param  list<string>  $spatialAttributes  Spatial column names
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
      * @param  array<string, mixed>  $attributeDefaults  Attribute default values
@@ -3072,6 +3128,11 @@ abstract class SQL extends Adapter
         $allColumnNames = \array_keys($allColumnNames);
         \sort($allColumnNames);
 
+        // Hoist hot-loop guards: spatial set lookup is O(1) via array_flip, and
+        // IntegerBooleans support is a constant for the lifetime of the adapter.
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
         // Build rows for the builder, applying JSON/boolean/spatial conversions
         foreach ($documentsData as $docAttrs) {
             $row = [];
@@ -3080,7 +3141,7 @@ abstract class SQL extends Adapter
                 if (\is_array($value)) {
                     $value = \json_encode($value);
                 }
-                if (! \in_array($key, $spatialAttributes) && $this->supports(Capability::IntegerBooleans)) {
+                if ($intBools && ! isset($spatialMap[$key])) {
                     $value = (\is_bool($value)) ? (int) $value : $value;
                 }
                 $row[$key] = $value;
@@ -3256,17 +3317,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Build a key-value row array from a Document for batch INSERT.
-     *
-     * Converts internal attributes ($id, $createdAt, etc.) to their column names
-     * and encodes arrays as JSON. Spatial attributes are included with their raw
-     * value (the caller must handle ST_GeomFromText wrapping separately).
-     *
-     * @param  array<string>  $attributeKeys
-     * @param  array<string>  $spatialAttributes
-     * @return array<string, mixed>
-     */
-    /**
      * @param array<string, mixed> $row
      */
     private function remapRow(array &$row): void
@@ -3283,6 +3333,17 @@ abstract class SQL extends Adapter
         }
     }
 
+    /**
+     * Build a key-value row array from a Document for batch INSERT.
+     *
+     * Converts internal attributes ($id, $createdAt, etc.) to their column names
+     * and encodes arrays as JSON. Spatial attributes are included with their raw
+     * value (the caller must handle ST_GeomFromText wrapping separately).
+     *
+     * @param  list<string>  $attributeKeys
+     * @param  list<string>  $spatialAttributes
+     * @return array<string, mixed>
+     */
     protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialAttributes = []): array
     {
         $attributes = $document->getAttributes();
@@ -3302,6 +3363,11 @@ abstract class SQL extends Adapter
             $row['_id'] = $document->getSequence();
         }
 
+        // Hoist per-row guards out of the cell loop: O(1) spatial lookup and
+        // a constant adapter capability check.
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
         foreach ($attributeKeys as $key) {
             if (isset($row[$key])) {
                 continue;
@@ -3310,7 +3376,7 @@ abstract class SQL extends Adapter
             if (\is_array($value)) {
                 $value = \json_encode($value);
             }
-            if (! \in_array($key, $spatialAttributes) && $this->supports(Capability::IntegerBooleans)) {
+            if ($intBools && ! isset($spatialMap[$key])) {
                 $value = (\is_bool($value)) ? (int) $value : $value;
             }
             $row[$key] = $value;
@@ -3320,12 +3386,20 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Helper method to extract spatial type attributes from collection attributes
+     * Helper method to extract spatial type attributes from collection attributes.
      *
-     * @return array<int,string>
+     * The result is memoized by collection id; invalidate via
+     * invalidateSpatialAttributesCache() when adding or removing attributes.
+     *
+     * @return list<string>
      */
     protected function getSpatialAttributes(Document $collection): array
     {
+        $key = $collection->getId();
+        if (isset($this->spatialAttributesCache[$key])) {
+            return $this->spatialAttributesCache[$key];
+        }
+
         /** @var array<mixed> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $spatialAttributes = [];
@@ -3338,7 +3412,17 @@ abstract class SQL extends Adapter
             }
         }
 
-        return $spatialAttributes;
+        return $this->spatialAttributesCache[$key] = $spatialAttributes;
+    }
+
+    /**
+     * Invalidate the spatial attributes cache for a collection. Called from
+     * createAttribute / deleteAttribute paths so the next write rescans the
+     * column list.
+     */
+    protected function invalidateSpatialAttributesCache(string $collectionId): void
+    {
+        unset($this->spatialAttributesCache[$collectionId]);
     }
 
     /**

@@ -437,7 +437,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             }
 
             try {
-                return $this->getPDO()->prepare($sql)->execute();
+                $ok = $this->getPDO()->prepare($sql)->execute();
+                $this->invalidateSpatialAttributesCache($collection);
+
+                return $ok;
             } catch (PDOException $e) {
                 throw $this->processException($e);
             }
@@ -656,10 +659,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 $row['_id'] = $document->getSequence();
             }
 
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (\in_array($attr, $spatialAttributes, true)) {
+                if (isset($spatialMap[$attr])) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -754,6 +759,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $builder = $this->newBuilder($name);
             $regularRow = ['_uid' => $document->getId()];
 
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
@@ -763,7 +770,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                } elseif (isset($spatialMap[$attribute])) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -805,7 +812,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
-        $this->timeout = $milliseconds;
+        parent::setTimeout($milliseconds, $event);
     }
 
     /**
@@ -819,8 +826,16 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
     protected function execute(mixed $stmt): bool
     {
-        $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
-        $this->getPDO()->exec("SET max_statement_time = " . (float) $seconds);
+        // Skip the SET round-trip when the timeout hasn't changed since the
+        // last execute on this connection. The Pool adapter resets timeout
+        // (and therefore the cached value) per checkout via setTimeout /
+        // clearTimeout, so this can't leak across pooled requests.
+        if ($this->timeout !== $this->getAppliedTimeout()) {
+            $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
+            $pdo = $this->getPDO();
+            $pdo->exec("SET max_statement_time = " . (float) $seconds);
+            $this->setAppliedTimeout($this->timeout);
+        }
 
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();

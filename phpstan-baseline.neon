@@ -391,24 +391,6 @@ parameters:
 			path: src/Database/Adapter/SQL.php
 
 		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) has parameter \$attributeKeys with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) has parameter \$spatialAttributes with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:buildDocumentRow\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
 			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:commitTransaction\(\) should return bool but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -511,12 +493,6 @@ parameters:
 			path: src/Database/Adapter/SQL.php
 
 		-
-			message: '#^Parameter \#1 \$row of method Utopia\\Database\\Adapter\:\:decorateRow\(\) expects array\<string, mixed\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
 			message: '#^Parameter \#2 \$arrays of function array_diff expects an array of values castable to string, array\<int, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
@@ -538,12 +514,6 @@ parameters:
 			message: '#^Parameter \#2 \$arrays of function array_intersect expects an array of values castable to string, array\<mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Possibly invalid array key type mixed\.$#'
-			identifier: offsetAccess.invalidOffset
-			count: 3
 			path: src/Database/Adapter/SQL.php
 
 		-

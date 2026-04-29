@@ -506,8 +506,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            return $this->execute($this->getPDO()
+            $ok = $this->execute($this->getPDO()
                 ->prepare($sql));
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -592,10 +595,15 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            return $this->execute($this->getPDO()
+            $ok = $this->execute($this->getPDO()
                 ->prepare($sql));
+            $this->invalidateSpatialAttributesCache($collection);
+
+            return $ok;
         } catch (PDOException $e) {
             if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+                $this->invalidateSpatialAttributesCache($collection);
+
                 return true;
             }
 
@@ -802,10 +810,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
             }
 
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (\in_array($attr, $spatialAttributes, true)) {
+                if (isset($spatialMap[$attr])) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -872,6 +882,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $builder = $this->newBuilder($name);
             $row = ['_uid' => $document->getId()];
 
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
@@ -881,7 +893,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                } elseif (isset($spatialMap[$attribute])) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -921,7 +933,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
-        $this->timeout = $milliseconds;
+        parent::setTimeout($milliseconds, $event);
     }
 
     /**
@@ -1207,19 +1219,23 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     {
         $pdo = $this->getPDO();
 
-        // Choose the right SET command based on transaction state
+        // No timeout configured and not inside a transaction — session default
+        // is already 0, so skip the SET/RESET round-trip pair entirely.
+        if ($this->timeout === 0 && $this->inTransaction === 0) {
+            /** @var PDOStatement|PDOStatementProxy $stmt */
+            return $stmt->execute();
+        }
+
         $sql = $this->inTransaction === 0
             ? "SET statement_timeout = '{$this->timeout}ms'"
             : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
 
-        // Apply timeout
         $pdo->exec($sql);
 
         /** @var PDOStatement|PDOStatementProxy $stmt */
         try {
             return $stmt->execute();
         } finally {
-            // Only reset the global timeout when not in a transaction
             if ($this->inTransaction === 0) {
                 $pdo->exec('RESET statement_timeout');
             }

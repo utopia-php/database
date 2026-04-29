@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0e67b717130969da75a82da58d886303",
+    "content-hash": "201be6404155086ef0ce1819eb0da548",
     "packages": [
         {
             "name": "brick/math",
@@ -2424,16 +2424,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "dev-feat-builder",
+            "version": "0.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "5ca0401a121dac3b99a45fe42032a6c92ccc51fe"
+                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/5ca0401a121dac3b99a45fe42032a6c92ccc51fe",
-                "reference": "5ca0401a121dac3b99a45fe42032a6c92ccc51fe",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/ca96081596aef2457aee6d653966a8f6a85f6f8c",
+                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c",
                 "shasum": ""
             },
             "require": {
@@ -2497,10 +2497,10 @@
                 "utopia"
             ],
             "support": {
-                "source": "https://github.com/utopia-php/query/tree/feat-builder",
+                "source": "https://github.com/utopia-php/query/tree/0.2.0",
                 "issues": "https://github.com/utopia-php/query/issues"
             },
-            "time": "2026-04-23T10:30:18+00:00"
+            "time": "2026-04-23T10:57:49+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -5422,8 +5422,7 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
-        "utopia-php/async": 20,
-        "utopia-php/query": 20
+        "utopia-php/async": 20
     },
     "prefer-stable": true,
     "prefer-lowest": false,

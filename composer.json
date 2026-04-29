@@ -43,7 +43,7 @@
         "utopia-php/cache": "1.*",
         "utopia-php/pools": "1.*",
         "utopia-php/mongo": "1.*",
-        "utopia-php/query": "dev-feat-builder",
+        "utopia-php/query": "0.2.*",
         "utopia-php/async": "@dev"
     },
     "require-dev": {

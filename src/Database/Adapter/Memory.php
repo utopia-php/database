@@ -25,7 +25,7 @@ class Memory extends Adapter
     /**
      * Map of database name to the set of collection storage keys it owns.
      *
-     * @var array<string, array<string, true>>
+     * @var array<string, array<string, string>>
      */
     protected array $databases = [];
 
@@ -179,7 +179,7 @@ class Memory extends Adapter
             return false;
         }
 
-        return isset($this->databases[$database][$this->key($collection)]);
+        return isset($this->databases[$database][$this->filter($collection)]);
     }
 
     public function list(): array
@@ -198,7 +198,7 @@ class Memory extends Adapter
             return true;
         }
 
-        foreach (\array_keys($this->databases[$name]) as $collectionKey) {
+        foreach ($this->databases[$name] as $collectionKey) {
             unset($this->data[$collectionKey]);
             unset($this->permissions[$collectionKey]);
         }
@@ -227,7 +227,7 @@ class Memory extends Adapter
             if (! isset($this->databases[$database])) {
                 $this->databases[$database] = [];
             }
-            $this->databases[$database][$key] = true;
+            $this->databases[$database][$this->filter($name)] = $key;
         }
 
         foreach ($attributes as $attribute) {
@@ -259,9 +259,10 @@ class Memory extends Adapter
         $key = $this->key($id);
         unset($this->data[$key]);
         unset($this->permissions[$key]);
+        $filtered = $this->filter($id);
         foreach ($this->databases as $name => $collections) {
-            if (isset($collections[$key])) {
-                unset($this->databases[$name][$key]);
+            if (isset($collections[$filtered]) && $collections[$filtered] === $key) {
+                unset($this->databases[$name][$filtered]);
             }
         }
 
@@ -912,10 +913,14 @@ class Memory extends Adapter
         $this->data[$key]['documents'][$newKey] = $row;
 
         if (! $skipPermissions) {
-            // Remove any permissions keyed to the old uid and rewrite.
+            // Remove any permissions keyed to the old uid (within the
+            // current tenant only — other tenants may legitimately hold a
+            // permission for the same $id under shared tables) and rewrite.
+            $tenant = $this->getTenant();
             $this->permissions[$key] = \array_values(\array_filter(
                 $this->permissions[$key],
-                fn (array $p) => $p['document'] !== $id && $p['document'] !== $newId
+                fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
+                    || ($p['document'] !== $id && $p['document'] !== $newId)
             ));
             $this->writePermissions($key, $document);
         } elseif ($newId !== $id) {
@@ -949,7 +954,10 @@ class Memory extends Adapter
             return 0;
         }
 
-        $count = 0;
+        // Two-phase: validate every row (including unique-index checks)
+        // before any write lands, so a uniqueness violation on document N
+        // does not leave documents 0..N-1 partially committed.
+        $prepared = [];
         foreach ($documents as $doc) {
             $uid = $doc->getId();
             $docKey = $this->documentKey($uid);
@@ -971,6 +979,15 @@ class Memory extends Adapter
                 $this->enforceUniqueIndexes($key, $merged, $uid);
             }
 
+            $prepared[] = ['uid' => $uid, 'docKey' => $docKey, 'attrs' => $resolvedAttrs];
+        }
+
+        $tenant = $this->getTenant();
+        foreach ($prepared as $entry) {
+            $uid = $entry['uid'];
+            $docKey = $entry['docKey'];
+            $resolvedAttrs = $entry['attrs'];
+
             $row = &$this->data[$key]['documents'][$docKey];
             foreach ($resolvedAttrs as $attribute => $value) {
                 if (\is_array($value)) {
@@ -989,7 +1006,8 @@ class Memory extends Adapter
                 $row['_permissions'] = \json_encode($updates->getPermissions());
                 $this->permissions[$key] = \array_values(\array_filter(
                     $this->permissions[$key],
-                    fn (array $p) => $p['document'] !== $uid
+                    fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
+                        || $p['document'] !== $uid
                 ));
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($updates->getPermissionsByType($type) as $permission) {
@@ -997,16 +1015,15 @@ class Memory extends Adapter
                             'document' => $uid,
                             'type' => $type,
                             'permission' => \str_replace('"', '', $permission),
-                            'tenant' => $this->getTenant(),
+                            'tenant' => $tenant,
                         ];
                     }
                 }
             }
-            $count++;
             unset($row);
         }
 
-        return $count;
+        return \count($prepared);
     }
 
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
@@ -1052,9 +1069,11 @@ class Memory extends Adapter
         }
 
         unset($this->data[$key]['documents'][$docKey]);
+        $tenant = $this->getTenant();
         $this->permissions[$key] = \array_values(\array_filter(
             $this->permissions[$key] ?? [],
-            fn (array $p) => $p['document'] !== $id
+            fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
+                || $p['document'] !== $id
         ));
 
         return true;
@@ -1093,9 +1112,11 @@ class Memory extends Adapter
             : [];
 
         if (! empty($deletedIds) || ! empty($permSet)) {
+            $tenant = $this->getTenant();
             $this->permissions[$key] = \array_values(\array_filter(
                 $this->permissions[$key] ?? [],
-                fn (array $p) => ! isset($deletedIds[$p['document']]) && ! isset($permSet[$p['document']])
+                fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
+                    || (! isset($deletedIds[$p['document']]) && ! isset($permSet[$p['document']]))
             ));
         }
 
@@ -2183,7 +2204,6 @@ class Memory extends Adapter
 
             case Query::TYPE_CONTAINS:
             case Query::TYPE_CONTAINS_ANY:
-            case Query::TYPE_CONTAINS_ALL:
                 if ($haystack === null) {
                     return false;
                 }
@@ -2194,6 +2214,18 @@ class Memory extends Adapter
                 }
 
                 return false;
+
+            case Query::TYPE_CONTAINS_ALL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if (! $this->jsonContains($haystack, $this->wrapScalarObjectValue($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
 
             case Query::TYPE_NOT_CONTAINS:
                 if ($haystack === null) {

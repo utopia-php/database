@@ -417,6 +417,8 @@ class Database
 
     protected bool $preserveDates = false;
 
+    protected bool $skipDuplicates = false;
+
     protected bool $preserveSequence = false;
 
     protected int $maxQueryValues = 5000;
@@ -840,6 +842,29 @@ class Database
         } finally {
             $this->checkRelationshipsExist = $previous;
         }
+    }
+
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
+    /**
+     * Build a tenant-aware identity key for a document.
+     * Returns "<tenant>:<id>" in tenant-per-document shared-table mode, otherwise just the id.
+     */
+    private function tenantKey(Document $document): string
+    {
+        return ($this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument())
+            ? $document->getTenant() . ':' . $document->getId()
+            : $document->getId();
     }
 
     /**
@@ -5700,9 +5725,11 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection, $chunk);
-            });
+            $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
+            // Set adapter flag before withTransaction so Mongo can opt out of a real txn.
+            $batch = $this->skipDuplicates
+                ? $this->adapter->skipDuplicates($insert)
+                : $insert();
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
@@ -7116,18 +7143,57 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        foreach ($documents as $key => $document) {
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                $old = $this->authorization->skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                ))));
-            } else {
-                $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                )));
+
+        // Batch-fetch existing documents in one query instead of N individual getDocument() calls.
+        // tenantPerDocument: group ids by tenant and run one find() per tenant under withTenant,
+        // so cross-tenant batches (e.g. StatsUsage worker) don't get silently scoped to the
+        // session tenant and miss rows belonging to other tenants.
+        $existingDocs = [];
+
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $idsByTenant = [];
+            foreach ($documents as $doc) {
+                if ($doc->getId() !== '') {
+                    $idsByTenant[$doc->getTenant()][] = $doc->getId();
+                }
             }
+            foreach ($idsByTenant as $tenant => $tenantIds) {
+                $tenantIds = \array_values(\array_unique($tenantIds));
+                foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $chunk) {
+                    $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit($this->maxQueryValues),
+                        ])
+                    )));
+                    foreach ($found as $doc) {
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
+                    }
+                }
+            }
+        } else {
+            $docIds = \array_values(\array_unique(\array_filter(
+                \array_map(fn (Document $doc) => $doc->getId(), $documents),
+                fn ($id) => $id !== ''
+            )));
+
+            if (!empty($docIds)) {
+                foreach (\array_chunk($docIds, \max(1, $this->maxQueryValues)) as $chunk) {
+                    $existing = $this->authorization->skip(fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit($this->maxQueryValues),
+                        ])
+                    ));
+                    foreach ($existing as $doc) {
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
+                    }
+                }
+            }
+        }
+
+        foreach ($documents as $key => $document) {
+            $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -7294,7 +7360,7 @@ class Database
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
-            $seenIds[] = $document->getId();
+            $seenIds[] = $this->tenantKey($document);
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -9281,7 +9347,11 @@ class Database
 
         $tenantSegment = $this->adapter->getTenant();
 
-        if ($collectionId === self::METADATA && isset($this->globalCollections[$documentId])) {
+        if (
+            $collectionId === self::METADATA &&
+            $this->adapter->getSharedTables() &&
+            isset($this->globalCollections[$documentId])
+        ) {
             $tenantSegment = null;
         }
 

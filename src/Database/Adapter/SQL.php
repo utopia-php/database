@@ -1030,6 +1030,33 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(): string
+    {
+        return '';
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -2476,6 +2503,7 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
+
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {
@@ -2573,8 +2601,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
+                {$this->getInsertSuffix($name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2588,8 +2617,9 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions}
+                    {$this->getInsertPermissionsSuffix()}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);

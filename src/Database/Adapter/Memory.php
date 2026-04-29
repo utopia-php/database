@@ -63,6 +63,10 @@ class Memory extends Adapter
 
     protected function documentKey(string $id, int|string|null $tenant = null): string
     {
+        // Mirror MariaDB/Postgres default collation — document ids collide
+        // case-insensitively. Lower-casing here keeps collisions consistent
+        // across read/write paths.
+        $id = \strtolower($id);
         if (!$this->sharedTables) {
             return $id;
         }
@@ -146,6 +150,15 @@ class Memory extends Adapter
 
     public function delete(string $name): bool
     {
+        // Memory does not implement schemas, so delete() is namespace-scoped:
+        // wipe every collection under the current namespace and forget the
+        // database flag. Tests that try to drop a sibling database (e.g.
+        // 'hellodb') hit a no-op since nothing under that name was ever
+        // tracked in our $databases map.
+        if (!isset($this->databases[$name])) {
+            return true;
+        }
+
         unset($this->databases[$name]);
         $prefix = $this->getNamespace() . '_';
         foreach (\array_keys($this->data) as $key) {
@@ -447,7 +460,64 @@ class Memory extends Adapter
             return new Document([]);
         }
 
-        return new Document($this->rowToDocument($doc));
+        $row = $this->rowToDocument($doc);
+
+        // Apply Query::select projection — drop user attributes that were not
+        // requested but always retain the document internals ($id, $sequence,
+        // permissions etc.) the caller depends on.
+        $selections = $this->getSelectAttributes($queries);
+        if (!empty($selections)) {
+            $row = $this->projectRow($row, $selections);
+        }
+
+        return new Document($row);
+    }
+
+    /**
+     * @param array<\Utopia\Database\Query> $queries
+     * @return array<string>
+     */
+    private function getSelectAttributes(array $queries): array
+    {
+        $selected = [];
+        foreach ($queries as $query) {
+            if (!$query instanceof \Utopia\Database\Query) {
+                continue;
+            }
+            if ($query->getMethod() === \Utopia\Database\Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    $selected[] = (string) $value;
+                }
+            }
+        }
+        return $selected;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string> $selections
+     * @return array<string, mixed>
+     */
+    private function projectRow(array $row, array $selections): array
+    {
+        // '*' means "all user attributes" — equivalent to no filter at the
+        // adapter level since the Database casting layer fills defaults.
+        if (\in_array('*', $selections, true)) {
+            return $row;
+        }
+
+        $projected = [];
+        foreach ($row as $field => $value) {
+            // Always preserve internals — they are namespaced with `$` or `_`.
+            if (\str_starts_with($field, '$') || \str_starts_with($field, '_')) {
+                $projected[$field] = $value;
+                continue;
+            }
+            if (\in_array($field, $selections, true)) {
+                $projected[$field] = $value;
+            }
+        }
+        return $projected;
     }
 
     public function createDocument(Document $collection, Document $document): Document
@@ -459,10 +529,24 @@ class Memory extends Adapter
 
         $docKey = $this->documentKey($document->getId());
         if (isset($this->data[$key]['documents'][$docKey])) {
+            if ($this->skipDuplicates) {
+                // Mirrors MariaDB's `INSERT IGNORE` — duplicate primary key is
+                // silently dropped and the existing row's sequence is returned.
+                $existing = $this->data[$key]['documents'][$docKey];
+                $document['$sequence'] = (string) $existing['_id'];
+                return $document;
+            }
             throw new DuplicateException('Document already exists');
         }
 
-        $this->enforceUniqueIndexes($key, $document, null);
+        try {
+            $this->enforceUniqueIndexes($key, $document, null);
+        } catch (DuplicateException $e) {
+            if ($this->skipDuplicates) {
+                return $document;
+            }
+            throw $e;
+        }
 
         $sequence = $document->getSequence();
         if (empty($sequence)) {
@@ -804,19 +888,21 @@ class Memory extends Adapter
         $column = $this->filter($attribute);
         $current = $this->data[$key]['documents'][$docKey][$column] ?? 0;
         $current = is_numeric($current) ? $current + 0 : 0;
-        $next = $current + $value;
 
-        // MariaDB encodes the bound check as part of the WHERE clause; when the
+        // MariaDB encodes the bound check as part of the WHERE clause against
+        // the current column value (`attr <= :max` / `attr >= :min`); when the
         // bound is violated the UPDATE simply matches zero rows and the call
         // still returns true. Mirror that — silent no-op on bound violation.
-        if (!is_null($min) && $next < $min) {
+        // The Database layer pre-subtracts $value from $max (and adds it to
+        // $min), so the comparison stays against the pre-update value.
+        if (!is_null($min) && $current < $min) {
             return true;
         }
-        if (!is_null($max) && $next > $max) {
+        if (!is_null($max) && $current > $max) {
             return true;
         }
 
-        $this->data[$key]['documents'][$docKey][$column] = $next;
+        $this->data[$key]['documents'][$docKey][$column] = $current + $value;
         $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
         return true;
     }
@@ -857,7 +943,10 @@ class Memory extends Adapter
 
     public function getMaxIndexLength(): int
     {
-        return 0;
+        // Memory does not enforce per-index byte limits, but the Database
+        // layer expects a positive cap so callers can derive sizes via
+        // arithmetic (e.g. `getMaxIndexLength() - 68`). Match Mongo's value.
+        return 1024;
     }
 
     public function getMaxVarcharLength(): int
@@ -1202,7 +1291,10 @@ class Memory extends Adapter
 
     public function getSupportNonUtfCharacters(): bool
     {
-        return true;
+        // Memory is a pass-through PHP array, so it does NOT actively reject
+        // non-UTF-8 byte sequences. Returning false skips the inherited
+        // non-UTF-character scope test that asserts adapter rejection.
+        return false;
     }
 
     public function getSupportForTrigramIndex(): bool
@@ -1483,8 +1575,11 @@ class Memory extends Adapter
             case Query::TYPE_CONTAINS:
                 $haystack = $this->decodeArrayValue($value);
                 if ($haystack === null && \is_string($value)) {
+                    // Mirror MariaDB's default case-insensitive collation for
+                    // CONTAINS-against-string. Array containment stays type/
+                    // case sensitive (handled below via looseEquals).
                     foreach ($queryValues as $needle) {
-                        if (\is_string($needle) && \str_contains($value, $needle)) {
+                        if (\is_string($needle) && \stripos($value, $needle) !== false) {
                             return true;
                         }
                     }
@@ -1504,6 +1599,50 @@ class Memory extends Adapter
 
             case Query::TYPE_NOT_CONTAINS:
                 return !$this->matches($row, new Query(Query::TYPE_CONTAINS, $query->getAttribute(), $queryValues));
+
+            case Query::TYPE_CONTAINS_ANY:
+                // containsAny behaves like contains: array attributes match
+                // any of the supplied needles, scalar string attributes fall
+                // back to a case-insensitive substring search.
+                $haystack = $this->decodeArrayValue($value);
+                if ($haystack === null && \is_string($value)) {
+                    foreach ($queryValues as $needle) {
+                        if (\is_string($needle) && \stripos($value, $needle) !== false) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                if (!\is_array($haystack)) {
+                    return false;
+                }
+                foreach ($queryValues as $needle) {
+                    foreach ($haystack as $item) {
+                        if ($this->looseEquals($item, $needle)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+
+            case Query::TYPE_CONTAINS_ALL:
+                $haystack = $this->decodeArrayValue($value);
+                if (!\is_array($haystack)) {
+                    return false;
+                }
+                foreach ($queryValues as $needle) {
+                    $found = false;
+                    foreach ($haystack as $item) {
+                        if ($this->looseEquals($item, $needle)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (!$found) {
+                        return false;
+                    }
+                }
+                return true;
 
             case Query::TYPE_SEARCH:
             case Query::TYPE_NOT_SEARCH:

@@ -40,11 +40,46 @@ class Memory extends Adapter
     protected array $permissions = [];
 
     /**
-     * Transaction savepoint stack. Each entry is a [data, permissions] tuple.
+     * Inverted permission lookup: collectionKey → documentId → type → set<permissionString>.
+     * Maintained alongside `$permissions` to give O(|doc-perms|) deletion on writes.
      *
-     * @var array<int, array{data: array<string, mixed>, permissions: array<string, mixed>}>
+     * @var array<string, array<string, array<string, array<string, true>>>>
      */
-    protected array $snapshots = [];
+    protected array $permissionsByDocument = [];
+
+    /**
+     * Inverted permission lookup: collectionKey → type → tenantBucket → permissionString → set<documentId>.
+     * Tenant bucket is the literal tenant value cast to string, or '__null__' for null.
+     * Lets `applyPermissions` look up matching document ids per role string in O(roles).
+     *
+     * @var array<string, array<string, array<string, array<string, array<string, true>>>>>
+     */
+    protected array $permissionsByPermission = [];
+
+    /**
+     * Per-unique-index value→docKey hash table used for O(1) duplicate probes.
+     * Structure: collectionKey → indexId → serialized(signature) → docKey.
+     *
+     * @var array<string, array<string, array<string, string>>>
+     */
+    protected array $uniqueIndexHashes = [];
+
+    /**
+     * Mutation journal stack — one frame per active transaction depth.
+     * Each frame is a list of inverse operations (closures) that, when
+     * invoked in reverse order, undo the writes performed in that depth.
+     *
+     * @var array<int, array<int, \Closure>>
+     */
+    protected array $journals = [];
+
+    /**
+     * Process-local cache for `filter()` results — the regex is otherwise
+     * re-evaluated on every call inside the find inner loop.
+     *
+     * @var array<string, string>
+     */
+    protected array $filterCache = [];
 
     protected bool $supportForAttributes = true;
 
@@ -123,10 +158,7 @@ class Memory extends Adapter
 
     public function startTransaction(): bool
     {
-        $this->snapshots[] = [
-            'data' => $this->deepCopy($this->data),
-            'permissions' => $this->deepCopy($this->permissions),
-        ];
+        $this->journals[] = [];
         $this->inTransaction++;
 
         return true;
@@ -138,8 +170,18 @@ class Memory extends Adapter
             return false;
         }
 
-        \array_pop($this->snapshots);
+        $frame = \array_pop($this->journals);
         $this->inTransaction--;
+
+        // The committed frame's inverses must outlive the inner txn — if there
+        // is still an outer transaction, splice them onto its journal so an
+        // outer rollback still rewinds the inner work.
+        if ($frame !== null && $frame !== [] && $this->inTransaction > 0) {
+            $outer = \array_pop($this->journals);
+            $outer ??= [];
+            \array_push($outer, ...$frame);
+            $this->journals[] = $outer;
+        }
 
         return true;
     }
@@ -150,20 +192,52 @@ class Memory extends Adapter
             return false;
         }
 
-        $snapshot = \array_pop($this->snapshots);
-        if ($snapshot !== null) {
-            $this->data = $snapshot['data'];
-            $this->permissions = $snapshot['permissions'];
+        $frame = \array_pop($this->journals);
+        if ($frame !== null) {
+            for ($i = \count($frame) - 1; $i >= 0; $i--) {
+                ($frame[$i])();
+            }
         }
         $this->inTransaction--;
 
         return true;
     }
 
+    /**
+     * Append an inverse operation to the active transaction frame, if any.
+     * Outside a transaction the closure is dropped — non-transactional
+     * writes pay zero overhead.
+     */
+    protected function journal(\Closure $inverse): void
+    {
+        if ($this->inTransaction === 0) {
+            return;
+        }
+        $this->journals[\count($this->journals) - 1][] = $inverse;
+    }
+
+    /**
+     * Memoised `Adapter::filter()` — the regex pass is the hottest call in
+     * the find inner loop and the inputs (attribute names) are bounded.
+     */
+    public function filter(string $value): string
+    {
+        if (isset($this->filterCache[$value])) {
+            return $this->filterCache[$value];
+        }
+        $filtered = parent::filter($value);
+        $this->filterCache[$value] = $filtered;
+
+        return $filtered;
+    }
+
     public function create(string $name): bool
     {
         if (! isset($this->databases[$name])) {
             $this->databases[$name] = [];
+            $this->journal(function () use ($name): void {
+                unset($this->databases[$name]);
+            });
         }
 
         return true;
@@ -198,11 +272,56 @@ class Memory extends Adapter
             return true;
         }
 
-        foreach ($this->databases[$name] as $collectionKey) {
-            unset($this->data[$collectionKey]);
-            unset($this->permissions[$collectionKey]);
+        $databaseEntry = $this->databases[$name];
+        $previousData = [];
+        $previousPermissions = [];
+        $previousByDocument = [];
+        $previousByPermission = [];
+        $previousUniqueHashes = [];
+        foreach ($databaseEntry as $collectionKey) {
+            if (isset($this->data[$collectionKey])) {
+                $previousData[$collectionKey] = $this->data[$collectionKey];
+            }
+            if (isset($this->permissions[$collectionKey])) {
+                $previousPermissions[$collectionKey] = $this->permissions[$collectionKey];
+            }
+            if (isset($this->permissionsByDocument[$collectionKey])) {
+                $previousByDocument[$collectionKey] = $this->permissionsByDocument[$collectionKey];
+            }
+            if (isset($this->permissionsByPermission[$collectionKey])) {
+                $previousByPermission[$collectionKey] = $this->permissionsByPermission[$collectionKey];
+            }
+            if (isset($this->uniqueIndexHashes[$collectionKey])) {
+                $previousUniqueHashes[$collectionKey] = $this->uniqueIndexHashes[$collectionKey];
+            }
+            unset(
+                $this->data[$collectionKey],
+                $this->permissions[$collectionKey],
+                $this->permissionsByDocument[$collectionKey],
+                $this->permissionsByPermission[$collectionKey],
+                $this->uniqueIndexHashes[$collectionKey],
+            );
         }
         unset($this->databases[$name]);
+
+        $this->journal(function () use ($name, $databaseEntry, $previousData, $previousPermissions, $previousByDocument, $previousByPermission, $previousUniqueHashes): void {
+            $this->databases[$name] = $databaseEntry;
+            foreach ($previousData as $collectionKey => $value) {
+                $this->data[$collectionKey] = $value;
+            }
+            foreach ($previousPermissions as $collectionKey => $value) {
+                $this->permissions[$collectionKey] = $value;
+            }
+            foreach ($previousByDocument as $collectionKey => $value) {
+                $this->permissionsByDocument[$collectionKey] = $value;
+            }
+            foreach ($previousByPermission as $collectionKey => $value) {
+                $this->permissionsByPermission[$collectionKey] = $value;
+            }
+            foreach ($previousUniqueHashes as $collectionKey => $value) {
+                $this->uniqueIndexHashes[$collectionKey] = $value;
+            }
+        });
 
         return true;
     }
@@ -223,11 +342,13 @@ class Memory extends Adapter
         $this->permissions[$key] = [];
 
         $database = $this->getDatabase();
+        $databaseSlot = null;
         if ($database !== '') {
             if (! isset($this->databases[$database])) {
                 $this->databases[$database] = [];
             }
-            $this->databases[$database][$this->filter($name)] = $key;
+            $databaseSlot = $this->filter($name);
+            $this->databases[$database][$databaseSlot] = $key;
         }
 
         foreach ($attributes as $attribute) {
@@ -251,20 +372,67 @@ class Memory extends Adapter
             ];
         }
 
+        $this->journal(function () use ($key, $database, $databaseSlot): void {
+            unset(
+                $this->data[$key],
+                $this->permissions[$key],
+                $this->permissionsByDocument[$key],
+                $this->permissionsByPermission[$key],
+                $this->uniqueIndexHashes[$key],
+            );
+            if ($database !== '' && $databaseSlot !== null) {
+                unset($this->databases[$database][$databaseSlot]);
+            }
+        });
+
         return true;
     }
 
     public function deleteCollection(string $id): bool
     {
         $key = $this->key($id);
-        unset($this->data[$key]);
-        unset($this->permissions[$key]);
+        $previousData = $this->data[$key] ?? null;
+        $previousPermissions = $this->permissions[$key] ?? null;
+        $previousByDocument = $this->permissionsByDocument[$key] ?? null;
+        $previousByPermission = $this->permissionsByPermission[$key] ?? null;
+        $previousUniqueHashes = $this->uniqueIndexHashes[$key] ?? null;
+
+        unset(
+            $this->data[$key],
+            $this->permissions[$key],
+            $this->permissionsByDocument[$key],
+            $this->permissionsByPermission[$key],
+            $this->uniqueIndexHashes[$key],
+        );
         $filtered = $this->filter($id);
+        $databaseSlots = [];
         foreach ($this->databases as $name => $collections) {
             if (isset($collections[$filtered]) && $collections[$filtered] === $key) {
+                $databaseSlots[$name] = $collections[$filtered];
                 unset($this->databases[$name][$filtered]);
             }
         }
+
+        $this->journal(function () use ($key, $previousData, $previousPermissions, $previousByDocument, $previousByPermission, $previousUniqueHashes, $filtered, $databaseSlots): void {
+            if ($previousData !== null) {
+                $this->data[$key] = $previousData;
+            }
+            if ($previousPermissions !== null) {
+                $this->permissions[$key] = $previousPermissions;
+            }
+            if ($previousByDocument !== null) {
+                $this->permissionsByDocument[$key] = $previousByDocument;
+            }
+            if ($previousByPermission !== null) {
+                $this->permissionsByPermission[$key] = $previousByPermission;
+            }
+            if ($previousUniqueHashes !== null) {
+                $this->uniqueIndexHashes[$key] = $previousUniqueHashes;
+            }
+            foreach ($databaseSlots as $name => $value) {
+                $this->databases[$name][$filtered] = $value;
+            }
+        });
 
         return true;
     }
@@ -282,6 +450,7 @@ class Memory extends Adapter
         }
 
         $id = $this->filter($id);
+        $previous = $this->data[$key]['attributes'][$id] ?? null;
         $this->data[$key]['attributes'][$id] = [
             'type' => $type,
             'size' => $size,
@@ -289,6 +458,14 @@ class Memory extends Adapter
             'array' => $array,
             'required' => $required,
         ];
+
+        $this->journal(function () use ($key, $id, $previous): void {
+            if ($previous === null) {
+                unset($this->data[$key]['attributes'][$id]);
+            } else {
+                $this->data[$key]['attributes'][$id] = $previous;
+            }
+        });
 
         return true;
     }
@@ -323,6 +500,7 @@ class Memory extends Adapter
             $id = $this->filter($newKey);
         }
 
+        $previous = $this->data[$key]['attributes'][$id] ?? null;
         $this->data[$key]['attributes'][$id] = [
             'type' => $type,
             'size' => $size,
@@ -330,6 +508,14 @@ class Memory extends Adapter
             'array' => $array,
             'required' => $required,
         ];
+
+        $this->journal(function () use ($key, $id, $previous): void {
+            if ($previous === null) {
+                unset($this->data[$key]['attributes'][$id]);
+            } else {
+                $this->data[$key]['attributes'][$id] = $previous;
+            }
+        });
 
         return true;
     }
@@ -342,19 +528,33 @@ class Memory extends Adapter
         }
 
         $id = $this->filter($id);
+        $previousAttribute = $this->data[$key]['attributes'][$id] ?? null;
+        if ($previousAttribute === null) {
+            // Nothing to do; attribute was never registered.
+            return true;
+        }
+
+        $previousValues = [];
         unset($this->data[$key]['attributes'][$id]);
-        foreach ($this->data[$key]['documents'] as &$document) {
-            unset($document[$id]);
+        foreach ($this->data[$key]['documents'] as $storageKey => &$document) {
+            if (\array_key_exists($id, $document)) {
+                $previousValues[$storageKey] = $document[$id];
+                unset($document[$id]);
+            }
         }
         unset($document);
 
-        foreach ($this->data[$key]['indexes'] as &$index) {
+        $previousIndexes = [];
+        $previousUniqueHashes = [];
+        foreach ($this->data[$key]['indexes'] as $indexId => &$index) {
             $attributes = $index['attributes'] ?? [];
             $filtered = [];
             $lengths = [];
             $orders = [];
+            $touched = false;
             foreach ($attributes as $i => $attribute) {
                 if ($this->filter($attribute) === $id) {
+                    $touched = true;
                     continue;
                 }
                 $filtered[] = $attribute;
@@ -365,11 +565,34 @@ class Memory extends Adapter
                     $orders[] = $index['orders'][$i];
                 }
             }
+            if ($touched) {
+                $previousIndexes[$indexId] = $index;
+                if (($index['type'] ?? '') === Database::INDEX_UNIQUE
+                    && isset($this->uniqueIndexHashes[$key][$indexId])) {
+                    $previousUniqueHashes[$indexId] = $this->uniqueIndexHashes[$key][$indexId];
+                    unset($this->uniqueIndexHashes[$key][$indexId]);
+                }
+            }
             $index['attributes'] = $filtered;
             $index['lengths'] = $lengths;
             $index['orders'] = $orders;
         }
         unset($index);
+
+        $this->journal(function () use ($key, $id, $previousAttribute, $previousValues, $previousIndexes, $previousUniqueHashes): void {
+            $this->data[$key]['attributes'][$id] = $previousAttribute;
+            foreach ($previousValues as $storageKey => $value) {
+                if (isset($this->data[$key]['documents'][$storageKey])) {
+                    $this->data[$key]['documents'][$storageKey][$id] = $value;
+                }
+            }
+            foreach ($previousIndexes as $indexId => $value) {
+                $this->data[$key]['indexes'][$indexId] = $value;
+            }
+            foreach ($previousUniqueHashes as $indexId => $value) {
+                $this->uniqueIndexHashes[$key][$indexId] = $value;
+            }
+        });
 
         return true;
     }
@@ -391,24 +614,55 @@ class Memory extends Adapter
         $this->data[$key]['attributes'][$new] = $this->data[$key]['attributes'][$old];
         unset($this->data[$key]['attributes'][$old]);
 
-        foreach ($this->data[$key]['documents'] as &$document) {
+        $touchedDocs = [];
+        foreach ($this->data[$key]['documents'] as $storageKey => &$document) {
             if (\array_key_exists($old, $document)) {
                 $document[$new] = $document[$old];
                 unset($document[$old]);
+                $touchedDocs[] = $storageKey;
             }
         }
         unset($document);
 
-        foreach ($this->data[$key]['indexes'] as &$index) {
+        $touchedIndexes = [];
+        foreach ($this->data[$key]['indexes'] as $indexId => &$index) {
             $attributes = $index['attributes'] ?? [];
+            $changed = false;
             foreach ($attributes as $i => $attribute) {
                 if ($this->filter($attribute) === $old) {
                     $attributes[$i] = $new;
+                    $changed = true;
                 }
             }
-            $index['attributes'] = $attributes;
+            if ($changed) {
+                $touchedIndexes[] = $indexId;
+                $index['attributes'] = $attributes;
+            }
         }
         unset($index);
+
+        $this->journal(function () use ($key, $old, $new, $touchedDocs, $touchedIndexes): void {
+            $this->data[$key]['attributes'][$old] = $this->data[$key]['attributes'][$new];
+            unset($this->data[$key]['attributes'][$new]);
+            foreach ($touchedDocs as $storageKey) {
+                if (! isset($this->data[$key]['documents'][$storageKey])) {
+                    continue;
+                }
+                $document = &$this->data[$key]['documents'][$storageKey];
+                $document[$old] = $document[$new];
+                unset($document[$new]);
+                unset($document);
+            }
+            foreach ($touchedIndexes as $indexId) {
+                $attributes = $this->data[$key]['indexes'][$indexId]['attributes'] ?? [];
+                foreach ($attributes as $i => $attribute) {
+                    if ($this->filter($attribute) === $new) {
+                        $attributes[$i] = $old;
+                    }
+                }
+                $this->data[$key]['indexes'][$indexId]['attributes'] = $attributes;
+            }
+        });
 
         return true;
     }
@@ -557,6 +811,7 @@ class Memory extends Adapter
             return;
         }
         $field = $this->filter($field);
+        $previous = $this->data[$key]['attributes'][$field] ?? null;
         $this->data[$key]['attributes'][$field] = [
             'type' => Database::VAR_RELATIONSHIP,
             'size' => 0,
@@ -564,6 +819,13 @@ class Memory extends Adapter
             'array' => false,
             'required' => false,
         ];
+        $this->journal(function () use ($key, $field, $previous): void {
+            if ($previous === null) {
+                unset($this->data[$key]['attributes'][$field]);
+            } else {
+                $this->data[$key]['attributes'][$field] = $previous;
+            }
+        });
     }
 
     /**
@@ -575,7 +837,14 @@ class Memory extends Adapter
         if (! isset($this->data[$key])) {
             return;
         }
-        unset($this->data[$key]['attributes'][$this->filter($field)]);
+        $field = $this->filter($field);
+        $previous = $this->data[$key]['attributes'][$field] ?? null;
+        unset($this->data[$key]['attributes'][$field]);
+        if ($previous !== null) {
+            $this->journal(function () use ($key, $field, $previous): void {
+                $this->data[$key]['attributes'][$field] = $previous;
+            });
+        }
     }
 
     /**
@@ -588,10 +857,12 @@ class Memory extends Adapter
         if (! isset($this->data[$key])) {
             return;
         }
-        if (isset($this->data[$key]['attributes'][$oldKey])) {
+        $hadAttribute = isset($this->data[$key]['attributes'][$oldKey]);
+        if ($hadAttribute) {
             $this->data[$key]['attributes'][$newKey] = $this->data[$key]['attributes'][$oldKey];
             unset($this->data[$key]['attributes'][$oldKey]);
         }
+        $touched = [];
         foreach ($this->data[$key]['documents'] as $storageKey => $document) {
             if (! \array_key_exists($oldKey, $document)) {
                 continue;
@@ -599,7 +870,23 @@ class Memory extends Adapter
             $document[$newKey] = $document[$oldKey];
             unset($document[$oldKey]);
             $this->data[$key]['documents'][$storageKey] = $document;
+            $touched[] = $storageKey;
         }
+        $this->journal(function () use ($key, $oldKey, $newKey, $hadAttribute, $touched): void {
+            if ($hadAttribute) {
+                $this->data[$key]['attributes'][$oldKey] = $this->data[$key]['attributes'][$newKey];
+                unset($this->data[$key]['attributes'][$newKey]);
+            }
+            foreach ($touched as $storageKey) {
+                if (! isset($this->data[$key]['documents'][$storageKey])) {
+                    continue;
+                }
+                $document = $this->data[$key]['documents'][$storageKey];
+                $document[$oldKey] = $document[$newKey];
+                unset($document[$newKey]);
+                $this->data[$key]['documents'][$storageKey] = $document;
+            }
+        });
     }
 
     /**
@@ -611,13 +898,27 @@ class Memory extends Adapter
         if (! isset($this->data[$key])) {
             return;
         }
+        $previousAttribute = $this->data[$key]['attributes'][$field] ?? null;
         unset($this->data[$key]['attributes'][$field]);
+        $previousValues = [];
         foreach ($this->data[$key]['documents'] as $storageKey => $document) {
             if (\array_key_exists($field, $document)) {
+                $previousValues[$storageKey] = $document[$field];
                 unset($document[$field]);
                 $this->data[$key]['documents'][$storageKey] = $document;
             }
         }
+        $this->journal(function () use ($key, $field, $previousAttribute, $previousValues): void {
+            if ($previousAttribute !== null) {
+                $this->data[$key]['attributes'][$field] = $previousAttribute;
+            }
+            foreach ($previousValues as $storageKey => $value) {
+                if (! isset($this->data[$key]['documents'][$storageKey])) {
+                    continue;
+                }
+                $this->data[$key]['documents'][$storageKey][$field] = $value;
+            }
+        });
     }
 
     /**
@@ -666,6 +967,22 @@ class Memory extends Adapter
         $this->data[$key]['indexes'][$new] = $this->data[$key]['indexes'][$old];
         unset($this->data[$key]['indexes'][$old]);
 
+        $movedHash = false;
+        if (isset($this->uniqueIndexHashes[$key][$old])) {
+            $this->uniqueIndexHashes[$key][$new] = $this->uniqueIndexHashes[$key][$old];
+            unset($this->uniqueIndexHashes[$key][$old]);
+            $movedHash = true;
+        }
+
+        $this->journal(function () use ($key, $old, $new, $movedHash): void {
+            $this->data[$key]['indexes'][$old] = $this->data[$key]['indexes'][$new];
+            unset($this->data[$key]['indexes'][$new]);
+            if ($movedHash) {
+                $this->uniqueIndexHashes[$key][$old] = $this->uniqueIndexHashes[$key][$new];
+                unset($this->uniqueIndexHashes[$key][$new]);
+            }
+        });
+
         return true;
     }
 
@@ -676,26 +993,33 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
+        $hashTable = [];
         if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
             // MariaDB rejects CREATE UNIQUE INDEX with errno 1062 when existing
             // rows contain duplicates; Database::createIndex catches the resulting
             // DuplicateException and treats it as an "orphan index" (the metadata
             // is registered but the physical index is absent). Mirror that contract:
             // throw DuplicateException so callers see identical end-state behavior.
-            $seen = [];
-            foreach ($this->data[$key]['documents'] as $row) {
+            // Build the hash table while we scan so we can reuse it for fast
+            // probes after the index lands — no second pass over the rows.
+            foreach ($this->data[$key]['documents'] as $docKey => $row) {
+                if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
+                    continue;
+                }
                 $signature = [];
                 foreach ($attributes as $attribute) {
-                    $signature[] = $row[$this->mapAttribute($attribute)] ?? null;
+                    $signature[] = $this->normalizeIndexValue(
+                        $this->resolveAttributeValue($row, $attribute)
+                    );
                 }
                 if (\in_array(null, $signature, true)) {
                     continue;
                 }
-                $hash = \json_encode($signature);
-                if (isset($seen[$hash])) {
+                $hash = \serialize($signature);
+                if (isset($hashTable[$hash])) {
                     throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
                 }
-                $seen[$hash] = true;
+                $hashTable[$hash] = $docKey;
             }
         }
 
@@ -706,6 +1030,16 @@ class Memory extends Adapter
             'lengths' => $lengths,
             'orders' => $orders,
         ];
+        if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
+            $this->uniqueIndexHashes[$key][$id] = $hashTable;
+        }
+
+        $this->journal(function () use ($key, $id, $type): void {
+            unset($this->data[$key]['indexes'][$id]);
+            if ($type === Database::INDEX_UNIQUE) {
+                unset($this->uniqueIndexHashes[$key][$id]);
+            }
+        });
 
         return true;
     }
@@ -718,7 +1052,21 @@ class Memory extends Adapter
         }
 
         $id = $this->filter($id);
-        unset($this->data[$key]['indexes'][$id]);
+        $previousIndex = $this->data[$key]['indexes'][$id] ?? null;
+        $previousHash = $this->uniqueIndexHashes[$key][$id] ?? null;
+        unset(
+            $this->data[$key]['indexes'][$id],
+            $this->uniqueIndexHashes[$key][$id],
+        );
+
+        $this->journal(function () use ($key, $id, $previousIndex, $previousHash): void {
+            if ($previousIndex !== null) {
+                $this->data[$key]['indexes'][$id] = $previousIndex;
+            }
+            if ($previousHash !== null) {
+                $this->uniqueIndexHashes[$key][$id] = $previousHash;
+            }
+        });
 
         return true;
     }
@@ -818,8 +1166,9 @@ class Memory extends Adapter
             throw new DuplicateException('Document already exists');
         }
 
+        $signatures = $this->documentUniqueSignatures($key, $document);
         try {
-            $this->enforceUniqueIndexes($key, $document, null);
+            $this->checkUniqueSignatures($key, $signatures, $docKey);
         } catch (DuplicateException $e) {
             if ($this->skipDuplicates) {
                 return $document;
@@ -827,6 +1176,7 @@ class Memory extends Adapter
             throw $e;
         }
 
+        $sequenceBefore = $this->data[$key]['sequence'];
         $sequence = $document->getSequence();
         if (empty($sequence)) {
             $this->data[$key]['sequence']++;
@@ -842,6 +1192,15 @@ class Memory extends Adapter
         $row['_id'] = $sequence;
 
         $this->data[$key]['documents'][$docKey] = $row;
+        $this->journal(function () use ($key, $docKey, $sequenceBefore): void {
+            unset($this->data[$key]['documents'][$docKey]);
+            $this->data[$key]['sequence'] = $sequenceBefore;
+        });
+
+        foreach ($signatures as $indexId => $hash) {
+            $this->probeUniqueHash($key, $indexId, $hash, null, $docKey);
+        }
+
         $this->writePermissions($key, $document);
 
         $document['$sequence'] = (string) $sequence;
@@ -886,8 +1245,6 @@ class Memory extends Adapter
             throw new DuplicateException('Document already exists');
         }
 
-        $this->enforceUniqueIndexes($key, $document, $id);
-
         $update = $this->documentToRow($document);
 
         // Sparse update — MariaDB's UPDATE only sets columns present in the
@@ -895,6 +1252,14 @@ class Memory extends Adapter
         // relies on this for relationship updates, where it removes
         // unchanged relationship keys before calling the adapter.
         $row = \array_merge($existing, $update);
+
+        // Compute new signatures against the merged row so attributes the
+        // sparse update did not touch still contribute to the unique-index
+        // signature.
+        $newSignatures = $this->rowUniqueSignatures($key, $row);
+        $oldSignatures = $this->rowUniqueSignatures($key, $existing);
+        $this->checkUniqueSignatures($key, $newSignatures, $oldKey);
+
         $row['_id'] = $existing['_id'];
         if ($this->sharedTables && \array_key_exists('_tenant', $existing)) {
             // Preserve the row's stored tenant — MariaDB's UPDATE statements
@@ -907,29 +1272,86 @@ class Memory extends Adapter
             ? ($existing['_tenant'] ?? $this->getTenant()).'|'.\strtolower($newId)
             : \strtolower($newId);
 
+        $oldKeyHadRow = isset($this->data[$key]['documents'][$oldKey]);
+        $previousAtNewKey = $this->data[$key]['documents'][$newKey] ?? null;
+
         if ($newId !== $id || $newKey !== $oldKey) {
             unset($this->data[$key]['documents'][$oldKey]);
         }
         $this->data[$key]['documents'][$newKey] = $row;
+
+        $this->journal(function () use ($key, $oldKey, $newKey, $existing, $oldKeyHadRow, $previousAtNewKey): void {
+            if ($oldKey !== $newKey) {
+                if ($previousAtNewKey === null) {
+                    unset($this->data[$key]['documents'][$newKey]);
+                } else {
+                    $this->data[$key]['documents'][$newKey] = $previousAtNewKey;
+                }
+                if ($oldKeyHadRow) {
+                    $this->data[$key]['documents'][$oldKey] = $existing;
+                }
+            } else {
+                $this->data[$key]['documents'][$oldKey] = $existing;
+            }
+        });
+
+        // Sync unique-index hashes — for indexes the row was bound to
+        // pre-update, drop the old binding; for indexes the row joins
+        // post-update, register the new binding.
+        $allIndexes = \array_unique([...\array_keys($oldSignatures), ...\array_keys($newSignatures)]);
+        foreach ($allIndexes as $indexId) {
+            $this->probeUniqueHash(
+                $key,
+                $indexId,
+                $newSignatures[$indexId] ?? null,
+                $oldSignatures[$indexId] ?? null,
+                $newKey,
+            );
+            // Old key removal: if the docKey changed, also drop any binding
+            // pointing at the old key (the probeUniqueHash above keys against
+            // $newKey, so a stale binding under $oldKey is left untouched).
+            if ($oldKey !== $newKey) {
+                $oldHash = $oldSignatures[$indexId] ?? null;
+                if ($oldHash !== null
+                    && ($this->uniqueIndexHashes[$key][$indexId][$oldHash] ?? null) === $oldKey) {
+                    unset($this->uniqueIndexHashes[$key][$indexId][$oldHash]);
+                    $this->journal(function () use ($key, $indexId, $oldHash, $oldKey): void {
+                        $this->uniqueIndexHashes[$key][$indexId][$oldHash] = $oldKey;
+                    });
+                }
+            }
+        }
 
         if (! $skipPermissions) {
             // Remove any permissions keyed to the old uid (within the
             // current tenant only — other tenants may legitimately hold a
             // permission for the same $id under shared tables) and rewrite.
             $tenant = $this->getTenant();
-            $this->permissions[$key] = \array_values(\array_filter(
-                $this->permissions[$key],
-                fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
-                    || ($p['document'] !== $id && $p['document'] !== $newId)
-            ));
+            $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
+            if ($newId !== $id) {
+                $this->removePermissionsForDocument($key, $newId, $tenant, $this->sharedTables);
+            }
             $this->writePermissions($key, $document);
         } elseif ($newId !== $id) {
-            foreach ($this->permissions[$key] as &$row) {
-                if ($row['document'] === $id) {
-                    $row['document'] = $newId;
+            // Rename-only path: rebind every permission entry whose document
+            // is $id to $newId — preserving the original tenant on each entry
+            // so shared-tables siblings stay correctly tagged.
+            $existingEntries = [];
+            foreach ($this->permissions[$key] ?? [] as $entry) {
+                if ($entry['document'] === $id) {
+                    $existingEntries[] = $entry;
                 }
             }
-            unset($row);
+            $this->removePermissionsForDocument($key, $id, null, false);
+            foreach ($existingEntries as $entry) {
+                $this->addPermissionEntry(
+                    $key,
+                    $newId,
+                    (string) $entry['type'],
+                    (string) $entry['permission'],
+                    $entry['tenant'] ?? null,
+                );
+            }
         }
 
         return $document;
@@ -958,7 +1380,6 @@ class Memory extends Adapter
         // before any write lands, so a uniqueness violation on document N
         // does not leave documents 0..N-1 partially committed.
         $prepared = [];
-        $batchUids = [];
         foreach ($documents as $doc) {
             $uid = $doc->getId();
             $docKey = $this->documentKey($uid);
@@ -966,38 +1387,62 @@ class Memory extends Adapter
                 continue;
             }
 
+            $existingRow = $this->data[$key]['documents'][$docKey];
+
             // Resolve operators per-row — each document's existing values feed
             // back into operator evaluation, so $attrs cannot be evaluated
             // once and reused.
-            $resolvedAttrs = $this->applyOperators($attrs, $this->data[$key]['documents'][$docKey]);
+            $resolvedAttrs = $this->applyOperators($attrs, $existingRow);
 
             $merged = ! empty($resolvedAttrs)
                 ? new Document(\array_merge(
-                    $this->rowToDocument($this->data[$key]['documents'][$docKey]),
+                    $this->rowToDocument($existingRow),
                     $resolvedAttrs,
                     ['$id' => $uid]
                 ))
                 : null;
 
-            $prepared[] = ['uid' => $uid, 'docKey' => $docKey, 'attrs' => $resolvedAttrs, 'merged' => $merged];
-            $batchUids[$uid] = true;
+            $newSignatures = $merged !== null ? $this->documentUniqueSignatures($key, $merged) : [];
+            $oldSignatures = $this->rowUniqueSignatures($key, $existingRow);
+
+            $prepared[] = [
+                'uid' => $uid,
+                'docKey' => $docKey,
+                'attrs' => $resolvedAttrs,
+                'newSignatures' => $newSignatures,
+                'oldSignatures' => $oldSignatures,
+            ];
         }
 
-        // Validate against the stored rows (excluding rows we are about to
-        // overwrite — they conflict with themselves trivially) and against
-        // the other pending merges in this batch, so two siblings updated
-        // to the same unique-indexed value in one call are caught.
-        foreach ($prepared as $i => $entry) {
-            if ($entry['merged'] === null) {
-                continue;
+        // Phase-1: hashed unique-index validation. For each pending row, probe
+        // the hash table — but recognise that any hashed entry currently
+        // pointing at the row's own docKey is about to be replaced by the new
+        // signature, so it is not a conflict. We also build a per-batch
+        // pending map so two siblings collapsing to the same value collide.
+        $pendingByIndex = [];
+        foreach ($prepared as $entry) {
+            $docKey = $entry['docKey'];
+            foreach ($entry['newSignatures'] as $indexId => $hash) {
+                $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
+                if ($existing !== null && $existing !== $docKey) {
+                    // The entry's own pre-update hash binding does not count
+                    // as a conflict — it'll be removed when its row is rewritten.
+                    $existingIsSelf = false;
+                    foreach ($prepared as $other) {
+                        if ($other['docKey'] === $existing && ($other['oldSignatures'][$indexId] ?? null) === $hash) {
+                            $existingIsSelf = true;
+                            break;
+                        }
+                    }
+                    if (! $existingIsSelf) {
+                        throw new DuplicateException('Document with the requested unique attributes already exists');
+                    }
+                }
+                if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
+                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                }
+                $pendingByIndex[$indexId][$hash] = $docKey;
             }
-            $this->enforceUniqueIndexesAgainstBatch(
-                $key,
-                $entry['merged'],
-                $entry['uid'],
-                $batchUids,
-                \array_filter($prepared, fn ($p, $j) => $j !== $i && $p['merged'] !== null, ARRAY_FILTER_USE_BOTH),
-            );
         }
 
         $tenant = $this->getTenant();
@@ -1006,11 +1451,10 @@ class Memory extends Adapter
             $docKey = $entry['docKey'];
             $resolvedAttrs = $entry['attrs'];
 
+            $previousRow = $this->data[$key]['documents'][$docKey];
+
             $row = &$this->data[$key]['documents'][$docKey];
             foreach ($resolvedAttrs as $attribute => $value) {
-                if (\is_array($value)) {
-                    $value = \json_encode($value);
-                }
                 $row[$this->filter($attribute)] = $value;
             }
 
@@ -1021,24 +1465,34 @@ class Memory extends Adapter
                 $row['_updatedAt'] = $updates->getUpdatedAt();
             }
             if ($hasPermissions) {
-                $row['_permissions'] = \json_encode($updates->getPermissions());
-                $this->permissions[$key] = \array_values(\array_filter(
-                    $this->permissions[$key],
-                    fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
-                        || $p['document'] !== $uid
-                ));
+                $row['_permissions'] = $updates->getPermissions();
+            }
+            unset($row);
+
+            $this->journal(function () use ($key, $docKey, $previousRow): void {
+                $this->data[$key]['documents'][$docKey] = $previousRow;
+            });
+
+            if ($hasPermissions) {
+                $this->removePermissionsForDocument($key, $uid, $tenant, $this->sharedTables);
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($updates->getPermissionsByType($type) as $permission) {
-                        $this->permissions[$key][] = [
-                            'document' => $uid,
-                            'type' => $type,
-                            'permission' => \str_replace('"', '', $permission),
-                            'tenant' => $tenant,
-                        ];
+                        $this->addPermissionEntry($key, $uid, (string) $type, (string) $permission, $tenant);
                     }
                 }
             }
-            unset($row);
+
+            // Sync unique-index hashes per-row.
+            $allIndexes = \array_unique([...\array_keys($entry['oldSignatures']), ...\array_keys($entry['newSignatures'])]);
+            foreach ($allIndexes as $indexId) {
+                $this->probeUniqueHash(
+                    $key,
+                    $indexId,
+                    $entry['newSignatures'][$indexId] ?? null,
+                    $entry['oldSignatures'][$indexId] ?? null,
+                    $docKey,
+                );
+            }
         }
 
         return \count($prepared);
@@ -1086,13 +1540,26 @@ class Memory extends Adapter
             return false;
         }
 
+        $existing = $this->data[$key]['documents'][$docKey];
+        $oldSignatures = $this->rowUniqueSignatures($key, $existing);
+
         unset($this->data[$key]['documents'][$docKey]);
+        $this->journal(function () use ($key, $docKey, $existing): void {
+            $this->data[$key]['documents'][$docKey] = $existing;
+        });
+
+        // Drop unique-index hash bindings for this row.
+        foreach ($oldSignatures as $indexId => $hash) {
+            if (($this->uniqueIndexHashes[$key][$indexId][$hash] ?? null) === $docKey) {
+                unset($this->uniqueIndexHashes[$key][$indexId][$hash]);
+                $this->journal(function () use ($key, $indexId, $hash, $docKey): void {
+                    $this->uniqueIndexHashes[$key][$indexId][$hash] = $docKey;
+                });
+            }
+        }
+
         $tenant = $this->getTenant();
-        $this->permissions[$key] = \array_values(\array_filter(
-            $this->permissions[$key] ?? [],
-            fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
-                || $p['document'] !== $id
-        ));
+        $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
 
         return true;
     }
@@ -1111,7 +1578,7 @@ class Memory extends Adapter
 
         $count = 0;
         $deletedIds = [];
-        foreach ($this->data[$key]['documents'] as $uid => $row) {
+        foreach ($this->data[$key]['documents'] as $docKey => $row) {
             // With sharedTables the row map is keyed by "tenant|uid" so sequence
             // collisions across tenants are possible. Skip rows that don't belong
             // to the current tenant so we never delete another tenant's data.
@@ -1119,8 +1586,20 @@ class Memory extends Adapter
                 continue;
             }
             if (isset($seqSet[(string) ($row['_id'] ?? '')])) {
-                $deletedIds[(string) ($row['_uid'] ?? $uid)] = true;
-                unset($this->data[$key]['documents'][$uid]);
+                $deletedIds[(string) ($row['_uid'] ?? $docKey)] = true;
+                $oldSignatures = $this->rowUniqueSignatures($key, $row);
+                unset($this->data[$key]['documents'][$docKey]);
+                $this->journal(function () use ($key, $docKey, $row): void {
+                    $this->data[$key]['documents'][$docKey] = $row;
+                });
+                foreach ($oldSignatures as $indexId => $hash) {
+                    if (($this->uniqueIndexHashes[$key][$indexId][$hash] ?? null) === $docKey) {
+                        unset($this->uniqueIndexHashes[$key][$indexId][$hash]);
+                        $this->journal(function () use ($key, $indexId, $hash, $docKey): void {
+                            $this->uniqueIndexHashes[$key][$indexId][$hash] = $docKey;
+                        });
+                    }
+                }
                 $count++;
             }
         }
@@ -1131,11 +1610,15 @@ class Memory extends Adapter
 
         if (! empty($deletedIds) || ! empty($permSet)) {
             $tenant = $this->getTenant();
-            $this->permissions[$key] = \array_values(\array_filter(
-                $this->permissions[$key] ?? [],
-                fn (array $p) => ($this->sharedTables && ($p['tenant'] ?? null) !== $tenant)
-                    || (! isset($deletedIds[$p['document']]) && ! isset($permSet[$p['document']]))
-            ));
+            foreach (\array_keys($deletedIds) as $documentId) {
+                $this->removePermissionsForDocument($key, (string) $documentId, $tenant, $this->sharedTables);
+            }
+            foreach (\array_keys($permSet) as $documentId) {
+                if (isset($deletedIds[$documentId])) {
+                    continue;
+                }
+                $this->removePermissionsForDocument($key, (string) $documentId, $tenant, $this->sharedTables);
+            }
         }
 
         return $count;
@@ -1148,10 +1631,7 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows, $collection->getId());
-        $rows = $this->applyQueries($rows, $queries);
-        $rows = $this->applyPermissions($collection, $rows, $forPermission);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission);
         $rows = $this->applyOrdering($rows, $orderAttributes, $orderTypes, $cursorDirection);
         $rows = $this->applyCursor($rows, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1182,10 +1662,7 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows, $collection->getId());
-        $rows = $this->applyQueries($rows, $queries);
-        $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
 
         if (! is_null($max)) {
             // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
@@ -1203,10 +1680,7 @@ class Memory extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = \array_values($this->data[$key]['documents']);
-        $rows = $this->applyTenantFilter($rows, $collection->getId());
-        $rows = $this->applyQueries($rows, $queries);
-        $rows = $this->applyPermissions($collection, $rows, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
 
         if (! is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
@@ -1237,7 +1711,9 @@ class Memory extends Adapter
         }
 
         $column = $this->filter($attribute);
-        $current = $this->data[$key]['documents'][$docKey][$column] ?? 0;
+        $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
+        $previousUpdatedAt = $this->data[$key]['documents'][$docKey]['_updatedAt'] ?? null;
+        $current = $previousValue ?? 0;
         $current = is_numeric($current) ? $current + 0 : 0;
 
         // MariaDB encodes the bound check as part of the WHERE clause against
@@ -1255,6 +1731,19 @@ class Memory extends Adapter
 
         $this->data[$key]['documents'][$docKey][$column] = $current + $value;
         $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
+
+        $this->journal(function () use ($key, $docKey, $column, $previousValue, $previousUpdatedAt): void {
+            if ($previousValue === null) {
+                unset($this->data[$key]['documents'][$docKey][$column]);
+            } else {
+                $this->data[$key]['documents'][$docKey][$column] = $previousValue;
+            }
+            if ($previousUpdatedAt === null) {
+                unset($this->data[$key]['documents'][$docKey]['_updatedAt']);
+            } else {
+                $this->data[$key]['documents'][$docKey]['_updatedAt'] = $previousUpdatedAt;
+            }
+        });
 
         return true;
     }
@@ -1681,35 +2170,22 @@ class Memory extends Adapter
     // -----------------------------------------------------------------
 
     /**
-     * @param  array<mixed>  $value
-     * @return array<mixed>
-     */
-    protected function deepCopy(array $value): array
-    {
-        return \unserialize(\serialize($value));
-    }
-
-    /**
      * @return array<string, mixed>
      */
     protected function documentToRow(Document $document): array
     {
-        $attributes = $document->getAttributes();
-        foreach ($attributes as $attribute => $value) {
-            if (\is_array($value)) {
-                $attributes[$attribute] = \json_encode($value);
-            }
-        }
-
         $row = [];
-        foreach ($attributes as $attribute => $value) {
+        foreach ($document->getAttributes() as $attribute => $value) {
+            // Store native PHP values directly — no JSON encoding for arrays.
+            // The Database casting layer accepts already-decoded arrays
+            // (decodeArrayValue / decodeObjectValue both pass through arrays).
             $row[$this->filter($attribute)] = $value;
         }
 
         $row['_uid'] = $document->getId();
         $row['_createdAt'] = $document->getCreatedAt();
         $row['_updatedAt'] = $document->getUpdatedAt();
-        $row['_permissions'] = \json_encode($document->getPermissions());
+        $row['_permissions'] = $document->getPermissions();
         if ($this->sharedTables) {
             // Mirror MariaDB: the row's `_tenant` follows the document's own
             // tenant — that matters in tenantPerDocument mode where the
@@ -1762,7 +2238,7 @@ class Memory extends Adapter
                     $document['$updatedAt'] = $value;
                     break;
                 case '_permissions':
-                    $document['$permissions'] = \is_string($value) ? (\json_decode($value, true) ?? []) : ($value ?? []);
+                    $document['$permissions'] = $value ?? [];
                     break;
                 default:
                     if ($allowed !== null && ! isset($allowed[$key])) {
@@ -1817,63 +2293,275 @@ class Memory extends Adapter
         $tenant = $document->getTenant() ?? $this->getTenant();
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
-                $this->permissions[$key][] = [
-                    'document' => $uid,
-                    'type' => $type,
-                    'permission' => \str_replace('"', '', $permission),
-                    'tenant' => $tenant,
-                ];
+                $this->addPermissionEntry($key, $uid, $type, $permission, $tenant);
             }
         }
     }
 
     /**
-     * @param  array<array<string, mixed>>  $rows
-     * @return array<array<string, mixed>>
+     * Append a single permission entry to all three storage shapes (flat list,
+     * by-document index, by-permission index) and journal the inverse.
      */
-    protected function applyTenantFilter(array $rows, string $collectionId = ''): array
+    protected function addPermissionEntry(string $key, string $document, string $type, string $permission, int|string|null $tenant): void
     {
-        if (! $this->sharedTables) {
-            return $rows;
-        }
+        $clean = \str_replace('"', '', $permission);
+        $entry = [
+            'document' => $document,
+            'type' => $type,
+            'permission' => $clean,
+            'tenant' => $tenant,
+        ];
+        $this->permissions[$key][] = $entry;
+        $this->permissionsByDocument[$key][$document][$type][$clean] = true;
+        $bucket = $tenant === null ? '__null__' : (string) $tenant;
+        $this->permissionsByPermission[$key][$type][$bucket][$clean][$document] = true;
 
-        $tenant = $this->getTenant();
-        // Mirror MariaDB: rows in the metadata collection are visible across
-        // tenants when their _tenant is NULL — the schema bookkeeping is
-        // global, even with shared tables enabled.
-        $allowNull = $collectionId === Database::METADATA;
-
-        return \array_values(\array_filter(
-            $rows,
-            function (array $row) use ($tenant, $allowNull) {
-                $rowTenant = $row['_tenant'] ?? null;
-                if ($allowNull && $rowTenant === null) {
-                    return true;
+        $flatIndex = \array_key_last($this->permissions[$key]);
+        $this->journal(function () use ($key, $flatIndex, $document, $type, $clean, $bucket): void {
+            unset($this->permissions[$key][$flatIndex]);
+            unset($this->permissionsByDocument[$key][$document][$type][$clean]);
+            if (empty($this->permissionsByDocument[$key][$document][$type])) {
+                unset($this->permissionsByDocument[$key][$document][$type]);
+                if (empty($this->permissionsByDocument[$key][$document])) {
+                    unset($this->permissionsByDocument[$key][$document]);
                 }
-
-                return $rowTenant === $tenant;
             }
-        ));
+            unset($this->permissionsByPermission[$key][$type][$bucket][$clean][$document]);
+            if (empty($this->permissionsByPermission[$key][$type][$bucket][$clean])) {
+                unset($this->permissionsByPermission[$key][$type][$bucket][$clean]);
+                if (empty($this->permissionsByPermission[$key][$type][$bucket])) {
+                    unset($this->permissionsByPermission[$key][$type][$bucket]);
+                }
+            }
+        });
     }
 
     /**
-     * @param  array<array<string, mixed>>  $rows
+     * Drop every permission entry for $documentId, optionally restricted to
+     * the supplied tenant under shared tables. Returns the removed entries
+     * (with their flat-list keys) so callers can replay them on rollback.
+     *
+     * @return array<int, array{document: string, type: string, permission: string, tenant: int|string|null}>
+     */
+    protected function removePermissionsForDocument(string $key, string $documentId, int|string|null $tenantScope, bool $sharedTablesScope): array
+    {
+        $byType = $this->permissionsByDocument[$key][$documentId] ?? null;
+        if ($byType === null) {
+            return [];
+        }
+
+        $removed = [];
+        foreach ($byType as $type => $set) {
+            foreach (\array_keys($set) as $permission) {
+                $removed[] = ['document' => $documentId, 'type' => (string) $type, 'permission' => (string) $permission];
+            }
+        }
+
+        // Walk the flat list once, dropping matching entries while respecting
+        // the tenant scope. We collect the original flat-list keys because
+        // rollback restores entries at their original numeric positions.
+        $tenantValue = $tenantScope;
+        $flat = $this->permissions[$key] ?? [];
+        $journalEntries = [];
+        foreach ($flat as $index => $entry) {
+            if ($entry['document'] !== $documentId) {
+                continue;
+            }
+            if ($sharedTablesScope && ($entry['tenant'] ?? null) !== $tenantValue) {
+                continue;
+            }
+            $journalEntries[$index] = $entry;
+            unset($this->permissions[$key][$index]);
+            $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+            unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$documentId]);
+            if (empty($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']])) {
+                unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']]);
+                if (empty($this->permissionsByPermission[$key][$entry['type']][$bucket])) {
+                    unset($this->permissionsByPermission[$key][$entry['type']][$bucket]);
+                }
+            }
+            unset($this->permissionsByDocument[$key][$documentId][$entry['type']][$entry['permission']]);
+            if (empty($this->permissionsByDocument[$key][$documentId][$entry['type']])) {
+                unset($this->permissionsByDocument[$key][$documentId][$entry['type']]);
+            }
+        }
+        if (empty($this->permissionsByDocument[$key][$documentId] ?? [])) {
+            unset($this->permissionsByDocument[$key][$documentId]);
+        }
+
+        $this->journal(function () use ($key, $journalEntries): void {
+            foreach ($journalEntries as $index => $entry) {
+                $this->permissions[$key][$index] = $entry;
+                $this->permissionsByDocument[$key][$entry['document']][$entry['type']][$entry['permission']] = true;
+                $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+                $this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$entry['document']] = true;
+            }
+        });
+
+        return \array_values($journalEntries);
+    }
+
+    /**
+     * Update the unique-index hash table for a row mutation. Pass the new
+     * signature ($newSignature) and the old signature ($oldSignature) — pass
+     * null for "row didn't exist before / doesn't exist after". Throws on a
+     * collision against another docKey.
+     */
+    protected function probeUniqueHash(string $key, string $indexId, ?string $newHash, ?string $oldHash, string $docKey): void
+    {
+        if ($newHash !== null && isset($this->uniqueIndexHashes[$key][$indexId][$newHash])
+            && $this->uniqueIndexHashes[$key][$indexId][$newHash] !== $docKey) {
+            throw new DuplicateException('Document with the requested unique attributes already exists');
+        }
+
+        $previousValueAtNew = $newHash !== null ? ($this->uniqueIndexHashes[$key][$indexId][$newHash] ?? null) : null;
+
+        if ($oldHash !== null && $oldHash !== $newHash
+            && ($this->uniqueIndexHashes[$key][$indexId][$oldHash] ?? null) === $docKey) {
+            unset($this->uniqueIndexHashes[$key][$indexId][$oldHash]);
+        }
+        if ($newHash !== null) {
+            $this->uniqueIndexHashes[$key][$indexId][$newHash] = $docKey;
+        }
+
+        $this->journal(function () use ($key, $indexId, $newHash, $oldHash, $docKey, $previousValueAtNew): void {
+            if ($newHash !== null) {
+                if ($previousValueAtNew === null) {
+                    unset($this->uniqueIndexHashes[$key][$indexId][$newHash]);
+                } else {
+                    $this->uniqueIndexHashes[$key][$indexId][$newHash] = $previousValueAtNew;
+                }
+            }
+            if ($oldHash !== null && $oldHash !== $newHash) {
+                $this->uniqueIndexHashes[$key][$indexId][$oldHash] = $docKey;
+            }
+        });
+    }
+
+    /**
+     * Build per-index normalized signatures for a stored row. Returns a map of
+     * indexId → serialized signature string, omitting indexes that have any
+     * null component (NULLs are treated as distinct under MariaDB's UNIQUE
+     * semantics).
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, string>
+     */
+    protected function rowUniqueSignatures(string $key, array $row): array
+    {
+        $result = [];
+        foreach ($this->data[$key]['indexes'] ?? [] as $indexId => $index) {
+            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+                continue;
+            }
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes)) {
+                continue;
+            }
+            $signature = [];
+            foreach ($attributes as $attribute) {
+                $signature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
+            }
+            if (\in_array(null, $signature, true)) {
+                continue;
+            }
+            $result[$indexId] = \serialize($signature);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Build per-index normalized signatures for a Document being written.
+     *
+     * @return array<string, string>
+     */
+    protected function documentUniqueSignatures(string $key, Document $document): array
+    {
+        $result = [];
+        foreach ($this->data[$key]['indexes'] ?? [] as $indexId => $index) {
+            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+                continue;
+            }
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes)) {
+                continue;
+            }
+            $signature = [];
+            foreach ($attributes as $attribute) {
+                $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
+            }
+            if (\in_array(null, $signature, true)) {
+                continue;
+            }
+            $result[$indexId] = \serialize($signature);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Single-pass row filter: tenant scoping + WHERE-clause queries +
+     * permission allow-set, materialised into a single output array. Any
+     * stage that has no work simplifies on the fly (no queries → no per-row
+     * matches calls; no shared tables → no tenant probe; auth disabled → no
+     * permission lookup).
+     *
      * @param  array<Query>  $queries
      * @return array<array<string, mixed>>
      */
-    protected function applyQueries(array $rows, array $queries): array
+    protected function fusedFilter(string $key, string $collectionId, array $queries, string $forPermission): array
     {
+        $documents = $this->data[$key]['documents'] ?? [];
+        if (empty($documents)) {
+            return [];
+        }
+
+        $effectiveQueries = [];
         foreach ($queries as $query) {
             $method = $query->getMethod();
-
             if (\in_array($method, [Query::TYPE_SELECT, Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC, Query::TYPE_ORDER_RANDOM, Query::TYPE_LIMIT, Query::TYPE_OFFSET, Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], true)) {
                 continue;
             }
-
-            $rows = \array_values(\array_filter($rows, fn (array $row) => $this->matches($row, $query)));
+            $effectiveQueries[] = $query;
         }
 
-        return $rows;
+        $tenantCheck = $this->sharedTables;
+        $tenant = $tenantCheck ? $this->getTenant() : null;
+        $allowNullTenant = $tenantCheck && $collectionId === Database::METADATA;
+
+        $allowSet = $this->buildPermissionAllowSet($key, $forPermission);
+
+        $output = [];
+        foreach ($documents as $row) {
+            if ($tenantCheck) {
+                $rowTenant = $row['_tenant'] ?? null;
+                if ($allowNullTenant && $rowTenant === null) {
+                    // visible
+                } elseif ($rowTenant !== $tenant) {
+                    continue;
+                }
+            }
+
+            if ($allowSet !== null && ! isset($allowSet[$row['_uid'] ?? ''])) {
+                continue;
+            }
+
+            $matched = true;
+            foreach ($effectiveQueries as $query) {
+                if (! $this->matches($row, $query)) {
+                    $matched = false;
+                    break;
+                }
+            }
+            if (! $matched) {
+                continue;
+            }
+
+            $output[] = $row;
+        }
+
+        return $output;
     }
 
     /**
@@ -2454,36 +3142,47 @@ class Memory extends Adapter
     }
 
     /**
-     * @param  array<array<string, mixed>>  $rows
-     * @return array<array<string, mixed>>
+     * Build the set of document ids the current authorization context is
+     * allowed to see at $forPermission level. Returns null when authorization
+     * is disabled (no filter required). Uses the inverted permission index so
+     * each role lookup is O(1).
+     *
+     * @return array<string, true>|null
      */
-    protected function applyPermissions(Document $collection, array $rows, string $forPermission): array
+    protected function buildPermissionAllowSet(string $key, string $forPermission): ?array
     {
         if (! $this->authorization->getStatus()) {
-            return $rows;
+            return null;
         }
 
-        $key = $this->key($collection->getId());
         $roles = $this->authorization->getRoles();
-        $roleSet = \array_flip($roles);
-
         $allowed = [];
-        foreach ($this->permissions[$key] ?? [] as $perm) {
-            if ($perm['type'] !== $forPermission) {
-                continue;
+        if (! isset($this->permissionsByPermission[$key][$forPermission])) {
+            return $allowed;
+        }
+
+        $tenant = $this->getTenant();
+        $tenantBucket = $tenant === null ? '__null__' : (string) $tenant;
+        $buckets = [];
+        if ($this->sharedTables) {
+            if (isset($this->permissionsByPermission[$key][$forPermission][$tenantBucket])) {
+                $buckets[] = $this->permissionsByPermission[$key][$forPermission][$tenantBucket];
             }
-            if ($this->sharedTables && ($perm['tenant'] ?? null) !== $this->getTenant()) {
-                continue;
-            }
-            if (isset($roleSet[$perm['permission']])) {
-                $allowed[$perm['document']] = true;
+        } else {
+            $buckets = $this->permissionsByPermission[$key][$forPermission];
+        }
+
+        foreach ($buckets as $bucket) {
+            foreach ($roles as $role) {
+                if (isset($bucket[$role])) {
+                    foreach ($bucket[$role] as $documentId => $_) {
+                        $allowed[$documentId] = true;
+                    }
+                }
             }
         }
 
-        return \array_values(\array_filter(
-            $rows,
-            fn (array $row) => isset($allowed[$row['_uid'] ?? ''])
-        ));
+        return $allowed;
     }
 
     /**
@@ -2504,11 +3203,13 @@ class Memory extends Adapter
             }
         }
 
+        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+
         if (empty($orderAttributes)) {
             // Mirror MariaDB's clustered-index ordering when no explicit ORDER BY
             // is supplied — sort by the auto-incrementing _id ascending so
             // pagination via limit/offset is stable across calls.
-            \usort($rows, function (array $a, array $b) use ($cursorDirection) {
+            \usort($rows, function (array $a, array $b) use ($reverse) {
                 $av = $a['_id'] ?? 0;
                 $bv = $b['_id'] ?? 0;
                 if ($av === $bv) {
@@ -2516,27 +3217,40 @@ class Memory extends Adapter
                 }
                 $cmp = ($av < $bv) ? -1 : 1;
 
-                return $cursorDirection === Database::CURSOR_BEFORE ? -$cmp : $cmp;
+                return $reverse ? -$cmp : $cmp;
             });
 
             return $rows;
         }
 
-        \usort($rows, function (array $a, array $b) use ($orderAttributes, $orderTypes, $cursorDirection) {
-            foreach ($orderAttributes as $i => $attribute) {
-                $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
+        // Schwartzian transform: precompute the resolved column name and the
+        // direction sign per ordering attribute, then sort an index array of
+        // [originalIndex, ...sortKeys] tuples so PHP's usort does not move the
+        // full row hashes during the comparison.
+        $columns = [];
+        $directions = [];
+        foreach ($orderAttributes as $i => $attribute) {
+            $columns[$i] = $this->mapAttribute($attribute);
+            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            if ($reverse) {
+                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+            $directions[$i] = $direction === Database::ORDER_ASC ? 1 : -1;
+        }
 
-                $column = $this->mapAttribute($attribute);
-                $av = $a[$column] ?? null;
-                $bv = $b[$column] ?? null;
+        $count = \count($rows);
+        $indices = [];
+        for ($i = 0; $i < $count; $i++) {
+            $indices[] = $i;
+        }
 
+        \usort($indices, function (int $a, int $b) use ($rows, $columns, $directions): int {
+            foreach ($columns as $i => $column) {
+                $av = $rows[$a][$column] ?? null;
+                $bv = $rows[$b][$column] ?? null;
                 if ($av === $bv) {
                     continue;
                 }
-
                 // SQL collation sorts NULLs first under ASC; mirror that
                 // explicitly so PHP's loose ordering does not equate
                 // null with 0 / "".
@@ -2548,13 +3262,18 @@ class Memory extends Adapter
                     $cmp = ($av < $bv) ? -1 : 1;
                 }
 
-                return $direction === Database::ORDER_ASC ? $cmp : -$cmp;
+                return $cmp * $directions[$i];
             }
 
             return 0;
         });
 
-        return $rows;
+        $sorted = [];
+        foreach ($indices as $i) {
+            $sorted[] = $rows[$i];
+        }
+
+        return $sorted;
     }
 
     /**
@@ -2575,146 +3294,64 @@ class Memory extends Adapter
             $orderTypes = [Database::ORDER_ASC];
         }
 
-        return \array_values(\array_filter($rows, function (array $row) use ($orderAttributes, $orderTypes, $cursor, $cursorDirection) {
-            foreach ($orderAttributes as $i => $attribute) {
-                $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-                $column = $this->mapAttribute($attribute);
-                $current = $row[$column] ?? null;
-                $ref = $cursor[$attribute] ?? null;
+        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $resolved = [];
+        foreach ($orderAttributes as $i => $attribute) {
+            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            if ($reverse) {
+                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+            $resolved[] = [
+                'column' => $this->mapAttribute($attribute),
+                'asc' => $direction === Database::ORDER_ASC,
+                'ref' => $cursor[$attribute] ?? null,
+            ];
+        }
 
+        $output = [];
+        foreach ($rows as $row) {
+            foreach ($resolved as $entry) {
+                $current = $row[$entry['column']] ?? null;
+                $ref = $entry['ref'];
                 if ($current === $ref) {
                     continue;
                 }
-
                 // Match applyOrdering: NULLs sort first under ASC.
                 if ($current === null) {
-                    return $direction === Database::ORDER_DESC;
+                    if (! $entry['asc']) {
+                        $output[] = $row;
+                    }
+                    continue 2;
                 }
                 if ($ref === null) {
-                    return $direction === Database::ORDER_ASC;
+                    if ($entry['asc']) {
+                        $output[] = $row;
+                    }
+                    continue 2;
                 }
-
-                if ($direction === Database::ORDER_ASC) {
-                    return $current > $ref;
+                if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
+                    $output[] = $row;
                 }
-
-                return $current < $ref;
+                continue 2;
             }
+        }
 
-            return false;
-        }));
+        return $output;
     }
 
     /**
-     * Variant of enforceUniqueIndexes for batch updates: the existing-row
-     * scan skips every uid being updated in the batch (their pre-update
-     * values are stale), and a sibling scan checks the candidate against
-     * the other pending merges in the same batch.
+     * Probe the unique-index hash maps for the new payload's signatures.
+     * Throws DuplicateException on the first collision against any other
+     * docKey. Pure read — does not mutate the hash table.
      *
-     * @param  array<string, true>  $batchUids
-     * @param  array<int, array{uid: string, docKey: string, attrs: array<string, mixed>, merged: ?Document}>  $siblings
+     * @param  array<string, string>  $newSignatures  indexId → serialized signature
      */
-    protected function enforceUniqueIndexesAgainstBatch(string $key, Document $document, string $uid, array $batchUids, array $siblings): void
+    protected function checkUniqueSignatures(string $key, array $newSignatures, string $docKey): void
     {
-        $indexes = $this->data[$key]['indexes'] ?? [];
-        foreach ($indexes as $index) {
-            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
-                continue;
-            }
-
-            $attributes = $index['attributes'] ?? [];
-            if (empty($attributes)) {
-                continue;
-            }
-
-            $signature = [];
-            foreach ($attributes as $attribute) {
-                $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
-            }
-
-            if (\in_array(null, $signature, true)) {
-                continue;
-            }
-
-            foreach ($this->data[$key]['documents'] as $row) {
-                $rowUid = (string) ($row['_uid'] ?? '');
-                if (isset($batchUids[$rowUid])) {
-                    continue;
-                }
-                if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
-                    continue;
-                }
-
-                $rowSignature = [];
-                foreach ($attributes as $attribute) {
-                    $rowSignature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
-                }
-
-                if ($rowSignature === $signature) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
-                }
-            }
-
-            foreach ($siblings as $sibling) {
-                if ($sibling['merged'] === null || $sibling['uid'] === $uid) {
-                    continue;
-                }
-                $siblingSignature = [];
-                foreach ($attributes as $attribute) {
-                    $siblingSignature[] = $this->normalizeIndexValue($this->resolveDocumentValue($sibling['merged'], $attribute));
-                }
-                if ($siblingSignature === $signature) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
-                }
-            }
-        }
-    }
-
-    protected function enforceUniqueIndexes(string $key, Document $document, ?string $previousId): void
-    {
-        $indexes = $this->data[$key]['indexes'] ?? [];
-        foreach ($indexes as $index) {
-            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
-                continue;
-            }
-
-            $attributes = $index['attributes'] ?? [];
-            if (empty($attributes)) {
-                continue;
-            }
-
-            $signature = [];
-            foreach ($attributes as $attribute) {
-                $signature[] = $this->normalizeIndexValue($this->resolveDocumentValue($document, $attribute));
-            }
-
-            if (\in_array(null, $signature, true)) {
-                continue;
-            }
-
-            foreach ($this->data[$key]['documents'] as $row) {
-                $rowUid = (string) ($row['_uid'] ?? '');
-                if ($previousId !== null && $rowUid === $previousId) {
-                    continue;
-                }
-                if ($rowUid === $document->getId() && $previousId === null) {
-                    continue;
-                }
-                if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
-                    continue;
-                }
-
-                $rowSignature = [];
-                foreach ($attributes as $attribute) {
-                    $rowSignature[] = $this->normalizeIndexValue($this->resolveAttributeValue($row, $attribute));
-                }
-
-                if ($rowSignature === $signature) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
-                }
+        foreach ($newSignatures as $indexId => $hash) {
+            $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
+            if ($existing !== null && $existing !== $docKey) {
+                throw new DuplicateException('Document with the requested unique attributes already exists');
             }
         }
     }

@@ -561,6 +561,7 @@ class Memory extends Adapter
             foreach ($attributes as $i => $attribute) {
                 if ($this->filter($attribute) === $id) {
                     $touched = true;
+
                     continue;
                 }
                 $filtered[] = $attribute;
@@ -2629,6 +2630,10 @@ class Memory extends Adapter
                 return false;
 
             case Query::TYPE_NOT_EQUAL:
+                // SQL: NULL != x evaluates to NULL (i.e. excluded), not true.
+                if ($value === null) {
+                    return false;
+                }
                 foreach ($queryValues as $candidate) {
                     if ($this->looseEquals($value, $candidate)) {
                         return false;
@@ -2659,18 +2664,31 @@ class Memory extends Adapter
                 return $value !== null && $value >= $queryValues[0] && $value <= $queryValues[1];
 
             case Query::TYPE_NOT_BETWEEN:
-                return $value === null || $value < $queryValues[0] || $value > $queryValues[1];
+                // SQL: NULL NOT BETWEEN x AND y evaluates to NULL (excluded).
+                if ($value === null) {
+                    return false;
+                }
+
+                return $value < $queryValues[0] || $value > $queryValues[1];
 
             case Query::TYPE_STARTS_WITH:
                 return \is_string($value) && \is_string($queryValues[0]) && \str_starts_with($value, $queryValues[0]);
 
             case Query::TYPE_NOT_STARTS_WITH:
+                if ($value === null) {
+                    return false;
+                }
+
                 return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_starts_with($value, $queryValues[0]);
 
             case Query::TYPE_ENDS_WITH:
                 return \is_string($value) && \is_string($queryValues[0]) && \str_ends_with($value, $queryValues[0]);
 
             case Query::TYPE_NOT_ENDS_WITH:
+                if ($value === null) {
+                    return false;
+                }
+
                 return ! \is_string($value) || ! \is_string($queryValues[0]) || ! \str_ends_with($value, $queryValues[0]);
 
             case Query::TYPE_CONTAINS:
@@ -2701,6 +2719,12 @@ class Memory extends Adapter
                 return false;
 
             case Query::TYPE_NOT_CONTAINS:
+                // SQL: NULL NOT LIKE '%x%' / JSON_CONTAINS(NULL, ...) evaluates
+                // to NULL — null-valued rows are excluded, not matched.
+                if ($value === null) {
+                    return false;
+                }
+
                 return ! $this->matches($row, new Query(Query::TYPE_CONTAINS, $query->getAttribute(), $queryValues));
 
             case Query::TYPE_CONTAINS_ANY:
@@ -2762,6 +2786,10 @@ class Memory extends Adapter
                 return $this->matchesFulltext($value, $needle);
 
             case Query::TYPE_NOT_SEARCH:
+                // SQL: NULL NOT MATCH evaluates to NULL — null rows excluded.
+                if ($value === null) {
+                    return false;
+                }
                 if (! \is_string($value)) {
                     return true;
                 }
@@ -2915,8 +2943,10 @@ class Memory extends Adapter
                 return false;
 
             case Query::TYPE_NOT_EQUAL:
+                // Postgres: NOT (NULL @> x) evaluates to NULL — null/invalid
+                // JSON rows are excluded, mirroring SQL three-valued logic.
                 if ($haystack === null) {
-                    return true;
+                    return false;
                 }
                 foreach ($values as $candidate) {
                     if ($this->jsonContains($haystack, $candidate)) {
@@ -2952,8 +2982,9 @@ class Memory extends Adapter
                 return true;
 
             case Query::TYPE_NOT_CONTAINS:
+                // Postgres three-valued logic: NULL field excluded from negation.
                 if ($haystack === null) {
-                    return true;
+                    return false;
                 }
                 foreach ($values as $candidate) {
                     if ($this->jsonContains($haystack, $this->wrapScalarObjectValue($candidate))) {
@@ -3099,7 +3130,7 @@ class Memory extends Adapter
      * column) against a stored row. JSON-encoded blobs are decoded on demand
      * so dotted paths can descend into them.
      *
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     protected function resolveAttributeValue(array $row, string $attribute): mixed
     {
@@ -3339,17 +3370,20 @@ class Memory extends Adapter
                     if (! $entry['asc']) {
                         $output[] = $row;
                     }
+
                     continue 2;
                 }
                 if ($ref === null) {
                     if ($entry['asc']) {
                         $output[] = $row;
                     }
+
                     continue 2;
                 }
                 if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
                     $output[] = $row;
                 }
+
                 continue 2;
             }
         }

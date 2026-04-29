@@ -868,4 +868,90 @@ class MemoryTest extends Base
             'code' => 3,
         ]));
     }
+
+    /**
+     * Regression: SQL three-valued logic — `WHERE col != x` evaluates to NULL
+     * for null-valued rows, so they are EXCLUDED from the result set. Memory
+     * adapter previously included null rows on every negation operator,
+     * diverging from MariaDB / MySQL / Postgres / SQLite.
+     */
+    public function testNegationOperatorsExcludeNullRows(): void
+    {
+        $database = $this->freshDatabase();
+
+        $database->createCollection('nullable', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => false,
+            ]),
+            new Document([
+                '$id' => 'score',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+            ]),
+            new Document([
+                '$id' => 'bio',
+                'type' => Database::VAR_STRING,
+                'size' => 1024,
+                'required' => false,
+            ]),
+        ], [
+            new Document([
+                '$id' => 'bio_ft',
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['bio'],
+            ]),
+        ], [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        $database->createDocument('nullable', new Document([
+            '$id' => 'with_value',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'alice',
+            'score' => 5,
+            'bio' => 'hello world',
+        ]));
+
+        $database->createDocument('nullable', new Document([
+            '$id' => 'with_null',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => null,
+            'score' => null,
+            'bio' => null,
+        ]));
+
+        $assertOnlyValueRow = function (string $operator, array $results) {
+            $ids = \array_map(fn (Document $d) => $d->getId(), $results);
+            $this->assertSame(['with_value'], $ids, $operator . ' should exclude null-valued rows');
+        };
+
+        $assertOnlyValueRow('notEqual', $database->find('nullable', [
+            Query::notEqual('name', 'bob'),
+        ]));
+
+        $assertOnlyValueRow('notBetween', $database->find('nullable', [
+            Query::notBetween('score', 100, 200),
+        ]));
+
+        $assertOnlyValueRow('notStartsWith', $database->find('nullable', [
+            Query::notStartsWith('name', 'zz'),
+        ]));
+
+        $assertOnlyValueRow('notEndsWith', $database->find('nullable', [
+            Query::notEndsWith('name', 'zz'),
+        ]));
+
+        $assertOnlyValueRow('notContains', $database->find('nullable', [
+            Query::notContains('bio', ['nope']),
+        ]));
+
+        $assertOnlyValueRow('notSearch', $database->find('nullable', [
+            Query::notSearch('bio', 'unrelated'),
+        ]));
+    }
 }

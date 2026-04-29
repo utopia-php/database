@@ -414,17 +414,238 @@ class Memory extends Adapter
 
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
-        throw new DatabaseException('Relationships are not implemented in the Memory adapter');
+        // Memory stores documents as flexible maps, so the relationship "column"
+        // is registered on the attribute list rather than added as a physical
+        // schema column. The registration ensures that reads always surface
+        // the relationship key (as null when unpopulated) — matching MariaDB,
+        // which selects the column even when no rows have a value.
+        // The M2M junction collection itself is created by the wrapper through
+        // the standard createCollection path.
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->registerRelationshipField($collection, $id);
+                if ($twoWay) {
+                    $this->registerRelationshipField($relatedCollection, $twoWayKey);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $this->registerRelationshipField($relatedCollection, $twoWayKey);
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $this->registerRelationshipField($collection, $id);
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                // Junction columns live on the junction collection, which is
+                // created with explicit attributes by the wrapper.
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
     }
 
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        throw new DatabaseException('Relationships are not implemented in the Memory adapter');
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+        $newKey = $newKey !== null ? $this->filter($newKey) : null;
+        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($newKey !== null && $newKey !== $key) {
+                    $this->renameDocumentField($collection, $key, $newKey);
+                }
+                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                    $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameDocumentField($collection, $key, $newKey);
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameDocumentField($collection, $key, $newKey);
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameDocumentField($junction, $key, $newKey);
+                    }
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameDocumentField($junction, $twoWayKey, $newTwoWayKey);
+                    }
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
     }
 
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
     {
-        throw new DatabaseException('Relationships are not implemented in the Memory adapter');
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->dropDocumentField($collection, $key);
+                    if ($twoWay) {
+                        $this->dropDocumentField($relatedCollection, $twoWayKey);
+                    }
+                } else {
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                    if ($twoWay) {
+                        $this->dropDocumentField($collection, $key);
+                    }
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                } else {
+                    $this->dropDocumentField($collection, $key);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->dropDocumentField($collection, $key);
+                } else {
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                // Junction collection is dropped by the wrapper via cleanupCollection.
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
+    }
+
+    /**
+     * Register a relationship field on the collection's attribute list so
+     * subsequent reads materialise the field (as null) even when no document
+     * has been written to it. Mirrors MariaDB's `ADD COLUMN ... DEFAULT NULL`.
+     */
+    protected function registerRelationshipField(string $collection, string $field): void
+    {
+        $key = $this->key($collection);
+        if (! isset($this->data[$key])) {
+            return;
+        }
+        $field = $this->filter($field);
+        $this->data[$key]['attributes'][$field] = [
+            'type' => Database::VAR_RELATIONSHIP,
+            'size' => 0,
+            'signed' => true,
+            'array' => false,
+            'required' => false,
+        ];
+    }
+
+    /**
+     * Unregister a relationship field from the collection's attribute list.
+     */
+    protected function unregisterRelationshipField(string $collection, string $field): void
+    {
+        $key = $this->key($collection);
+        if (! isset($this->data[$key])) {
+            return;
+        }
+        unset($this->data[$key]['attributes'][$this->filter($field)]);
+    }
+
+    /**
+     * Rename a field across every document in a collection, preserving null
+     * entries so subsequent reads that join on the new key still resolve.
+     */
+    protected function renameDocumentField(string $collection, string $oldKey, string $newKey): void
+    {
+        $key = $this->key($collection);
+        if (! isset($this->data[$key])) {
+            return;
+        }
+        if (isset($this->data[$key]['attributes'][$oldKey])) {
+            $this->data[$key]['attributes'][$newKey] = $this->data[$key]['attributes'][$oldKey];
+            unset($this->data[$key]['attributes'][$oldKey]);
+        }
+        foreach ($this->data[$key]['documents'] as $storageKey => $document) {
+            if (! \array_key_exists($oldKey, $document)) {
+                continue;
+            }
+            $document[$newKey] = $document[$oldKey];
+            unset($document[$oldKey]);
+            $this->data[$key]['documents'][$storageKey] = $document;
+        }
+    }
+
+    /**
+     * Remove a field from every document in a collection.
+     */
+    protected function dropDocumentField(string $collection, string $field): void
+    {
+        $key = $this->key($collection);
+        if (! isset($this->data[$key])) {
+            return;
+        }
+        unset($this->data[$key]['attributes'][$field]);
+        foreach ($this->data[$key]['documents'] as $storageKey => $document) {
+            if (\array_key_exists($field, $document)) {
+                unset($document[$field]);
+                $this->data[$key]['documents'][$storageKey] = $document;
+            }
+        }
+    }
+
+    /**
+     * Resolve the junction collection name for a many-to-many relationship.
+     * Mirrors Database::getJunctionCollection — the junction is named after
+     * the parent/child sequence pair.
+     */
+    protected function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string
+    {
+        $metadataKey = $this->key(Database::METADATA);
+        if (! isset($this->data[$metadataKey])) {
+            return null;
+        }
+
+        $collectionDoc = $this->locateDocument($metadataKey, Database::METADATA, $collection);
+        $relatedDoc = $this->locateDocument($metadataKey, Database::METADATA, $relatedCollection);
+        if ($collectionDoc === null || $relatedDoc === null) {
+            return null;
+        }
+
+        $collectionSequence = $collectionDoc[1]['_id'] ?? null;
+        $relatedSequence = $relatedDoc[1]['_id'] ?? null;
+        if ($collectionSequence === null || $relatedSequence === null) {
+            return null;
+        }
+
+        return $side === Database::RELATION_SIDE_PARENT
+            ? '_'.$collectionSequence.'_'.$relatedSequence
+            : '_'.$relatedSequence.'_'.$collectionSequence;
     }
 
     public function renameIndex(string $collection, string $old, string $new): bool
@@ -513,7 +734,7 @@ class Memory extends Adapter
             return new Document([]);
         }
 
-        $row = $this->rowToDocument($located[1]);
+        $row = $this->rowToDocument($located[1], null, $key);
 
         // Apply Query::select projection — drop user attributes that were not
         // requested but always retain the document internals ($id, $sequence,
@@ -666,7 +887,13 @@ class Memory extends Adapter
 
         $this->enforceUniqueIndexes($key, $document, $id);
 
-        $row = $this->documentToRow($document);
+        $update = $this->documentToRow($document);
+
+        // Sparse update — MariaDB's UPDATE only sets columns present in the
+        // document; absent columns retain their previous values. The wrapper
+        // relies on this for relationship updates, where it removes
+        // unchanged relationship keys before calling the adapter.
+        $row = \array_merge($existing, $update);
         $row['_id'] = $existing['_id'];
         if ($this->sharedTables && \array_key_exists('_tenant', $existing)) {
             // Preserve the row's stored tenant — MariaDB's UPDATE statements
@@ -899,7 +1126,7 @@ class Memory extends Adapter
         $selections = $this->extractSelections($queries);
         $results = [];
         foreach ($rows as $row) {
-            $results[] = new Document($this->rowToDocument($row, $selections));
+            $results[] = new Document($this->rowToDocument($row, $selections, $key));
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1134,7 +1361,7 @@ class Memory extends Adapter
 
     public function getSupportForRelationships(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForUpdateLock(): bool
@@ -1467,7 +1694,7 @@ class Memory extends Adapter
      * @param  array<int, string>|null  $selections
      * @return array<string, mixed>
      */
-    protected function rowToDocument(array $row, ?array $selections = null): array
+    protected function rowToDocument(array $row, ?array $selections = null, ?string $storageKey = null): array
     {
         $allowed = null;
         if ($selections !== null && $selections !== [] && ! \in_array('*', $selections, true)) {
@@ -1503,6 +1730,22 @@ class Memory extends Adapter
                         break;
                     }
                     $document[$key] = $value;
+            }
+        }
+
+        // Surface registered relationship fields as null when missing — mirrors
+        // MariaDB selecting a `DEFAULT NULL` column even when no row has set it.
+        if ($storageKey !== null && isset($this->data[$storageKey]['attributes'])) {
+            foreach ($this->data[$storageKey]['attributes'] as $attributeId => $definition) {
+                if (($definition['type'] ?? null) !== Database::VAR_RELATIONSHIP) {
+                    continue;
+                }
+                if ($allowed !== null && ! isset($allowed[$attributeId])) {
+                    continue;
+                }
+                if (! \array_key_exists($attributeId, $document)) {
+                    $document[$attributeId] = null;
+                }
             }
         }
 
@@ -2104,10 +2347,18 @@ class Memory extends Adapter
      */
     protected function resolveAttributeValue(array $row, string $attribute): mixed
     {
+        // MariaDB strips non-alphanumeric chars from column names before any
+        // SELECT, so an attribute like `$symbols_coll.ection3` becomes a flat
+        // `symbols_collection3` column. Mirror that: if the fully-filtered name
+        // exists as a column on the row, return it directly without splitting
+        // on dots — only fall back to nested object path traversal when the
+        // flat lookup misses.
+        $flatColumn = $this->mapAttribute($attribute);
+        if (\array_key_exists($flatColumn, $row)) {
+            return $row[$flatColumn];
+        }
         if (! \str_contains($attribute, '.')) {
-            $column = $this->mapAttribute($attribute);
-
-            return \array_key_exists($column, $row) ? $row[$column] : null;
+            return null;
         }
 
         [$head, $rest] = \explode('.', $attribute, 2);

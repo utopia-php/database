@@ -739,7 +739,7 @@ class Redis extends Adapter
 
     public function getSupportForRelationships(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForUpdateLock(): bool

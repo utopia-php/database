@@ -112,7 +112,7 @@ buffer between adjacent regions are locked.
 | `getSupportForCasting` | `true` | `true` | JSON encode/decode round-trips through string types. |
 | `getSupportForQueryContains` | `true` | `true` | Implemented in T40 via array scan. |
 | `getSupportForTimeouts` | `false` | `false` | Already-decided unsupported. |
-| `getSupportForRelationships` | `true` | `false` [^rel] | Wave 1 ships the helpers + null-surfacing contract; flipped to `true` in T4 once T2 (schema ops) and T3 (read-path call sites) land. |
+| `getSupportForRelationships` | `true` | `true` | Schema-only adapter implementation: relationship attributes registered in `meta.attrs` as minimal records; orchestrator handles populate/junction/cascade via standard CRUD; null-surfaced on every read path. |
 | `getSupportForUpdateLock` | `false` | `false` | Already-decided unsupported (optimistic only). |
 | `getSupportForBatchOperations` | `true` | `true` | Match — pipelined in Wave 2. |
 | `getSupportForAttributeResizing` | `true` | `true` | Schemaless, no-op. |
@@ -246,13 +246,9 @@ deviate.
    | `private function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string` | T1 |
    | `private function loadMetadataDocument(string $collection): ?Document` | T1 |
 
-7. **Capability bit.** `getSupportForRelationships()` returns `false` until
-   T2 + T3 ship; T4 flips it to `true` and adds the cross-process smoke
-   test. See the parity-table footnote below.
-
-[^rel]: Returns `false` while T2 (schema ops) and T3 (read-path null
-surfacing) are still pending. T4 flips it to `true` once both ship and the
-cross-process smoke test passes.
+7. **Capability bit.** `getSupportForRelationships()` returns `true` —
+   T2 (schema ops), T3 (read-path null surfacing), and T4 (capability flip
+   + cross-process smoke) have all shipped.
 
 ## Known limitations
 

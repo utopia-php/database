@@ -574,10 +574,13 @@ class SQLite extends MariaDB
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
-            $stmt->execute();
 
-            $exceeds = $stmt->fetchColumn() !== false;
-            $stmt->closeCursor();
+            try {
+                $stmt->execute();
+                $exceeds = $stmt->fetchColumn() !== false;
+            } finally {
+                $stmt->closeCursor();
+            }
 
             if ($exceeds) {
                 throw new TruncateException("Attribute '{$id}' has values exceeding new size {$size}");
@@ -3231,7 +3234,7 @@ class SQLite extends MariaDB
                 Query::TYPE_STARTS_WITH, Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH, Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
                 Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => $onArray
-                    ? '%' . $this->escapeWildcards((string) \json_encode($value)) . '%'
+                    ? '%' . $this->escapeWildcards((string) (\json_encode($value) ?: '')) . '%'
                     : '%' . $this->escapeWildcards($value) . '%',
                 default => $value,
             };

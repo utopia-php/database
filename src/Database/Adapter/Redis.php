@@ -1009,8 +1009,6 @@ class Redis extends Adapter
      * METADATA is exempt: relationship attributes for user collections are
      * nested inside the metadata row's `attributes` payload, not stored as
      * top-level keys. Surfacing nulls there would clobber that nested array.
-     *
-     * @phpstan-ignore method.unused (wired up by T3 read-path call sites)
      */
     private function surfaceRelationshipAttributes(string $collection, Document $document): Document
     {
@@ -1784,6 +1782,10 @@ class Redis extends Adapter
             }
         }
 
+        if ($col !== Database::METADATA) {
+            $document = $this->surfaceRelationshipAttributes($col, $document);
+        }
+
         $selections = [];
         foreach ($queries as $query) {
             if ($query instanceof Query && $query->getMethod() === Query::TYPE_SELECT) {
@@ -1886,6 +1888,9 @@ class Redis extends Adapter
             }
 
             $existing = $this->decode($existingPayload);
+            if ($col !== Database::METADATA) {
+                $existing = $this->surfaceRelationshipAttributes($col, $existing);
+            }
             $newId = $document->getId() !== '' ? $document->getId() : $id;
             $newKey = $this->key($this->ns(), 'doc', $col, \strtolower($newId));
 
@@ -1964,6 +1969,16 @@ class Redis extends Adapter
                 $existingPayloads = [];
             }
 
+            // Cache the relationship-key list once per bulk call so the
+            // null-surface pass is N reads of a local list, not N reads of
+            // meta.attrs.
+            $relationshipKeys = [];
+            if ($col !== Database::METADATA) {
+                $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
+                $attributes = $this->readAttributesField($r, $metaKey);
+                $relationshipKeys = $this->extractRelationshipKeys($attributes);
+            }
+
             $count = 0;
             foreach ($documents as $i => $doc) {
                 $uid = $doc->getId();
@@ -1974,6 +1989,9 @@ class Redis extends Adapter
                 }
 
                 $existing = $this->decode($existingPayload);
+                if (! empty($relationshipKeys)) {
+                    $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
+                }
                 $merged = $existing->getArrayCopy();
                 $resolved = $this->applyOperators($attrs, $merged);
                 foreach ($resolved as $attribute => $value) {
@@ -2039,6 +2057,16 @@ class Redis extends Adapter
                 $existingPayloads = [];
             }
 
+            // Cache the relationship-key list once per bulk call (see
+            // updateDocuments) so we surface nulls without re-reading
+            // meta.attrs per change.
+            $relationshipKeys = [];
+            if ($col !== Database::METADATA) {
+                $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
+                $attributes = $this->readAttributesField($r, $metaKey);
+                $relationshipKeys = $this->extractRelationshipKeys($attributes);
+            }
+
             foreach ($changes as $i => $change) {
                 $document = $change->getNew();
                 $id = $document->getId();
@@ -2047,6 +2075,9 @@ class Redis extends Adapter
 
                 if (\is_string($existingPayload) && $existingPayload !== '') {
                     $existing = $this->decode($existingPayload);
+                    if (! empty($relationshipKeys)) {
+                        $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
+                    }
                     $existingArray = $existing->getArrayCopy();
                     $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
                     $merged = \array_merge($existingArray, $resolved);
@@ -2658,6 +2689,16 @@ class Redis extends Adapter
         $tenant = $sharedTables ? $this->getTenant() : null;
         $allowNullTenant = $sharedTables && $collection === Database::METADATA;
 
+        // Read meta.attrs once and cache the relationship-key list across the
+        // decode loop — `surfaceRelationshipAttributes` would re-read meta on
+        // every document otherwise.
+        $relationshipKeys = [];
+        if ($collection !== Database::METADATA) {
+            $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $relationshipKeys = $this->extractRelationshipKeys($attributes);
+        }
+
         $documents = [];
         foreach ($payloads as $payload) {
             if (! \is_string($payload) || $payload === '') {
@@ -2672,6 +2713,10 @@ class Redis extends Adapter
                 if ($crossTenant) {
                     continue;
                 }
+            }
+
+            if (! empty($relationshipKeys)) {
+                $document = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
             }
 
             $documents[] = $document;

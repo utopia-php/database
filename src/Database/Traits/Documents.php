@@ -2295,19 +2295,42 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $getResults = fn () => $this->adapter->find(
-                    $collection,
-                    $queries,
-                    $limit ?? 25,
-                    $offset ?? 0,
-                    $orderAttributes,
-                    $orderTypes,
-                    $cursor,
-                    $cursorDirection,
-                    $forPermission
-                );
-
-                $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+                // Inline the auth-skip toggle to avoid the per-find Closure
+                // allocation that authorization->skip() requires. Still
+                // restores the original status on exception via try/finally.
+                if ($skipAuth) {
+                    $previousStatus = $this->authorization->getStatus();
+                    $this->authorization->disable();
+                    try {
+                        $results = $this->adapter->find(
+                            $collection,
+                            $queries,
+                            $limit ?? 25,
+                            $offset ?? 0,
+                            $orderAttributes,
+                            $orderTypes,
+                            $cursor,
+                            $cursorDirection,
+                            $forPermission
+                        );
+                    } finally {
+                        if ($previousStatus) {
+                            $this->authorization->enable();
+                        }
+                    }
+                } else {
+                    $results = $this->adapter->find(
+                        $collection,
+                        $queries,
+                        $limit ?? 25,
+                        $offset ?? 0,
+                        $orderAttributes,
+                        $orderTypes,
+                        $cursor,
+                        $cursorDirection,
+                        $forPermission
+                    );
+                }
 
                 if ($cacheKey !== null && $this->queryCache !== null) {
                     $this->queryCache->set($cacheKey, $results);

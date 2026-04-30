@@ -3299,6 +3299,11 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForReconnection(): bool
     {
         return false;

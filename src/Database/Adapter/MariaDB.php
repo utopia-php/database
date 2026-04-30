@@ -1840,6 +1840,11 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return true;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;

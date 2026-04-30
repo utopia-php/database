@@ -989,6 +989,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     /**
      * Is hostname supported?
      *

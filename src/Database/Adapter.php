@@ -1090,6 +1090,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is upsert via arbitrary unique indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertOnUniqueIndex(): bool;
+
+    /**
      * Is vector type supported?
      *
      * @return bool

@@ -50,6 +50,18 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -2312,19 +2324,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param ?string $forCollection Filtered collection id (for FTS5 routing).
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param ?string $forCollection See {@see getSQLCondition}.
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -2333,9 +2347,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 
@@ -3155,7 +3169,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3299,7 +3313,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3385,7 +3399,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

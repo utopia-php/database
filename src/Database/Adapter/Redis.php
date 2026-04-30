@@ -121,6 +121,66 @@ class Redis extends Adapter
         return self::KEY_PREFIX . self::SEP . $namespace . self::SEP . $database;
     }
 
+    /**
+     * Build the document storage key. Lower-cases `$id` to match MariaDB's
+     * default case-insensitive UID semantics. Under shared tables every doc
+     * key is bucketed by tenant so two tenants can hold the same id without
+     * colliding — `null` tenants land under the `_` bucket alongside global
+     * METADATA rows.
+     */
+    private function docKey(string $collection, string $id, int|string|null $tenant = null): string
+    {
+        $id = \strtolower($id);
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'doc', $collection, $id);
+        }
+
+        $bucket = $this->bucketFor($tenant);
+
+        return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
+    }
+
+    /**
+     * Build the doc-id index SET key for a collection. Tenant-scoped under
+     * shared tables so per-tenant `find()` / `count()` see only their own
+     * ids and a recreated collection does not inherit foreign ids.
+     */
+    private function idxKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'idx', $collection);
+        }
+
+        return $this->key($this->ns(), 'idx', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    /**
+     * Build the sequence counter key for a collection. Tenant-scoped under
+     * shared tables so each tenant gets an independent monotonic id space.
+     */
+    private function seqKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'seq', $collection);
+        }
+
+        return $this->key($this->ns(), 'seq', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    /**
+     * Resolve the tenant-bucket segment for shared-tables doc/idx/seq keys,
+     * mapping `null` to the literal `'_'` so all shared-tables keys share a
+     * single bucket convention.
+     */
+    private function bucketFor(int|string|null $tenant): string
+    {
+        if ($tenant === null) {
+            $tenant = $this->getTenant();
+        }
+
+        return $tenant === null ? '_' : (string) $tenant;
+    }
+
     private function encode(Document $document): string
     {
         return \json_encode(
@@ -471,13 +531,13 @@ class Redis extends Adapter
                     $id = $payload['id'];
                     /** @var string $beforePayload */
                     $beforePayload = $payload['payload'];
-                    $this->client->set($this->key($this->ns(), 'doc', $collection, \strtolower($id)), $beforePayload);
+                    $this->client->set($this->docKey($collection, $id), $beforePayload);
                     // If the update changed the id, the new key must be removed
                     // and the old id restored to the index set.
                     if (isset($payload['newId']) && \is_string($payload['newId']) && $payload['newId'] !== $id) {
                         $newId = $payload['newId'];
-                        $this->client->del($this->key($this->ns(), 'doc', $collection, \strtolower($newId)));
-                        $idxKey = $this->key($this->ns(), 'idx', $collection);
+                        $this->client->del($this->docKey($collection, $newId));
+                        $idxKey = $this->idxKey($collection);
                         $this->client->sRem($idxKey, \strtolower($newId));
                         $this->client->sAdd($idxKey, \strtolower($id));
                     }
@@ -547,16 +607,16 @@ class Redis extends Adapter
         // lowercased id; lowercase here too so rollback of a mixed-case
         // create id actually deletes the perm doc HASH that was written.
         $lowerId = \strtolower($id);
-        $this->client->del($this->key($this->ns(), 'doc', $collection, $lowerId));
-        $this->client->sRem($this->key($this->ns(), 'idx', $collection), $lowerId);
+        $this->client->del($this->docKey($collection, $lowerId));
+        $this->client->sRem($this->idxKey($collection), $lowerId);
         $this->client->del($this->permDocKey($collection, $lowerId));
     }
 
     private function rawRestoreDoc(string $collection, string $id, string $payload): void
     {
         $lowerId = \strtolower($id);
-        $this->client->set($this->key($this->ns(), 'doc', $collection, $lowerId), $payload);
-        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), $lowerId);
+        $this->client->set($this->docKey($collection, $lowerId), $payload);
+        $this->client->sAdd($this->idxKey($collection), $lowerId);
     }
 
     /**
@@ -1097,7 +1157,7 @@ class Redis extends Adapter
             return;
         }
 
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
 
         $this->tx(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
             /** @var array<int, string>|false $docIds */
@@ -1107,7 +1167,7 @@ class Redis extends Adapter
             }
 
             foreach ($docIds as $docId) {
-                $docKey = $this->key($this->ns(), 'doc', $collection, $docId);
+                $docKey = $this->docKey($collection, $docId);
                 $payload = $client->get($docKey);
                 if (! \is_string($payload) || $payload === '') {
                     continue;
@@ -1141,7 +1201,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $field = $this->filter($field);
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
 
         $this->tx(function (RedisClient $client) use ($collection, $field, $idxKey): void {
             /** @var array<int, string>|false $docIds */
@@ -1151,7 +1211,7 @@ class Redis extends Adapter
             }
 
             foreach ($docIds as $docId) {
-                $docKey = $this->key($this->ns(), 'doc', $collection, $docId);
+                $docKey = $this->docKey($collection, $docId);
                 $payload = $client->get($docKey);
                 if (! \is_string($payload) || $payload === '') {
                     continue;
@@ -1209,8 +1269,13 @@ class Redis extends Adapter
      */
     private function loadMetadataDocument(string $collection): ?Document
     {
-        $docKey = $this->key($this->ns(), 'doc', Database::METADATA, \strtolower($this->filter($collection)));
-        $payload = $this->client->get($docKey);
+        $id = $this->filter($collection);
+        $payload = $this->client->get($this->docKey(Database::METADATA, $id));
+        // Fall back to the null-tenant METADATA row under shared tables —
+        // bootstrap writes the global metadata schema with $tenant=null.
+        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables()) {
+            $payload = $this->client->get($this->docKey(Database::METADATA, $id, '_'));
+        }
         if (! \is_string($payload) || $payload === '') {
             return null;
         }
@@ -1295,7 +1360,7 @@ class Redis extends Adapter
         $id = $this->filter($name);
         $colsKey = $this->key($this->ns(), 'cols');
         $metaKey = $this->key($this->ns(), 'meta', $id);
-        $idxKey = $this->key($this->ns(), 'idx', $id);
+        $idxKey = $this->idxKey($id);
 
         if ((bool) $this->client->exists($metaKey)) {
             throw new DuplicateException('Collection already exists');
@@ -1481,6 +1546,8 @@ class Redis extends Adapter
             );
         });
 
+        $this->dropDocumentField($collection, $id);
+
         return true;
     }
 
@@ -1517,6 +1584,8 @@ class Redis extends Adapter
                 \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             );
         });
+
+        $this->renameDocumentField($collection, $old, $new);
 
         return true;
     }
@@ -1610,7 +1679,7 @@ class Redis extends Adapter
             return;
         }
 
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
         /** @var array<int, string> $docIds */
         $docIds = $client->sMembers($idxKey);
         if (empty($docIds)) {
@@ -1623,7 +1692,7 @@ class Redis extends Adapter
             if ($excludeKey !== null && \strtolower((string) $docId) === $excludeKey) {
                 continue;
             }
-            $docKeys[(string) $docId] = $this->key($this->ns(), 'doc', $collection, (string) $docId);
+            $docKeys[(string) $docId] = $this->docKey($collection, (string) $docId);
         }
         if ($docKeys === []) {
             return;
@@ -1712,13 +1781,11 @@ class Redis extends Adapter
         $idxKey = $this->key($prefix, 'idx', $collection);
         $seqKey = $this->key($prefix, 'seq', $collection);
 
+        // Non-shared layout: walk the doc-id index for variadic DEL of every
+        // doc + perm-doc HASH. Cheap when the set is empty.
         /** @var array<int, string>|false $docIds */
         $docIds = $client->sMembers($idxKey);
         if (\is_array($docIds) && $docIds !== []) {
-            // Variadic DEL keeps the per-doc cleanup in O(batch / SCAN_BATCH)
-            // round trips instead of N. Permission HASH key here uses the
-            // non-shared layout; the shared-tables perm:t:* sweep below
-            // covers the tenant-bucketed variant.
             $keys = [];
             foreach ($docIds as $docId) {
                 $keys[] = $this->key($prefix, 'doc', $collection, $docId);
@@ -1732,6 +1799,15 @@ class Redis extends Adapter
                 $client->del(...$keys);
             }
         }
+
+        // Shared-tables doc/idx/seq sweep: tenants-bucketed under
+        // `{prefix}:doc:t:{tenant}:{col}:*`, `{prefix}:idx:t:{tenant}:{col}`
+        // and `{prefix}:seq:t:{tenant}:{col}`. Run unconditionally so a
+        // collection populated while shared-tables was on can still be
+        // purged after the test resets the flag back off.
+        $this->deleteByPattern($client, $prefix . self::SEP . 'doc' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection . self::SEP . '*');
+        $this->deleteByPattern($client, $prefix . self::SEP . 'idx' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection);
+        $this->deleteByPattern($client, $prefix . self::SEP . 'seq' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection);
 
         // Non-shared-tables perm-set sweep. permKey() emits this layout when
         // shared tables is OFF: `{prefix}:perm:{col}:{letter}:{role}`.
@@ -1785,14 +1861,14 @@ class Redis extends Adapter
 
         $total = $this->measureKey($metaKey);
 
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
         $total += $this->measureKey($idxKey);
 
         /** @var array<int, string>|false $docIds */
         $docIds = $this->client->sMembers($idxKey);
         if (\is_array($docIds)) {
             foreach ($docIds as $docId) {
-                $total += $this->measureKey($this->key($this->ns(), 'doc', $collection, $docId));
+                $total += $this->measureKey($this->docKey($collection, (string) $docId));
                 $total += $this->measureKey($this->key($this->ns(), 'perm', 'doc', $collection, $docId));
             }
         }
@@ -1872,7 +1948,13 @@ class Redis extends Adapter
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $col = $this->filter($collection->getId());
-        $payload = $this->client->get($this->key($this->ns(), 'doc', $col, \strtolower($id)));
+        $payload = $this->client->get($this->docKey($col, $id));
+        // Mirror Memory's METADATA fallback: under shared tables the
+        // bootstrap METADATA row is written with a null tenant and must
+        // be visible to every tenant.
+        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables() && $col === Database::METADATA) {
+            $payload = $this->client->get($this->docKey($col, $id, '_'));
+        }
 
         if (! \is_string($payload) || $payload === '') {
             return new Document([]);
@@ -1934,9 +2016,10 @@ class Redis extends Adapter
             $id = ID::unique();
             $document->setAttribute('$id', $id);
         }
-        $docKey = $this->key($this->ns(), 'doc', $col, \strtolower($id));
-        $idxKey = $this->key($this->ns(), 'idx', $col);
-        $seqKey = $this->key($this->ns(), 'seq', $col);
+        $tenant = $document->getTenant();
+        $docKey = $this->docKey($col, $id, $tenant);
+        $idxKey = $this->idxKey($col, $tenant);
+        $seqKey = $this->seqKey($col, $tenant);
 
         return $this->tx(function (RedisClient $r) use ($col, $id, $document, $docKey, $idxKey, $seqKey): Document {
             if ((bool) $r->exists($docKey)) {
@@ -2000,10 +2083,20 @@ class Redis extends Adapter
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $col = $this->filter($collection->getId());
-        $oldKey = $this->key($this->ns(), 'doc', $col, \strtolower($id));
-        $idxKey = $this->key($this->ns(), 'idx', $col);
+        $oldKey = $this->docKey($col, $id);
+        $idxKey = $this->idxKey($col);
+        // METADATA fallback: under shared tables the bootstrap METADATA row
+        // is written with a null tenant; subsequent updates from another
+        // tenant must still resolve to that row instead of throwing.
+        $useNullTenant = false;
+        if ($col === Database::METADATA && $this->getSharedTables() && $this->getTenant() !== null) {
+            if ((bool) $this->client->exists($oldKey) === false) {
+                $oldKey = $this->docKey($col, $id, '_');
+                $useNullTenant = true;
+            }
+        }
 
-        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey): Document {
+        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
             $existingPayload = $r->get($oldKey);
             if (! \is_string($existingPayload) || $existingPayload === '') {
                 throw new NotFoundException('Document not found');
@@ -2014,7 +2107,13 @@ class Redis extends Adapter
                 $existing = $this->surfaceRelationshipAttributes($col, $existing);
             }
             $newId = $document->getId() !== '' ? $document->getId() : $id;
-            $newKey = $this->key($this->ns(), 'doc', $col, \strtolower($newId));
+            // Stay on the null-tenant key when the existing row was located
+            // there; rewriting under the current tenant would split the row.
+            $newKey = $useNullTenant ? $this->docKey($col, $newId, '_') : $this->docKey($col, $newId);
+            // Idx set scoping mirrors the located row so per-tenant ids remain
+            // separate but the null-tenant METADATA row stays in the null
+            // tenant's idx set.
+            $effectiveIdxKey = $useNullTenant ? $this->idxKey($col, '_') : $idxKey;
 
             if ($newId !== $id && (bool) $r->exists($newKey)) {
                 throw new DuplicateException('Document already exists');
@@ -2031,10 +2130,10 @@ class Redis extends Adapter
 
             if ($newId !== $id) {
                 $r->del($oldKey);
-                $r->sRem($idxKey, \strtolower($id));
+                $r->sRem($effectiveIdxKey, \strtolower($id));
             }
             $r->set($newKey, $payload);
-            $r->sAdd($idxKey, \strtolower($newId));
+            $r->sAdd($effectiveIdxKey, \strtolower($newId));
 
             $this->journal('updateDoc', [
                 'collection' => $col,
@@ -2081,7 +2180,7 @@ class Redis extends Adapter
             // document, which dominates wall time on bulk updates.
             $docKeys = [];
             foreach ($documents as $doc) {
-                $docKeys[] = $this->key($this->ns(), 'doc', $col, \strtolower($doc->getId()));
+                $docKeys[] = $this->docKey($col, $doc->getId());
             }
 
             $r->multi(\Redis::PIPELINE);
@@ -2163,8 +2262,8 @@ class Redis extends Adapter
         }
 
         $col = $this->filter($collection->getId());
-        $idxKey = $this->key($this->ns(), 'idx', $col);
-        $seqKey = $this->key($this->ns(), 'seq', $col);
+        $idxKey = $this->idxKey($col);
+        $seqKey = $this->seqKey($col);
 
         return $this->tx(function (RedisClient $r) use ($col, $attribute, $changes, $idxKey, $seqKey): array {
             $results = [];
@@ -2174,7 +2273,7 @@ class Redis extends Adapter
             $r->multi(\Redis::PIPELINE);
             foreach ($changes as $change) {
                 $document = $change->getNew();
-                $r->get($this->key($this->ns(), 'doc', $col, \strtolower($document->getId())));
+                $r->get($this->docKey($col, $document->getId()));
             }
             $existingPayloads = $r->exec();
             if (! \is_array($existingPayloads)) {
@@ -2194,7 +2293,7 @@ class Redis extends Adapter
             foreach ($changes as $i => $change) {
                 $document = $change->getNew();
                 $id = $document->getId();
-                $docKey = $this->key($this->ns(), 'doc', $col, \strtolower($id));
+                $docKey = $this->docKey($col, $id);
                 $existingPayload = $existingPayloads[$i] ?? false;
 
                 if (\is_string($existingPayload) && $existingPayload !== '') {
@@ -2275,7 +2374,7 @@ class Redis extends Adapter
                 if (! empty($doc->getSequence())) {
                     continue;
                 }
-                $this->client->get($this->key($this->ns(), 'doc', $collection, \strtolower($doc->getId())));
+                $this->client->get($this->docKey($collection, $doc->getId()));
                 $indexes[] = $index;
             }
             // No work queued — discard the empty pipeline so the connection
@@ -2319,8 +2418,8 @@ class Redis extends Adapter
     public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->filter($collection);
-        $docKey = $this->key($this->ns(), 'doc', $collection, \strtolower($id));
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $docKey = $this->docKey($collection, $id);
+        $idxKey = $this->idxKey($collection);
 
         return $this->tx(function (RedisClient $r) use ($collection, $id, $docKey, $idxKey): bool {
             $payload = $r->get($docKey);
@@ -2349,7 +2448,7 @@ class Redis extends Adapter
         }
 
         $collection = $this->filter($collection);
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
 
         return $this->tx(function (RedisClient $r) use ($collection, $sequences, $permissionIds, $idxKey): int {
             $sequenceSet = [];
@@ -2364,7 +2463,7 @@ class Redis extends Adapter
 
             $r->multi(\Redis::PIPELINE);
             foreach ($allIds as $id) {
-                $r->get($this->key($this->ns(), 'doc', $collection, (string) $id));
+                $r->get($this->docKey($collection, (string) $id));
             }
             $payloads = $r->exec();
             if (! \is_array($payloads)) {
@@ -2391,7 +2490,7 @@ class Redis extends Adapter
                     'payload' => $payload,
                 ]);
                 $this->clearPermissions($collection, (string) $documentId);
-                $r->del($this->key($this->ns(), 'doc', $collection, \strtolower((string) $documentId)));
+                $r->del($this->docKey($collection, (string) $documentId));
                 $r->sRem($idxKey, \strtolower((string) $documentId));
             }
 
@@ -2419,7 +2518,7 @@ class Redis extends Adapter
         int|float|null $max = null
     ): bool {
         $collection = $this->filter($collection);
-        $docKey = $this->key($this->ns(), 'doc', $collection, \strtolower($id));
+        $docKey = $this->docKey($collection, $id);
 
         return $this->tx(function (RedisClient $r) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
             $payload = $r->get($docKey);
@@ -2487,7 +2586,7 @@ class Redis extends Adapter
             // index creation fails up-front rather than silently allowing
             // duplicate values to coexist under a "unique" constraint.
             if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
-                $idxKey = $this->key($this->ns(), 'idx', $collection);
+                $idxKey = $this->idxKey($collection);
                 /** @var array<int, string> $docIds */
                 $docIds = $client->sMembers($idxKey);
                 if (! empty($docIds)) {
@@ -2498,7 +2597,7 @@ class Redis extends Adapter
                     // with payload size rather than RTT count.
                     $docKeys = [];
                     foreach ($docIds as $docId) {
-                        $docKeys[] = $this->key($this->ns(), 'doc', $collection, (string) $docId);
+                        $docKeys[] = $this->docKey($collection, (string) $docId);
                     }
                     /** @var array<int, mixed> $payloads */
                     $payloads = $client->mGet($docKeys);
@@ -2729,7 +2828,7 @@ class Redis extends Adapter
             && $this->authorization->getStatus() === false
             && $this->getSharedTables() === false
         ) {
-            $idxKey = $this->key($this->ns(), 'idx', $collectionId);
+            $idxKey = $this->idxKey($collectionId);
             $cardinality = $this->client->sCard($idxKey);
             if (\is_int($cardinality)) {
                 return $max === null ? $cardinality : \min($max, $cardinality);
@@ -2789,7 +2888,7 @@ class Redis extends Adapter
      */
     private function loadCollectionDocuments(RedisClient $client, string $collection, string $forPermission): array
     {
-        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        $idxKey = $this->idxKey($collection);
         /** @var array<int, string> $ids */
         $ids = $client->sMembers($idxKey);
         if (empty($ids)) {
@@ -2807,7 +2906,7 @@ class Redis extends Adapter
 
         $keys = [];
         foreach ($ids as $id) {
-            $keys[] = $this->key($this->ns(), 'doc', $collection, (string) $id);
+            $keys[] = $this->docKey($collection, (string) $id);
         }
 
         /** @var array<int, mixed> $payloads */

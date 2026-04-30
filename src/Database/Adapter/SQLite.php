@@ -110,11 +110,15 @@ class SQLite extends MariaDB
      */
     private function registerUserFunctions(): void
     {
-        $pcre = static function (?string $pattern, ?string $value): int {
+        // Memoise the delimited pattern. SQLite invokes the UDF once per
+        // candidate row, and the str_replace cost adds up quickly on
+        // large WHERE … REGEXP scans.
+        $delimitedCache = [];
+        $pcre = static function (?string $pattern, ?string $value) use (&$delimitedCache): int {
             if ($pattern === null || $value === null) {
                 return 0;
             }
-            $delimited = '/' . \str_replace('/', '\/', $pattern) . '/u';
+            $delimited = $delimitedCache[$pattern] ??= '/' . \str_replace('/', '\/', $pattern) . '/u';
 
             return @\preg_match($delimited, $value) === 1 ? 1 : 0;
         };
@@ -361,12 +365,10 @@ class SQLite extends MariaDB
         // so the result tracks bytes actually used inside each page rather
         // than full 4KB page allocations, which would let small inserts
         // appear as a no-op against the parent assertions.
-        // `_` is a LIKE single-char wildcard, so the `_` between
-        // collection and tenant in the prefix would happily match any
-        // character — collection `users` and `userA` would both pull
-        // each other's FTS shadow tables into the size. Escape `_`
-        // with a sentinel and declare it via ESCAPE.
-        $ftsPattern = \str_replace('_', '\_', $ftsPrefix) . '%\_fts%';
+        // `_` and `%` are LIKE wildcards. Without escaping the literal
+        // `_` separators, collection `users` and `userA` would each pull
+        // the other's FTS shadow tables into the sum.
+        $ftsPattern = $this->escapeLikePattern($ftsPrefix) . '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX) . '%';
 
         $stmt = $this->getPDO()->prepare("
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
@@ -411,6 +413,18 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
+        // Drop any FTS5 virtual tables for this collection first. Their
+        // shadow tables (`_data`, `_idx`, `_docsize`, `_config`) are not
+        // cleaned up implicitly when the parent table is dropped — they
+        // would otherwise leak disk space and `getSizeOfCollection` for
+        // a recreated collection of the same name would still sum the
+        // orphaned bytes.
+        foreach ($this->findFulltextTables($id) as $ftsTable) {
+            $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
+            $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+            $this->getPDO()->prepare($sql)->execute();
+        }
+
         $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
@@ -424,6 +438,11 @@ class SQLite extends MariaDB
         $this->getPDO()
             ->prepare($sql)
             ->execute();
+
+        // Drop any cached FTS table lookups for this collection — a
+        // subsequent createCollection of the same name with a different
+        // attribute set must not resolve to the just-dropped tables.
+        $this->ftsTableCache = [];
 
         return true;
     }
@@ -469,10 +488,19 @@ class SQLite extends MariaDB
         if ($this->emulateMySQL && $type === Database::VAR_STRING && $size > 0 && !$array) {
             $name = $this->filter($collection);
             $column = $this->filter($id);
-            $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max LIMIT 1";
+
+            // Under shared tables the underlying table is shared across
+            // tenants; scoping the scan by `_tenant` keeps tenant A's
+            // resize from being blocked (and tenant A's metadata from
+            // leaking) by an oversized value owned by tenant B.
+            $tenantClause = $this->sharedTables ? ' AND `_tenant` = :_tenant' : '';
+            $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
             $stmt = $this->getPDO()->prepare($sql);
             $stmt->bindValue(':max', $size, PDO::PARAM_INT);
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant, PDO::PARAM_INT);
+            }
             $stmt->execute();
 
             $exceeds = $stmt->fetchColumn() !== false;
@@ -871,19 +899,35 @@ class SQLite extends MariaDB
      */
     protected function findFulltextTables(string $collection): array
     {
+        // `_` and `%` are LIKE wildcards. `getFulltextTablePrefix` always
+        // contains literal `_` separators, so without an ESCAPE clause the
+        // prefix `db_users_` would also match `db_usersA…` and pull a
+        // sibling collection's FTS5 tables into the result. `filter()`
+        // strips `%` from collection names today; escaping it anyway
+        // keeps this defensible if filter() ever widens.
         $stmt = $this->getPDO()->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
-              AND name LIKE :_prefix
-              AND name LIKE :_suffix
+              AND name LIKE :_prefix ESCAPE '\\'
+              AND name LIKE :_suffix ESCAPE '\\'
         ");
-        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
-        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
+        $stmt->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
+        $stmt->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
         $stmt->execute();
         $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
         $stmt->closeCursor();
 
         return $tables;
+    }
+
+    /**
+     * Escape `_`, `%`, and `\` so a literal value can be embedded in a
+     * LIKE pattern without acting as a wildcard. Pair every call site
+     * with an explicit `ESCAPE '\\'` clause.
+     */
+    private function escapeLikePattern(string $value): string
+    {
+        return \str_replace(['\\', '_', '%'], ['\\\\', '\_', '\%'], $value);
     }
 
     /**
@@ -2858,9 +2902,10 @@ class SQLite extends MariaDB
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
 
-        $value = $this->getFTS5Value($query->getValue());
+        $rawValue = (string) $query->getValue();
+        $ftsValue = $this->getFTS5Value($rawValue);
 
-        if ($value === '') {
+        if ($ftsValue === '') {
             // Empty term — match nothing on SEARCH and everything on NOT_SEARCH
             // rather than handing FTS5 an empty string that triggers a
             // syntax error.
@@ -2880,11 +2925,13 @@ class SQLite extends MariaDB
         if ($ftsTable === null) {
             // No collection context or no matching FTS5 table — fall back
             // to a LIKE scan so the query still returns plausible results
-            // instead of erroring out.
-            return $this->buildSearchLikeFallback($attribute, $value, $alias, $placeholder, $method, $binds);
+            // instead of erroring out. Use the raw user value, not the
+            // FTS5-formatted one (which embeds `OR`/`*` syntax that LIKE
+            // would treat as literal characters and never match).
+            return $this->buildSearchLikeFallback($attribute, $rawValue, $alias, $placeholder, $method, $binds);
         }
 
-        $binds[":{$placeholder}_0"] = $value;
+        $binds[":{$placeholder}_0"] = $ftsValue;
 
         $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
 
@@ -2894,7 +2941,9 @@ class SQLite extends MariaDB
     /**
      * Wrap a SEARCH/NOT_SEARCH query as a LIKE scan when no FTS5 table is
      * available. Extracted so the no-collection-context and no-matching-FTS
-     * branches share the same shape.
+     * branches share the same shape. The caller passes the raw user value;
+     * we escape LIKE wildcards and bind with an explicit ESCAPE clause so
+     * literal `%`/`_` in the input don't act as wildcards.
      *
      * @param array<string,mixed> $binds
      */
@@ -2906,8 +2955,8 @@ class SQLite extends MariaDB
         string $method,
         array &$binds,
     ): string {
-        $binds[":{$placeholder}_0"] = '%' . $value . '%';
-        $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
+        $binds[":{$placeholder}_0"] = '%' . $this->escapeWildcards($value) . '%';
+        $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0 ESCAPE '\\'";
 
         return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
     }

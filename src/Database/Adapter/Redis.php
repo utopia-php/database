@@ -7,14 +7,17 @@ namespace Utopia\Database\Adapter;
 use Redis as RedisClient;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -120,7 +123,10 @@ class Redis extends Adapter
 
     private function encode(Document $document): string
     {
-        return \json_encode($document->getArrayCopy(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        return \json_encode(
+            $document->getArrayCopy(),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+        );
     }
 
     private function decode(string $payload): Document
@@ -1645,7 +1651,8 @@ class Redis extends Adapter
                 throw new DuplicateException('Document already exists');
             }
 
-            $merged = \array_merge($existing->getArrayCopy(), $document->getArrayCopy());
+            $resolved = $this->applyOperators($document->getArrayCopy(), $existing->getArrayCopy());
+            $merged = \array_merge($existing->getArrayCopy(), $resolved);
             $merged['$id'] = $newId;
             $mergedDocument = new Document($merged);
 
@@ -1705,7 +1712,8 @@ class Redis extends Adapter
 
                 $existing = $this->decode($existingPayload);
                 $merged = $existing->getArrayCopy();
-                foreach ($attrs as $attribute => $value) {
+                $resolved = $this->applyOperators($attrs, $merged);
+                foreach ($resolved as $attribute => $value) {
                     $merged[$attribute] = $value;
                 }
                 if ($hasCreatedAt) {
@@ -1776,7 +1784,9 @@ class Redis extends Adapter
 
                 if (\is_string($existingPayload) && $existingPayload !== '') {
                     $existing = $this->decode($existingPayload);
-                    $merged = \array_merge($existing->getArrayCopy(), $document->getArrayCopy());
+                    $existingArray = $existing->getArrayCopy();
+                    $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
+                    $merged = \array_merge($existingArray, $resolved);
                     $merged['$id'] = $id;
 
                     if ($attribute !== '') {
@@ -1814,6 +1824,11 @@ class Redis extends Adapter
                         }
                     }
                     $document->setAttribute('$sequence', $sequence);
+
+                    $resolved = $this->applyOperators($document->getArrayCopy(), []);
+                    foreach ($resolved as $attr => $value) {
+                        $document->setAttribute($attr, $value);
+                    }
 
                     $r->set($docKey, $this->encode($document));
                     $r->sAdd($idxKey, \strtolower($id));
@@ -3227,4 +3242,254 @@ class Redis extends Adapter
     }
 
     // === @architect:T56 end ===
+
+    /**
+     * Resolve any Operator-typed attributes against the existing document
+     * before persisting. Mirrors Memory::applyOperators — non-operator
+     * values pass through untouched.
+     *
+     * @param  array<string, mixed>  $attrs  Incoming attributes (may contain Operator instances)
+     * @param  array<string, mixed>  $existing  Decoded document used as the operator's "current" value
+     * @return array<string, mixed>
+     */
+    protected function applyOperators(array $attrs, array $existing): array
+    {
+        $result = [];
+        foreach ($attrs as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                /** @var Operator $value */
+                $result[$attribute] = $this->applyOperator($existing[$attribute] ?? null, $value);
+
+                continue;
+            }
+            $result[$attribute] = $value;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Apply a single Operator to a stored value and return the new value.
+     * Mirrors Memory::applyOperator — the SQL adapters express the same
+     * semantics in CASE/JSON helpers (see MariaDB::getOperatorSQL).
+     */
+    protected function applyOperator(mixed $current, Operator $operator): mixed
+    {
+        $values = $operator->getValues();
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case Operator::TYPE_INCREMENT:
+                $by = $values[0] ?? 1;
+                $max = $values[1] ?? null;
+                $base = \is_numeric($current) ? $current + 0 : 0;
+                if ($max !== null) {
+                    if ($base >= $max || ($max - $base) <= $by) {
+                        return $this->preserveNumericType($base, $max);
+                    }
+                }
+
+                return $this->preserveNumericType($base, $base + $by);
+
+            case Operator::TYPE_DECREMENT:
+                $by = $values[0] ?? 1;
+                $min = $values[1] ?? null;
+                $base = \is_numeric($current) ? $current + 0 : 0;
+                if ($min !== null) {
+                    if ($base <= $min || ($base - $min) <= $by) {
+                        return $this->preserveNumericType($base, $min);
+                    }
+                }
+
+                return $this->preserveNumericType($base, $base - $by);
+
+            case Operator::TYPE_MULTIPLY:
+                $by = $values[0] ?? 1;
+                $max = $values[1] ?? null;
+                $base = \is_numeric($current) ? $current + 0 : 0;
+
+                return $this->applyNumericLimit($base * $by, $max, true);
+
+            case Operator::TYPE_DIVIDE:
+                $by = $values[0] ?? 1;
+                $min = $values[1] ?? null;
+                if ($by == 0) {
+                    return $current;
+                }
+                $base = \is_numeric($current) ? $current + 0 : 0;
+
+                return $this->applyNumericLimit($base / $by, $min, false);
+
+            case Operator::TYPE_MODULO:
+                $by = $values[0] ?? 1;
+                if ($by == 0) {
+                    return $current;
+                }
+                $base = \is_numeric($current) ? (int) $current : 0;
+
+                return $base % (int) $by;
+
+            case Operator::TYPE_POWER:
+                $by = $values[0] ?? 1;
+                $max = $values[1] ?? null;
+                $base = \is_numeric($current) ? $current + 0 : 0;
+
+                return $this->applyNumericLimit($base ** $by, $max, true);
+
+            case Operator::TYPE_STRING_CONCAT:
+                return ((string) ($current ?? '')) . (string) ($values[0] ?? '');
+
+            case Operator::TYPE_STRING_REPLACE:
+                $search = (string) ($values[0] ?? '');
+                $replace = (string) ($values[1] ?? '');
+                if ($current === null) {
+                    return null;
+                }
+
+                return \str_replace($search, $replace, (string) $current);
+
+            case Operator::TYPE_TOGGLE:
+                return ! (bool) $current;
+
+            case Operator::TYPE_ARRAY_APPEND:
+                $list = $this->coerceArray($current);
+
+                return [...$list, ...\array_values($values)];
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $list = $this->coerceArray($current);
+
+                return [...\array_values($values), ...$list];
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $list = $this->coerceArray($current);
+                $index = (int) ($values[0] ?? 0);
+                $value = $values[1] ?? null;
+                if ($index < 0) {
+                    $index = 0;
+                }
+                if ($index > \count($list)) {
+                    $index = \count($list);
+                }
+                \array_splice($list, $index, 0, [$value]);
+
+                return $list;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $list = $this->coerceArray($current);
+                $needle = $values[0] ?? null;
+
+                return \array_values(\array_filter($list, fn ($item) => $item !== $needle));
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                $list = $this->coerceArray($current);
+
+                return \array_values(\array_unique($list, SORT_REGULAR));
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $list = $this->coerceArray($current);
+                $other = \array_values($values);
+
+                return \array_values(\array_filter($list, fn ($item) => \in_array($item, $other, false)));
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $list = $this->coerceArray($current);
+                $other = \array_values($values);
+
+                return \array_values(\array_filter($list, fn ($item) => ! \in_array($item, $other, false)));
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $list = $this->coerceArray($current);
+                $condition = (string) ($values[0] ?? '');
+                $compare = $values[1] ?? null;
+
+                return \array_values(\array_filter($list, fn ($item) => $this->matchesArrayFilter($item, $condition, $compare)));
+
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $days = (int) ($values[0] ?? 0);
+
+                return $this->shiftDate($current, $days * 86400);
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $days = (int) ($values[0] ?? 0);
+
+                return $this->shiftDate($current, -$days * 86400);
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return DateTime::now();
+        }
+
+        throw new OperatorException("Invalid operator: {$method}");
+    }
+
+    protected function applyNumericLimit(int|float $value, int|float|null $bound, bool $isUpper): int|float
+    {
+        if ($bound === null) {
+            return $value;
+        }
+
+        return $isUpper ? \min($value, $bound) : \max($value, $bound);
+    }
+
+    /**
+     * Preserve int-ness when the original value is an int — without this,
+     * PHP's arithmetic promotes the result to float and the Range validator
+     * rejects an integer column post-update.
+     */
+    protected function preserveNumericType(int|float $original, int|float $result): int|float
+    {
+        if (\is_int($original) && \is_float($result) && $result === (float) (int) $result) {
+            return (int) $result;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    protected function coerceArray(mixed $value): array
+    {
+        if (\is_array($value)) {
+            return \array_values($value);
+        }
+        if (\is_string($value) && $value !== '') {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                return \array_values($decoded);
+            }
+        }
+
+        return [];
+    }
+
+    protected function matchesArrayFilter(mixed $item, string $condition, mixed $compare): bool
+    {
+        return match ($condition) {
+            Query::TYPE_EQUAL => $item == $compare,
+            Query::TYPE_NOT_EQUAL => $item != $compare,
+            Query::TYPE_GREATER => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
+            Query::TYPE_GREATER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
+            Query::TYPE_LESSER => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
+            Query::TYPE_LESSER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
+            Query::TYPE_IS_NULL => $item === null,
+            Query::TYPE_IS_NOT_NULL => $item !== null,
+            default => true,
+        };
+    }
+
+    protected function shiftDate(mixed $current, int $seconds): ?string
+    {
+        if ($current === null) {
+            return null;
+        }
+        try {
+            $base = new \DateTime((string) $current);
+        } catch (\Throwable) {
+            return $current === '' ? null : (string) $current;
+        }
+        $base->modify(($seconds >= 0 ? '+' : '') . $seconds . ' seconds');
+
+        return DateTime::format($base);
+    }
 }

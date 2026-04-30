@@ -1683,24 +1683,47 @@ class Database
             $attributes[] = $attribute;
         }
 
+        // Cache the set of types that actually require a cast. Strings,
+        // datetimes, JSON, etc. all fall through to default in the match
+        // below, so skipping them entirely avoids the per-attribute
+        // foreach + setAttribute pair on every document.
+        $idType = ColumnType::Id->value;
+        $boolType = ColumnType::Boolean->value;
+        $intType = ColumnType::Integer->value;
+        $doubleType = ColumnType::Double->value;
+
         foreach ($attributes as $attribute) {
             /** @var string $key */
             $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key, null);
-            if (is_null($value)) {
-                continue;
-            }
-
             if ($key === '$permissions') {
                 continue;
             }
 
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $typeKey = $type instanceof ColumnType ? $type->value : (\is_string($type) ? $type : '');
+
+            $needsCast = $array
+                || $typeKey === $idType
+                || $typeKey === $boolType
+                || $typeKey === $intType
+                || $typeKey === $doubleType;
+            if (! $needsCast) {
+                // String/datetime/JSON/etc — already in their canonical
+                // PHP type after PDO fetch. Skip the load/setAttribute
+                // round trip entirely.
+                continue;
+            }
+
+            $value = $document->getAttribute($key, null);
+            if (\is_null($value)) {
+                continue;
+            }
+
             if ($array) {
-                $value = ! is_string($value)
+                $value = ! \is_string($value)
                     ? $value
-                    : json_decode($value, true);
+                    : \json_decode($value, true);
             } else {
                 $value = [$value];
             }

@@ -37,7 +37,7 @@ class RedisCrossProcessTest extends TestCase
         $disabled = \explode(',', \ini_get('disable_functions') ?: '');
         $disabled = \array_map('trim', $disabled);
         if (\in_array('proc_open', $disabled, true)) {
-            $this->markTestSkipped('proc_open disabled — cross-process Redis adapter test cannot run.');
+            $this->markTestIncomplete('proc_open required — cross-process Redis adapter test cannot run.');
         }
 
         $this->authorization = new Authorization();
@@ -50,7 +50,9 @@ class RedisCrossProcessTest extends TestCase
             if ($this->namespace !== '' && $this->redisClient instanceof Redis) {
                 $client = $this->redisClient;
                 $iterator = null;
-                $pattern = $this->namespace . ':*';
+                // Adapter keys are prefixed with `KEY_PREFIX:` — without the
+                // prefix this SCAN matches nothing and leaks every key.
+                $pattern = RedisDbAdapter::KEY_PREFIX . ':' . $this->namespace . ':*';
                 while (($keys = $client->scan($iterator, $pattern, 500)) !== false) {
                     if (\is_array($keys) && \count($keys) > 0) {
                         $client->del($keys);

@@ -53,11 +53,11 @@ redis://[user:pass@]host:port[/db]
 
 | Signature | Purpose |
 |-----------|---------|
-| `private function key(string ...$parts): string` | Joins parts with `SEP`, prepends `KEY_PREFIX`. |
-| `private function ns(): string` | Returns `"{KEY_PREFIX}:{namespace}:{database}"`. |
+| `private function key(string ...$parts): string` | Joins parts with `SEP`. Does NOT prepend `KEY_PREFIX` — call sites compose the prefix by passing `$this->ns()` as the first argument. |
+| `private function ns(): string` | Returns `"{KEY_PREFIX}:{namespace}:{database}"`. Every adapter-produced key starts with this prefix. |
 | `private function encode(Document $document): string` | `json_encode` with `JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE`. |
 | `private function decode(string $payload): Document` | Wraps `json_decode` (`JSON_THROW_ON_ERROR`) in a `Document`. |
-| `protected function tx(callable $fn): mixed` | **Pass-through in Wave 1**; T56 replaces with `WATCH`/`MULTI`/`EXEC` retry loop. |
+| `protected function tx(callable $fn): mixed` | Network-error retry loop. Does NOT provide isolation. `getSupportForTransactionRetries()` returns `false` to keep the trait's OCC tests off. Real `WATCH`/`MULTI`/`EXEC` is a follow-up. |
 
 ### Cross-architect (locked signatures, stub-throwing in Wave 1)
 
@@ -138,7 +138,7 @@ buffer between adjacent regions are locked.
 | `getSupportForTrigramIndex` | `false` | `false` | Match. |
 | `getSupportForPCRERegex` | `true` | `true` | Match — Wave 2 evaluates via PHP `preg_match`. |
 | `getSupportForPOSIXRegex` | `false` | `false` | Match. |
-| `getSupportForTransactionRetries` | `false` | `true` | Redis retries optimistic `WATCH`/`MULTI`/`EXEC` on conflict. |
+| `getSupportForTransactionRetries` | `false` | `false` | `tx()` is currently a network-error retry loop, NOT optimistic concurrency control. Real `WATCH`/`MULTI`/`EXEC` is deferred to a follow-up PR. |
 | `getSupportForNestedTransactions` | `true` | `true` | Match — modelled via journal stack. |
 
 Total abstract methods on `Adapter`: **119** (counted via

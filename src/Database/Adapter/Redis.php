@@ -95,14 +95,37 @@ class Redis extends Adapter
         $this->client = $client;
     }
 
+    /**
+     * Join the supplied parts with `SEP`. Does NOT prepend `KEY_PREFIX` —
+     * call sites compose the prefix by passing `$this->ns()` (which is
+     * `'KEY_PREFIX:{namespace}:{database}'`) as the first argument.
+     */
     private function key(string ...$parts): string
     {
-        return self::KEY_PREFIX . self::SEP . \implode(self::SEP, $parts);
+        return \implode(self::SEP, $parts);
     }
 
+    /**
+     * Build the `'KEY_PREFIX:{namespace}:{database}'` prefix shared by
+     * every adapter-produced key. All call sites that construct a Redis
+     * key MUST pass `$this->ns()` as the first argument to `key()` —
+     * passing the raw namespace/database produces unprefixed keys that
+     * collide across processes.
+     */
     private function ns(): string
     {
         return self::KEY_PREFIX . self::SEP . $this->getNamespace() . self::SEP . $this->getDatabase();
+    }
+
+    /**
+     * Variant of `ns()` that targets a specific database name within the
+     * current namespace. Used by `exists()` / `delete()` and similar
+     * cross-database operations where the Adapter's bound database is
+     * not the database under inspection.
+     */
+    private function nsFor(string $namespace, string $database): string
+    {
+        return self::KEY_PREFIX . self::SEP . $namespace . self::SEP . $database;
     }
 
     private function encode(Document $document): string
@@ -112,16 +135,23 @@ class Redis extends Adapter
 
     private function decode(string $payload): Document
     {
-        /** @var array<string, mixed> $data */
-        $data = \json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        try {
+            /** @var array<string, mixed> $data */
+            $data = \json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new DatabaseException('Document decode failed: ' . $e->getMessage(), 0, $e);
+        }
 
         return new Document($data);
     }
 
     /**
-     * Pass-through executor used while the transaction layer is being
-     * implemented. T56 replaces this body with a WATCH/MULTI/EXEC retry
-     * loop in Wave 2; do not inline the body at call sites.
+     * Network-error retry loop. Does NOT provide optimistic-concurrency
+     * isolation — concurrent writes to the same keys may interleave.
+     * `getSupportForTransactionRetries()` returns `false` for that reason,
+     * so the shared trait suite skips OCC-retry assertions. Replacing this
+     * body with a real WATCH/MULTI/EXEC loop and flipping the support flag
+     * is deferred to a follow-up PR.
      *
      * @param callable(RedisClient): mixed $fn
      */
@@ -161,21 +191,40 @@ class Redis extends Adapter
 
         $hashKey = $this->permDocKey($collection, $id);
         $hashFields = [];
+        $writes = [];
         foreach ($byRole as $role => $letters) {
             $unique = \array_values(\array_unique($letters));
             \sort($unique);
             $hashFields[$role] = \implode(',', $unique);
             foreach ($unique as $letter) {
-                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+                $writes[] = [$role, $letter];
             }
         }
-        $this->client->hMSet($hashKey, $hashFields);
 
-        $this->journal('writePermissions', [
-            'collection' => $collection,
-            'id' => $id,
-            'roles' => $hashFields,
-        ]);
+        // Pipeline the SADD writes so a doc with N (role,action) pairs hits
+        // Redis in a single round trip rather than N+1 sequential sends.
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($writes as [$role, $letter]) {
+                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+            }
+            $this->client->hMSet($hashKey, $hashFields);
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            $this->client->discard();
+            throw $e;
+        }
+
+        // Journal one entry per (role, letter) pair so rollback dispatches
+        // through the existing 'createPerm' case without a bespoke handler.
+        foreach ($writes as [$role, $letter]) {
+            $this->journal('createPerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+            ]);
+        }
     }
 
     /**
@@ -192,21 +241,40 @@ class Redis extends Adapter
             return;
         }
 
+        $removals = [];
         foreach ($hash as $role => $letterCsv) {
             if ($letterCsv === '') {
                 continue;
             }
             foreach (\explode(',', $letterCsv) as $letter) {
-                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+                $removals[] = [$role, $letter];
             }
         }
-        $this->client->del($hashKey);
 
-        $this->journal('clearPermissions', [
-            'collection' => $collection,
-            'id' => $id,
-            'roles' => $hash,
-        ]);
+        // Pipeline the SREMs and HDEL together — one round trip per call site.
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($removals as [$role, $letter]) {
+                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+            }
+            $this->client->del($hashKey);
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            $this->client->discard();
+            throw $e;
+        }
+
+        // Emit one 'deletePerm' per pair so rollback can replay each SADD
+        // and rehydrate the per-doc HASH entry independently.
+        foreach ($removals as [$role, $letter]) {
+            $this->journal('deletePerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+                'previous' => $hash[$role] ?? '',
+            ]);
+        }
     }
 
     /**
@@ -348,20 +416,6 @@ class Redis extends Adapter
                     /** @var string $id */
                     $id = $payload['id'];
                     $this->rawDeleteDoc($collection, $id);
-                    if (isset($payload['permissions']) && \is_array($payload['permissions'])) {
-                        foreach ($payload['permissions'] as $role => $csv) {
-                            if (!\is_string($role) || !\is_string($csv)) {
-                                continue;
-                            }
-                            foreach (\explode(',', $csv) as $action) {
-                                $action = \trim($action);
-                                if ($action === '') {
-                                    continue;
-                                }
-                                $this->client->sRem($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
-                            }
-                        }
-                    }
                     break;
 
                 case 'deleteDoc':
@@ -372,22 +426,6 @@ class Redis extends Adapter
                     /** @var string $beforePayload */
                     $beforePayload = $payload['payload'];
                     $this->rawRestoreDoc($collection, $id, $beforePayload);
-                    if (isset($payload['permissions']) && \is_array($payload['permissions'])) {
-                        $docPermKey = $this->key($this->ns(), 'perm', 'doc', $collection, $id);
-                        foreach ($payload['permissions'] as $role => $csv) {
-                            if (!\is_string($role) || !\is_string($csv)) {
-                                continue;
-                            }
-                            $this->client->hSet($docPermKey, $role, $csv);
-                            foreach (\explode(',', $csv) as $action) {
-                                $action = \trim($action);
-                                if ($action === '') {
-                                    continue;
-                                }
-                                $this->client->sAdd($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
-                            }
-                        }
-                    }
                     break;
 
                 case 'updateDoc':
@@ -397,34 +435,47 @@ class Redis extends Adapter
                     $id = $payload['id'];
                     /** @var string $beforePayload */
                     $beforePayload = $payload['payload'];
-                    $this->client->set($this->key($this->ns(), 'doc', $collection, $id), $beforePayload);
+                    $this->client->set($this->key($this->ns(), 'doc', $collection, \strtolower($id)), $beforePayload);
+                    // If the update changed the id, the new key must be removed
+                    // and the old id restored to the index set.
+                    if (isset($payload['newId']) && \is_string($payload['newId']) && $payload['newId'] !== $id) {
+                        $newId = $payload['newId'];
+                        $this->client->del($this->key($this->ns(), 'doc', $collection, \strtolower($newId)));
+                        $idxKey = $this->key($this->ns(), 'idx', $collection);
+                        $this->client->sRem($idxKey, \strtolower($newId));
+                        $this->client->sAdd($idxKey, \strtolower($id));
+                    }
                     break;
 
                 case 'createPerm':
+                    // Inverse of writePermissions: drop the (role, letter)
+                    // membership and the per-doc HASH entry for that role.
                     /** @var string $collection */
                     $collection = $payload['collection'];
-                    /** @var string $action */
-                    $action = $payload['action'];
+                    /** @var string $letter */
+                    $letter = $payload['letter'];
                     /** @var string $role */
                     $role = $payload['role'];
                     /** @var string $id */
                     $id = $payload['id'];
-                    $this->client->sRem($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
-                    $this->client->hDel($this->key($this->ns(), 'perm', 'doc', $collection, $id), $role);
+                    $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+                    $this->client->hDel($this->permDocKey($collection, $id), $role);
                     break;
 
                 case 'deletePerm':
+                    // Inverse of clearPermissions: restore the (role, letter)
+                    // membership and rehydrate the per-doc HASH entry.
                     /** @var string $collection */
                     $collection = $payload['collection'];
-                    /** @var string $action */
-                    $action = $payload['action'];
+                    /** @var string $letter */
+                    $letter = $payload['letter'];
                     /** @var string $role */
                     $role = $payload['role'];
                     /** @var string $id */
                     $id = $payload['id'];
-                    $this->client->sAdd($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
-                    if (isset($payload['previous']) && \is_string($payload['previous'])) {
-                        $this->client->hSet($this->key($this->ns(), 'perm', 'doc', $collection, $id), $role, $payload['previous']);
+                    $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+                    if (isset($payload['previous']) && \is_string($payload['previous']) && $payload['previous'] !== '') {
+                        $this->client->hSet($this->permDocKey($collection, $id), $role, $payload['previous']);
                     }
                     break;
 
@@ -456,15 +507,15 @@ class Redis extends Adapter
 
     private function rawDeleteDoc(string $collection, string $id): void
     {
-        $this->client->del($this->key($this->ns(), 'doc', $collection, $id));
-        $this->client->sRem($this->key($this->ns(), 'idx', $collection), $id);
-        $this->client->del($this->key($this->ns(), 'perm', 'doc', $collection, $id));
+        $this->client->del($this->key($this->ns(), 'doc', $collection, \strtolower($id)));
+        $this->client->sRem($this->key($this->ns(), 'idx', $collection), \strtolower($id));
+        $this->client->del($this->permDocKey($collection, $id));
     }
 
     private function rawRestoreDoc(string $collection, string $id, string $payload): void
     {
-        $this->client->set($this->key($this->ns(), 'doc', $collection, $id), $payload);
-        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), $id);
+        $this->client->set($this->key($this->ns(), 'doc', $collection, \strtolower($id)), $payload);
+        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), \strtolower($id));
     }
 
     /**
@@ -477,7 +528,7 @@ class Redis extends Adapter
     protected function evaluateQueries(string $collection, array $queries, ?int $limit, ?int $offset, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
     {
         $collectionId = $this->filter($collection);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -569,7 +620,10 @@ class Redis extends Adapter
 
     public function getIdAttributeType(): string
     {
-        return Database::VAR_STRING;
+        // Sequence ids are sourced from `INCR`, which returns integers.
+        // The validator rejects string-valued sequences when this returns
+        // VAR_STRING, so mirror Memory's VAR_INTEGER stance.
+        return Database::VAR_INTEGER;
     }
 
     public function getSupportForSchemas(): bool
@@ -809,7 +863,12 @@ class Redis extends Adapter
 
     public function getSupportForTransactionRetries(): bool
     {
-        return true;
+        // The current `tx()` body is a network-error retry loop, not a
+        // WATCH/MULTI/EXEC OCC implementation. Reporting `false` keeps the
+        // shared trait's OCC-retry tests from running against semantics this
+        // adapter doesn't yet provide. Mirror Memory's stance until a real
+        // optimistic concurrency layer lands.
+        return false;
     }
 
     public function getSupportForNestedTransactions(): bool
@@ -905,7 +964,7 @@ class Redis extends Adapter
     public function create(string $name): bool
     {
         $name = $this->filter($name);
-        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+        $dbsKey = $this->key($this->ns(), 'dbs');
 
         $this->tx(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
 
@@ -915,7 +974,7 @@ class Redis extends Adapter
     public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
-        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+        $dbsKey = $this->key($this->ns(), 'dbs');
 
         if ((bool) $this->client->sIsMember($dbsKey, $database) === false) {
             return false;
@@ -926,14 +985,15 @@ class Redis extends Adapter
         }
 
         $collection = $this->filter($collection);
-        $colsKey = $this->key($this->getNamespace(), $database, 'cols');
+        $namespace = $this->getNamespace();
+        $colsKey = $this->key($this->nsFor($namespace, $database), 'cols');
 
         return (bool) $this->client->sIsMember($colsKey, $collection);
     }
 
     public function list(): array
     {
-        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+        $dbsKey = $this->key($this->ns(), 'dbs');
         /** @var array<int, string>|false $names */
         $names = $this->client->sMembers($dbsKey);
         if ($names === false) {
@@ -952,8 +1012,8 @@ class Redis extends Adapter
     {
         $name = $this->filter($name);
         $namespace = $this->getNamespace();
-        $dbsKey = $this->key($namespace, $this->getDatabase(), 'dbs');
-        $colsKey = $this->key($namespace, $name, 'cols');
+        $dbsKey = $this->key($this->ns(), 'dbs');
+        $colsKey = $this->key($this->nsFor($namespace, $name), 'cols');
 
         $this->tx(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
             /** @var array<int, string>|false $collections */
@@ -974,11 +1034,9 @@ class Redis extends Adapter
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($name);
-        $namespace = $this->getNamespace();
-        $database = $this->getDatabase();
-        $colsKey = $this->key($namespace, $database, 'cols');
-        $metaKey = $this->key($namespace, $database, 'meta', $id);
-        $idxKey = $this->key($namespace, $database, 'idx', $id);
+        $colsKey = $this->key($this->ns(), 'cols');
+        $metaKey = $this->key($this->ns(), 'meta', $id);
+        $idxKey = $this->key($this->ns(), 'idx', $id);
 
         if ((bool) $this->client->exists($metaKey)) {
             throw new DuplicateException('Collection already exists');
@@ -1024,7 +1082,7 @@ class Redis extends Adapter
         $id = $this->filter($id);
         $namespace = $this->getNamespace();
         $database = $this->getDatabase();
-        $colsKey = $this->key($namespace, $database, 'cols');
+        $colsKey = $this->key($this->ns(), 'cols');
 
         $this->tx(function (RedisClient $client) use ($id, $namespace, $database, $colsKey): void {
             $this->purgeCollectionKeys($client, $namespace, $database, $id);
@@ -1057,7 +1115,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -1105,7 +1163,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -1141,7 +1199,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             return true;
@@ -1172,7 +1230,7 @@ class Redis extends Adapter
         $collection = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -1271,24 +1329,26 @@ class Redis extends Adapter
     private function purgeCollectionKeys(RedisClient $client, string $namespace, string $database, string $collection): void
     {
         $collection = $this->filter($collection);
-        $metaKey = $this->key($namespace, $database, 'meta', $collection);
-        $idxKey = $this->key($namespace, $database, 'idx', $collection);
+        $prefix = $this->nsFor($namespace, $database);
+        $metaKey = $this->key($prefix, 'meta', $collection);
+        $idxKey = $this->key($prefix, 'idx', $collection);
+        $seqKey = $this->key($prefix, 'seq', $collection);
 
         /** @var array<int, string>|false $docIds */
         $docIds = $client->sMembers($idxKey);
         if (\is_array($docIds)) {
             foreach ($docIds as $docId) {
                 $client->del(
-                    $this->key($namespace, $database, 'doc', $collection, $docId),
-                    $this->key($namespace, $database, 'perm', 'doc', $collection, $docId),
+                    $this->key($prefix, 'doc', $collection, $docId),
+                    $this->key($prefix, 'perm', 'doc', $collection, $docId),
                 );
             }
         }
 
-        $this->deleteByPattern($client, $this->key($namespace, $database, 'perm', $collection) . self::SEP . '*');
-        $this->deleteByPattern($client, $this->key($namespace, $database, 'tenants', $collection) . self::SEP . '*');
+        $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection) . self::SEP . '*');
+        $this->deleteByPattern($client, $this->key($prefix, 'tenants', $collection) . self::SEP . '*');
 
-        $client->del($metaKey, $idxKey);
+        $client->del($metaKey, $idxKey, $seqKey);
     }
 
     /**
@@ -1319,9 +1379,7 @@ class Redis extends Adapter
     private function computeCollectionSize(string $collection): int
     {
         $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
-        $database = $this->getDatabase();
-        $metaKey = $this->key($namespace, $database, 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             return 0;
@@ -1329,19 +1387,19 @@ class Redis extends Adapter
 
         $total = $this->measureKey($metaKey);
 
-        $idxKey = $this->key($namespace, $database, 'idx', $collection);
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
         $total += $this->measureKey($idxKey);
 
         /** @var array<int, string>|false $docIds */
         $docIds = $this->client->sMembers($idxKey);
         if (\is_array($docIds)) {
             foreach ($docIds as $docId) {
-                $total += $this->measureKey($this->key($namespace, $database, 'doc', $collection, $docId));
-                $total += $this->measureKey($this->key($namespace, $database, 'perm', 'doc', $collection, $docId));
+                $total += $this->measureKey($this->key($this->ns(), 'doc', $collection, $docId));
+                $total += $this->measureKey($this->key($this->ns(), 'perm', 'doc', $collection, $docId));
             }
         }
 
-        $permPrefix = $this->key($namespace, $database, 'perm', $collection) . self::SEP . '*';
+        $permPrefix = $this->key($this->ns(), 'perm', $collection) . self::SEP . '*';
         $cursor = null;
         do {
             /** @var array<int, string>|false $batch */
@@ -1485,7 +1543,7 @@ class Redis extends Adapter
             $r->sAdd($idxKey, \strtolower($id));
 
             $this->writePermissions($col, $id, $document);
-            $this->journal('createDoc', ['col' => $col, 'id' => $id]);
+            $this->journal('createDoc', ['collection' => $col, 'id' => $id]);
 
             return $document;
         });
@@ -1535,10 +1593,10 @@ class Redis extends Adapter
             $r->sAdd($idxKey, \strtolower($newId));
 
             $this->journal('updateDoc', [
-                'col' => $col,
+                'collection' => $col,
                 'id' => $id,
                 'newId' => $newId,
-                'before' => $existingPayload,
+                'payload' => $existingPayload,
             ]);
 
             if (! $skipPermissions) {
@@ -1598,10 +1656,10 @@ class Redis extends Adapter
                 $r->set($docKey, $this->encode($mergedDocument));
 
                 $this->journal('updateDoc', [
-                    'col' => $col,
+                    'collection' => $col,
                     'id' => $uid,
                     'newId' => $uid,
-                    'before' => $existingPayload,
+                    'payload' => $existingPayload,
                 ]);
 
                 if ($hasPermissions) {
@@ -1667,10 +1725,10 @@ class Redis extends Adapter
                     $r->set($docKey, $this->encode($mergedDocument));
 
                     $this->journal('updateDoc', [
-                        'col' => $col,
+                        'collection' => $col,
                         'id' => $id,
                         'newId' => $id,
-                        'before' => $existingPayload,
+                        'payload' => $existingPayload,
                     ]);
 
                     $this->clearPermissions($col, $id);
@@ -1695,7 +1753,7 @@ class Redis extends Adapter
                     $r->sAdd($idxKey, \strtolower($id));
 
                     $this->writePermissions($col, $id, $document);
-                    $this->journal('createDoc', ['col' => $col, 'id' => $id]);
+                    $this->journal('createDoc', ['collection' => $col, 'id' => $id]);
 
                     $results[] = $document;
                 }
@@ -1712,15 +1770,26 @@ class Redis extends Adapter
         }
 
         $this->client->multi(\Redis::PIPELINE);
-        $indexes = [];
-        foreach ($documents as $index => $doc) {
-            if (! empty($doc->getSequence())) {
-                continue;
+        try {
+            $indexes = [];
+            foreach ($documents as $index => $doc) {
+                if (! empty($doc->getSequence())) {
+                    continue;
+                }
+                $this->client->get($this->key($this->ns(), 'doc', $collection, \strtolower($doc->getId())));
+                $indexes[] = $index;
             }
-            $this->client->get($this->key($this->ns(), 'doc', $collection, \strtolower($doc->getId())));
-            $indexes[] = $index;
+            // No work queued — discard the empty pipeline so the connection
+            // does not stay in MULTI mode after returning early.
+            if ($indexes === []) {
+                $this->client->discard();
+                return $documents;
+            }
+            $payloads = $this->client->exec();
+        } catch (\Throwable $e) {
+            $this->client->discard();
+            throw $e;
         }
-        $payloads = $this->client->exec();
         if (! \is_array($payloads)) {
             return $documents;
         }
@@ -1752,9 +1821,9 @@ class Redis extends Adapter
             }
 
             $this->journal('deleteDoc', [
-                'col' => $collection,
+                'collection' => $collection,
                 'id' => $id,
-                'before' => $payload,
+                'payload' => $payload,
             ]);
 
             $this->clearPermissions($collection, $id);
@@ -1808,9 +1877,9 @@ class Redis extends Adapter
 
             foreach ($deleted as $documentId => $payload) {
                 $this->journal('deleteDoc', [
-                    'col' => $collection,
+                    'collection' => $collection,
                     'id' => (string) $documentId,
-                    'before' => $payload,
+                    'payload' => $payload,
                 ]);
                 $this->clearPermissions($collection, (string) $documentId);
                 $r->del($this->key($this->ns(), 'doc', $collection, \strtolower((string) $documentId)));
@@ -1867,10 +1936,10 @@ class Redis extends Adapter
             $r->set($docKey, $this->encode($document));
 
             $this->journal('updateDoc', [
-                'col' => $collection,
+                'collection' => $collection,
                 'id' => $id,
                 'newId' => $id,
-                'before' => $payload,
+                'payload' => $payload,
             ]);
 
             return true;
@@ -1889,7 +1958,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -1908,17 +1977,29 @@ class Redis extends Adapter
             // index creation fails up-front rather than silently allowing
             // duplicate values to coexist under a "unique" constraint.
             if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
-                $idxKey = $this->key($this->getNamespace(), $this->getDatabase(), 'idx', $collection);
+                $idxKey = $this->key($this->ns(), 'idx', $collection);
                 /** @var array<int, string> $docIds */
                 $docIds = $client->sMembers($idxKey);
                 if (! empty($docIds)) {
+                    $sharedTables = $this->getSharedTables();
+                    $currentTenant = $sharedTables ? $this->getTenant() : null;
                     $seen = [];
                     foreach ($docIds as $docId) {
-                        $payload = $client->get($this->key($this->getNamespace(), $this->getDatabase(), 'doc', $collection, (string) $docId));
+                        $payload = $client->get($this->key($this->ns(), 'doc', $collection, (string) $docId));
                         if (! \is_string($payload)) {
                             continue;
                         }
                         $document = $this->decode($payload);
+                        // Under shared tables the inverted-index set fans
+                        // across every tenant; only probe rows that belong
+                        // to the active tenant so cross-tenant rows don't
+                        // produce spurious collisions.
+                        if ($sharedTables) {
+                            $rowTenant = $document->getAttribute('$tenant');
+                            if ($rowTenant !== $currentTenant) {
+                                continue;
+                            }
+                        }
                         $signature = [];
                         $hasNull = false;
                         foreach ($attributes as $attribute) {
@@ -1932,8 +2013,8 @@ class Redis extends Adapter
                         if ($hasNull) {
                             continue;
                         }
-                        if ($this->getSharedTables()) {
-                            \array_unshift($signature, $document->getAttribute('$tenant'));
+                        if ($sharedTables) {
+                            \array_unshift($signature, $currentTenant);
                         }
                         $hash = \serialize($signature);
                         if (isset($seen[$hash])) {
@@ -1967,7 +2048,7 @@ class Redis extends Adapter
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             return true;
@@ -1998,7 +2079,7 @@ class Redis extends Adapter
         $collection = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -2033,7 +2114,7 @@ class Redis extends Adapter
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -2072,7 +2153,7 @@ class Redis extends Adapter
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
@@ -2108,10 +2189,25 @@ class Redis extends Adapter
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
+        }
+
+        // Fast path: no query filters and authorization disabled means we can
+        // use the cardinality of the index set directly. Authorization-on
+        // requires a hydration pass through `loadCollectionDocuments` so the
+        // permission filter actually runs.
+        // TODO: this path still scans the full collection when queries are
+        // present — acceptable parity with Memory, but a known scaling limit
+        // and unsuitable for large production collections.
+        if (empty($queries) && $this->authorization->getStatus() === false) {
+            $idxKey = $this->key($this->ns(), 'idx', $collectionId);
+            $cardinality = $this->client->sCard($idxKey);
+            if (\is_int($cardinality)) {
+                return $max === null ? $cardinality : \min($max, $cardinality);
+            }
         }
 
         return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $max): int {
@@ -2167,7 +2263,7 @@ class Redis extends Adapter
      */
     private function loadCollectionDocuments(RedisClient $client, string $collection, string $forPermission): array
     {
-        $idxKey = $this->key($this->getNamespace(), $this->getDatabase(), 'idx', $collection);
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
         /** @var array<int, string> $ids */
         $ids = $client->sMembers($idxKey);
         if (empty($ids)) {
@@ -2185,7 +2281,7 @@ class Redis extends Adapter
 
         $keys = [];
         foreach ($ids as $id) {
-            $keys[] = $this->key($this->getNamespace(), $this->getDatabase(), 'doc', $collection, (string) $id);
+            $keys[] = $this->key($this->ns(), 'doc', $collection, (string) $id);
         }
 
         /** @var array<int, mixed> $payloads */

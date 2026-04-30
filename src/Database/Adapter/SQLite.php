@@ -45,6 +45,42 @@ class SQLite extends MariaDB
     private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
     private const MARIADB_LONGTEXT_BYTES = '4294967295';
 
+    public function __construct(mixed $pdo)
+    {
+        parent::__construct($pdo);
+
+        $this->registerUserFunctions();
+    }
+
+    /**
+     * SQLite has no built-in regex operator — the inherited REGEXP path
+     * relies on the connection supplying one. Register a PHP-implemented
+     * REGEXP UDF that calls preg_match (PCRE), forwarding through the
+     * Utopia PDO wrapper / pool proxies via __call. Failures are
+     * swallowed so a non-SQLite PDO doesn't blow up adapter
+     * construction.
+     */
+    private function registerUserFunctions(): void
+    {
+        $pcre = static function (?string $pattern, ?string $value): int {
+            if ($pattern === null || $value === null) {
+                return 0;
+            }
+            $delimited = '/' . \str_replace('/', '\/', $pattern) . '/u';
+
+            return @\preg_match($delimited, $value) === 1 ? 1 : 0;
+        };
+
+        try {
+            $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
+        } catch (\Throwable) {
+            // Either the PDO isn't SQLite or the proxy doesn't expose
+            // the create-function hook — REGEXP queries will simply
+            // fail at SQL parse time, which is the same behaviour as
+            // before this UDF existed.
+        }
+    }
+
     /**
      * @inheritDoc
      */
@@ -271,15 +307,21 @@ class SQLite extends MariaDB
         // so the result tracks bytes actually used inside each page rather
         // than full 4KB page allocations, which would let small inserts
         // appear as a no-op against the parent assertions.
+        // `_` is a LIKE single-char wildcard, so the `_` between
+        // collection and tenant in the prefix would happily match any
+        // character — collection `users` and `userA` would both pull
+        // each other's FTS shadow tables into the size. Escape `_`
+        // with a sentinel and declare it via ESCAPE.
+        $ftsPattern = \str_replace('_', '\_', $ftsPrefix) . '%\_fts%';
+
         $stmt = $this->getPDO()->prepare("
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
-             WHERE name = :name OR name = :perms OR name LIKE :fts_pattern;
+             WHERE name = :name OR name = :perms OR name LIKE :fts_pattern ESCAPE '\\';
         ");
 
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':perms', $permissions);
-        $ftsPattern = $ftsPrefix . '%_fts%';
         $stmt->bindParam(':fts_pattern', $ftsPattern);
 
         try {
@@ -556,6 +598,12 @@ class SQLite extends MariaDB
         }
 
         $columns = \array_map(fn (string $attr) => $this->filter($attr), $attributes);
+        // FTS5's `fts5(<cols>, ...)` declaration treats backticks as an
+        // identifier quote in some builds and as part of the column
+        // name in others; stick to bare identifiers there. Backticks are
+        // still fine for the parent table references in triggers and
+        // for the INSERT column list since those are regular SQL.
+        $ftsColumnList = \implode(', ', $columns);
         $columnList = \implode(', ', \array_map(fn (string $c) => "`{$c}`", $columns));
         $newColumnList = \implode(', ', \array_map(fn (string $c) => "NEW.`{$c}`", $columns));
         $oldColumnList = \implode(', ', \array_map(fn (string $c) => "OLD.`{$c}`", $columns));
@@ -565,7 +613,7 @@ class SQLite extends MariaDB
         // index — the next document write would silently desync.
         $this->startTransaction();
         try {
-            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$columnList}, content=`{$parentTable}`, content_rowid=`_id`)";
+            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=`{$parentTable}`, content_rowid=`_id`)";
             $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
             $this->getPDO()->prepare($createSql)->execute();
 
@@ -1167,12 +1215,11 @@ class SQLite extends MariaDB
      */
     public function getSupportForAttributeResizing(): bool
     {
-        // SQLite is dynamically typed and has no MODIFY COLUMN. The
-        // resize-down guard in updateAttribute matches MariaDB's
-        // contract, but flipping this on activates parent test suites
-        // that currently cascade off other adapter behaviour. Re-enable
-        // alongside the upsert path once the cascade is understood.
-        return false;
+        // SQLite is dynamically typed with no MODIFY COLUMN, but
+        // updateAttribute scans the column on resize-down and raises
+        // TruncateException when any row exceeds the new size — same
+        // contract MariaDB enforces via the engine.
+        return true;
     }
 
     /**
@@ -1207,10 +1254,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForUpserts(): bool
     {
-        // Upsert support gates several scoped tests. Re-enable after
-        // the parent suite stops cascading failures off the existing
-        // ON CONFLICT path.
-        return false;
+        return true;
     }
 
     /**
@@ -2153,10 +2197,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForPCRERegex(): bool
     {
-        // SQLite has no built-in REGEXP. Re-enable once we figure out a
-        // safe place to register the PHP UDF that doesn't trip the test
-        // harness's connection lifecycle.
-        return false;
+        return true;
     }
 
     /**
@@ -2190,16 +2231,27 @@ class SQLite extends MariaDB
      */
     public function createAttributes(string $collection, array $attributes): bool
     {
-        foreach ($attributes as $attribute) {
-            $this->createAttribute(
-                $collection,
-                $attribute['$id'],
-                $attribute['type'],
-                $attribute['size'] ?? 0,
-                $attribute['signed'] ?? true,
-                $attribute['array'] ?? false,
-                $attribute['required'] ?? false,
-            );
+        // The flag advertises atomic batch creation. SQLite has no
+        // multi-column ADD, but DDL inside a transaction is still
+        // rolled back on failure, so a mid-batch error doesn't leave
+        // the table half-extended.
+        $this->startTransaction();
+        try {
+            foreach ($attributes as $attribute) {
+                $this->createAttribute(
+                    $collection,
+                    $attribute['$id'],
+                    $attribute['type'],
+                    $attribute['size'] ?? 0,
+                    $attribute['signed'] ?? true,
+                    $attribute['array'] ?? false,
+                    $attribute['required'] ?? false,
+                );
+            }
+            $this->commitTransaction();
+        } catch (\Throwable $e) {
+            $this->rollbackTransaction();
+            throw $e;
         }
 
         return true;
@@ -2520,7 +2572,7 @@ class SQLite extends MariaDB
         $base = $declaration;
         $argument = null;
         $secondArgument = null;
-        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)(?:\s*,\s*(\d+))?/', $declaration, $matches) === 1) {
+        if (\preg_match('/^([A-Za-z]+)\s*\((\d+)(?:\s*,\s*(\d+))?\s*\)/', $declaration, $matches) === 1) {
             $base = $matches[1];
             $argument = (int) $matches[2];
             if (isset($matches[3]) && $matches[3] !== '') {
@@ -2771,7 +2823,13 @@ class SQLite extends MariaDB
      */
     protected function getFTS5Value(string $value): string
     {
-        $exact = \str_starts_with($value, '"') && \str_ends_with($value, '"');
+        // A balanced pair of quotes triggers exact-phrase mode. A lone
+        // quote (the same `"` matching both ends of a single-character
+        // string) and unbalanced phrases like `"foo"bar"` should not.
+        $exact = \strlen($value) >= 2
+            && \str_starts_with($value, '"')
+            && \str_ends_with($value, '"')
+            && \substr_count($value, '"') === 2;
 
         // FTS5 reserves a number of characters as syntax. Replacing them
         // with whitespace lets multi-word search terms still split into

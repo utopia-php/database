@@ -34,6 +34,16 @@ abstract class SQL extends Adapter
     protected int $floatPrecision = 17;
 
     /**
+     * Filtered collection id of the query currently being built. Set by
+     * find/count/sum (and similar) before delegating to getSQLConditions
+     * so SQL adapter overrides can resolve auxiliary tables (e.g.
+     * SQLite's FTS5 virtual tables) for the active collection.
+     * Lives on the SQL base because Memory has no concept of collection
+     * scoping at this layer.
+     */
+    protected ?string $currentQueryCollection = null;
+
+    /**
      * Configure float precision for parameter binding/logging.
      */
     public function setFloatPrecision(int $precision): void

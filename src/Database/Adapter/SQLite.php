@@ -352,7 +352,7 @@ class SQLite extends MariaDB
         $namespace = $this->getNamespace();
         $name = $namespace . '_' . $collection;
         $permissions = $namespace . '_' . $collection . '_perms';
-        $ftsPrefix = "{$namespace}_{$this->tenant}_{$collection}_";
+        $ftsPrefix = "{$namespace}_{$collection}_";
 
         // FTS5 virtual tables don't show up in dbstat themselves — their
         // storage is backed by shadow tables named `<vtable>_data`,
@@ -736,11 +736,14 @@ class SQLite extends MariaDB
 
     /**
      * Common prefix for every FTS5 table belonging to `$collection`. Used by
-     * lookup helpers that scan sqlite_master with a LIKE pattern.
+     * lookup helpers that scan sqlite_master with a LIKE pattern. Mirrors
+     * getSQLTable's naming — namespace + collection only, no tenant. Under
+     * shared tables the tenant is a column, not a name suffix, and the FTS5
+     * table tracks the underlying collection 1:1.
      */
     protected function getFulltextTablePrefix(string $collection): string
     {
-        return "{$this->getNamespace()}_{$this->tenant}_{$this->filter($collection)}_";
+        return "{$this->getNamespace()}_{$this->filter($collection)}_";
     }
 
     /**

@@ -1551,6 +1551,125 @@ class Redis extends Adapter
     }
 
     /**
+     * Pre-flight unique-index check: scan the collection's existing rows for
+     * conflicts with `$document` against every UNIQUE index on the collection,
+     * mirroring Memory's `checkUniqueSignatures`. Throws DuplicateException
+     * on the first collision so callers don't waste a write round trip when
+     * MariaDB would have rejected the row.
+     *
+     * `$excludeId` lets `updateDocument` skip the document being updated.
+     */
+    private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
+    {
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $indexes = $this->readIndexesField($client, $metaKey);
+
+        $uniqueIndexes = [];
+        foreach ($indexes as $index) {
+            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
+                continue;
+            }
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes)) {
+                continue;
+            }
+            $uniqueIndexes[] = $attributes;
+        }
+
+        if ($uniqueIndexes === []) {
+            return;
+        }
+
+        // Build the new document's signatures up-front. Indexes that have any
+        // null component are treated as distinct (mirrors MariaDB's UNIQUE
+        // semantics — NULL never collides with another NULL).
+        $newSignatures = [];
+        $sharedTables = $this->getSharedTables();
+        $tenant = $sharedTables ? ($document->getAttribute('$tenant') ?? $this->getTenant()) : null;
+        foreach ($uniqueIndexes as $i => $attributes) {
+            $signature = [];
+            $hasNull = false;
+            foreach ($attributes as $attribute) {
+                $value = $this->resolveDocumentAttribute($document, (string) $attribute);
+                if ($value === null) {
+                    $hasNull = true;
+                    break;
+                }
+                $signature[] = $this->normalizeIndexValue($value);
+            }
+            if ($hasNull) {
+                continue;
+            }
+            if ($sharedTables) {
+                \array_unshift($signature, $tenant);
+            }
+            $newSignatures[$i] = \serialize($signature);
+        }
+
+        if ($newSignatures === []) {
+            return;
+        }
+
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        /** @var array<int, string> $docIds */
+        $docIds = $client->sMembers($idxKey);
+        if (empty($docIds)) {
+            return;
+        }
+
+        $excludeKey = $excludeId !== null ? \strtolower($excludeId) : null;
+        $docKeys = [];
+        foreach ($docIds as $docId) {
+            if ($excludeKey !== null && \strtolower((string) $docId) === $excludeKey) {
+                continue;
+            }
+            $docKeys[(string) $docId] = $this->key($this->ns(), 'doc', $collection, (string) $docId);
+        }
+        if ($docKeys === []) {
+            return;
+        }
+
+        /** @var array<int, mixed> $payloads */
+        $payloads = $client->mGet(\array_values($docKeys));
+        $position = 0;
+        foreach ($docKeys as $docId => $_) {
+            $payload = $payloads[$position++] ?? null;
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $existing = $this->decode($payload);
+            if ($sharedTables) {
+                $rowTenant = $existing->getAttribute('$tenant');
+                if ($rowTenant !== $tenant) {
+                    continue;
+                }
+            }
+            foreach ($newSignatures as $i => $newHash) {
+                $attributes = $uniqueIndexes[$i];
+                $signature = [];
+                $hasNull = false;
+                foreach ($attributes as $attribute) {
+                    $value = $this->resolveDocumentAttribute($existing, (string) $attribute);
+                    if ($value === null) {
+                        $hasNull = true;
+                        break;
+                    }
+                    $signature[] = $this->normalizeIndexValue($value);
+                }
+                if ($hasNull) {
+                    continue;
+                }
+                if ($sharedTables) {
+                    \array_unshift($signature, $tenant);
+                }
+                if (\serialize($signature) === $newHash) {
+                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                }
+            }
+        }
+    }
+
+    /**
      * Insert or replace an attribute record matched by `$id`/`key`. Returns a
      * fresh list (re-indexed) so the JSON encodes as an array, never an object.
      *
@@ -1752,7 +1871,7 @@ class Redis extends Adapter
 
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $col = $collection->getId();
+        $col = $this->filter($collection->getId());
         $payload = $this->client->get($this->key($this->ns(), 'doc', $col, \strtolower($id)));
 
         if (! \is_string($payload) || $payload === '') {
@@ -1809,7 +1928,7 @@ class Redis extends Adapter
 
     public function createDocument(Document $collection, Document $document): Document
     {
-        $col = $collection->getId();
+        $col = $this->filter($collection->getId());
         $id = $document->getId();
         if ($id === '') {
             $id = ID::unique();
@@ -1834,6 +1953,15 @@ class Redis extends Adapter
                     return $document;
                 }
                 throw new DuplicateException('Document already exists');
+            }
+
+            try {
+                $this->enforceUniqueIndexes($r, $col, $document);
+            } catch (DuplicateException $e) {
+                if ($this->skipDuplicates) {
+                    return $document;
+                }
+                throw $e;
             }
 
             $sequence = $document->getSequence();
@@ -1871,7 +1999,7 @@ class Redis extends Adapter
 
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
-        $col = $collection->getId();
+        $col = $this->filter($collection->getId());
         $oldKey = $this->key($this->ns(), 'doc', $col, \strtolower($id));
         $idxKey = $this->key($this->ns(), 'idx', $col);
 
@@ -1896,6 +2024,8 @@ class Redis extends Adapter
             $merged = \array_merge($existing->getArrayCopy(), $resolved);
             $merged['$id'] = $newId;
             $mergedDocument = new Document($merged);
+
+            $this->enforceUniqueIndexes($r, $col, $mergedDocument, $id);
 
             $payload = $this->encode($mergedDocument);
 
@@ -1939,7 +2069,7 @@ class Redis extends Adapter
             return 0;
         }
 
-        $col = $collection->getId();
+        $col = $this->filter($collection->getId());
 
         // Drop any caller-provided keys: pipeline results are indexed
         // sequentially, so positional iteration here MUST start at 0.
@@ -2032,7 +2162,7 @@ class Redis extends Adapter
             return $changes;
         }
 
-        $col = $collection->getId();
+        $col = $this->filter($collection->getId());
         $idxKey = $this->key($this->ns(), 'idx', $col);
         $seqKey = $this->key($this->ns(), 'seq', $col);
 
@@ -2188,6 +2318,7 @@ class Redis extends Adapter
 
     public function deleteDocument(string $collection, string $id): bool
     {
+        $collection = $this->filter($collection);
         $docKey = $this->key($this->ns(), 'doc', $collection, \strtolower($id));
         $idxKey = $this->key($this->ns(), 'idx', $collection);
 
@@ -2217,6 +2348,7 @@ class Redis extends Adapter
             return 0;
         }
 
+        $collection = $this->filter($collection);
         $idxKey = $this->key($this->ns(), 'idx', $collection);
 
         return $this->tx(function (RedisClient $r) use ($collection, $sequences, $permissionIds, $idxKey): int {
@@ -2286,6 +2418,7 @@ class Redis extends Adapter
         int|float|null $min = null,
         int|float|null $max = null
     ): bool {
+        $collection = $this->filter($collection);
         $docKey = $this->key($this->ns(), 'doc', $collection, \strtolower($id));
 
         return $this->tx(function (RedisClient $r) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
@@ -3193,8 +3326,21 @@ class Redis extends Adapter
      */
     private function resolveDocumentAttribute(Document $document, string $attribute): mixed
     {
-        if (! \str_contains($attribute, '.')) {
+        // Redis stores documents as raw JSON, so attribute keys keep symbols
+        // (`$`, `.`, etc.) verbatim. Try a direct lookup first — only when the
+        // literal key misses do we fall back to the filtered alias and then to
+        // dotted-path traversal (mirrors Memory's `resolveAttributeValue`).
+        if ($document->offsetExists($attribute)) {
             return $document->getAttribute($attribute);
+        }
+
+        $filtered = $this->filter($attribute);
+        if ($filtered !== $attribute && $document->offsetExists($filtered)) {
+            return $document->getAttribute($filtered);
+        }
+
+        if (! \str_contains($attribute, '.')) {
+            return null;
         }
 
         [$head, $rest] = \explode('.', $attribute, 2);

@@ -364,15 +364,28 @@ class Redis extends Adapter
     }
 
     /**
+     * Resolve the tenant-bucket segment for shared-tables perm keys, mapping
+     * a null tenant to the literal `'_'` so all shared-tables perm keys share
+     * a single inversion convention. Returns null when shared tables are off.
+     */
+    private function tenantBucket(): ?string
+    {
+        if (! $this->getSharedTables()) {
+            return null;
+        }
+        $tenant = $this->getTenant();
+
+        return $tenant === null ? '_' : (string) $tenant;
+    }
+
+    /**
      * Build the role/action set key, scoping by tenant under shared tables so
      * cross-tenant role overlaps don't leak document ids.
      */
     private function permKey(string $collection, string $letter, string $role): string
     {
-        if ($this->getSharedTables()) {
-            $tenant = $this->getTenant();
-            $bucket = $tenant === null ? '_' : (string) $tenant;
-
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
             return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . $collection . self::SEP . $letter . self::SEP . $role;
         }
 
@@ -386,10 +399,8 @@ class Redis extends Adapter
      */
     private function permDocKey(string $collection, string $id): string
     {
-        if ($this->getSharedTables()) {
-            $tenant = $this->getTenant();
-            $bucket = $tenant === null ? '_' : (string) $tenant;
-
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
             return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
         }
 
@@ -532,15 +543,20 @@ class Redis extends Adapter
 
     private function rawDeleteDoc(string $collection, string $id): void
     {
-        $this->client->del($this->key($this->ns(), 'doc', $collection, \strtolower($id)));
-        $this->client->sRem($this->key($this->ns(), 'idx', $collection), \strtolower($id));
-        $this->client->del($this->permDocKey($collection, $id));
+        // writePermissions/clearPermissions key the per-doc HASH off the
+        // lowercased id; lowercase here too so rollback of a mixed-case
+        // create id actually deletes the perm doc HASH that was written.
+        $lowerId = \strtolower($id);
+        $this->client->del($this->key($this->ns(), 'doc', $collection, $lowerId));
+        $this->client->sRem($this->key($this->ns(), 'idx', $collection), $lowerId);
+        $this->client->del($this->permDocKey($collection, $lowerId));
     }
 
     private function rawRestoreDoc(string $collection, string $id, string $payload): void
     {
-        $this->client->set($this->key($this->ns(), 'doc', $collection, \strtolower($id)), $payload);
-        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), \strtolower($id));
+        $lowerId = \strtolower($id);
+        $this->client->set($this->key($this->ns(), 'doc', $collection, $lowerId), $payload);
+        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), $lowerId);
     }
 
     /**
@@ -1700,12 +1716,33 @@ class Redis extends Adapter
 
         $col = $collection->getId();
 
+        // Drop any caller-provided keys: pipeline results are indexed
+        // sequentially, so positional iteration here MUST start at 0.
+        $documents = \array_values($documents);
+
         return $this->tx(function (RedisClient $r) use ($col, $documents, $updates, $attrs, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
-            $count = 0;
+            // Pipeline existing-payload GETs in a single round trip — mirrors
+            // upsertDocuments() and avoids one synchronous round trip per
+            // document, which dominates wall time on bulk updates.
+            $docKeys = [];
             foreach ($documents as $doc) {
+                $docKeys[] = $this->key($this->ns(), 'doc', $col, \strtolower($doc->getId()));
+            }
+
+            $r->multi(\Redis::PIPELINE);
+            foreach ($docKeys as $docKey) {
+                $r->get($docKey);
+            }
+            $existingPayloads = $r->exec();
+            if (! \is_array($existingPayloads)) {
+                $existingPayloads = [];
+            }
+
+            $count = 0;
+            foreach ($documents as $i => $doc) {
                 $uid = $doc->getId();
-                $docKey = $this->key($this->ns(), 'doc', $col, \strtolower($uid));
-                $existingPayload = $r->get($docKey);
+                $docKey = $docKeys[$i];
+                $existingPayload = $existingPayloads[$i] ?? false;
                 if (! \is_string($existingPayload) || $existingPayload === '') {
                     continue;
                 }
@@ -2072,9 +2109,17 @@ class Redis extends Adapter
                 if (! empty($docIds)) {
                     $sharedTables = $this->getSharedTables();
                     $currentTenant = $sharedTables ? $this->getTenant() : null;
-                    $seen = [];
+                    // Single mGet round trip instead of N sequential GETs so
+                    // unique-index creation on a populated collection scales
+                    // with payload size rather than RTT count.
+                    $docKeys = [];
                     foreach ($docIds as $docId) {
-                        $payload = $client->get($this->key($this->ns(), 'doc', $collection, (string) $docId));
+                        $docKeys[] = $this->key($this->ns(), 'doc', $collection, (string) $docId);
+                    }
+                    /** @var array<int, mixed> $payloads */
+                    $payloads = $client->mGet($docKeys);
+                    $seen = [];
+                    foreach ($payloads as $payload) {
                         if (! \is_string($payload)) {
                             continue;
                         }

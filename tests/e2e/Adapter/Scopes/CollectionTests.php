@@ -1273,7 +1273,11 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringNotContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
+            // Cache key format: '<cache>-<host>:<namespace>:<tenant>:collection:<id>'.
+            // Substring matching is unsafe because the namespace is a hex
+            // uniqid() that may legitimately contain the tenant digits.
+            $tenantSegment = \explode(':', $collectionKey)[2] ?? null;
+            $this->assertSame('', $tenantSegment);
         }
 
         // non global collection should contain tenant in the cache key
@@ -1283,7 +1287,8 @@ trait CollectionTests
             $nonGlobalCollectionId
         );
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKeyRegular);
+            $tenantSegment = \explode(':', $collectionKeyRegular)[2] ?? null;
+            $this->assertSame((string) $db->getAdapter()->getTenant(), $tenantSegment);
         }
 
         // Non metadata collection should contain tenant in the cache key

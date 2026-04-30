@@ -106,28 +106,50 @@ class SQLite extends MariaDB
 
     public function setTenant(int|string|null $tenant): bool
     {
-        if ($this->tenant !== $tenant) {
+        $changed = $this->tenant !== $tenant;
+        $result = parent::setTenant($tenant);
+        if ($changed) {
+            // Invalidate after the parent setter so a validation failure
+            // doesn't leave us with a cleared cache against the prior tenant.
             $this->ftsTableCache = [];
         }
 
-        return parent::setTenant($tenant);
+        return $result;
     }
 
     public function setNamespace(string $namespace): static
     {
+        // Invalidate after the parent setter so a thrown validation
+        // doesn't leave a cleared cache against the prior namespace.
+        parent::setNamespace($namespace);
         $this->ftsTableCache = [];
 
-        return parent::setNamespace($namespace);
+        return $this;
     }
 
     public function setSharedTables(bool $sharedTables): bool
     {
-        if ($this->sharedTables !== $sharedTables) {
+        $changed = $this->sharedTables !== $sharedTables;
+        $result = parent::setSharedTables($sharedTables);
+        if ($changed) {
             $this->ftsTableCache = [];
         }
 
-        return parent::setSharedTables($sharedTables);
+        return $result;
     }
+
+    /**
+     * Reject patterns over this size to bound ReDoS exposure — the UDF runs
+     * once per candidate row, so a pathological pattern is amplified by
+     * table cardinality.
+     */
+    private const REGEXP_MAX_PATTERN_LENGTH = 512;
+
+    /**
+     * Cap on cached delimited patterns. Long-lived adapters processing many
+     * distinct user patterns would otherwise grow this map without bound.
+     */
+    private const REGEXP_PATTERN_CACHE_LIMIT = 256;
 
     /**
      * Register a preg_match-backed REGEXP UDF so the inherited REGEXP
@@ -135,16 +157,35 @@ class SQLite extends MariaDB
      */
     private function registerUserFunctions(): void
     {
-        // SQLite invokes the UDF once per candidate row; cache the
-        // delimited pattern.
+        // SQLite invokes the UDF once per candidate row, so cache the
+        // delimited pattern across rows. FIFO-evict at REGEXP_PATTERN_CACHE_LIMIT
+        // entries so distinct user patterns can't grow this without bound.
         $delimitedCache = [];
         $pcre = static function (?string $pattern, ?string $value) use (&$delimitedCache): int {
             if ($pattern === null || $value === null) {
                 return 0;
             }
-            $delimited = $delimitedCache[$pattern] ??= '/' . \str_replace('/', '\/', $pattern) . '/u';
+            if (\strlen($pattern) > self::REGEXP_MAX_PATTERN_LENGTH) {
+                return 0;
+            }
 
-            return @\preg_match($delimited, $value) === 1 ? 1 : 0;
+            if (!isset($delimitedCache[$pattern])) {
+                if (\count($delimitedCache) >= self::REGEXP_PATTERN_CACHE_LIMIT) {
+                    \array_shift($delimitedCache);
+                }
+                // Use a delimiter unlikely to appear in user input (chr(1))
+                // so we don't have to escape forward-slashes the user wrote
+                // intentionally and risk double-escaping backslashes.
+                $delimitedCache[$pattern] = "\x01" . $pattern . "\x01u";
+            }
+            $delimited = $delimitedCache[$pattern];
+
+            // preg_match returns false on bad pattern / runtime error
+            // (e.g. PREG_BACKTRACK_LIMIT_ERROR). Silently treat those as
+            // no-match — REGEXP is a query predicate, not a validator.
+            $result = @\preg_match($delimited, $value);
+
+            return $result === 1 ? 1 : 0;
         };
 
         try {
@@ -1016,7 +1057,11 @@ class SQLite extends MariaDB
         try {
             $metadataCollection = new Document(['$id' => Database::METADATA]);
             $collectionDoc = $this->getDocument($metadataCollection, $collection);
-        } catch (\Throwable) {
+        } catch (NotFoundException) {
+            // Metadata not yet seeded (collection drop during bootstrap).
+            // Anything else surfaces — masking PDO errors here would silently
+            // fall through to the single-candidate drop path and tear down
+            // the wrong table.
             return null;
         }
 
@@ -1674,11 +1719,10 @@ class SQLite extends MariaDB
                 return 'UNIQUE INDEX';
 
             case Database::INDEX_FULLTEXT:
-                // Fulltext is handled via FTS5 virtual tables, not regular
-                // CREATE INDEX, so this branch should never reach SQL
-                // generation. Returning a placeholder keeps the contract
-                // satisfied for any introspection callers.
-                return 'INDEX';
+                // Fulltext is handled via FTS5 virtual tables in
+                // createFulltextIndex; reaching this codepath means a
+                // caller bypassed that route and would emit invalid SQL.
+                throw new DatabaseException('Fulltext indexes use createFulltextIndex(), not getSQLIndexType');
 
             default:
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);

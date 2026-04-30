@@ -707,7 +707,11 @@ class SQLite extends MariaDB
             $this->getPDO()->prepare($backfill)->execute();
 
             $this->commitTransaction();
-        } catch (PDOException $e) {
+        } catch (\Throwable $e) {
+            // trigger() callbacks may throw any Throwable (not only
+            // PDOException), and any escape that bypasses the rollback
+            // would leave the inTransaction counter incremented and the
+            // CREATE VIRTUAL TABLE half-applied.
             $this->rollbackTransaction();
             throw $e;
         }
@@ -800,19 +804,15 @@ class SQLite extends MariaDB
     /**
      * Drop the FTS5 virtual table (and its triggers) corresponding to the
      * fulltext index `$id` on `$collection`, if one exists. Returns true if
-     * a matching table was found and dropped.
+     * a matching table was found and dropped, false if no FTS5 table
+     * exists for the collection. Throws when multiple FTS5 tables exist
+     * and the id can't be unambiguously resolved — silently dropping
+     * none would leave the caller's `deleteIndex` returning success
+     * while the triggers and shadow tables remained intact.
      */
     protected function dropFulltextIndexById(string $collection, string $id): bool
     {
-        $stmt = $this->getPDO()->prepare("
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name LIKE :_prefix AND name LIKE :_suffix
-        ");
-        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
-        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
-        $stmt->execute();
-        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $stmt->closeCursor();
+        $tables = $this->findFulltextTables($collection);
 
         if (empty($tables)) {
             return false;
@@ -821,9 +821,15 @@ class SQLite extends MariaDB
         // The index id isn't encoded in the FTS5 table name (the name is
         // keyed off the sorted attribute set). When a single FTS5 table
         // exists for this collection, treat it as the unambiguous target;
-        // otherwise refuse and let the caller surface a clearer error.
+        // otherwise raise an explicit error rather than silently leaving
+        // the tables in place — the deleteIndex fallthrough swallows
+        // "no such index" and would otherwise report success.
         if (\count($tables) !== 1) {
-            return false;
+            throw new DatabaseException(
+                "Cannot resolve fulltext index '{$id}' on '{$collection}': "
+                . \count($tables) . ' FTS5 tables exist for this collection. '
+                . 'Drop them by attribute set instead.'
+            );
         }
 
         $ftsTable = $tables[0];
@@ -845,7 +851,7 @@ class SQLite extends MariaDB
             $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
             $this->getPDO()->prepare($sql)->execute();
             $this->commitTransaction();
-        } catch (PDOException $e) {
+        } catch (\Throwable $e) {
             $this->rollbackTransaction();
             throw $e;
         }
@@ -853,6 +859,31 @@ class SQLite extends MariaDB
         $this->ftsTableCache = [];
 
         return true;
+    }
+
+    /**
+     * List every FTS5 virtual table belonging to `$collection`, identified
+     * by the prefix/suffix naming convention used when the table was
+     * created. Centralises the sqlite_master LIKE-scan that
+     * dropFulltextIndexById and findFulltextTableForAttribute both need.
+     *
+     * @return array<string>
+     */
+    protected function findFulltextTables(string $collection): array
+    {
+        $stmt = $this->getPDO()->prepare("
+            SELECT name FROM sqlite_master
+            WHERE type='table'
+              AND name LIKE :_prefix
+              AND name LIKE :_suffix
+        ");
+        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
+        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
+        $stmt->execute();
+        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt->closeCursor();
+
+        return $tables;
     }
 
     /**
@@ -2894,19 +2925,7 @@ class SQLite extends MariaDB
             return $this->ftsTableCache[$cacheKey];
         }
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT name FROM sqlite_master
-            WHERE type='table'
-              AND name LIKE :_prefix
-              AND name LIKE :_suffix
-        ");
-        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
-        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
-        $stmt->execute();
-        $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $stmt->closeCursor();
-
-        foreach ($tables as $table) {
+        foreach ($this->findFulltextTables($collection) as $table) {
             $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);

@@ -60,6 +60,25 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build SQL conditions for a query while exposing the active collection
+     * via $currentQueryCollection. The state is always reset, even when
+     * getSQLConditions throws — adapter overrides that read it (e.g.
+     * SQLite's FTS5 routing) rely on it being absent outside this scope.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        $this->currentQueryCollection = $name;
+        try {
+            return $this->getSQLConditions($queries, $binds, $separator);
+        } finally {
+            $this->currentQueryCollection = null;
+        }
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -3165,12 +3184,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $this->currentQueryCollection = $name;
-        try {
-            $conditions = $this->getSQLConditions($queries, $binds);
-        } finally {
-            $this->currentQueryCollection = null;
-        }
+        $conditions = $this->getSQLConditionsForCollection($name, $queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3314,12 +3328,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $this->currentQueryCollection = $name;
-        try {
-            $conditions = $this->getSQLConditions($otherQueries, $binds);
-        } finally {
-            $this->currentQueryCollection = null;
-        }
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3405,12 +3414,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $this->currentQueryCollection = $name;
-        try {
-            $conditions = $this->getSQLConditions($otherQueries, $binds);
-        } finally {
-            $this->currentQueryCollection = null;
-        }
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

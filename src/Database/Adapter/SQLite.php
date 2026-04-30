@@ -612,6 +612,9 @@ class SQLite extends MariaDB
         }
 
         $indexes = $collection->getAttribute('indexes', []);
+        if (\is_string($indexes)) {
+            $indexes = \json_decode($indexes, true) ?? [];
+        }
 
         foreach ($indexes as $index) {
             $attributes = $index['attributes'];
@@ -662,6 +665,9 @@ class SQLite extends MariaDB
         $old = $this->filter($old);
         $new = $this->filter($new);
         $indexes = $collection->getAttribute('indexes', []);
+        if (\is_string($indexes)) {
+            $indexes = \json_decode($indexes, true) ?? [];
+        }
         $index = null;
 
         foreach ($indexes as $node) {

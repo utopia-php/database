@@ -118,7 +118,7 @@ class Structure extends Validator
      * $collection is readonly, so the merge result never changes after the
      * first call.
      *
-     * @var array<int, array<string, mixed>|Document>|null
+     * @var array<array<string, mixed>>|null
      */
     private ?array $mergedAttributes = null;
 

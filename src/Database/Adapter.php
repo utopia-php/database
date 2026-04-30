@@ -73,7 +73,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     protected Authorization $authorization;
 
     /** @var array<string, true>|null */
-    private ?array $capabilitySet = null;
+    protected ?array $capabilitySet = null;
 
     /**
      * Check if this adapter supports a given capability.

@@ -38,7 +38,10 @@ class SQLiteTest extends Base
         $redis->select(3);
         $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
-        $database = new Database(new SQLite($pdo), $cache);
+        $adapter = new SQLite($pdo);
+        $adapter->setEmulateMySQL(true);
+
+        $database = new Database($adapter, $cache);
         assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)

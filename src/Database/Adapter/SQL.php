@@ -220,6 +220,18 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
+    }
+
+    /**
      * Get the hostname of the database connection.
      *
      * @return string
@@ -4129,10 +4141,11 @@ abstract class SQL extends Adapter
 
     /**
      * @param  array<string, mixed>  $binds
+     * @param  ?string  $forCollection  Filtered collection id (for FTS5 routing).
      *
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -4153,7 +4166,7 @@ abstract class SQL extends Adapter
                 /** @var iterable<Query> $nestedQueries */
                 $nestedQueries = $query->getValue();
                 foreach ($nestedQueries as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds);
+                    $conditions[] = $this->getSQLCondition($q, $binds, $forCollection);
                 }
 
                 $method = strtoupper($query->getMethod()->value);
@@ -4247,11 +4260,12 @@ abstract class SQL extends Adapter
      * @param  array<Query>  $queries
      * @param  array<string, mixed>  $binds
      * @param  string  $separator  The logical operator joining conditions (AND/OR)
+     * @param  ?string  $forCollection  See {@see getSQLCondition}.
      * @return string
      *
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -4262,9 +4276,9 @@ abstract class SQL extends Adapter
             if ($query->isNested()) {
                 /** @var array<Query> $nestedQueries */
                 $nestedQueries = $query->getValues();
-                $conditions[] = $this->getSQLConditions($nestedQueries, $binds, strtoupper($query->getMethod()->value));
+                $conditions[] = $this->getSQLConditions($nestedQueries, $binds, strtoupper($query->getMethod()->value), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 

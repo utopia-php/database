@@ -1580,7 +1580,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
@@ -1611,7 +1611,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 /** @var iterable<Query> $nestedQueries */
                 $nestedQueries = $query->getValue();
                 foreach ($nestedQueries as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds);
+                    $conditions[] = $this->getSQLCondition($q, $binds, $forCollection);
                 }
 
                 $method = strtoupper($query->getMethod()->value);

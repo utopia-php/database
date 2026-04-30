@@ -105,7 +105,6 @@ class Redis extends Adapter
         return self::KEY_PREFIX . self::SEP . \implode(self::SEP, $parts);
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function ns(): string
     {
         return self::KEY_PREFIX . self::SEP . $this->getNamespace() . self::SEP . $this->getDatabase();
@@ -139,19 +138,83 @@ class Redis extends Adapter
         return $fn($this->client);
     }
 
-    /** @phpstan-ignore-next-line method.unused */
+    /**
+     * Persist a document's permissions into the inverted role/action sets and
+     * the per-document role->letters HASH. The same writes are journalled so
+     * T56 can revert them on rollback.
+     *
+     * @phpstan-ignore-next-line method.unused
+     */
     private function writePermissions(string $collection, string $id, Document $document): void
     {
-        throw new \LogicException('owned by T50');
-    }
+        $byRole = [];
+        foreach (Database::PERMISSIONS as $type) {
+            foreach ($document->getPermissionsByType($type) as $role) {
+                $byRole[$role][] = self::actionLetter($type);
+            }
+        }
 
-    /** @phpstan-ignore-next-line method.unused */
-    private function clearPermissions(string $collection, string $id): void
-    {
-        throw new \LogicException('owned by T50');
+        if ($byRole === []) {
+            return;
+        }
+
+        $hashKey = $this->permDocKey($collection, $id);
+        $hashFields = [];
+        foreach ($byRole as $role => $letters) {
+            $unique = \array_values(\array_unique($letters));
+            \sort($unique);
+            $hashFields[$role] = \implode(',', $unique);
+            foreach ($unique as $letter) {
+                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+            }
+        }
+        $this->client->hMSet($hashKey, $hashFields);
+
+        $this->journal('writePermissions', [
+            'collection' => $collection,
+            'id' => $id,
+            'roles' => $hashFields,
+        ]);
     }
 
     /**
+     * Strip every permission entry for ($collection, $id) from the inverted
+     * sets and the per-doc HASH, recording the previous state in the journal
+     * so T56 can replay it on rollback.
+     *
+     * @phpstan-ignore-next-line method.unused
+     */
+    private function clearPermissions(string $collection, string $id): void
+    {
+        $hashKey = $this->permDocKey($collection, $id);
+        /** @var array<string, string>|false $hash */
+        $hash = $this->client->hGetAll($hashKey);
+        if ($hash === false || $hash === []) {
+            return;
+        }
+
+        foreach ($hash as $role => $letterCsv) {
+            if ($letterCsv === '') {
+                continue;
+            }
+            foreach (\explode(',', $letterCsv) as $letter) {
+                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+            }
+        }
+        $this->client->del($hashKey);
+
+        $this->journal('clearPermissions', [
+            'collection' => $collection,
+            'id' => $id,
+            'roles' => $hash,
+        ]);
+    }
+
+    /**
+     * Restrict $ids to those visible to the current authorization context for
+     * the given $action. Returns $ids unchanged when authorization is off so
+     * privileged code paths bypass the filter.
+     *
      * @param array<int, string> $ids
      * @return array<int, string>
      *
@@ -159,7 +222,88 @@ class Redis extends Adapter
      */
     private function applyPermissionFilter(string $collection, array $ids, string $action): array
     {
-        throw new \LogicException('owned by T50');
+        if ($ids === []) {
+            return $ids;
+        }
+        if ($this->authorization->getStatus() === false) {
+            return $ids;
+        }
+
+        $roles = $this->authorization->getRoles();
+        if ($roles === []) {
+            return [];
+        }
+
+        $letter = self::actionLetter($action);
+        $keys = [];
+        foreach ($roles as $role) {
+            $keys[] = $this->permKey($collection, $letter, $role);
+        }
+
+        if (\count($keys) === 1) {
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sMembers($keys[0]);
+        } else {
+            $first = \array_shift($keys);
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sUnion($first, ...$keys);
+        }
+        if ($allowed === false || $allowed === []) {
+            return [];
+        }
+
+        $allowedSet = \array_flip($allowed);
+
+        return \array_values(\array_filter($ids, static fn (string $id): bool => isset($allowedSet[$id])));
+    }
+
+    /**
+     * Translate a `Database::PERMISSION_*` action string to the single-letter
+     * suffix used in `{ns}:{db}:perm:{col}:{letter}:{role}` set keys.
+     */
+    private static function actionLetter(string $action): string
+    {
+        return match ($action) {
+            Database::PERMISSION_READ => 'r',
+            Database::PERMISSION_CREATE => 'c',
+            Database::PERMISSION_UPDATE => 'u',
+            Database::PERMISSION_DELETE => 'd',
+            Database::PERMISSION_WRITE => 'w',
+            default => throw new DatabaseException('Unknown permission action: ' . $action),
+        };
+    }
+
+    /**
+     * Build the role/action set key, scoping by tenant under shared tables so
+     * cross-tenant role overlaps don't leak document ids.
+     */
+    private function permKey(string $collection, string $letter, string $role): string
+    {
+        if ($this->getSharedTables()) {
+            $tenant = $this->getTenant();
+            $bucket = $tenant === null ? '_' : (string) $tenant;
+
+            return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . $collection . self::SEP . $letter . self::SEP . $role;
+        }
+
+        return $this->ns() . self::SEP . 'perm' . self::SEP . $collection . self::SEP . $letter . self::SEP . $role;
+    }
+
+    /**
+     * Build the per-document role->letters HASH key for ($collection, $id),
+     * applying the same tenant scoping as `permKey()` so reads/writes stay
+     * symmetric under shared tables.
+     */
+    private function permDocKey(string $collection, string $id): string
+    {
+        if ($this->getSharedTables()) {
+            $tenant = $this->getTenant();
+            $bucket = $tenant === null ? '_' : (string) $tenant;
+
+            return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
+        }
+
+        return $this->ns() . self::SEP . 'perm' . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
     }
 
     /**
@@ -808,17 +952,17 @@ class Redis extends Adapter
 
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
-        throw new \LogicException('owned by T50');
+        throw new DatabaseException('Relationships not supported by Redis adapter');
     }
 
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        throw new \LogicException('owned by T50');
+        throw new DatabaseException('Relationships not supported by Redis adapter');
     }
 
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
     {
-        throw new \LogicException('owned by T50');
+        throw new DatabaseException('Relationships not supported by Redis adapter');
     }
 
     // === @architect:T50 end ===

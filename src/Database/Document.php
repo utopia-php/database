@@ -312,15 +312,18 @@ class Document extends ArrayObject
      */
     public function setAttribute(string $key, mixed $value, SetType $type = SetType::Assign): static
     {
-        if ($type !== SetType::Assign) {
+        // Fast path for the dominant Assign case — skip the match dispatch
+        // and the type-comparison branches that only matter for Append/Prepend.
+        if ($type === SetType::Assign) {
+            $this[$key] = $value;
+        } else {
             $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
-        }
 
-        match ($type) {
-            SetType::Assign => $this[$key] = $value,
-            SetType::Append => $this[$key] = [...(array) $this[$key], $value],
-            SetType::Prepend => $this[$key] = [$value, ...(array) $this[$key]],
-        };
+            match ($type) {
+                SetType::Append => $this[$key] = [...(array) $this[$key], $value],
+                SetType::Prepend => $this[$key] = [$value, ...(array) $this[$key]],
+            };
+        }
 
         if ($key === '$permissions') {
             if (\is_array($this[$key])) {

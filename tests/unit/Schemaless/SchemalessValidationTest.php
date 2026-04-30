@@ -67,7 +67,6 @@ class SchemalessValidationTest extends TestCase
         $this->adapter->method('createDocuments')->willReturnCallback(function (Document $col, array $docs) {
             return $docs;
         });
-        $this->adapter->method('updateDocument')->willReturnArgument(2);
         $this->adapter->method('createIndex')->willReturn(true);
         $this->adapter->method('deleteIndex')->willReturn(true);
         $this->adapter->method('getSequences')->willReturnArgument(1);
@@ -123,13 +122,14 @@ class SchemalessValidationTest extends TestCase
     private function setupCollections(array $collections): void
     {
         $meta = $this->metaCollection();
+        /** @var array<string, Document> $map */
         $map = [];
         foreach ($collections as $col) {
             $map[$col->getId()] = $col;
         }
 
         $this->adapter->method('getDocument')->willReturnCallback(
-            function (Document $col, string $docId) use ($meta, $map) {
+            function (Document $col, string $docId) use ($meta, &$map) {
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
                     return $meta;
                 }
@@ -138,6 +138,18 @@ class SchemalessValidationTest extends TestCase
                 }
 
                 return new Document();
+            }
+        );
+
+        // Persist metadata writes back to the map so subsequent reads observe
+        // mutations made by createIndex/createAttribute/etc.
+        $this->adapter->method('updateDocument')->willReturnCallback(
+            function (Document $col, string $docId, Document $document) use (&$map) {
+                if ($col->getId() === Database::METADATA) {
+                    $map[$docId] = $document;
+                }
+
+                return $document;
             }
         );
     }

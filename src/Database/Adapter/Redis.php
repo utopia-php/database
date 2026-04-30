@@ -1088,8 +1088,6 @@ class Redis extends Adapter
      * do not register inverse entries with `journal()`. The transaction
      * wrapper is used solely to surface `\RedisException` as
      * `TransactionException`.
-     *
-     * @phpstan-ignore method.unused (wired up by T2 updateRelationship)
      */
     private function renameDocumentField(string $collection, string $oldKey, string $newKey): void
     {
@@ -1140,8 +1138,6 @@ class Redis extends Adapter
      * stored payloads when a relationship column is dropped.
      *
      * Same non-journalled schema-op contract as `renameDocumentField`.
-     *
-     * @phpstan-ignore method.unused (wired up by T2 deleteRelationship)
      */
     private function dropDocumentField(string $collection, string $field): void
     {
@@ -1188,8 +1184,6 @@ class Redis extends Adapter
      * Reads the METADATA collection's docs for both sides and extracts each
      * `$sequence`. Returns null when either METADATA row is missing or has
      * no sequence — callers treat that as a no-op (skip the rename).
-     *
-     * @phpstan-ignore method.unused (wired up by T2 updateRelationship M2M branch)
      */
     private function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string
     {
@@ -3459,17 +3453,151 @@ class Redis extends Adapter
 
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
-        throw new DatabaseException('Relationships not supported by Redis adapter');
+        // Redis stores documents as flexible JSON blobs, so the relationship
+        // "column" is registered on the collection's meta.attrs list rather
+        // than added as a physical schema column. Mirrors Memory's
+        // `registerRelationshipField` — minimal record only; the orchestrator
+        // writes the full options (onDelete / side / related-collection) onto
+        // the METADATA collection separately. The M2M junction collection
+        // itself is created by the wrapper via the standard createCollection
+        // path with explicit attributes.
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->createAttribute($collection, $id, Database::VAR_RELATIONSHIP, 0, true, false, false);
+                if ($twoWay) {
+                    $this->createAttribute($relatedCollection, $twoWayKey, Database::VAR_RELATIONSHIP, 0, true, false, false);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $this->createAttribute($relatedCollection, $twoWayKey, Database::VAR_RELATIONSHIP, 0, true, false, false);
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $this->createAttribute($collection, $id, Database::VAR_RELATIONSHIP, 0, true, false, false);
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                // Junction columns live on the junction collection, which is
+                // created with explicit attributes by the wrapper.
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
     }
 
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        throw new DatabaseException('Relationships not supported by Redis adapter');
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+        $newKey = $newKey !== null ? $this->filter($newKey) : null;
+        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
+                    $this->renameDocumentField($collection, $key, $newKey);
+                }
+                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                    $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($collection, $key, $newKey);
+                        $this->renameDocumentField($collection, $key, $newKey);
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($collection, $key, $newKey);
+                        $this->renameDocumentField($collection, $key, $newKey);
+                    }
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($junction, $key, $newKey);
+                        $this->renameDocumentField($junction, $key, $newKey);
+                    }
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($junction, $twoWayKey, $newTwoWayKey);
+                        $this->renameDocumentField($junction, $twoWayKey, $newTwoWayKey);
+                    }
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
     }
 
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
     {
-        throw new DatabaseException('Relationships not supported by Redis adapter');
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->deleteAttribute($collection, $key);
+                    $this->dropDocumentField($collection, $key);
+                    if ($twoWay) {
+                        $this->deleteAttribute($relatedCollection, $twoWayKey);
+                        $this->dropDocumentField($relatedCollection, $twoWayKey);
+                    }
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                    if ($twoWay) {
+                        $this->deleteAttribute($collection, $key);
+                        $this->dropDocumentField($collection, $key);
+                    }
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                } else {
+                    $this->deleteAttribute($collection, $key);
+                    $this->dropDocumentField($collection, $key);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->deleteAttribute($collection, $key);
+                    $this->dropDocumentField($collection, $key);
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    $this->dropDocumentField($relatedCollection, $twoWayKey);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                // Junction collection is dropped by the wrapper via cleanupCollection.
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
     }
 
     // === @architect:T50 end ===

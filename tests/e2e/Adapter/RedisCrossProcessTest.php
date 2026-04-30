@@ -25,6 +25,7 @@ use Utopia\Database\Validator\Authorization;
 class RedisCrossProcessTest extends TestCase
 {
     private const HELPER_SCRIPT = __DIR__ . '/_helpers/redis_cross_process_worker.php';
+    private const RELATIONSHIP_HELPER_SCRIPT = __DIR__ . '/_helpers/redis_relationship_worker.php';
 
     protected ?Authorization $authorization = null;
     protected ?Redis $redisClient = null;
@@ -172,5 +173,155 @@ class RedisCrossProcessTest extends TestCase
             $reread->getAttribute('value'),
             'Parent did not observe the child process update — Redis adapter state is not actually shared.'
         );
+    }
+
+    public function testRelationshipRoundTripAcrossProcesses(): void
+    {
+        $host = \getenv('REDIS_HOST') ?: 'redis-mirror';
+        $port = (int) (\getenv('REDIS_PORT') ?: 6379);
+
+        $redis = new Redis();
+        $redis->connect($host, $port);
+        $this->redisClient = $redis;
+
+        $this->namespace = 'utopia_xprel_' . \uniqid();
+
+        $cacheHost = \getenv('CACHE_REDIS_HOST') ?: 'redis';
+        $cachePort = (int) (\getenv('CACHE_REDIS_PORT') ?: 6379);
+        $cacheRedis = new Redis();
+        $cacheRedis->connect($cacheHost, $cachePort);
+        $cache = new Cache(new RedisCacheAdapter($cacheRedis));
+
+        $database = new Database(new RedisDbAdapter($redis), $cache);
+        $database
+            ->setAuthorization($this->authorization)
+            ->setDatabase('utopiaTests')
+            ->setNamespace($this->namespace);
+
+        $database->create();
+
+        // Children collection — needs a string column so the orchestrator
+        // has something tangible to read back.
+        $database->createCollection('children', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->createCollection('parents', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->createRelationship(
+            collection: 'parents',
+            relatedCollection: 'children',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: false,
+            id: 'child',
+            onDelete: Database::RELATION_MUTATE_SET_NULL
+        );
+
+        $childId = 'child-1';
+        $database->createDocument('children', new Document([
+            '$id' => $childId,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'kid',
+        ]));
+
+        $parentSetId = 'parent-set';
+        $database->createDocument('parents', new Document([
+            '$id' => $parentSetId,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'with-child',
+            'child' => $childId,
+        ]));
+
+        $parentNullId = 'parent-null';
+        $database->createDocument('parents', new Document([
+            '$id' => $parentNullId,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'no-child',
+            // 'child' deliberately omitted — adapter should null-surface.
+        ]));
+
+        $command = [
+            \PHP_BINARY,
+            self::RELATIONSHIP_HELPER_SCRIPT,
+            $this->namespace,
+            $parentSetId,
+            $parentNullId,
+            $childId,
+        ];
+
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $env = [
+            'REDIS_HOST' => $host,
+            'REDIS_PORT' => (string) $port,
+            'CACHE_REDIS_HOST' => $cacheHost,
+            'CACHE_REDIS_PORT' => (string) $cachePort,
+            'PATH' => \getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
+        ];
+
+        $process = \proc_open($command, $descriptors, $pipes, null, $env);
+        if (! \is_resource($process)) {
+            $this->fail('Failed to spawn child PHP process via proc_open.');
+        }
+
+        \fclose($pipes[0]);
+        $stdout = \stream_get_contents($pipes[1]) ?: '';
+        $stderr = \stream_get_contents($pipes[2]) ?: '';
+        \fclose($pipes[1]);
+        \fclose($pipes[2]);
+
+        $exitCode = \proc_close($process);
+
+        if ($exitCode !== 0) {
+            $this->fail(
+                "Child process exited with status {$exitCode}.\n" .
+                "STDOUT:\n{$stdout}\n" .
+                "STDERR:\n{$stderr}"
+            );
+        }
+
+        $this->assertStringContainsString('OK', $stdout);
     }
 }

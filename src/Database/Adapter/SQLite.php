@@ -3131,7 +3131,7 @@ class SQLite extends MariaDB
      * escapeWildcards() emits backslash escapes on every wildcard.
      * Everything else falls through to the MariaDB implementation.
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
     {
         $method = $query->getMethod();
 
@@ -3150,7 +3150,7 @@ class SQLite extends MariaDB
         }
 
         if ($method !== Query::TYPE_SEARCH && $method !== Query::TYPE_NOT_SEARCH) {
-            return parent::getSQLCondition($query, $binds);
+            return parent::getSQLCondition($query, $binds, $forCollection);
         }
 
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
@@ -3168,15 +3168,13 @@ class SQLite extends MariaDB
             return $method === Query::TYPE_SEARCH ? '1 = 0' : '1 = 1';
         }
 
-        $collection = $this->currentQueryCollection;
-
         // Look the FTS5 table up by attribute rather than computing the
         // name from the attribute alone — multi-column fulltext indexes
         // encode their full sorted attribute set in the table name, so
         // single-attribute searches against them would otherwise miss.
-        $ftsTable = $collection === null
+        $ftsTable = $forCollection === null
             ? null
-            : $this->findFulltextTableForAttribute($collection, $attribute);
+            : $this->findFulltextTableForAttribute($forCollection, $attribute);
 
         if ($ftsTable === null) {
             // No collection context or no matching FTS5 table — fall back

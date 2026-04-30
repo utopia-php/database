@@ -34,16 +34,6 @@ abstract class SQL extends Adapter
     protected int $floatPrecision = 17;
 
     /**
-     * Filtered collection id of the query currently being built. Set by
-     * find/count/sum (and similar) before delegating to getSQLConditions
-     * so SQL adapter overrides can resolve auxiliary tables (e.g.
-     * SQLite's FTS5 virtual tables) for the active collection.
-     * Lives on the SQL base because Memory has no concept of collection
-     * scoping at this layer.
-     */
-    protected ?string $currentQueryCollection = null;
-
-    /**
      * Configure float precision for parameter binding/logging.
      */
     public function setFloatPrecision(int $precision): void
@@ -60,22 +50,19 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Build SQL conditions for a query while exposing the active collection
-     * via $currentQueryCollection. The state is always reset, even when
-     * getSQLConditions throws — adapter overrides that read it (e.g.
-     * SQLite's FTS5 routing) rely on it being absent outside this scope.
+     * Build SQL conditions for `$name` and thread the collection name down
+     * to the per-query builders. Adapter overrides that need the active
+     * collection (e.g. SQLite's FTS5 routing) read it from this parameter
+     * instead of per-instance state — under Swoole coroutines, instance
+     * state would race across yields if the same statement compiled
+     * multiple SEARCH conditions.
      *
      * @param array<Query> $queries
      * @param array<string,mixed> $binds
      */
     protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
     {
-        $this->currentQueryCollection = $name;
-        try {
-            return $this->getSQLConditions($queries, $binds, $separator);
-        } finally {
-            $this->currentQueryCollection = null;
-        }
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
     }
 
     /**
@@ -2341,19 +2328,25 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param ?string $forCollection Filtered collection id of the query
+     *        currently being built, threaded through so adapter overrides
+     *        can resolve auxiliary tables (e.g. SQLite's FTS5 virtual
+     *        tables) for the active collection without touching shared
+     *        state that would race across Swoole coroutine yields.
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param ?string $forCollection See {@see getSQLCondition}.
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -2362,9 +2355,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 

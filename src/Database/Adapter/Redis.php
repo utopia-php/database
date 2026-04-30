@@ -99,7 +99,6 @@ class Redis extends Adapter
         $this->client = $client;
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function key(string ...$parts): string
     {
         return self::KEY_PREFIX . self::SEP . \implode(self::SEP, $parts);
@@ -117,7 +116,6 @@ class Redis extends Adapter
         return \json_encode($document->getArrayCopy(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function decode(string $payload): Document
     {
         /** @var array<string, mixed> $data */
@@ -154,8 +152,6 @@ class Redis extends Adapter
     /**
      * @param array<int, string> $ids
      * @return array<int, string>
-     *
-     * @phpstan-ignore-next-line method.unused
      */
     private function applyPermissionFilter(string $collection, array $ids, string $action): array
     {
@@ -201,7 +197,32 @@ class Redis extends Adapter
      */
     protected function evaluateQueries(string $collection, array $queries, ?int $limit, ?int $offset, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
     {
-        throw new \LogicException('owned by T40');
+        $collectionId = $this->filter($collection);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection): array {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+            $documents = $this->orderDocuments($documents, $orderAttributes, $orderTypes, $cursorDirection);
+            $documents = $this->cursorDocuments($documents, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
+
+            if (! \is_null($offset)) {
+                $documents = \array_slice($documents, $offset);
+            }
+            if (! \is_null($limit)) {
+                $documents = \array_slice($documents, 0, $limit);
+            }
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $documents = \array_reverse($documents);
+            }
+
+            return $documents;
+        });
     }
 
     public function getDriver(): mixed
@@ -760,42 +781,1102 @@ class Redis extends Adapter
 
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
-        throw new \LogicException('owned by T40');
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): bool {
+            $indexes = $this->readIndexesField($client, $metaKey);
+
+            foreach ($indexes as $existing) {
+                if (($existing['$id'] ?? $existing['key'] ?? null) === $id) {
+                    throw new DuplicateException('Index already exists');
+                }
+            }
+
+            // Unique-index pre-flight: scan existing documents for collisions so
+            // index creation fails up-front rather than silently allowing
+            // duplicate values to coexist under a "unique" constraint.
+            if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
+                $idxKey = $this->key($this->getNamespace(), $this->getDatabase(), 'idx', $collection);
+                /** @var array<int, string> $docIds */
+                $docIds = $client->sMembers($idxKey);
+                if (! empty($docIds)) {
+                    $seen = [];
+                    foreach ($docIds as $docId) {
+                        $payload = $client->get($this->key($this->getNamespace(), $this->getDatabase(), 'doc', $collection, (string) $docId));
+                        if (! \is_string($payload)) {
+                            continue;
+                        }
+                        $document = $this->decode($payload);
+                        $signature = [];
+                        $hasNull = false;
+                        foreach ($attributes as $attribute) {
+                            $value = $this->resolveDocumentAttribute($document, (string) $attribute);
+                            if ($value === null) {
+                                $hasNull = true;
+                                break;
+                            }
+                            $signature[] = $this->normalizeIndexValue($value);
+                        }
+                        if ($hasNull) {
+                            continue;
+                        }
+                        if ($this->getSharedTables()) {
+                            \array_unshift($signature, $document->getAttribute('$tenant'));
+                        }
+                        $hash = \serialize($signature);
+                        if (isset($seen[$hash])) {
+                            throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
+                        }
+                        $seen[$hash] = true;
+                    }
+                }
+            }
+
+            $indexes[] = [
+                '$id' => $id,
+                'key' => $id,
+                'type' => $type,
+                'attributes' => \array_values($attributes),
+                'lengths' => \array_values($lengths),
+                'orders' => \array_values($orders),
+            ];
+
+            $client->hSet(
+                $metaKey,
+                'indexes',
+                \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+
+            return true;
+        });
     }
 
     public function deleteIndex(string $collection, string $id): bool
     {
-        throw new \LogicException('owned by T40');
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return true;
+        }
+
+        return $this->tx(function (RedisClient $client) use ($metaKey, $id): bool {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $filtered = [];
+            foreach ($indexes as $index) {
+                if (($index['$id'] ?? $index['key'] ?? null) === $id) {
+                    continue;
+                }
+                $filtered[] = $index;
+            }
+
+            $client->hSet(
+                $metaKey,
+                'indexes',
+                \json_encode(\array_values($filtered), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+
+            return true;
+        });
     }
 
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        throw new \LogicException('owned by T40');
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): bool {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $changed = false;
+            foreach ($indexes as $i => $index) {
+                if (($index['$id'] ?? $index['key'] ?? null) === $old) {
+                    $indexes[$i]['$id'] = $new;
+                    $indexes[$i]['key'] = $new;
+                    $changed = true;
+                    break;
+                }
+            }
+
+            if (! $changed) {
+                return true;
+            }
+
+            $client->hSet(
+                $metaKey,
+                'indexes',
+                \json_encode(\array_values($indexes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+
+            return true;
+        });
     }
 
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        throw new \LogicException('owned by T40');
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission): array {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, $forPermission);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+            $documents = $this->orderDocuments($documents, $orderAttributes, $orderTypes, $cursorDirection);
+            $documents = $this->cursorDocuments($documents, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
+
+            if (! \is_null($offset)) {
+                $documents = \array_slice($documents, $offset);
+            }
+            if (! \is_null($limit)) {
+                $documents = \array_slice($documents, 0, $limit);
+            }
+
+            $selections = $this->extractSelectionsFromQueries($queries);
+            if (! empty($selections)) {
+                $projected = [];
+                foreach ($documents as $document) {
+                    $projected[] = $this->projectDocument($document, $selections);
+                }
+                $documents = $projected;
+            }
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $documents = \array_reverse($documents);
+            }
+
+            return $documents;
+        });
     }
 
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        throw new \LogicException('owned by T40');
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($collectionId, $attribute, $queries, $max): float|int {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+
+            if (! \is_null($max)) {
+                $documents = \array_slice($documents, 0, $max);
+            }
+
+            $sum = 0;
+            $isFloat = false;
+            foreach ($documents as $document) {
+                $value = $this->resolveDocumentAttribute($document, $attribute);
+                if ($value === null) {
+                    continue;
+                }
+                if (\is_float($value)) {
+                    $isFloat = true;
+                }
+                if (\is_numeric($value)) {
+                    $sum += $value;
+                }
+            }
+
+            return $isFloat ? (float) $sum : (int) $sum;
+        });
     }
 
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        throw new \LogicException('owned by T40');
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $max): int {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+
+            if (! \is_null($max)) {
+                $documents = \array_slice($documents, 0, $max);
+            }
+
+            return \count($documents);
+        });
     }
 
     public function getSchemaIndexes(string $collection): array
     {
-        throw new \LogicException('owned by T40');
+        // Mirror Memory: Redis maintains no on-disk schema, so the adapter
+        // exposes no schema-level indexes. Index metadata lives on the
+        // collection Document and is read by Database via getCollection().
+        return [];
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        throw new \LogicException('owned by T40');
+        return \count($collection->getAttribute('indexes', [])) + \count(Database::INTERNAL_INDEXES);
+    }
+
+    /**
+     * Read and JSON-decode the indexes field on a collection meta hash.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function readIndexesField(RedisClient $client, string $metaKey): array
+    {
+        $raw = $client->hGet($metaKey, 'indexes');
+        if (! \is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = \json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        if (! \is_array($decoded)) {
+            return [];
+        }
+
+        /** @var array<int, array<string, mixed>> $decoded */
+        return $decoded;
+    }
+
+    /**
+     * Hydrate every document in the collection's id-set, applying tenant and
+     * permission filters. Returns Documents in insertion-set order.
+     *
+     * @return array<int, Document>
+     */
+    private function loadCollectionDocuments(RedisClient $client, string $collection, string $forPermission): array
+    {
+        $idxKey = $this->key($this->getNamespace(), $this->getDatabase(), 'idx', $collection);
+        /** @var array<int, string> $ids */
+        $ids = $client->sMembers($idxKey);
+        if (empty($ids)) {
+            return [];
+        }
+
+        // Permission filter through the T50-owned hook before fetching to
+        // avoid round-tripping payloads we will discard anyway.
+        if ($this->authorization->getStatus()) {
+            $ids = $this->applyPermissionFilter($collection, $ids, $forPermission);
+            if (empty($ids)) {
+                return [];
+            }
+        }
+
+        $keys = [];
+        foreach ($ids as $id) {
+            $keys[] = $this->key($this->getNamespace(), $this->getDatabase(), 'doc', $collection, (string) $id);
+        }
+
+        /** @var array<int, mixed> $payloads */
+        $payloads = $client->mGet($keys);
+        $sharedTables = $this->getSharedTables();
+        $tenant = $sharedTables ? $this->getTenant() : null;
+        $allowNullTenant = $sharedTables && $collection === Database::METADATA;
+
+        $documents = [];
+        foreach ($payloads as $payload) {
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $document = $this->decode($payload);
+
+            if ($sharedTables) {
+                $rowTenant = $document->getAttribute('$tenant');
+                if ($allowNullTenant && $rowTenant === null) {
+                    // visible
+                } elseif ($rowTenant !== $tenant) {
+                    continue;
+                }
+            }
+
+            $documents[] = $document;
+        }
+
+        return $documents;
+    }
+
+    /**
+     * Apply non-pagination query filters to the supplied documents.
+     *
+     * @param  array<int, Document>  $documents
+     * @param  array<int, Query>  $queries
+     * @return array<int, Document>
+     */
+    private function filterDocumentsByQueries(string $collection, array $documents, array $queries): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $effective = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (\in_array($method, [
+                Query::TYPE_SELECT,
+                Query::TYPE_ORDER_ASC,
+                Query::TYPE_ORDER_DESC,
+                Query::TYPE_ORDER_RANDOM,
+                Query::TYPE_LIMIT,
+                Query::TYPE_OFFSET,
+                Query::TYPE_CURSOR_AFTER,
+                Query::TYPE_CURSOR_BEFORE,
+            ], true)) {
+                continue;
+            }
+            $effective[] = $query;
+        }
+
+        if (empty($effective)) {
+            return \array_values($documents);
+        }
+
+        $output = [];
+        foreach ($documents as $document) {
+            $matched = true;
+            foreach ($effective as $query) {
+                if (! $this->matchesDocument($document, $query)) {
+                    $matched = false;
+                    break;
+                }
+            }
+            if ($matched) {
+                $output[] = $document;
+            }
+        }
+
+        return $output;
+    }
+
+    /**
+     * Resolve a single Query against a Document, mirroring Memory's matches()
+     * but operating on the Document's natural `$id`/`$tenant`/etc. layout.
+     */
+    private function matchesDocument(Document $document, Query $query): bool
+    {
+        $method = $query->getMethod();
+
+        if ($method === Query::TYPE_AND) {
+            foreach ($query->getValues() as $sub) {
+                if (! ($sub instanceof Query) || ! $this->matchesDocument($document, $sub)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if ($method === Query::TYPE_OR) {
+            foreach ($query->getValues() as $sub) {
+                if ($sub instanceof Query && $this->matchesDocument($document, $sub)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $attribute = $query->getAttribute();
+        $value = $this->resolveDocumentAttribute($document, $attribute);
+        $values = $query->getValues();
+
+        if ($query->isObjectAttribute() && ! \str_contains($attribute, '.')) {
+            return $this->matchesDocumentObject($value, $query);
+        }
+
+        switch ($method) {
+            case Query::TYPE_EQUAL:
+                foreach ($values as $candidate) {
+                    if ($this->valuesEqual($value, $candidate)) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_NOT_EQUAL:
+                if ($value === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->valuesEqual($value, $candidate)) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_LESSER:
+                return $value !== null && $value < $values[0];
+
+            case Query::TYPE_LESSER_EQUAL:
+                return $value !== null && $value <= $values[0];
+
+            case Query::TYPE_GREATER:
+                return $value !== null && $value > $values[0];
+
+            case Query::TYPE_GREATER_EQUAL:
+                return $value !== null && $value >= $values[0];
+
+            case Query::TYPE_IS_NULL:
+                return $value === null;
+
+            case Query::TYPE_IS_NOT_NULL:
+                return $value !== null;
+
+            case Query::TYPE_BETWEEN:
+                return $value !== null && $value >= $values[0] && $value <= $values[1];
+
+            case Query::TYPE_NOT_BETWEEN:
+                if ($value === null) {
+                    return false;
+                }
+
+                return $value < $values[0] || $value > $values[1];
+
+            case Query::TYPE_STARTS_WITH:
+                return \is_string($value) && \is_string($values[0] ?? null) && \str_starts_with($value, (string) $values[0]);
+
+            case Query::TYPE_NOT_STARTS_WITH:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! \is_string($value) || ! \is_string($values[0] ?? null) || ! \str_starts_with($value, (string) $values[0]);
+
+            case Query::TYPE_ENDS_WITH:
+                return \is_string($value) && \is_string($values[0] ?? null) && \str_ends_with($value, (string) $values[0]);
+
+            case Query::TYPE_NOT_ENDS_WITH:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! \is_string($value) || ! \is_string($values[0] ?? null) || ! \str_ends_with($value, (string) $values[0]);
+
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
+                $haystack = $this->coerceArrayValue($value);
+                if ($haystack === null && \is_string($value)) {
+                    foreach ($values as $needle) {
+                        if (\is_string($needle) && \stripos($value, $needle) !== false) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+                if (! \is_array($haystack)) {
+                    return false;
+                }
+                foreach ($values as $needle) {
+                    foreach ($haystack as $item) {
+                        if ($this->valuesEqual($item, $needle)) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_NOT_CONTAINS:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! $this->matchesDocument($document, new Query(Query::TYPE_CONTAINS, $attribute, $values));
+
+            case Query::TYPE_CONTAINS_ALL:
+                $haystack = $this->coerceArrayValue($value);
+                if (! \is_array($haystack)) {
+                    return false;
+                }
+                foreach ($values as $needle) {
+                    $found = false;
+                    foreach ($haystack as $item) {
+                        if ($this->valuesEqual($item, $needle)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (! $found) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_SEARCH:
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $needle = (string) ($values[0] ?? '');
+                if ($needle === '') {
+                    return false;
+                }
+
+                return $this->matchesFulltextRedis($value, $needle);
+
+            case Query::TYPE_NOT_SEARCH:
+                if ($value === null) {
+                    return false;
+                }
+                if (! \is_string($value)) {
+                    return true;
+                }
+                $needle = (string) ($values[0] ?? '');
+                if ($needle === '') {
+                    return true;
+                }
+
+                return ! $this->matchesFulltextRedis($value, $needle);
+
+            case Query::TYPE_REGEX:
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $pattern = (string) ($values[0] ?? '');
+                $delimited = '#' . \str_replace('#', '\\#', $pattern) . '#u';
+
+                return @\preg_match($delimited, $value) === 1;
+        }
+
+        throw new QueryException('Query method not supported by Redis adapter: ' . $method);
+    }
+
+    /**
+     * Object-attribute query semantics — JSONB-style containment used for
+     * Postgres-flavoured equal/contains operators against decoded objects.
+     */
+    private function matchesDocumentObject(mixed $value, Query $query): bool
+    {
+        $haystack = $this->decodeObjectishValue($value);
+        $values = $query->getValues();
+        $method = $query->getMethod();
+
+        switch ($method) {
+            case Query::TYPE_EQUAL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $candidate)) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_NOT_EQUAL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $candidate)) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_CONTAINS_ANY:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Query::TYPE_CONTAINS_ALL:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if (! $this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_NOT_CONTAINS:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Query::TYPE_IS_NULL:
+                return $value === null;
+
+            case Query::TYPE_IS_NOT_NULL:
+                return $value !== null;
+        }
+
+        throw new QueryException('Query method ' . $method . ' not supported for object attributes');
+    }
+
+    /**
+     * Stable ordering across Documents. Random short-circuits via shuffle to
+     * preserve usort transitivity; absent attributes fall back to $sequence.
+     *
+     * @param  array<int, Document>  $documents
+     * @param  array<int, string>  $orderAttributes
+     * @param  array<int, string>  $orderTypes
+     * @return array<int, Document>
+     */
+    private function orderDocuments(array $documents, array $orderAttributes, array $orderTypes, string $cursorDirection): array
+    {
+        foreach ($orderTypes as $type) {
+            if ($type === Database::ORDER_RANDOM) {
+                \shuffle($documents);
+
+                return $documents;
+            }
+        }
+
+        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+
+        if (empty($orderAttributes)) {
+            \usort($documents, function (Document $a, Document $b) use ($reverse): int {
+                $av = $a->getAttribute('$sequence', 0);
+                $bv = $b->getAttribute('$sequence', 0);
+                $av = \is_numeric($av) ? $av + 0 : 0;
+                $bv = \is_numeric($bv) ? $bv + 0 : 0;
+                if ($av === $bv) {
+                    return 0;
+                }
+                $cmp = ($av < $bv) ? -1 : 1;
+
+                return $reverse ? -$cmp : $cmp;
+            });
+
+            return $documents;
+        }
+
+        $directions = [];
+        foreach ($orderAttributes as $i => $attribute) {
+            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            if ($reverse) {
+                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+            $directions[$i] = $direction === Database::ORDER_ASC ? 1 : -1;
+        }
+
+        \usort($documents, function (Document $a, Document $b) use ($orderAttributes, $directions): int {
+            foreach ($orderAttributes as $i => $attribute) {
+                $av = $this->resolveDocumentAttribute($a, $attribute);
+                $bv = $this->resolveDocumentAttribute($b, $attribute);
+                if ($av === $bv) {
+                    continue;
+                }
+                if ($av === null) {
+                    $cmp = -1;
+                } elseif ($bv === null) {
+                    $cmp = 1;
+                } else {
+                    $cmp = ($av < $bv) ? -1 : 1;
+                }
+
+                return $cmp * $directions[$i];
+            }
+
+            return 0;
+        });
+
+        return $documents;
+    }
+
+    /**
+     * Discard documents preceding the supplied cursor on the active sort.
+     *
+     * @param  array<int, Document>  $documents
+     * @param  array<int, string>  $orderAttributes
+     * @param  array<int, string>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @return array<int, Document>
+     */
+    private function cursorDocuments(array $documents, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
+    {
+        if (empty($cursor)) {
+            return $documents;
+        }
+
+        if (empty($orderAttributes)) {
+            $orderAttributes = ['$sequence'];
+            $orderTypes = [Database::ORDER_ASC];
+        }
+
+        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $resolved = [];
+        foreach ($orderAttributes as $i => $attribute) {
+            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            if ($reverse) {
+                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+            $resolved[] = [
+                'attribute' => $attribute,
+                'asc' => $direction === Database::ORDER_ASC,
+                'ref' => $cursor[$attribute] ?? null,
+            ];
+        }
+
+        $output = [];
+        foreach ($documents as $document) {
+            foreach ($resolved as $entry) {
+                $current = $this->resolveDocumentAttribute($document, $entry['attribute']);
+                $ref = $entry['ref'];
+                if ($current === $ref) {
+                    continue;
+                }
+                if ($current === null) {
+                    if (! $entry['asc']) {
+                        $output[] = $document;
+                    }
+
+                    continue 2;
+                }
+                if ($ref === null) {
+                    if ($entry['asc']) {
+                        $output[] = $document;
+                    }
+
+                    continue 2;
+                }
+                if ($entry['asc'] ? ($current > $ref) : ($current < $ref)) {
+                    $output[] = $document;
+                }
+
+                continue 2;
+            }
+        }
+
+        return $output;
+    }
+
+    /**
+     * Resolve a dotted attribute path on a Document, falling back to nested
+     * decoded JSON traversal when the head segment holds a string payload.
+     */
+    private function resolveDocumentAttribute(Document $document, string $attribute): mixed
+    {
+        if (! \str_contains($attribute, '.')) {
+            return $document->getAttribute($attribute);
+        }
+
+        [$head, $rest] = \explode('.', $attribute, 2);
+        $value = $document->getAttribute($head);
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        return $this->traverseNestedPath($value, $rest);
+    }
+
+    /**
+     * Walk a remaining dotted path through arrays, returning null on miss.
+     */
+    private function traverseNestedPath(mixed $value, string $path): mixed
+    {
+        foreach (\explode('.', $path) as $part) {
+            if ($value instanceof Document) {
+                $value = $value->getArrayCopy();
+            }
+            if (\is_array($value) && \array_key_exists($part, $value)) {
+                $value = $value[$part];
+
+                continue;
+            }
+
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Normalise a value for unique-index hashing. Booleans collapse to ints
+     * and numeric strings collapse to numbers so signatures match SQL casts.
+     */
+    private function normalizeIndexValue(mixed $value): mixed
+    {
+        if (\is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+        if (\is_string($value) && \is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Equal-with-numeric-coercion mirroring Memory::looseEquals — covers the
+     * "1" == 1 case Database tests rely on.
+     */
+    private function valuesEqual(mixed $a, mixed $b): bool
+    {
+        if ($a === $b) {
+            return true;
+        }
+        if (\is_numeric($a) && \is_numeric($b)) {
+            return $a + 0 === $b + 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * Decode a CONTAINS-target into an array if possible. Returns null when
+     * the value is neither an array nor a JSON-encoded array string.
+     *
+     * @return array<mixed>|null
+     */
+    private function coerceArrayValue(mixed $value): ?array
+    {
+        if (\is_array($value)) {
+            return $value;
+        }
+        if (\is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
+            $decoded = \json_decode($value, true);
+
+            return \is_array($decoded) ? $decoded : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Decode an object-typed attribute value for JSONB-style containment.
+     */
+    private function decodeObjectishValue(mixed $value): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (\is_array($value)) {
+            return $value;
+        }
+        if ($value instanceof Document) {
+            return $value->getArrayCopy();
+        }
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Postgres `@>` JSONB containment in PHP — recursive subset semantics
+     * with list-element matching for array haystacks.
+     */
+    private function jsonContainment(mixed $haystack, mixed $candidate): bool
+    {
+        if (\is_array($haystack) && \array_is_list($haystack)) {
+            if (\is_array($candidate) && \array_is_list($candidate)) {
+                foreach ($candidate as $needle) {
+                    $matched = false;
+                    foreach ($haystack as $item) {
+                        if ($this->jsonContainment($item, $needle)) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if (! $matched) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            foreach ($haystack as $item) {
+                if ($this->jsonContainment($item, $candidate)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if (\is_array($haystack) && \is_array($candidate)) {
+            foreach ($candidate as $key => $value) {
+                if (! \array_key_exists($key, $haystack)) {
+                    return false;
+                }
+                if (! $this->jsonContainment($haystack[$key], $value)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if ($haystack === $candidate) {
+            return true;
+        }
+        if (\is_numeric($haystack) && \is_numeric($candidate)) {
+            return $haystack + 0 === $candidate + 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * Wrap `['skills' => 'typescript']` into `['skills' => ['typescript']]`
+     * so contains-style probes hit array entries inside the haystack.
+     */
+    private function wrapScalarObjectCandidate(mixed $candidate): mixed
+    {
+        if (! \is_array($candidate) || \count($candidate) !== 1) {
+            return $candidate;
+        }
+        $key = \array_key_first($candidate);
+        $value = $candidate[$key];
+        if (\is_array($value)) {
+            return $candidate;
+        }
+
+        return [$key => [$value]];
+    }
+
+    /**
+     * Natural-language fulltext approximation: tokenise on
+     * whitespace/punctuation, support trailing wildcard prefix matching, and
+     * honour quoted phrases as case-insensitive substring probes.
+     */
+    private function matchesFulltextRedis(string $haystack, string $needle): bool
+    {
+        if (\preg_match('/^"(.*)"$/u', \trim($needle), $matches) === 1) {
+            $phrase = \mb_strtolower($matches[1]);
+            if ($phrase === '') {
+                return false;
+            }
+
+            return \str_contains(\mb_strtolower($haystack), $phrase);
+        }
+
+        $haystackTokens = $this->tokenizeForSearch($haystack);
+        $needleTokens = $this->tokenizeForSearch($needle);
+        if (empty($needleTokens) || empty($haystackTokens)) {
+            return false;
+        }
+        $set = \array_flip($haystackTokens);
+        foreach ($needleTokens as $token) {
+            if (\str_ends_with($token, '*')) {
+                $prefix = \substr($token, 0, -1);
+                if ($prefix === '') {
+                    continue;
+                }
+                foreach ($haystackTokens as $candidate) {
+                    if (\str_starts_with($candidate, $prefix)) {
+                        return true;
+                    }
+                }
+
+                continue;
+            }
+            if (isset($set[$token])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function tokenizeForSearch(string $text): array
+    {
+        $lower = \mb_strtolower($text);
+        $parts = \preg_split('/[^\p{L}\p{N}*]+/u', $lower) ?: [];
+
+        return \array_values(\array_filter($parts, fn (string $p): bool => $p !== ''));
+    }
+
+    /**
+     * Extract user-requested attributes from any TYPE_SELECT queries. Internal
+     * attributes (prefixed with `$` or `_`) are always preserved — only user
+     * attributes are subject to projection.
+     *
+     * @param  array<int, Query>  $queries
+     * @return array<int, string>
+     */
+    private function extractSelectionsFromQueries(array $queries): array
+    {
+        $selections = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                continue;
+            }
+            foreach ($query->getValues() as $value) {
+                if (\is_string($value)) {
+                    $selections[] = $value;
+                }
+            }
+        }
+
+        return $selections;
+    }
+
+    /**
+     * Project a Document down to the supplied user-attribute selection.
+     * `*` short-circuits projection (no filter applied). Internal attributes
+     * (prefixed `$` / `_`) are always retained.
+     *
+     * @param  array<int, string>  $selections
+     */
+    private function projectDocument(Document $document, array $selections): Document
+    {
+        if (\in_array('*', $selections, true)) {
+            return $document;
+        }
+
+        $projected = [];
+        foreach ($document->getArrayCopy() as $field => $value) {
+            if (\is_string($field) && (\str_starts_with($field, '$') || \str_starts_with($field, '_'))) {
+                $projected[$field] = $value;
+
+                continue;
+            }
+            if (\in_array($field, $selections, true)) {
+                $projected[$field] = $value;
+            }
+        }
+
+        return new Document($projected);
     }
 
     // === @architect:T40 end ===

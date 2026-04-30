@@ -4,7 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -832,19 +831,19 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
     protected function execute(mixed $stmt): bool
     {
-        $seconds = $this->timeout > 0 ? $this->timeout / 1000.0 : 0.0;
-
         // MariaDB inherits the session-level max_statement_time across
         // statements. Only push it when the desired value changes; an
         // unconditional SET per query doubles the round-trip count for
         // every hot-path read.
-        if ($seconds !== $this->appliedMaxStatementTime) {
-            $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
-            $this->appliedMaxStatementTime = $seconds;
+        if ($this->timeout > 0 || $this->appliedMaxStatementTime !== 0.0) {
+            $seconds = $this->timeout > 0 ? $this->timeout / 1000.0 : 0.0;
+            if ($seconds !== $this->appliedMaxStatementTime) {
+                $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
+                $this->appliedMaxStatementTime = $seconds;
+            }
         }
 
-        /** @var \PDOStatement|PDOStatementProxy $stmt */
-        return $stmt->execute();
+        return parent::execute($stmt);
     }
 
     /**

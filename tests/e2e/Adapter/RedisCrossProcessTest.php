@@ -80,8 +80,10 @@ class RedisCrossProcessTest extends TestCase
 
         $this->namespace = 'utopia_xp_' . \uniqid();
 
+        $cacheHost = \getenv('CACHE_REDIS_HOST') ?: 'redis';
+        $cachePort = (int) (\getenv('CACHE_REDIS_PORT') ?: 6379);
         $cacheRedis = new Redis();
-        $cacheRedis->connect('redis', 6379);
+        $cacheRedis->connect($cacheHost, $cachePort);
         $cache = new Cache(new RedisCacheAdapter($cacheRedis));
 
         $database = new Database(new RedisDbAdapter($redis), $cache);
@@ -135,8 +137,8 @@ class RedisCrossProcessTest extends TestCase
         $env = [
             'REDIS_HOST' => $host,
             'REDIS_PORT' => (string) $port,
-            'CACHE_REDIS_HOST' => 'redis',
-            'CACHE_REDIS_PORT' => '6379',
+            'CACHE_REDIS_HOST' => $cacheHost,
+            'CACHE_REDIS_PORT' => (string) $cachePort,
             'PATH' => \getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
         ];
 

@@ -1182,7 +1182,9 @@ abstract class SQL extends Adapter
 
         // Single pass partitioning: pull vector queries out for ORDER BY and
         // detect aggregation/join shape in the same walk. Each Method::value
-        // is checked once per query rather than three times.
+        // is checked once per query rather than three times. Search queries
+        // are picked up here too so we don't need a second pass via
+        // `extractSearchQueries` later in this method.
         // Defer the defensive `clone` until we know the query path will mutate
         // the Query objects (joins or aggregations-with-joins). The vast
         // majority of finds take neither path and don't need a per-query
@@ -1190,6 +1192,7 @@ abstract class SQL extends Adapter
         $vectorQueries = [];
         $otherQueries = [];
         $adapterFilterQueries = [];
+        $searchQueries = [];
         $hasAggregation = false;
         $hasJoins = false;
 
@@ -1209,6 +1212,10 @@ abstract class SQL extends Adapter
             }
 
             $otherQueries[] = $query;
+
+            if ($method === Method::Search) {
+                $searchQueries[] = $query;
+            }
 
             if ($method->isAggregate() || $method === Method::GroupBy) {
                 $hasAggregation = true;
@@ -1423,9 +1430,22 @@ abstract class SQL extends Adapter
             }
         }
 
-        // Full-text search relevance scoring
-        $searchQueries = $this->extractSearchQueries($queries);
-        if (! empty($searchQueries)) {
+        // Full-text search relevance scoring.
+        //
+        // Skip the second MATCH compilation (and its ORDER BY) when the caller
+        // already asked for an explicit order. The Documents trait auto-appends
+        // '$sequence' as a tiebreaker, so a `$orderAttributes === ['$sequence']`
+        // signal — with no entries before it — means "caller did not specify
+        // an order" and is the only case where we should auto-order by
+        // relevance. Anything else (multiple entries, or a leading attribute
+        // other than $sequence) means the caller has an explicit order and
+        // relevance ordering would silently override it.
+        $callerSuppliedOrder = ! (
+            count($orderAttributes) === 0
+            || (count($orderAttributes) === 1 && $orderAttributes[0] === '$sequence')
+        );
+
+        if (! empty($searchQueries) && ! $callerSuppliedOrder) {
             $builder->select(['*']);
             foreach ($searchQueries as $searchQuery) {
                 $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);

@@ -1649,8 +1649,8 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? '%' . $this->escapeWildcards(\json_encode($value)) . '%' : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? '%' . $this->escapeWildcards(\json_encode($value)) . '%' : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? '%' . $this->escapeWildcards((string) \json_encode($value)) . '%' : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? '%' . $this->escapeWildcards((string) \json_encode($value)) . '%' : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 

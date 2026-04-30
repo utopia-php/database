@@ -77,6 +77,16 @@ class SQLite extends MariaDB
      */
     protected bool $emulateMySQL = false;
 
+    /**
+     * Set to true once the REGEXP UDF has been successfully registered on
+     * the underlying PDO. Used by getSupportForPCRERegex so the capability
+     * flag reflects reality — pool/proxy PDOs that don't expose
+     * sqliteCreateFunction will silently fail registration, and the planner
+     * shouldn't emit REGEXP queries against a connection that can't run
+     * them.
+     */
+    private bool $pcreRegistered = false;
+
     public function __construct(mixed $pdo)
     {
         parent::__construct($pdo);
@@ -125,6 +135,7 @@ class SQLite extends MariaDB
 
         try {
             $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
+            $this->pcreRegistered = true;
         } catch (\Throwable) {
             // Either the PDO isn't SQLite or the proxy doesn't expose
             // the create-function hook — REGEXP queries will simply
@@ -829,9 +840,11 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Stable, per-collection-and-attribute FTS5 table name. Uses attribute
-     * names rather than the index id so getSQLCondition can derive it from
-     * the search query without consulting the index map.
+     * Stable, per-collection-and-attribute FTS5 table name. The attribute
+     * set is hashed rather than joined with `_` because attribute names may
+     * themselves contain underscores after `filter()` — the joins
+     * `['ab', 'cd_ef']` and `['ab_cd', 'ef']` both produce `ab_cd_ef`,
+     * which would silently alias unrelated indexes onto the same table.
      *
      * @param array<string>|string $attributes
      */
@@ -840,7 +853,10 @@ class SQLite extends MariaDB
         $attrs = \is_array($attributes) ? $attributes : [$attributes];
         $attrs = \array_map(fn (string $attr) => $this->filter($attr), $attrs);
         \sort($attrs);
-        $key = \implode('_', $attrs);
+        // NUL is filtered out of attribute names, so it's safe as a
+        // sentinel separator before hashing — no input can produce a
+        // colliding pre-image.
+        $key = \substr(\hash('sha1', \implode("\0", $attrs)), 0, 16);
 
         return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
     }
@@ -2455,10 +2471,10 @@ class SQLite extends MariaDB
      */
     public function getSupportForPCRERegex(): bool
     {
-        // The REGEXP UDF is registered unconditionally in the
-        // constructor and runs preg_match (PCRE) — same surface as
-        // MariaDB's native operator from the caller's perspective.
-        return true;
+        // Registration runs in the constructor but is best-effort — proxy
+        // PDOs (pool, mirror) may not expose sqliteCreateFunction. Only
+        // advertise PCRE support when the UDF actually wired up.
+        return $this->pcreRegistered;
     }
 
     /**
@@ -2594,31 +2610,31 @@ class SQLite extends MariaDB
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                if ($key !== $newKey) {
+                if (!\is_null($newKey) && $key !== $newKey) {
                     $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                if ($twoWay && !\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
                     $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if (!\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if (!\is_null($newKey) && $key !== $newKey) {
                         $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                     }
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if (!\is_null($newTwoWayKey) && $twoWayKey !== $newTwoWayKey) {
                         $statements[] = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`";
                     }
                 } else {
-                    if ($key !== $newKey) {
+                    if (!\is_null($newKey) && $key !== $newKey) {
                         $statements[] = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`";
                     }
                 }
@@ -2966,6 +2982,9 @@ class SQLite extends MariaDB
             Query::TYPE_NOT_STARTS_WITH,
             Query::TYPE_ENDS_WITH,
             Query::TYPE_NOT_ENDS_WITH,
+            Query::TYPE_CONTAINS,
+            Query::TYPE_CONTAINS_ANY,
+            Query::TYPE_NOT_CONTAINS,
         ];
 
         if (\in_array($method, $likeMethods, true)) {
@@ -3069,11 +3088,13 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Compile STARTS_WITH / ENDS_WITH (and their NOT variants) into LIKE
-     * with an explicit ESCAPE '\' clause. Inherited escapeWildcards()
-     * backslash-escapes every wildcard before binding; SQLite needs the
-     * ESCAPE clause to honour those backslashes the way MariaDB does
-     * implicitly.
+     * Compile STARTS_WITH / ENDS_WITH / CONTAINS (and their NOT variants)
+     * into LIKE with an explicit ESCAPE '\' clause. Inherited
+     * escapeWildcards() backslash-escapes every wildcard before binding;
+     * SQLite needs the ESCAPE clause to honour those backslashes the way
+     * MariaDB does implicitly. The MariaDB parent path issues plain LIKE,
+     * which under SQLite would treat literal `%`/`_` in the search term
+     * as wildcards.
      *
      * @param array<string,mixed> $binds
      */
@@ -3089,13 +3110,19 @@ class SQLite extends MariaDB
         $isNotQuery = \in_array($method, [
             Query::TYPE_NOT_STARTS_WITH,
             Query::TYPE_NOT_ENDS_WITH,
+            Query::TYPE_NOT_CONTAINS,
         ], true);
+
+        $onArray = $query->onArray();
 
         $conditions = [];
         foreach ($query->getValues() as $key => $value) {
             $bound = match ($method) {
                 Query::TYPE_STARTS_WITH, Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH, Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => $onArray
+                    ? '%' . $this->escapeWildcards((string) \json_encode($value)) . '%'
+                    : '%' . $this->escapeWildcards($value) . '%',
                 default => $value,
             };
 
@@ -3145,7 +3172,23 @@ class SQLite extends MariaDB
         }
 
         $tokens = \explode(' ', $sanitized);
-        $last = \array_pop($tokens) . '*';
+        // FTS5 treats AND/OR/NOT/NEAR (case-insensitive) as boolean operators
+        // when they appear as bare tokens. A user term like "or cats" would
+        // become "or OR cats*", which FTS5 parses as a syntax error. Wrap
+        // any reserved-word token in double quotes so it's matched as a
+        // literal term instead.
+        $tokens = \array_map(static function (string $token): string {
+            if (\preg_match('/^(AND|OR|NOT|NEAR)$/i', $token) === 1) {
+                return '"' . $token . '"';
+            }
+            return $token;
+        }, $tokens);
+        $last = \array_pop($tokens);
+        // Don't append the prefix wildcard to a quoted reserved-word token —
+        // FTS5 doesn't support `"or"*` as a prefix-match phrase.
+        if ($last !== null && !\str_starts_with($last, '"')) {
+            $last .= '*';
+        }
         $tokens[] = $last;
 
         return \implode(' OR ', $tokens);

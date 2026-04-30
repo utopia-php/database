@@ -2156,6 +2156,11 @@ class Postgres extends SQL
         return true;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     /**
      * Is vector type supported?
      *

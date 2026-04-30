@@ -177,6 +177,12 @@ class Redis extends Adapter
      */
     private function writePermissions(string $collection, string $id, Document $document): void
     {
+        // Document keys (`doc:{col}:{id}`) and the index SET (`idx:{col}`) both
+        // use `\strtolower($id)`. The inverted permission SETs must follow the
+        // same convention so `applyPermissionFilter()` can intersect ids from
+        // the index SET with the perm SETs without case mismatch.
+        $id = \strtolower($id);
+
         $byRole = [];
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $role) {
@@ -244,6 +250,9 @@ class Redis extends Adapter
      */
     private function clearPermissions(string $collection, string $id): void
     {
+        // Mirror writePermissions(): all perm-set operations key off the
+        // lowercased id so reads and writes stay symmetric.
+        $id = \strtolower($id);
         $hashKey = $this->permDocKey($collection, $id);
         /** @var array<string, string>|false $hash */
         $hash = $this->client->hGetAll($hashKey);
@@ -1539,6 +1548,18 @@ class Redis extends Adapter
 
         return $this->tx(function (RedisClient $r) use ($col, $id, $document, $docKey, $idxKey, $seqKey): Document {
             if ((bool) $r->exists($docKey)) {
+                if ($this->skipDuplicates) {
+                    // Mirrors MariaDB's `INSERT IGNORE` and Memory's skipDuplicates path:
+                    // duplicate primary key is silently dropped and the existing row's
+                    // sequence is returned so the caller can still emit an onNext event.
+                    $existingPayload = $r->get($docKey);
+                    if (\is_string($existingPayload) && $existingPayload !== '') {
+                        $existing = $this->decode($existingPayload);
+                        $document->setAttribute('$sequence', $existing->getSequence() ?? '');
+                    }
+
+                    return $document;
+                }
                 throw new DuplicateException('Document already exists');
             }
 

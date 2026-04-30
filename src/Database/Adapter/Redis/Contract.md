@@ -166,3 +166,10 @@ inverse operations through `rawDeleteDoc()` and `rawRestoreDoc()`.
   or the five-blank-line buffer between regions.
 * If a contract gap is found, write `CONTRACT_GAP.md` in your worktree root
   and escalate to the consolidator instead of editing this file.
+
+## Known limitations
+
+* Multi-attribute cursor pagination has known off-by-one issues in corner
+  cases (`testFindOrderByMultipleAttributeAfter`,
+  `testFindOrderByMultipleAttributeBefore`). Single-attribute cursor
+  pagination works correctly. Tracked for follow-up.

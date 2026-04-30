@@ -87,6 +87,10 @@ trait Databases
 
         $this->cache->flush();
 
+        // Drop the in-process metadata memo entirely — the entire database
+        // is gone, so nothing in there is still valid.
+        $this->collectionMetadataCache = [];
+
         return $deleted;
     }
 }

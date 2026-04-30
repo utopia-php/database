@@ -274,6 +274,24 @@ trait Collections
      */
     public function getCollection(string $id): Document
     {
+        // Memoise within this Database instance so repeated find/getDocument
+        // calls don't replay the METADATA SELECT — especially important when
+        // the user has wired in a no-op cache adapter. The cache key includes
+        // the active database, namespace and tenant so multi-tenant or
+        // shared-table setups stay isolated.
+        $cacheKey = $this->adapter->getDatabase() . '::' . $this->adapter->getNamespace()
+            . '::' . ($this->adapter->getTenant() ?? '') . '::' . $id;
+
+        if (isset($this->collectionMetadataCache[$cacheKey])) {
+            // Always hand callers an independent copy: createIndex,
+            // updateAttribute, etc. mutate the returned Document in-place,
+            // and we cannot allow those mutations to leak between calls.
+            $cached = clone $this->collectionMetadataCache[$cacheKey];
+            $this->trigger(Event::CollectionRead, $cached);
+
+            return $cached;
+        }
+
         // Inline silent() to avoid the per-call Closure allocation. The
         // outer event suppression scope is preserved via try/finally so any
         // ambient silent context still wins.
@@ -292,6 +310,15 @@ trait Collections
             && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
             return new Document();
+        }
+
+        if (! $collection->isEmpty()) {
+            if (\count($this->collectionMetadataCache) >= self::COLLECTION_METADATA_CACHE_LIMIT) {
+                $this->collectionMetadataCache = [];
+            }
+            // Cache a clone so future hits return independent copies even
+            // before the first caller is done mutating their handle.
+            $this->collectionMetadataCache[$cacheKey] = clone $collection;
         }
 
         $this->trigger(Event::CollectionRead, $collection);

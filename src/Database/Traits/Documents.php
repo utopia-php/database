@@ -2055,6 +2055,14 @@ trait Documents
 
         $this->cache->purge($collectionKey);
 
+        // Invalidate any in-process metadata memo — schema changed.
+        $metadataSuffix = '::'.$collectionId;
+        foreach (\array_keys($this->collectionMetadataCache) as $cachedKey) {
+            if (\str_ends_with((string) $cachedKey, $metadataSuffix)) {
+                unset($this->collectionMetadataCache[$cachedKey]);
+            }
+        }
+
         // Drop every cached validator scoped to this collection id, regardless
         // of the namespace/tenant/maxQueryValues prefix that was active when
         // the entry was built.
@@ -2084,6 +2092,18 @@ trait Documents
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
+
+        // When the underlying document is a collection definition (i.e. it
+        // lives in the METADATA collection), drop the in-process metadata
+        // memo for that collection too — its schema may have shifted.
+        if ($collectionId === self::METADATA) {
+            $metadataSuffix = '::'.$id;
+            foreach (\array_keys($this->collectionMetadataCache) as $cachedKey) {
+                if (\str_ends_with((string) $cachedKey, $metadataSuffix)) {
+                    unset($this->collectionMetadataCache[$cachedKey]);
+                }
+            }
+        }
 
         return true;
     }

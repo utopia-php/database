@@ -312,6 +312,25 @@ class Database
      */
     protected bool $eventsSilenced = false;
 
+    /**
+     * Per-instance memoisation of getCollection() results. Avoids the
+     * METADATA SELECT that would otherwise repeat for every find/getDocument
+     * call when the user-provided cache is the No-op adapter.
+     *
+     * Keyed by "{database}::{namespace}::{tenant}::{id}" so multi-tenant /
+     * multi-database/multi-namespace contexts cannot leak across each other.
+     * Entries are invalidated by purgeCachedCollection() and by any code path
+     * that reads or writes the METADATA collection itself (createCollection,
+     * createAttribute, createIndex, deleteAttribute, deleteIndex, etc.) so
+     * the cached metadata never goes stale relative to actual schema.
+     *
+     * @var array<string, Document>
+     */
+    protected array $collectionMetadataCache = [];
+
+    /** Soft cap to prevent unbounded growth in long-lived workers. */
+    protected const COLLECTION_METADATA_CACHE_LIMIT = 256;
+
     protected ?NativeDateTime $timestamp = null;
 
     protected ?Relationships $relationshipHook = null;

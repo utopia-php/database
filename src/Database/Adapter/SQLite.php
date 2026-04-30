@@ -794,7 +794,13 @@ class SQLite extends MariaDB
 
             $this->commitTransaction();
         } catch (\Throwable $e) {
-            $this->rollbackTransaction();
+            // Swallow rollback failures so the original cause keeps its
+            // place at the top of the stack — a "Failed to rollback"
+            // wrapper hides what actually went wrong.
+            try {
+                $this->rollbackTransaction();
+            } catch (\Throwable) {
+            }
             throw $e;
         }
 
@@ -941,7 +947,10 @@ class SQLite extends MariaDB
             $this->getPDO()->prepare($sql)->execute();
             $this->commitTransaction();
         } catch (\Throwable $e) {
-            $this->rollbackTransaction();
+            try {
+                $this->rollbackTransaction();
+            } catch (\Throwable) {
+            }
             throw $e;
         }
 
@@ -2542,7 +2551,10 @@ class SQLite extends MariaDB
             }
             $this->commitTransaction();
         } catch (\Throwable $e) {
-            $this->rollbackTransaction();
+            try {
+                $this->rollbackTransaction();
+            } catch (\Throwable) {
+            }
             throw $e;
         }
 

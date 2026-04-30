@@ -927,11 +927,8 @@ class SQLite extends MariaDB
     /**
      * Drop the FTS5 virtual table (and its triggers) corresponding to the
      * fulltext index `$id` on `$collection`, if one exists. Returns true if
-     * a matching table was found and dropped, false if no FTS5 table
-     * exists for the collection. Throws when multiple FTS5 tables exist
-     * and the id can't be unambiguously resolved — silently dropping
-     * none would leave the caller's `deleteIndex` returning success
-     * while the triggers and shadow tables remained intact.
+     * a matching table was found and dropped, false if there's no FTS5
+     * table for this id on the collection.
      */
     protected function dropFulltextIndexById(string $collection, string $id): bool
     {
@@ -941,21 +938,23 @@ class SQLite extends MariaDB
             return false;
         }
 
-        // The index id isn't encoded in the FTS5 table name (the name is
-        // keyed off the sorted attribute set). When a single FTS5 table
-        // exists for this collection, treat it as the unambiguous target;
-        // otherwise raise an explicit error rather than silently leaving
-        // the tables in place — the deleteIndex fallthrough swallows
-        // "no such index" and would otherwise report success.
-        if (\count($tables) !== 1) {
-            throw new DatabaseException(
-                "Cannot resolve fulltext index '{$id}' on '{$collection}': "
-                . \count($tables) . ' FTS5 tables exist for this collection. '
-                . 'Drop them by attribute set instead.'
-            );
-        }
+        // FTS5 table names are keyed off a hash of the sorted attribute
+        // set rather than the user-supplied index id, so the id alone
+        // can't address a table directly. Resolve via the collection's
+        // metadata: read the index definition, hash its attributes the
+        // same way createFulltextIndex did, and compare. When metadata
+        // isn't reachable (e.g. mid-rollback or in tests that bypass
+        // createCollection) and exactly one FTS5 table exists, fall
+        // back to that single table so single-index callers still work.
+        $ftsTable = $this->resolveFulltextTableById($collection, $id, $tables);
 
-        $ftsTable = $tables[0];
+        if ($ftsTable === null) {
+            if (\count($tables) === 1) {
+                $ftsTable = $tables[0];
+            } else {
+                return false;
+            }
+        }
         $triggerSuffixes = [
             self::FTS_TRIGGER_INSERT,
             self::FTS_TRIGGER_DELETE,
@@ -982,6 +981,68 @@ class SQLite extends MariaDB
         $this->ftsTableCache = [];
 
         return true;
+    }
+
+    /**
+     * Resolve the FTS5 table that backs index `$id` on `$collection` by
+     * looking up the index definition in collection metadata and hashing
+     * its attribute set the same way createFulltextIndex did. Returns
+     * null when no metadata index exists for `$id`, when the metadata
+     * collection itself isn't readable, or when the hashed table isn't
+     * among the candidates passed in.
+     *
+     * @param array<string> $candidates
+     */
+    protected function resolveFulltextTableById(string $collection, string $id, array $candidates): ?string
+    {
+        try {
+            $metadataCollection = new Document(['$id' => Database::METADATA]);
+            $collectionDoc = $this->getDocument($metadataCollection, $collection);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($collectionDoc->isEmpty()) {
+            return null;
+        }
+
+        $indexes = $collectionDoc->getAttribute('indexes', []);
+        $filteredId = $this->filter($id);
+
+        foreach ($indexes as $index) {
+            $indexId = $index instanceof Document
+                ? $index->getId()
+                : (\is_array($index) ? ($index['$id'] ?? null) : null);
+
+            if ($indexId === null) {
+                continue;
+            }
+            if ($this->filter((string) $indexId) !== $filteredId) {
+                continue;
+            }
+
+            $type = $index instanceof Document
+                ? $index->getAttribute('type')
+                : ($index['type'] ?? null);
+
+            if ($type !== Database::INDEX_FULLTEXT) {
+                return null;
+            }
+
+            $attributes = $index instanceof Document
+                ? $index->getAttribute('attributes', [])
+                : ($index['attributes'] ?? []);
+
+            $internal = \array_map(
+                fn ($a) => $this->getInternalKeyForAttribute((string) $a),
+                (array) $attributes
+            );
+            $candidate = $this->getFulltextTableName($collection, $internal);
+
+            return \in_array($candidate, $candidates, true) ? $candidate : null;
+        }
+
+        return null;
     }
 
     /**
@@ -2822,7 +2883,104 @@ class SQLite extends MariaDB
             ]);
         }
 
+        // PRAGMA index_list only surfaces B-tree indexes — FTS5 fulltext
+        // indexes live in their own virtual tables and are invisible to it.
+        // Append them so callers (Database::createIndex, drift detection)
+        // see the full set of indexes that physically exist.
+        foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {
+            $results[] = new Document($entry);
+        }
+
         return $results;
+    }
+
+    /**
+     * Build the schema-index entries for every FTS5 fulltext table on
+     * `$collection`. Each entry maps back to a metadata index id when
+     * possible (so createIndex's existsInSchema check matches by id like
+     * MariaDB does); when the metadata isn't readable we surface the
+     * FTS5 table name instead so the caller can still see the index
+     * exists.
+     *
+     * @return array<array{
+     *     '$id': string,
+     *     indexName: string,
+     *     indexType: string,
+     *     nonUnique: int,
+     *     columns: array<string>,
+     *     lengths: array<null>,
+     * }>
+     */
+    protected function getFulltextSchemaIndexes(string $collection): array
+    {
+        $tables = $this->findFulltextTables($collection);
+
+        if (empty($tables)) {
+            return [];
+        }
+
+        $hashToId = [];
+        try {
+            $metadataCollection = new Document(['$id' => Database::METADATA]);
+            $collectionDoc = $this->getDocument($metadataCollection, $collection);
+            if (!$collectionDoc->isEmpty()) {
+                foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
+                    $indexId = $index instanceof Document
+                        ? $index->getId()
+                        : (\is_array($index) ? ($index['$id'] ?? null) : null);
+                    $type = $index instanceof Document
+                        ? $index->getAttribute('type')
+                        : (\is_array($index) ? ($index['type'] ?? null) : null);
+
+                    if ($indexId === null || $type !== Database::INDEX_FULLTEXT) {
+                        continue;
+                    }
+
+                    $attributes = $index instanceof Document
+                        ? $index->getAttribute('attributes', [])
+                        : ($index['attributes'] ?? []);
+
+                    $internal = \array_map(
+                        fn ($a) => $this->getInternalKeyForAttribute((string) $a),
+                        (array) $attributes
+                    );
+                    $hashToId[$this->getFulltextTableName($collection, $internal)] = $this->filter((string) $indexId);
+                }
+            }
+        } catch (\Throwable) {
+            // No metadata available — fall through with the FTS5 table
+            // name as the entry id.
+        }
+
+        $entries = [];
+        foreach ($tables as $ftsTable) {
+            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$ftsTable}`)");
+            $info->execute();
+            $cols = $info->fetchAll(PDO::FETCH_ASSOC);
+            $info->closeCursor();
+
+            $columns = [];
+            foreach ($cols as $col) {
+                $name = (string) ($col['name'] ?? '');
+                if ($name === '') {
+                    continue;
+                }
+                $columns[] = $name;
+            }
+
+            $id = $hashToId[$ftsTable] ?? $ftsTable;
+
+            $entries[] = [
+                '$id' => $id,
+                'indexName' => $id,
+                'indexType' => 'FULLTEXT',
+                'nonUnique' => 1,
+                'columns' => $columns,
+                'lengths' => \array_fill(0, \count($columns), null),
+            ];
+        }
+
+        return $entries;
     }
 
     /**

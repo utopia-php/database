@@ -916,6 +916,17 @@ class Relationships implements Hook
     {
         $nestedSelections = [];
 
+        // Pre-index relationships by key once so per-value lookups are O(1)
+        // instead of O(relationships) with a fresh array_filter each iteration.
+        /** @var array<string, Document> $relationshipsByKey */
+        $relationshipsByKey = [];
+        /** @var Document $relationship */
+        foreach ($relationships as $relationship) {
+            /** @var string $relKey */
+            $relKey = $relationship->getAttribute('key', $relationship->getId());
+            $relationshipsByKey[$relKey] = $relationship;
+        }
+
         foreach ($queries as $query) {
             if ($query->getMethod() !== Method::Select) {
                 continue;
@@ -931,10 +942,7 @@ class Relationships implements Hook
                 $nesting = \explode('.', $value);
                 $selectedKey = \array_shift($nesting);
 
-                $relationship = \array_values(\array_filter(
-                    $relationships,
-                    fn (Document $relationship) => Attribute::fromDocument($relationship)->key === $selectedKey,
-                ))[0] ?? null;
+                $relationship = $relationshipsByKey[$selectedKey] ?? null;
 
                 if (! $relationship) {
                     continue;

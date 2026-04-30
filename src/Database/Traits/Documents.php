@@ -170,7 +170,13 @@ trait Documents
             return new Document();
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $previousSilenced = $this->eventsSilenced;
+        $this->eventsSilenced = true;
+        try {
+            $collection = $this->getCollection($collection);
+        } finally {
+            $this->eventsSilenced = $previousSilenced;
+        }
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');

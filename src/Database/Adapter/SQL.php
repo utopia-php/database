@@ -50,12 +50,8 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Build SQL conditions for `$name` and thread the collection name down
-     * to the per-query builders. Adapter overrides that need the active
-     * collection (e.g. SQLite's FTS5 routing) read it from this parameter
-     * instead of per-instance state — under Swoole coroutines, instance
-     * state would race across yields if the same statement compiled
-     * multiple SEARCH conditions.
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
      *
      * @param array<Query> $queries
      * @param array<string,mixed> $binds
@@ -2328,11 +2324,7 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
-     * @param ?string $forCollection Filtered collection id of the query
-     *        currently being built, threaded through so adapter overrides
-     *        can resolve auxiliary tables (e.g. SQLite's FTS5 virtual
-     *        tables) for the active collection without touching shared
-     *        state that would race across Swoole coroutine yields.
+     * @param ?string $forCollection Filtered collection id (for FTS5 routing).
      * @return string
      * @throws Exception
      */

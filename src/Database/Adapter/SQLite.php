@@ -58,16 +58,8 @@ class SQLite extends MariaDB
     private const FTS_TRIGGER_UPDATE = 'au';
 
     /**
-     * Memo of FTS5 table resolution per collection. Outer key is the
-     * collection name; inner map is attribute → matching FTS5 table
-     * (or null when no FTS5 table covers that attribute). Populated in
-     * one sqlite_master + PRAGMA pass per collection so subsequent
-     * lookups for any attribute are O(1) — the previous flat
-     * `<collection>::<attribute>` scheme re-issued PRAGMA per attribute
-     * miss, building an N+1 storm on multi-attribute search batches.
-     * Invalidated per-collection on FTS create/drop and on
-     * deleteCollection — only the affected collection's slice is
-     * cleared, not the whole map.
+     * Per-collection attribute → FTS5 table memo. Populated in one pass
+     * so multi-attribute SEARCH batches don't issue PRAGMA per attribute.
      *
      * @var array<string, array<string, ?string>>
      */
@@ -84,12 +76,8 @@ class SQLite extends MariaDB
     protected bool $emulateMySQL = false;
 
     /**
-     * Set to true once the REGEXP UDF has been successfully registered on
-     * the underlying PDO. Used by getSupportForPCRERegex so the capability
-     * flag reflects reality — pool/proxy PDOs that don't expose
-     * sqliteCreateFunction will silently fail registration, and the planner
-     * shouldn't emit REGEXP queries against a connection that can't run
-     * them.
+     * Whether the REGEXP UDF actually wired up. Pool/proxy PDOs may not
+     * expose sqliteCreateFunction.
      */
     private bool $pcreRegistered = false;
 
@@ -117,18 +105,13 @@ class SQLite extends MariaDB
     }
 
     /**
-     * SQLite has no built-in regex operator — the inherited REGEXP path
-     * relies on the connection supplying one. Register a PHP-implemented
-     * REGEXP UDF that calls preg_match (PCRE), forwarding through the
-     * Utopia PDO wrapper / pool proxies via __call. Failures are
-     * swallowed so a non-SQLite PDO doesn't blow up adapter
-     * construction.
+     * Register a preg_match-backed REGEXP UDF so the inherited REGEXP
+     * path resolves. Best-effort — non-SQLite PDOs simply skip it.
      */
     private function registerUserFunctions(): void
     {
-        // Memoise the delimited pattern. SQLite invokes the UDF once per
-        // candidate row, and the str_replace cost adds up quickly on
-        // large WHERE … REGEXP scans.
+        // SQLite invokes the UDF once per candidate row; cache the
+        // delimited pattern.
         $delimitedCache = [];
         $pcre = static function (?string $pattern, ?string $value) use (&$delimitedCache): int {
             if ($pattern === null || $value === null) {
@@ -143,10 +126,6 @@ class SQLite extends MariaDB
             $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
             $this->pcreRegistered = true;
         } catch (\Throwable) {
-            // Either the PDO isn't SQLite or the proxy doesn't expose
-            // the create-function hook — REGEXP queries will simply
-            // fail at SQL parse time, which is the same behaviour as
-            // before this UDF existed.
         }
     }
 
@@ -452,22 +431,10 @@ class SQLite extends MariaDB
         $namespace = $this->getNamespace();
         $name = $namespace . '_' . $collection;
         $permissions = $namespace . '_' . $collection . '_perms';
-        // Reuse getFulltextTablePrefix so the LIKE prefix tracks the same
-        // tenant-aware naming createFulltextIndex uses. Hardcoding
-        // "{namespace}_{collection}_" diverged under sharedTables once the
-        // FTS5 tables started carrying a tenant segment.
         $ftsPrefix = $this->getFulltextTablePrefix($collection);
 
-        // FTS5 virtual tables don't show up in dbstat themselves — their
-        // storage is backed by shadow tables named `<vtable>_data`,
-        // `<vtable>_idx`, `<vtable>_docsize`, and `<vtable>_config`. Match
-        // the prefix and let LIKE pull in all of them. Sum (pgsize - unused)
-        // so the result tracks bytes actually used inside each page rather
-        // than full 4KB page allocations, which would let small inserts
-        // appear as a no-op against the parent assertions.
-        // `_` and `%` are LIKE wildcards. Without escaping the literal
-        // `_` separators, collection `users` and `userA` would each pull
-        // the other's FTS shadow tables into the sum.
+        // FTS5 storage lives in `<vtable>_data|_idx|_docsize|_config`
+        // shadow tables; sum (pgsize - unused) over all of them.
         $ftsPattern = $this->escapeLikePattern($ftsPrefix) . '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX) . '%';
 
         $stmt = $this->getPDO()->prepare("
@@ -513,12 +480,7 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        // Drop any FTS5 virtual tables for this collection first. Their
-        // shadow tables (`_data`, `_idx`, `_docsize`, `_config`) are not
-        // cleaned up implicitly when the parent table is dropped — they
-        // would otherwise leak disk space and `getSizeOfCollection` for
-        // a recreated collection of the same name would still sum the
-        // orphaned bytes.
+        // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
             $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
@@ -539,9 +501,6 @@ class SQLite extends MariaDB
             ->prepare($sql)
             ->execute();
 
-        // Drop any cached FTS table lookups for this collection — a
-        // subsequent createCollection of the same name with a different
-        // attribute set must not resolve to the just-dropped tables.
         unset($this->ftsTableCache[$id]);
 
         return true;
@@ -787,28 +746,19 @@ class SQLite extends MariaDB
         }
 
         $columns = \array_map(fn (string $attr) => $this->filter($attr), $attributes);
-        // FTS5's `fts5(<cols>, ...)` declaration treats backticks as an
-        // identifier quote in some builds and as part of the column
-        // name in others; stick to bare identifiers there. Backticks are
-        // still fine for the parent table references in triggers and
-        // for the INSERT column list since those are regular SQL.
+        // Bare identifiers in fts5(...) — backticks aren't part of FTS5's
+        // config grammar.
         $ftsColumnList = \implode(', ', $columns);
         $columnList = \implode(', ', \array_map(fn (string $c) => "`{$c}`", $columns));
         $newColumnList = \implode(', ', \array_map(fn (string $c) => "NEW.`{$c}`", $columns));
         $oldColumnList = \implode(', ', \array_map(fn (string $c) => "OLD.`{$c}`", $columns));
 
-        // Wrap setup + backfill in a transaction so a mid-backfill failure
-        // doesn't leave triggers wired up to a partially populated FTS5
-        // index — the next document write would silently desync.
+        // Atomic setup so mid-backfill failure can't leave triggers
+        // wired to a half-populated index.
         $this->startTransaction();
         try {
-            // FTS5's `fts5(...)` config grammar parses `content=` and
-            // `content_rowid=` values as either bare identifiers, double-
-            // quoted identifiers, or single-quoted strings. Backticks are
-            // not part of the grammar — SQLite's lenient parser accepts
-            // them in some builds but treats them as part of the literal
-            // value in others, where the engine then can't locate the
-            // content table. Use double quotes per the documented form.
+            // Double quotes for content= — backticks aren't FTS5 grammar
+            // and some builds record them as part of the literal value.
             $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
             $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
             $this->getPDO()->prepare($createSql)->execute();
@@ -830,11 +780,7 @@ class SQLite extends MariaDB
             $this->getPDO()->prepare($deleteTrigger)->execute();
 
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
-            // Restrict the update trigger to changes that touch indexed
-            // columns. Without `OF <cols>` the trigger fires on every
-            // UPDATE — including timestamp- or permission-only writes —
-            // forcing FTS5 to delete-marker + re-tokenise the row even
-            // when the indexed text is unchanged.
+            // OF <cols>: skip re-tokenise when only timestamps/permissions change.
             $updateTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}` BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
@@ -848,10 +794,6 @@ class SQLite extends MariaDB
 
             $this->commitTransaction();
         } catch (\Throwable $e) {
-            // trigger() callbacks may throw any Throwable (not only
-            // PDOException), and any escape that bypasses the rollback
-            // would leave the inTransaction counter incremented and the
-            // CREATE VIRTUAL TABLE half-applied.
             $this->rollbackTransaction();
             throw $e;
         }
@@ -862,11 +804,8 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Stable, per-collection-and-attribute FTS5 table name. The attribute
-     * set is hashed rather than joined with `_` because attribute names may
-     * themselves contain underscores after `filter()` — the joins
-     * `['ab', 'cd_ef']` and `['ab_cd', 'ef']` both produce `ab_cd_ef`,
-     * which would silently alias unrelated indexes onto the same table.
+     * FTS5 table name keyed off the sorted attribute set. Hashed because
+     * `_`-joining `['ab', 'cd_ef']` collides with `['ab_cd', 'ef']`.
      *
      * @param array<string>|string $attributes
      */
@@ -875,21 +814,14 @@ class SQLite extends MariaDB
         $attrs = \is_array($attributes) ? $attributes : [$attributes];
         $attrs = \array_map(fn (string $attr) => $this->filter($attr), $attrs);
         \sort($attrs);
-        // NUL is filtered out of attribute names, so it's safe as a
-        // sentinel separator before hashing — no input can produce a
-        // colliding pre-image.
         $key = \substr(\hash('sha1', \implode("\0", $attrs)), 0, 16);
 
         return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
     }
 
     /**
-     * Common prefix for every FTS5 table belonging to `$collection`. Used
-     * by lookup helpers that scan sqlite_master with a LIKE pattern. Under
-     * shared tables, mirror the regular-index naming and include the
-     * tenant segment so each tenant gets their own FTS5 vtable — without
-     * that, tenant A's deleteIndex(<fulltext>) would drop the FTS5 table
-     * tenant B is also using.
+     * Common LIKE prefix for FTS5 tables on `$collection`. Tenant-scoped
+     * under sharedTables so per-tenant drops don't tear down a shared vtable.
      */
     protected function getFulltextTablePrefix(string $collection): string
     {
@@ -901,10 +833,8 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Filtered string form of the active tenant for safe interpolation
-     * into SQL identifiers. The base property is typed `int|string|null`,
-     * so a string-typed tenant (rare but allowed by the contract) would
-     * otherwise reach DDL identifiers without going through filter().
+     * Filtered tenant for identifier interpolation (the base property is
+     * `int|string|null`).
      */
     private function getTenantSegment(): string
     {
@@ -963,10 +893,8 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Drop the FTS5 virtual table (and its triggers) corresponding to the
-     * fulltext index `$id` on `$collection`, if one exists. Returns true if
-     * a matching table was found and dropped, false if there's no FTS5
-     * table for this id on the collection.
+     * Drop the FTS5 vtable backing index `$id` on `$collection`. Returns
+     * false when no FTS5 table exists; throws when ambiguous.
      */
     protected function dropFulltextIndexById(string $collection, string $id): bool
     {
@@ -976,26 +904,17 @@ class SQLite extends MariaDB
             return false;
         }
 
-        // FTS5 table names are keyed off a hash of the sorted attribute
-        // set rather than the user-supplied index id, so the id alone
-        // can't address a table directly. Resolve via the collection's
-        // metadata: read the index definition, hash its attributes the
-        // same way createFulltextIndex did, and compare. When metadata
-        // isn't reachable (e.g. mid-rollback or in tests that bypass
-        // createCollection) and exactly one FTS5 table exists, fall
-        // back to that single table so single-index callers still work.
+        // Resolve via metadata since the table name is hashed off the
+        // attribute set, not the index id.
         $ftsTable = $this->resolveFulltextTableById($collection, $id, $tables);
 
         if ($ftsTable === null) {
             if (\count($tables) === 1) {
                 $ftsTable = $tables[0];
             } else {
-                // Returning false would let deleteIndex fall through to
-                // `DROP INDEX <regular>` which then errors with "no such
-                // index" — the catch in deleteIndex swallows that as a
-                // benign already-gone case, so the FTS5 tables would
-                // silently survive a delete that reported success. Surface
-                // the ambiguity instead.
+                // Returning false would let deleteIndex swallow the
+                // resulting "no such index" and report success while
+                // the FTS5 tables survived.
                 throw new DatabaseException(
                     "Cannot resolve fulltext index '{$id}' on '{$collection}': "
                     . \count($tables) . ' FTS5 tables exist and metadata does not'
@@ -1031,13 +950,10 @@ class SQLite extends MariaDB
         return true;
     }
 
+
     /**
-     * Resolve the FTS5 table that backs index `$id` on `$collection` by
-     * looking up the index definition in collection metadata and hashing
-     * its attribute set the same way createFulltextIndex did. Returns
-     * null when no metadata index exists for `$id`, when the metadata
-     * collection itself isn't readable, or when the hashed table isn't
-     * among the candidates passed in.
+     * Resolve the FTS5 table for index `$id` via metadata. Returns null
+     * when metadata doesn't reach a candidate.
      *
      * @param array<string> $candidates
      */
@@ -1094,21 +1010,14 @@ class SQLite extends MariaDB
     }
 
     /**
-     * List every FTS5 virtual table belonging to `$collection`, identified
-     * by the prefix/suffix naming convention used when the table was
-     * created. Centralises the sqlite_master LIKE-scan that
-     * dropFulltextIndexById and findFulltextTableForAttribute both need.
+     * Every FTS5 vtable on `$collection`.
      *
      * @return array<string>
      */
     protected function findFulltextTables(string $collection): array
     {
-        // `_` and `%` are LIKE wildcards. `getFulltextTablePrefix` always
-        // contains literal `_` separators, so without an ESCAPE clause the
-        // prefix `db_users_` would also match `db_usersA…` and pull a
-        // sibling collection's FTS5 tables into the result. `filter()`
-        // strips `%` from collection names today; escaping it anyway
-        // keeps this defensible if filter() ever widens.
+        // ESCAPE '\\' so the literal `_` separators in the prefix don't
+        // act as LIKE wildcards (e.g. `db_users_` matching `db_usersA_`).
         $stmt = $this->getPDO()->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
@@ -2580,9 +2489,6 @@ class SQLite extends MariaDB
      */
     public function getSupportForPCRERegex(): bool
     {
-        // Registration runs in the constructor but is best-effort — proxy
-        // PDOs (pool, mirror) may not expose sqliteCreateFunction. Only
-        // advertise PCRE support when the UDF actually wired up.
         return $this->pcreRegistered;
     }
 
@@ -2931,10 +2837,7 @@ class SQLite extends MariaDB
             ]);
         }
 
-        // PRAGMA index_list only surfaces B-tree indexes — FTS5 fulltext
-        // indexes live in their own virtual tables and are invisible to it.
-        // Append them so callers (Database::createIndex, drift detection)
-        // see the full set of indexes that physically exist.
+        // PRAGMA index_list misses FTS5 vtables.
         foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {
             $results[] = new Document($entry);
         }
@@ -2943,12 +2846,8 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Build the schema-index entries for every FTS5 fulltext table on
-     * `$collection`. Each entry maps back to a metadata index id when
-     * possible (so createIndex's existsInSchema check matches by id like
-     * MariaDB does); when the metadata isn't readable we surface the
-     * FTS5 table name instead so the caller can still see the index
-     * exists.
+     * Schema-index entries for FTS5 fulltext tables on `$collection`.
+     * Maps each back to a metadata index id when possible.
      *
      * @return array<array{
      *     '$id': string,
@@ -2996,8 +2895,6 @@ class SQLite extends MariaDB
                 }
             }
         } catch (\Throwable) {
-            // No metadata available — fall through with the FTS5 table
-            // name as the entry id.
         }
 
         $entries = [];
@@ -3210,26 +3107,17 @@ class SQLite extends MariaDB
         $ftsValue = $this->getFTS5Value($rawValue);
 
         if ($ftsValue === '') {
-            // Empty term — match nothing on SEARCH and everything on NOT_SEARCH
-            // rather than handing FTS5 an empty string that triggers a
-            // syntax error.
+            // Empty term — FTS5 syntax-errors on the empty string.
             return $method === Query::TYPE_SEARCH ? '1 = 0' : '1 = 1';
         }
 
-        // Look the FTS5 table up by attribute rather than computing the
-        // name from the attribute alone — multi-column fulltext indexes
-        // encode their full sorted attribute set in the table name, so
-        // single-attribute searches against them would otherwise miss.
         $ftsTable = $forCollection === null
             ? null
             : $this->findFulltextTableForAttribute($forCollection, $attribute);
 
         if ($ftsTable === null) {
-            // No collection context or no matching FTS5 table — fall back
-            // to a LIKE scan so the query still returns plausible results
-            // instead of erroring out. Use the raw user value, not the
-            // FTS5-formatted one (which embeds `OR`/`*` syntax that LIKE
-            // would treat as literal characters and never match).
+            // LIKE on the raw value — the FTS5-formatted form embeds
+            // `OR`/`*` that LIKE would treat as literal.
             return $this->buildSearchLikeFallback($attribute, $rawValue, $alias, $placeholder, $method, $binds);
         }
 
@@ -3241,11 +3129,7 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Wrap a SEARCH/NOT_SEARCH query as a LIKE scan when no FTS5 table is
-     * available. Extracted so the no-collection-context and no-matching-FTS
-     * branches share the same shape. The caller passes the raw user value;
-     * we escape LIKE wildcards and bind with an explicit ESCAPE clause so
-     * literal `%`/`_` in the input don't act as wildcards.
+     * SEARCH fallback to LIKE when no FTS5 table covers the attribute.
      *
      * @param array<string,mixed> $binds
      */
@@ -3264,12 +3148,9 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Find the FTS5 virtual table on `$collection` that covers `$attribute`,
-     * or null if none exists. Resolves the multi-column case where the
-     * stored table name is keyed off the full sorted attribute set and
-     * can't be reconstructed from a single attribute. Populates the per-
-     * collection attribute → table map on first call so subsequent lookups
-     * hit memory.
+     * FTS5 vtable on `$collection` that covers `$attribute`. Multi-column
+     * indexes can't be addressed from a single attribute alone — the
+     * lookup is via the cached attribute → table map.
      */
     protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
     {
@@ -3281,12 +3162,6 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Walk every FTS5 table on `$collection` once and return a flat
-     * attribute → table map. Each FTS5 table contributes its columns,
-     * with the last write winning if two tables happen to share a
-     * column (createFulltextIndex's `IF NOT EXISTS` guard plus the
-     * sha1-hashed naming make that practically unreachable).
-     *
      * @return array<string, string>
      */
     private function buildFulltextAttributeMap(string $collection): array
@@ -3309,13 +3184,9 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Compile STARTS_WITH / ENDS_WITH / CONTAINS (and their NOT variants)
-     * into LIKE with an explicit ESCAPE '\' clause. Inherited
-     * escapeWildcards() backslash-escapes every wildcard before binding;
-     * SQLite needs the ESCAPE clause to honour those backslashes the way
-     * MariaDB does implicitly. The MariaDB parent path issues plain LIKE,
-     * which under SQLite would treat literal `%`/`_` in the search term
-     * as wildcards.
+     * Compile STARTS_WITH / ENDS_WITH / CONTAINS (and NOT variants) into
+     * LIKE with an explicit ESCAPE clause — SQLite needs it to honour
+     * the backslash escapes escapeWildcards() inserts.
      *
      * @param array<string,mixed> $binds
      */
@@ -3358,29 +3229,18 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Sanitise a SEARCH term for FTS5. The inherited getFulltextValue keeps
-     * dots and other characters that FTS5 treats as syntax — strip anything
-     * that isn't a token character, collapse whitespace, OR-join the
-     * remaining terms, and prefix-match the trailing token. This matches
-     * MariaDB's BOOLEAN MODE contract: terms without operators are OR'd
-     * together and the final term is treated as a prefix.
-     *
-     * Returns '' when the input has no token characters; callers should
-     * short-circuit instead of binding the empty string.
+     * Format a SEARCH term as MariaDB BOOLEAN MODE: OR-joined tokens with
+     * the trailing token prefix-matched. Empty when no token survives.
      */
     protected function getFTS5Value(string $value): string
     {
-        // A balanced pair of quotes triggers exact-phrase mode. A lone
-        // quote (the same `"` matching both ends of a single-character
-        // string) and unbalanced phrases like `"foo"bar"` should not.
+        // Balanced wrapping `"..."` triggers exact-phrase mode.
         $exact = \strlen($value) >= 2
             && \str_starts_with($value, '"')
             && \str_ends_with($value, '"')
             && \substr_count($value, '"') === 2;
 
-        // FTS5 reserves a number of characters as syntax. Replacing them
-        // with whitespace lets multi-word search terms still split into
-        // separate tokens instead of becoming one giant prefix.
+        // Strip FTS5 syntax characters so multi-word terms split.
         $sanitized = \preg_replace('/[^\p{L}\p{N}_\s]+/u', ' ', $value) ?? '';
         $sanitized = \trim((string) \preg_replace('/\s+/', ' ', $sanitized));
 
@@ -3393,11 +3253,7 @@ class SQLite extends MariaDB
         }
 
         $tokens = \explode(' ', $sanitized);
-        // FTS5 treats AND/OR/NOT/NEAR (case-insensitive) as boolean operators
-        // when they appear as bare tokens. A user term like "or cats" would
-        // become "or OR cats*", which FTS5 parses as a syntax error. Wrap
-        // any reserved-word token in double quotes so it's matched as a
-        // literal term instead.
+        // Quote AND/OR/NOT/NEAR — bare, FTS5 treats them as operators.
         $tokens = \array_map(static function (string $token): string {
             if (\preg_match('/^(AND|OR|NOT|NEAR)$/i', $token) === 1) {
                 return '"' . $token . '"';
@@ -3405,8 +3261,6 @@ class SQLite extends MariaDB
             return $token;
         }, $tokens);
         $last = \array_pop($tokens);
-        // Don't append the prefix wildcard to a quoted reserved-word token —
-        // FTS5 doesn't support `"or"*` as a prefix-match phrase.
         if ($last !== null && !\str_starts_with($last, '"')) {
             $last .= '*';
         }

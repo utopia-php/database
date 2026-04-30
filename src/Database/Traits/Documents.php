@@ -2677,10 +2677,12 @@ trait Documents
         /** @var array<Document> $collAttrs */
         $collAttrs = $collection->getAttribute('attributes', []);
         foreach ($collAttrs as $attribute) {
-            $typedAttr = Attribute::fromDocument($attribute);
-            if ($typedAttr->type !== ColumnType::Relationship) {
-                $keys[] = $typedAttr->key;
+            if (Attribute::isRelationship($attribute)) {
+                continue;
             }
+            /** @var string $attrKey */
+            $attrKey = $attribute->getAttribute('key', $attribute->getId());
+            $keys[] = $attrKey;
         }
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
             $invalid = \array_diff($selections, $keys);

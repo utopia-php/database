@@ -282,6 +282,17 @@ class Database
     private static ?array $internalAttributeDocuments = null;
 
     /**
+     * Process-lifetime cache of internal attribute definitions as raw arrays, keyed by
+     * whether the adapter has shared tables enabled. The shared-tables variant includes
+     * `$tenant`, the other variant excludes it.
+     *
+     * Returned arrays MUST NOT be mutated by callers — they are shared singletons.
+     *
+     * @var array<int, array<array<string, mixed>>>|null
+     */
+    private static ?array $internalAttributeArrays = null;
+
+    /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
@@ -1944,15 +1955,19 @@ class Database
      */
     public function getInternalAttributes(): array
     {
-        $attributes = self::INTERNAL_ATTRIBUTES;
-
-        if (! $this->adapter->getSharedTables()) {
-            $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-                return $attribute['$id'] !== '$tenant';
-            });
+        if (self::$internalAttributeArrays === null) {
+            $withTenant = self::INTERNAL_ATTRIBUTES;
+            $withoutTenant = \array_values(\array_filter(
+                self::INTERNAL_ATTRIBUTES,
+                static fn (array $attribute): bool => $attribute['$id'] !== '$tenant',
+            ));
+            self::$internalAttributeArrays = [
+                0 => $withoutTenant,
+                1 => $withTenant,
+            ];
         }
 
-        return $attributes;
+        return self::$internalAttributeArrays[$this->adapter->getSharedTables() ? 1 : 0];
     }
 
     /**

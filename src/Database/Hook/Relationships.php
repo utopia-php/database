@@ -137,7 +137,7 @@ class Relationships implements Hook
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute): bool => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            Attribute::isRelationship(...)
         );
 
         $stackCount = \count($this->writeStack);
@@ -287,7 +287,7 @@ class Relationships implements Hook
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute): bool => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            Attribute::isRelationship(...)
         );
 
         $stackCount = \count($this->writeStack);
@@ -707,7 +707,7 @@ class Relationships implements Hook
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute): bool => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            Attribute::isRelationship(...)
         );
 
         foreach ($relationships as $relationship) {
@@ -873,7 +873,7 @@ class Relationships implements Hook
                                 /** @var array<Document> $relatedCollectionRelationships */
                                 $relatedCollectionRelationships = \array_filter(
                                     $relatedCollectionRelationships,
-                                    fn (Document $attr): bool => Attribute::fromDocument($attr)->type === ColumnType::Relationship
+                                    Attribute::isRelationship(...)
                                 );
 
                                 $nextSelects = $this->processQueries($relatedCollectionRelationships, $relationshipQueries);

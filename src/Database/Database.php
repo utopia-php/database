@@ -1871,15 +1871,54 @@ class Database
      */
     public function convertQueries(Document $collection, array $queries): array
     {
+        $attributesById = $this->buildAttributeMap($collection);
+        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::DefinedAttributes)
+            && $this->adapter->supports(Capability::Objects);
+
+        return $this->convertQueriesWithMap($queries, $attributesById, $isNestedQueryAttributeSupported);
+    }
+
+    /**
+     * Build an `id => Document` map of the collection's attributes plus
+     * shared internal attribute Documents. Hoisted out so it's computed once
+     * per `convertQueries` call rather than per query / per attribute.
+     *
+     * @return array<string, Document>
+     */
+    private function buildAttributeMap(Document $collection): array
+    {
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $attributesById = [];
+        foreach ($attributes as $attr) {
+            $attributesById[$attr->getId()] = $attr;
+        }
+        foreach (self::internalAttributeDocuments() as $internal) {
+            $attributesById[$internal->getId()] = $internal;
+        }
+
+        return $attributesById;
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @param array<string, Document> $attributesById
+     * @return array<Query>
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
+     */
+    private function convertQueriesWithMap(array $queries, array $attributesById, bool $isNestedQueryAttributeSupported): array
+    {
         foreach ($queries as $index => $query) {
             if ($query->isNested()) {
                 /** @var array<Query> $nestedQueries */
                 $nestedQueries = $query->getValues();
-                $values = $this->convertQueries($collection, $nestedQueries);
+                $values = $this->convertQueriesWithMap($nestedQueries, $attributesById, $isNestedQueryAttributeSupported);
                 $query->setValues($values);
             }
 
-            $query = $this->convertQuery($collection, $query);
+            $query = $this->convertQueryWithMap($query, $attributesById, $isNestedQueryAttributeSupported);
 
             $queries[$index] = $query;
         }
@@ -1897,33 +1936,35 @@ class Database
      */
     public function convertQuery(Document $collection, Query $query): Query
     {
-        /**
-         * @var array<Document> $attributes
-         */
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributesById = $this->buildAttributeMap($collection);
+        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::DefinedAttributes)
+            && $this->adapter->supports(Capability::Objects);
 
-        foreach (self::internalAttributeDocuments() as $attribute) {
-            $attributes[] = $attribute;
-        }
+        return $this->convertQueryWithMap($query, $attributesById, $isNestedQueryAttributeSupported);
+    }
 
+    /**
+     * @param array<string, Document> $attributesById
+     * @return Query
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
+     */
+    private function convertQueryWithMap(Query $query, array $attributesById, bool $isNestedQueryAttributeSupported): Query
+    {
         $queryAttribute = $query->getAttribute();
-        $isNestedQueryAttribute = $this->getAdapter()->supports(Capability::DefinedAttributes) && $this->adapter->supports(Capability::Objects) && \str_contains($queryAttribute, '.');
+        $isNestedQueryAttribute = $isNestedQueryAttributeSupported && \str_contains($queryAttribute, '.');
 
-        $attribute = new Document();
+        $attribute = $attributesById[$queryAttribute] ?? null;
 
-        foreach ($attributes as $attr) {
-            if ($attr->getId() === $query->getAttribute()) {
-                $attribute = $attr;
-            } elseif ($isNestedQueryAttribute) {
-                // nested object query
-                $baseAttribute = \explode('.', $queryAttribute, 2)[0];
-                if ($baseAttribute === $attr->getId() && $attr->getAttribute('type') === ColumnType::Object->value) {
-                    $query->setAttributeType(ColumnType::Object->value);
-                }
+        if ($attribute === null && $isNestedQueryAttribute) {
+            $baseAttribute = \explode('.', $queryAttribute, 2)[0];
+            $base = $attributesById[$baseAttribute] ?? null;
+            if ($base !== null && $base->getAttribute('type') === ColumnType::Object->value) {
+                $query->setAttributeType(ColumnType::Object->value);
             }
         }
 
-        if (! $attribute->isEmpty()) {
+        if ($attribute !== null) {
             /** @var bool $isArray */
             $isArray = $attribute->getAttribute('array', false);
             /** @var string $attrType */

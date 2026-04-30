@@ -210,25 +210,18 @@ class SQLite extends MariaDB
                 ->prepare($permissions)
                 ->execute();
 
-            // For shared tables the same `_uid` legitimately appears across
-            // tenants — make the UNIQUE constraint composite so cross-tenant
-            // documents don't collide and `ON CONFLICT(_uid, _tenant)` from
-            // the upsert path has a matching index to land on.
-            $uidColumns = $this->sharedTables ? ['_uid', '_tenant'] : ['_uid'];
-            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, $uidColumns, [], []);
+            // getSQLIndex automatically prepends `_tenant` to every index
+            // when sharedTables is on, so the resulting UNIQUE here is
+            // already composite on (_tenant, _uid) under shared tables.
+            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            // Match MariaDB's shared shape: include _tenant in the perms
-            // UNIQUE so two tenants can both grant the same role on the
-            // same document without colliding. Without _tenant the
-            // upsert path for shared tables hits a UNIQUE violation
-            // when a new tenant re-inserts permissions for a row that
-            // already exists in another tenant.
-            $permsColumns = $this->sharedTables
-                ? ['_document', '_type', '_permission', '_tenant']
-                : ['_document', '_type', '_permission'];
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, $permsColumns, [], []);
+            // getSQLIndex prepends `_tenant` automatically under shared
+            // tables, so the resulting UNIQUE on the perms table is
+            // (_tenant, _document, _type, _permission) and two tenants
+            // can hold the same role on the same document.
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {
@@ -2111,7 +2104,11 @@ class SQLite extends MariaDB
             }
         }
 
-        $conflictKeys = $this->sharedTables ? '(_uid, _tenant)' : '(_uid)';
+        // getSQLIndex prepends `_tenant` to every index column list
+        // under shared tables, so the actual UNIQUE on the documents
+        // table is (_tenant, _uid). SQLite's ON CONFLICT clause needs
+        // the same column order to match a UNIQUE constraint.
+        $conflictKeys = $this->sharedTables ? '(_tenant, _uid)' : '(_uid)';
 
         $stmt = $this->getPDO()->prepare(
             "

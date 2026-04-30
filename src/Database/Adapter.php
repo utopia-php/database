@@ -1154,19 +1154,40 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Process-lifetime cache for {@see self::filter()}. Keys are referentially
+     * stable across the request lifetime and frequently re-queried per-row, so
+     * caching the regex result amortizes the preg_replace cost across all
+     * decode/encode/build passes. Bounded to avoid unbounded growth from
+     * unusual input.
+     *
+     * @var array<string, string>
+     */
+    private static array $filteredKeyCache = [];
+
+    private const FILTERED_KEY_CACHE_LIMIT = 4096;
+
+    /**
      * Filter Keys
      *
      * @throws DatabaseException
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
+        if (isset(self::$filteredKeyCache[$value])) {
+            return self::$filteredKeyCache[$value];
+        }
 
-        if (\is_null($value)) {
+        $filtered = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
+
+        if (\is_null($filtered)) {
             throw new DatabaseException('Failed to filter key');
         }
 
-        return $value;
+        if (\count(self::$filteredKeyCache) >= self::FILTERED_KEY_CACHE_LIMIT) {
+            self::$filteredKeyCache = [];
+        }
+
+        return self::$filteredKeyCache[$value] = $filtered;
     }
 
     /**

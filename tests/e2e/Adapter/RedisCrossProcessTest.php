@@ -82,7 +82,6 @@ class RedisCrossProcessTest extends TestCase
         $cacheRedis->connect('redis', 6379);
         $cache = new Cache(new RedisCacheAdapter($cacheRedis));
 
-        // @phpstan-ignore class.notFound, argument.type (Redis adapter built in parallel)
         $database = new Database(new RedisDbAdapter($redis), $cache);
         $database
             ->setAuthorization($this->authorization)

@@ -59,10 +59,8 @@ abstract class RedisBase extends Base
         $cacheRedis->connect('redis', 6379);
         $cache = new Cache(new RedisCacheAdapter($cacheRedis));
 
-        // @phpstan-ignore class.notFound (built in parallel by another architect)
         $adapter = new RedisAdapter($this->getRedisClient());
 
-        // @phpstan-ignore argument.type
         $database = new Database($adapter, $cache);
         $database
             ->setAuthorization(self::$authorization)

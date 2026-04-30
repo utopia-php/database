@@ -51,7 +51,6 @@ try {
     $authorization->addRole('any');
 
     $cache = new Cache(new RedisCacheAdapter($cacheRedis));
-    // @phpstan-ignore class.notFound, argument.type (Redis adapter built in parallel)
     $database = new Database(new RedisDbAdapter($redis), $cache);
     $database
         ->setAuthorization($authorization)

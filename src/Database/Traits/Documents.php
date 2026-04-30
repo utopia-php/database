@@ -571,6 +571,20 @@ trait Documents
         $time = DateTime::now();
         $modified = 0;
 
+        // Hoisted: validator only depends on the collection + adapter properties,
+        // both stable for this call. Allocating once and reusing across all
+        // documents avoids per-document construction and (with the in-class
+        // memo) per-document `array_merge` of the attribute list.
+        $validator = $this->validate
+            ? new Structure(
+                $collection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->supports(Capability::DefinedAttributes)
+            )
+            : null;
+
         foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
@@ -601,14 +615,7 @@ trait Documents
 
             $document = $this->encode($collection, $document);
 
-            if ($this->validate) {
-                $validator = new Structure(
-                    $collection,
-                    $this->adapter->getIdAttributeType(),
-                    $this->adapter->getMinDateTime(),
-                    $this->adapter->getMaxDateTime(),
-                    $this->adapter->supports(Capability::DefinedAttributes)
-                );
+            if ($validator !== null) {
                 if (! $validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
                 }

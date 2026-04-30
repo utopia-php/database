@@ -112,6 +112,17 @@ class Structure extends Validator
     protected string $message = 'General Error';
 
     /**
+     * Lazily-built merged attribute list (internal + collection).
+     *
+     * Stable for the lifetime of this validator: $attributes is constant and
+     * $collection is readonly, so the merge result never changes after the
+     * first call.
+     *
+     * @var array<int, array<string, mixed>|Document>|null
+     */
+    private ?array $mergedAttributes = null;
+
+    /**
      * Structure constructor.
      */
     public function __construct(
@@ -229,10 +240,14 @@ class Structure extends Validator
 
         $keys = [];
         $structure = $document->getArrayCopy();
-        /** @var array<string, mixed> $collectionAttributes */
-        $collectionAttributes = $this->collection->getAttribute('attributes', []);
-        /** @var array<array<string, mixed>> $attributes */
-        $attributes = \array_merge($this->attributes, $collectionAttributes);
+        if ($this->mergedAttributes === null) {
+            /** @var array<string, mixed> $collectionAttributes */
+            $collectionAttributes = $this->collection->getAttribute('attributes', []);
+            /** @var array<array<string, mixed>> $merged */
+            $merged = \array_merge($this->attributes, $collectionAttributes);
+            $this->mergedAttributes = $merged;
+        }
+        $attributes = $this->mergedAttributes;
 
         if (! $this->checkForAllRequiredValues($structure, $attributes, $keys)) {
             return false;

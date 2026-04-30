@@ -45,11 +45,37 @@ class SQLite extends MariaDB
     private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
     private const MARIADB_LONGTEXT_BYTES = '4294967295';
 
+    /**
+     * When enabled, the adapter reports MariaDB-shaped column metadata,
+     * advertises MariaDB-only capabilities (upserts, attribute resizing,
+     * PCRE regex via the registered UDF), and declares schema-internal
+     * columns (e.g. `_tenant`) using MariaDB-style types so callers that
+     * inspect INFORMATION_SCHEMA-style results behave identically across
+     * both adapters. Off by default — vanilla SQLite stays vanilla.
+     */
+    protected bool $emulateMySQL = false;
+
     public function __construct(mixed $pdo)
     {
         parent::__construct($pdo);
 
         $this->registerUserFunctions();
+    }
+
+    /**
+     * Toggle MariaDB/MySQL emulation. See $emulateMySQL for what this
+     * actually changes.
+     */
+    public function setEmulateMySQL(bool $emulate): static
+    {
+        $this->emulateMySQL = $emulate;
+
+        return $this;
+    }
+
+    public function getEmulateMySQL(): bool
+    {
+        return $this->emulateMySQL;
     }
 
     /**
@@ -209,7 +235,13 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        $tenantQuery = $this->sharedTables ? '`_tenant` "INT(11) UNSIGNED" DEFAULT NULL,' : '';
+        // SQLite stores integers regardless of declared type, but
+        // testSchemaAttributes asserts the columnType reads back as
+        // `int(11) unsigned` to match MariaDB. Quote the declaration so
+        // PRAGMA table_info echoes the exact string under emulation;
+        // otherwise use INTEGER, the affinity-correct vanilla form.
+        $tenantType = $this->emulateMySQL ? '"INT(11) UNSIGNED"' : 'INTEGER';
+        $tenantQuery = $this->sharedTables ? "`_tenant` {$tenantType} DEFAULT NULL," : '';
 
         $collection = "
 			CREATE TABLE {$this->getSQLTable($id)} (
@@ -408,10 +440,11 @@ class SQLite extends MariaDB
 
         // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
         // not supported and a smaller declared size silently accepts
-        // larger values. To keep parity with the MariaDB contract that
-        // resize-down rejects when data exceeds the new size, scan the
-        // column ourselves and raise the same TruncateException.
-        if ($type === Database::VAR_STRING && $size > 0 && !$array) {
+        // larger values. Under MySQL emulation, scan the column and
+        // raise the same TruncateException MariaDB throws. Off-
+        // emulation the declared size is metadata-only, so skip the
+        // scan and let the rename branch (if any) handle the rest.
+        if ($this->emulateMySQL && $type === Database::VAR_STRING && $size > 0 && !$array) {
             $name = $this->filter($collection);
             $column = $this->filter($id);
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max LIMIT 1";
@@ -1215,11 +1248,11 @@ class SQLite extends MariaDB
      */
     public function getSupportForAttributeResizing(): bool
     {
-        // SQLite is dynamically typed with no MODIFY COLUMN, but
-        // updateAttribute scans the column on resize-down and raises
-        // TruncateException when any row exceeds the new size — same
-        // contract MariaDB enforces via the engine.
-        return true;
+        // SQLite is dynamically typed with no MODIFY COLUMN. When
+        // emulating MySQL, updateAttribute scans the column on
+        // resize-down and raises TruncateException to match MariaDB's
+        // contract. Off-emulation, declared sizes are metadata-only.
+        return $this->emulateMySQL;
     }
 
     /**
@@ -1254,6 +1287,7 @@ class SQLite extends MariaDB
      */
     public function getSupportForUpserts(): bool
     {
+        // ON CONFLICT DO UPDATE is native SQLite, not MariaDB emulation.
         return true;
     }
 
@@ -2197,6 +2231,9 @@ class SQLite extends MariaDB
      */
     public function getSupportForPCRERegex(): bool
     {
+        // The REGEXP UDF is registered unconditionally in the
+        // constructor and runs preg_match (PCRE) — same surface as
+        // MariaDB's native operator from the caller's perspective.
         return true;
     }
 
@@ -2581,10 +2618,11 @@ class SQLite extends MariaDB
         }
 
         $dataType = \strtolower($base);
-        // SQLite spells INT and INTEGER interchangeably for declared types,
-        // but MariaDB's INFORMATION_SCHEMA always reports `int`. Canonicalise
-        // so getSchemaAttributes matches the parent contract.
-        if ($dataType === 'integer') {
+        // SQLite spells INT and INTEGER interchangeably for declared types.
+        // Under emulation, canonicalise to MariaDB's reported `int` so
+        // getSchemaAttributes matches that adapter's contract; otherwise
+        // keep the verbatim form the user declared.
+        if ($this->emulateMySQL && $dataType === 'integer') {
             $dataType = 'int';
         }
 
@@ -2596,25 +2634,18 @@ class SQLite extends MariaDB
             'datetimePrecision' => null,
         ];
 
+        // VARCHAR / CHAR / DATETIME(n) / DECIMAL(p,s) length+precision
+        // come straight from the declaration — that's true for vanilla
+        // SQLite too. The MariaDB byte ceilings (TEXT/MEDIUMTEXT/etc.)
+        // and the integer/float precision defaults are MariaDB-specific
+        // INFORMATION_SCHEMA conventions, so report them only under
+        // emulation.
         switch ($dataType) {
             case 'varchar':
             case 'char':
                 if ($argument !== null) {
                     $result['characterMaximumLength'] = (string) $argument;
                 }
-                break;
-
-            case 'text':
-                $result['characterMaximumLength'] = self::MARIADB_TEXT_BYTES;
-                break;
-
-            case 'mediumtext':
-                $result['characterMaximumLength'] = self::MARIADB_MEDIUMTEXT_BYTES;
-                break;
-
-            case 'longtext':
-            case 'json':
-                $result['characterMaximumLength'] = self::MARIADB_LONGTEXT_BYTES;
                 break;
 
             case 'datetime':
@@ -2625,40 +2656,70 @@ class SQLite extends MariaDB
                 }
                 break;
 
-            case 'tinyint':
-                $result['numericPrecision'] = '3';
-                break;
-
-            case 'smallint':
-                $result['numericPrecision'] = '5';
-                break;
-
-            case 'mediumint':
-                $result['numericPrecision'] = '7';
-                break;
-
-            case 'int':
-            case 'integer':
-                $result['numericPrecision'] = '10';
-                break;
-
-            case 'bigint':
-                $result['numericPrecision'] = '19';
-                break;
-
             case 'decimal':
             case 'numeric':
-                $result['numericPrecision'] = $argument !== null ? (string) $argument : '10';
-                $result['numericScale'] = $secondArgument !== null ? (string) $secondArgument : '0';
+                if ($argument !== null) {
+                    $result['numericPrecision'] = (string) $argument;
+                }
+                if ($secondArgument !== null) {
+                    $result['numericScale'] = (string) $secondArgument;
+                } elseif ($this->emulateMySQL && $argument !== null) {
+                    $result['numericScale'] = '0';
+                }
                 break;
+        }
 
-            case 'float':
-                $result['numericPrecision'] = '12';
-                break;
+        if ($this->emulateMySQL) {
+            switch ($dataType) {
+                case 'text':
+                    $result['characterMaximumLength'] = self::MARIADB_TEXT_BYTES;
+                    break;
 
-            case 'double':
-                $result['numericPrecision'] = '22';
-                break;
+                case 'mediumtext':
+                    $result['characterMaximumLength'] = self::MARIADB_MEDIUMTEXT_BYTES;
+                    break;
+
+                case 'longtext':
+                case 'json':
+                    $result['characterMaximumLength'] = self::MARIADB_LONGTEXT_BYTES;
+                    break;
+
+                case 'tinyint':
+                    $result['numericPrecision'] = '3';
+                    break;
+
+                case 'smallint':
+                    $result['numericPrecision'] = '5';
+                    break;
+
+                case 'mediumint':
+                    $result['numericPrecision'] = '7';
+                    break;
+
+                case 'int':
+                case 'integer':
+                    $result['numericPrecision'] = '10';
+                    break;
+
+                case 'bigint':
+                    $result['numericPrecision'] = '19';
+                    break;
+
+                case 'decimal':
+                case 'numeric':
+                    if ($result['numericPrecision'] === null) {
+                        $result['numericPrecision'] = '10';
+                    }
+                    break;
+
+                case 'float':
+                    $result['numericPrecision'] = '12';
+                    break;
+
+                case 'double':
+                    $result['numericPrecision'] = '22';
+                    break;
+            }
         }
 
         return $result;

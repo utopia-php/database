@@ -58,12 +58,18 @@ class SQLite extends MariaDB
     private const FTS_TRIGGER_UPDATE = 'au';
 
     /**
-     * Memo of FTS5 table resolution keyed by `<collection>::<attribute>`,
-     * value is the matching FTS5 table name or null when no match exists.
-     * Avoids re-scanning sqlite_master + PRAGMA table_info on every search
-     * condition. Cleared whenever an FTS5 table is created or dropped.
+     * Memo of FTS5 table resolution per collection. Outer key is the
+     * collection name; inner map is attribute → matching FTS5 table
+     * (or null when no FTS5 table covers that attribute). Populated in
+     * one sqlite_master + PRAGMA pass per collection so subsequent
+     * lookups for any attribute are O(1) — the previous flat
+     * `<collection>::<attribute>` scheme re-issued PRAGMA per attribute
+     * miss, building an N+1 storm on multi-attribute search batches.
+     * Invalidated per-collection on FTS create/drop and on
+     * deleteCollection — only the affected collection's slice is
+     * cleared, not the whole map.
      *
-     * @var array<string, ?string>
+     * @var array<string, array<string, ?string>>
      */
     private array $ftsTableCache = [];
 
@@ -532,7 +538,7 @@ class SQLite extends MariaDB
         // Drop any cached FTS table lookups for this collection — a
         // subsequent createCollection of the same name with a different
         // attribute set must not resolve to the just-dropped tables.
-        $this->ftsTableCache = [];
+        unset($this->ftsTableCache[$id]);
 
         return true;
     }
@@ -730,7 +736,7 @@ class SQLite extends MariaDB
 			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
 		");
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
+        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
         $stmt->execute();
         $index = $stmt->fetch();
         if (!empty($index)) {
@@ -792,7 +798,14 @@ class SQLite extends MariaDB
         // index — the next document write would silently desync.
         $this->startTransaction();
         try {
-            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=`{$parentTable}`, content_rowid=`_id`)";
+            // FTS5's `fts5(...)` config grammar parses `content=` and
+            // `content_rowid=` values as either bare identifiers, double-
+            // quoted identifiers, or single-quoted strings. Backticks are
+            // not part of the grammar — SQLite's lenient parser accepts
+            // them in some builds but treats them as part of the literal
+            // value in others, where the engine then can't locate the
+            // content table. Use double quotes per the documented form.
+            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
             $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
             $this->getPDO()->prepare($createSql)->execute();
 
@@ -813,8 +826,13 @@ class SQLite extends MariaDB
             $this->getPDO()->prepare($deleteTrigger)->execute();
 
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
+            // Restrict the update trigger to changes that touch indexed
+            // columns. Without `OF <cols>` the trigger fires on every
+            // UPDATE — including timestamp- or permission-only writes —
+            // forcing FTS5 to delete-marker + re-tokenise the row even
+            // when the indexed text is unchanged.
             $updateTrigger = "
-                CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}` BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
@@ -834,7 +852,7 @@ class SQLite extends MariaDB
             throw $e;
         }
 
-        $this->ftsTableCache = [];
+        unset($this->ftsTableCache[$collection]);
 
         return true;
     }
@@ -862,15 +880,31 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Common prefix for every FTS5 table belonging to `$collection`. Used by
-     * lookup helpers that scan sqlite_master with a LIKE pattern. Mirrors
-     * getSQLTable's naming — namespace + collection only, no tenant. Under
-     * shared tables the tenant is a column, not a name suffix, and the FTS5
-     * table tracks the underlying collection 1:1.
+     * Common prefix for every FTS5 table belonging to `$collection`. Used
+     * by lookup helpers that scan sqlite_master with a LIKE pattern. Under
+     * shared tables, mirror the regular-index naming and include the
+     * tenant segment so each tenant gets their own FTS5 vtable — without
+     * that, tenant A's deleteIndex(<fulltext>) would drop the FTS5 table
+     * tenant B is also using.
      */
     protected function getFulltextTablePrefix(string $collection): string
     {
+        if ($this->sharedTables) {
+            return "{$this->getNamespace()}_{$this->getTenantSegment()}_{$this->filter($collection)}_";
+        }
+
         return "{$this->getNamespace()}_{$this->filter($collection)}_";
+    }
+
+    /**
+     * Filtered string form of the active tenant for safe interpolation
+     * into SQL identifiers. The base property is typed `int|string|null`,
+     * so a string-typed tenant (rare but allowed by the contract) would
+     * otherwise reach DDL identifiers without going through filter().
+     */
+    private function getTenantSegment(): string
+    {
+        return $this->filter((string) ($this->tenant ?? ''));
     }
 
     /**
@@ -891,7 +925,7 @@ class SQLite extends MariaDB
         // DROP INDEX path. Otherwise the index is either an FTS5 virtual
         // table (whose name is keyed off attributes, not the id) or
         // already absent — try the FTS5 path before erroring.
-        $regularIndex = "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}";
+        $regularIndex = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}";
         $stmt = $this->getPDO()->prepare("
             SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
         ");
@@ -952,7 +986,17 @@ class SQLite extends MariaDB
             if (\count($tables) === 1) {
                 $ftsTable = $tables[0];
             } else {
-                return false;
+                // Returning false would let deleteIndex fall through to
+                // `DROP INDEX <regular>` which then errors with "no such
+                // index" — the catch in deleteIndex swallows that as a
+                // benign already-gone case, so the FTS5 tables would
+                // silently survive a delete that reported success. Surface
+                // the ambiguity instead.
+                throw new DatabaseException(
+                    "Cannot resolve fulltext index '{$id}' on '{$collection}': "
+                    . \count($tables) . ' FTS5 tables exist and metadata does not'
+                    . ' match any of them.'
+                );
             }
         }
         $triggerSuffixes = [
@@ -978,7 +1022,7 @@ class SQLite extends MariaDB
             throw $e;
         }
 
-        $this->ftsTableCache = [];
+        unset($this->ftsTableCache[$collection]);
 
         return true;
     }
@@ -1720,7 +1764,7 @@ class SQLite extends MariaDB
             $attributes[$key] = "`{$attribute}` {$postfix}";
         }
 
-        $key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
+        $key = "`{$this->getNamespace()}_{$this->getTenantSegment()}_{$collection}_{$id}`";
         $attributes = implode(', ', $attributes);
 
         if ($this->sharedTables) {
@@ -3219,28 +3263,45 @@ class SQLite extends MariaDB
      * Find the FTS5 virtual table on `$collection` that covers `$attribute`,
      * or null if none exists. Resolves the multi-column case where the
      * stored table name is keyed off the full sorted attribute set and
-     * can't be reconstructed from a single attribute.
+     * can't be reconstructed from a single attribute. Populates the per-
+     * collection attribute → table map on first call so subsequent lookups
+     * hit memory.
      */
     protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
     {
-        $cacheKey = "{$collection}::{$attribute}";
-        if (\array_key_exists($cacheKey, $this->ftsTableCache)) {
-            return $this->ftsTableCache[$cacheKey];
+        if (!\array_key_exists($collection, $this->ftsTableCache)) {
+            $this->ftsTableCache[$collection] = $this->buildFulltextAttributeMap($collection);
         }
 
+        return $this->ftsTableCache[$collection][$attribute] ?? null;
+    }
+
+    /**
+     * Walk every FTS5 table on `$collection` once and return a flat
+     * attribute → table map. Each FTS5 table contributes its columns,
+     * with the last write winning if two tables happen to share a
+     * column (createFulltextIndex's `IF NOT EXISTS` guard plus the
+     * sha1-hashed naming make that practically unreachable).
+     *
+     * @return array<string, string>
+     */
+    private function buildFulltextAttributeMap(string $collection): array
+    {
+        $map = [];
         foreach ($this->findFulltextTables($collection) as $table) {
             $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
             $info->closeCursor();
             foreach ($cols as $col) {
-                if (($col['name'] ?? null) === $attribute) {
-                    return $this->ftsTableCache[$cacheKey] = $table;
+                $name = $col['name'] ?? null;
+                if (\is_string($name) && $name !== '') {
+                    $map[$name] = $table;
                 }
             }
         }
 
-        return $this->ftsTableCache[$cacheKey] = null;
+        return $map;
     }
 
     /**

@@ -135,16 +135,28 @@ class SQLite extends MariaDB
 
     /**
      * @inheritDoc
+     *
+     * SQLite serialises writers through a single file lock. PDO's default
+     * `BEGIN` is `DEFERRED`, which acquires the writer lock lazily on the
+     * first write — if two transactions both started as readers and try to
+     * promote to writer at the same time, one fails immediately with
+     * SQLITE_BUSY without any busy_timeout retry (a real deadlock case).
+     * `BEGIN IMMEDIATE` reserves the writer slot up-front so concurrent
+     * writers queue behind it under busy_timeout instead.
      */
     public function startTransaction(): bool
     {
         try {
             if ($this->inTransaction === 0) {
                 if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
+                    $this->getPDO()
+                        ->prepare('ROLLBACK')
+                        ->execute();
                 }
 
-                $result = $this->getPDO()->beginTransaction();
+                $result = $this->getPDO()
+                    ->prepare('BEGIN IMMEDIATE')
+                    ->execute();
             } else {
                 $result = $this->getPDO()
                     ->prepare('SAVEPOINT transaction' . $this->inTransaction)
@@ -161,6 +173,73 @@ class SQLite extends MariaDB
         $this->inTransaction++;
 
         return $result;
+    }
+
+    /**
+     * @inheritDoc
+     *
+     * Overrides the inherited PDO-driven commit because startTransaction
+     * issues a raw `BEGIN IMMEDIATE` (rather than PDO::beginTransaction),
+     * so PDO's internal in-transaction flag is never set and PDO::commit()
+     * would throw "no active transaction". Mirrors that with a raw COMMIT
+     * and SAVEPOINT release for nested levels.
+     */
+    public function commitTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            if ($this->inTransaction > 1) {
+                $result = $this->getPDO()
+                    ->prepare('RELEASE SAVEPOINT transaction' . ($this->inTransaction - 1))
+                    ->execute();
+                $this->inTransaction--;
+                return $result;
+            }
+
+            $result = $this->getPDO()
+                ->prepare('COMMIT')
+                ->execute();
+            $this->inTransaction = 0;
+        } catch (PDOException $e) {
+            throw new TransactionException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     *
+     * Counterpart to commitTransaction — uses a raw ROLLBACK for the same
+     * reason (raw BEGIN IMMEDIATE bypasses PDO's transaction tracking).
+     */
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            if ($this->inTransaction > 1) {
+                $this->getPDO()
+                    ->prepare('ROLLBACK TO transaction' . ($this->inTransaction - 1))
+                    ->execute();
+                $this->inTransaction--;
+            } else {
+                $this->getPDO()
+                    ->prepare('ROLLBACK')
+                    ->execute();
+                $this->inTransaction = 0;
+            }
+        } catch (PDOException $e) {
+            $this->inTransaction = 0;
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        return true;
     }
 
     /**

@@ -104,6 +104,31 @@ class SQLite extends MariaDB
         return $this->emulateMySQL;
     }
 
+    public function setTenant(int|string|null $tenant): bool
+    {
+        if ($this->tenant !== $tenant) {
+            $this->ftsTableCache = [];
+        }
+
+        return parent::setTenant($tenant);
+    }
+
+    public function setNamespace(string $namespace): static
+    {
+        $this->ftsTableCache = [];
+
+        return parent::setNamespace($namespace);
+    }
+
+    public function setSharedTables(bool $sharedTables): bool
+    {
+        if ($this->sharedTables !== $sharedTables) {
+            $this->ftsTableCache = [];
+        }
+
+        return parent::setSharedTables($sharedTables);
+    }
+
     /**
      * Register a preg_match-backed REGEXP UDF so the inherited REGEXP
      * path resolves. Best-effort — non-SQLite PDOs simply skip it.
@@ -379,17 +404,10 @@ class SQLite extends MariaDB
                 ->prepare($permissions)
                 ->execute();
 
-            // getSQLIndex automatically prepends `_tenant` to every index
-            // when sharedTables is on, so the resulting UNIQUE here is
-            // already composite on (_tenant, _uid) under shared tables.
             $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            // getSQLIndex prepends `_tenant` automatically under shared
-            // tables, so the resulting UNIQUE on the perms table is
-            // (_tenant, _document, _type, _permission) and two tenants
-            // can hold the same role on the same document.
             $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
@@ -407,10 +425,6 @@ class SQLite extends MariaDB
 
                 $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders, [], [], $indexTtl);
             }
-
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-            $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
-
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -558,7 +572,7 @@ class SQLite extends MariaDB
             $stmt = $this->getPDO()->prepare($sql);
             $stmt->bindValue(':max', $size, PDO::PARAM_INT);
             if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant, PDO::PARAM_INT);
+                $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
             $stmt->execute();
 
@@ -594,7 +608,7 @@ class SQLite extends MariaDB
             throw new NotFoundException('Collection not found');
         }
 
-        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
+        $indexes = $collection->getAttribute('indexes', []);
 
         foreach ($indexes as $index) {
             $attributes = $index['attributes'];
@@ -644,7 +658,7 @@ class SQLite extends MariaDB
 
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
+        $indexes = $collection->getAttribute('indexes', []);
         $index = null;
 
         foreach ($indexes as $node) {
@@ -746,26 +760,32 @@ class SQLite extends MariaDB
         }
 
         $columns = \array_map(fn (string $attr) => $this->filter($attr), $attributes);
-        // Bare identifiers in fts5(...) — backticks aren't part of FTS5's
-        // config grammar.
         $ftsColumnList = \implode(', ', $columns);
         $columnList = \implode(', ', \array_map(fn (string $c) => "`{$c}`", $columns));
         $newColumnList = \implode(', ', \array_map(fn (string $c) => "NEW.`{$c}`", $columns));
         $oldColumnList = \implode(', ', \array_map(fn (string $c) => "OLD.`{$c}`", $columns));
 
-        // Atomic setup so mid-backfill failure can't leave triggers
-        // wired to a half-populated index.
+        // Under shared tables every tenant has a distinct FTS vtable but the
+        // parent table is shared, so triggers must filter by `_tenant`
+        // literal — otherwise tenant A's vtable accumulates tenant B's
+        // tokenized content. The same applies to the initial backfill.
+        $tenantLiteral = $this->sharedTables ? $this->getTenantSqlLiteral() : null;
+        $insertWhen = $tenantLiteral !== null ? " WHEN NEW.`_tenant` IS {$tenantLiteral}" : '';
+        $deleteWhen = $tenantLiteral !== null ? " WHEN OLD.`_tenant` IS {$tenantLiteral}" : '';
+        $updateWhen = $tenantLiteral !== null
+            ? " WHEN OLD.`_tenant` IS {$tenantLiteral} OR NEW.`_tenant` IS {$tenantLiteral}"
+            : '';
+        $backfillWhere = $tenantLiteral !== null ? " WHERE `_tenant` IS {$tenantLiteral}" : '';
+
         $this->startTransaction();
         try {
-            // Double quotes for content= — backticks aren't FTS5 grammar
-            // and some builds record them as part of the literal value.
             $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
             $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
             $this->getPDO()->prepare($createSql)->execute();
 
             $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
-                CREATE TRIGGER `{$ftsTable}_{$insertSuffix}` AFTER INSERT ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$insertSuffix}` AFTER INSERT ON `{$parentTable}`{$insertWhen} BEGIN
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
@@ -773,7 +793,7 @@ class SQLite extends MariaDB
 
             $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
-                CREATE TRIGGER `{$ftsTable}_{$deleteSuffix}` AFTER DELETE ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$deleteSuffix}` AFTER DELETE ON `{$parentTable}`{$deleteWhen} BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                 END
             ";
@@ -782,14 +802,14 @@ class SQLite extends MariaDB
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
             // OF <cols>: skip re-tokenise when only timestamps/permissions change.
             $updateTrigger = "
-                CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}`{$updateWhen} BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
             $this->getPDO()->prepare($updateTrigger)->execute();
 
-            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`";
+            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
             $this->getPDO()->prepare($backfill)->execute();
 
             $this->commitTransaction();
@@ -845,6 +865,22 @@ class SQLite extends MariaDB
     private function getTenantSegment(): string
     {
         return $this->filter((string) ($this->tenant ?? ''));
+    }
+
+    /**
+     * Tenant rendered as a SQL literal for embedding in trigger bodies and
+     * other places where parameter binding isn't available.
+     */
+    private function getTenantSqlLiteral(): string
+    {
+        if ($this->tenant === null) {
+            return 'NULL';
+        }
+        if (\is_int($this->tenant)) {
+            return (string) $this->tenant;
+        }
+
+        return $this->getPDO()->quote((string) $this->tenant);
     }
 
     /**
@@ -1152,11 +1188,7 @@ class SQLite extends MariaDB
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("SELECT last_insert_rowid() AS id");
-            $statment->execute();
-            $last = $statment->fetch();
-
-            $document['$sequence'] = $last['id'];
+            $document['$sequence'] = (int) $this->getPDO()->lastInsertId();
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -1694,26 +1726,6 @@ class SQLite extends MariaDB
         }
 
         return "CREATE {$type} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
-    }
-
-    /**
-     * Get SQL condition for permissions
-     *
-     * @param string $collection
-     * @param array<string> $roles
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLPermissionsCondition(string $collection, array $roles, string $alias, string $type = Database::PERMISSION_READ): string
-    {
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-
-        return "{$this->quote($alias)}.{$this->quote('_uid')} IN (
-                    SELECT distinct(_document)
-                    FROM `{$this->getNamespace()}_{$collection}_perms`
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = '{$type}'
-                )";
     }
 
     /**
@@ -2605,9 +2617,6 @@ class SQLite extends MariaDB
         return true;
     }
 
-    /**
-     * Same multi-statement split rationale as createRelationship.
-     */
     public function updateRelationship(
         string $collection,
         string $relatedCollection,
@@ -2692,9 +2701,6 @@ class SQLite extends MariaDB
         return true;
     }
 
-    /**
-     * Same multi-statement split rationale as createRelationship.
-     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,

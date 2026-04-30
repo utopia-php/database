@@ -1674,6 +1674,65 @@ class SQLite extends SQL
         return null;
     }
 
+    #[\Override]
+    protected function isAdapterFilterQuery(Query $query): bool
+    {
+        $method = $query->getMethod();
+
+        return $method === Method::Search || $method === Method::NotSearch;
+    }
+
+    /**
+     * Compile a Search/NotSearch query into FTS5 SQL with positional bindings.
+     * Falls back to a LIKE expression when no FTS5 table covers the attribute.
+     *
+     * @return array{expression: string, bindings: list<mixed>}|null
+     */
+    #[\Override]
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias): ?array
+    {
+        $method = $query->getMethod();
+        if ($method !== Method::Search && $method !== Method::NotSearch) {
+            return null;
+        }
+
+        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
+        $aliasQuoted = $this->quote($alias);
+
+        $rawValue = '';
+        $queryValue = $query->getValue();
+        if (\is_scalar($queryValue)) {
+            $rawValue = (string) $queryValue;
+        }
+        $ftsValue = $this->getFTS5Value($rawValue);
+
+        if ($ftsValue === '') {
+            return [
+                'expression' => $method === Method::Search ? '1 = 0' : '1 = 1',
+                'bindings' => [],
+            ];
+        }
+
+        $ftsTable = $this->findFulltextTableForAttribute($collection, $attribute);
+
+        if ($ftsTable === null) {
+            $likeExpr = "{$aliasQuoted}.{$this->quote($attribute)} LIKE ? ESCAPE '\\'";
+            $likeBinding = '%' . $this->escapeWildcards($rawValue) . '%';
+
+            return [
+                'expression' => $method === Method::Search ? $likeExpr : "NOT ({$likeExpr})",
+                'bindings' => [$likeBinding],
+            ];
+        }
+
+        $subquery = "{$aliasQuoted}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
+
+        return [
+            'expression' => $method === Method::Search ? $subquery : "NOT ({$subquery})",
+            'bindings' => [$ftsValue],
+        ];
+    }
+
     protected function processException(PDOException $e): Exception
     {
         // Timeout

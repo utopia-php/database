@@ -1189,6 +1189,7 @@ abstract class SQL extends Adapter
         // clone allocation.
         $vectorQueries = [];
         $otherQueries = [];
+        $adapterFilterQueries = [];
         $hasAggregation = false;
         $hasJoins = false;
 
@@ -1197,6 +1198,12 @@ abstract class SQL extends Adapter
 
             if ($method->isVector()) {
                 $vectorQueries[] = $query;
+
+                continue;
+            }
+
+            if ($this->isAdapterFilterQuery($query)) {
+                $adapterFilterQueries[] = $query;
 
                 continue;
             }
@@ -1306,6 +1313,14 @@ abstract class SQL extends Adapter
 
         // Pass all queries (filters, aggregations, joins, groupBy, having) to the builder
         $builder->filter($queries);
+
+        // Adapter-specific filters (e.g. SQLite FTS5) compiled to raw WHERE.
+        foreach ($adapterFilterQueries as $query) {
+            $compiled = $this->compileAdapterFilter($query, $name, $alias);
+            if ($compiled !== null) {
+                $builder->whereRaw($compiled['expression'], $compiled['bindings']);
+            }
+        }
 
         // Permission subquery for primary table
         if ($this->authorization->getStatus()) {
@@ -4503,6 +4518,32 @@ abstract class SQL extends Adapter
      * @return array{expression: string, order: string, bindings: list<mixed>}|null
      */
     protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
+    {
+        return null;
+    }
+
+    /**
+     * Whether `$query` should bypass the upstream Builder pipeline and be
+     * compiled by the adapter directly via {@see compileAdapterFilter()}.
+     *
+     * Used by adapters whose query semantics aren't expressible through the
+     * Builder's typed methods — e.g. SQLite's FTS5 search needs an
+     * `IN (SELECT rowid FROM <fts_table> ...)` subquery that requires the
+     * collection name and metadata.
+     */
+    protected function isAdapterFilterQuery(Query $query): bool
+    {
+        return false;
+    }
+
+    /**
+     * Compile an adapter-specific filter to a raw WHERE expression with
+     * positional bindings. Called for queries flagged by
+     * {@see isAdapterFilterQuery()}. Returning null skips emission.
+     *
+     * @return array{expression: string, bindings: list<mixed>}|null
+     */
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias): ?array
     {
         return null;
     }

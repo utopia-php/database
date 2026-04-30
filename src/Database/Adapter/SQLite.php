@@ -45,6 +45,28 @@ class SQLite extends MariaDB
     private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
     private const MARIADB_LONGTEXT_BYTES = '4294967295';
 
+    /** Suffix appended to every FTS5 virtual table name created by this adapter. */
+    private const FTS_TABLE_SUFFIX = '_fts';
+
+    /** AFTER INSERT trigger suffix on the parent collection. */
+    private const FTS_TRIGGER_INSERT = 'ai';
+
+    /** AFTER DELETE trigger suffix on the parent collection. */
+    private const FTS_TRIGGER_DELETE = 'ad';
+
+    /** AFTER UPDATE trigger suffix on the parent collection. */
+    private const FTS_TRIGGER_UPDATE = 'au';
+
+    /**
+     * Memo of FTS5 table resolution keyed by `<collection>::<attribute>`,
+     * value is the matching FTS5 table name or null when no match exists.
+     * Avoids re-scanning sqlite_master + PRAGMA table_info on every search
+     * condition. Cleared whenever an FTS5 table is created or dropped.
+     *
+     * @var array<string, ?string>
+     */
+    private array $ftsTableCache = [];
+
     /**
      * When enabled, the adapter reports MariaDB-shaped column metadata,
      * advertises MariaDB-only capabilities (upserts, attribute resizing,
@@ -615,6 +637,10 @@ class SQLite extends MariaDB
      */
     protected function createFulltextIndex(string $collection, string $id, array $attributes): bool
     {
+        if (empty($attributes)) {
+            throw new DatabaseException('Fulltext index requires at least one attribute');
+        }
+
         $attributes = \array_map(fn (string $a) => $this->getInternalKeyForAttribute($a), $attributes);
         $ftsTable = $this->getFulltextTableName($collection, $attributes);
         $parentTable = "{$this->getNamespace()}_{$collection}";
@@ -626,7 +652,9 @@ class SQLite extends MariaDB
         ");
         $stmt->bindValue(':_table', $ftsTable);
         $stmt->execute();
-        if (!empty($stmt->fetch())) {
+        $exists = !empty($stmt->fetch());
+        $stmt->closeCursor();
+        if ($exists) {
             return true;
         }
 
@@ -650,22 +678,25 @@ class SQLite extends MariaDB
             $createSql = $this->trigger(Database::EVENT_INDEX_CREATE, $createSql);
             $this->getPDO()->prepare($createSql)->execute();
 
+            $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
-                CREATE TRIGGER `{$ftsTable}_ai` AFTER INSERT ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$insertSuffix}` AFTER INSERT ON `{$parentTable}` BEGIN
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
             $this->getPDO()->prepare($insertTrigger)->execute();
 
+            $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
-                CREATE TRIGGER `{$ftsTable}_ad` AFTER DELETE ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$deleteSuffix}` AFTER DELETE ON `{$parentTable}` BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                 END
             ";
             $this->getPDO()->prepare($deleteTrigger)->execute();
 
+            $updateSuffix = self::FTS_TRIGGER_UPDATE;
             $updateTrigger = "
-                CREATE TRIGGER `{$ftsTable}_au` AFTER UPDATE ON `{$parentTable}` BEGIN
+                CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE ON `{$parentTable}` BEGIN
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
@@ -680,6 +711,8 @@ class SQLite extends MariaDB
             $this->rollbackTransaction();
             throw $e;
         }
+
+        $this->ftsTableCache = [];
 
         return true;
     }
@@ -698,7 +731,16 @@ class SQLite extends MariaDB
         \sort($attrs);
         $key = \implode('_', $attrs);
 
-        return "{$this->getNamespace()}_{$this->tenant}_{$collection}_{$key}_fts";
+        return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
+    }
+
+    /**
+     * Common prefix for every FTS5 table belonging to `$collection`. Used by
+     * lookup helpers that scan sqlite_master with a LIKE pattern.
+     */
+    protected function getFulltextTablePrefix(string $collection): string
+    {
+        return "{$this->getNamespace()}_{$this->tenant}_{$this->filter($collection)}_";
     }
 
     /**
@@ -759,12 +801,12 @@ class SQLite extends MariaDB
      */
     protected function dropFulltextIndexById(string $collection, string $id): bool
     {
-        $prefix = "{$this->getNamespace()}_{$this->tenant}_{$collection}_";
         $stmt = $this->getPDO()->prepare("
             SELECT name FROM sqlite_master
-            WHERE type='table' AND name LIKE :_prefix AND name LIKE '%_fts'
+            WHERE type='table' AND name LIKE :_prefix AND name LIKE :_suffix
         ");
-        $stmt->bindValue(':_prefix', $prefix . '%');
+        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
+        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
         $stmt->execute();
         $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
         $stmt->closeCursor();
@@ -773,23 +815,39 @@ class SQLite extends MariaDB
             return false;
         }
 
-        // The index id isn't encoded in the FTS5 table name, so we can't
-        // match a single table from the id alone. Probe the index map: the
-        // caller has to pass the column set when creating, but on delete we
-        // only get the id. Fall back to dropping every matching FTS5 table
-        // when only one exists; otherwise leave the regular DROP INDEX
-        // path to error.
+        // The index id isn't encoded in the FTS5 table name (the name is
+        // keyed off the sorted attribute set). When a single FTS5 table
+        // exists for this collection, treat it as the unambiguous target;
+        // otherwise refuse and let the caller surface a clearer error.
         if (\count($tables) !== 1) {
             return false;
         }
 
         $ftsTable = $tables[0];
-        foreach (['ai', 'ad', 'au'] as $suffix) {
-            $this->getPDO()->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+        $triggerSuffixes = [
+            self::FTS_TRIGGER_INSERT,
+            self::FTS_TRIGGER_DELETE,
+            self::FTS_TRIGGER_UPDATE,
+        ];
+
+        // Atomic teardown: orphaned triggers without their FTS5 table will
+        // start failing on every parent write, so do not commit a partial
+        // drop if any step fails midway.
+        $this->startTransaction();
+        try {
+            foreach ($triggerSuffixes as $suffix) {
+                $this->getPDO()->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+            }
+            $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
+            $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+            $this->getPDO()->prepare($sql)->execute();
+            $this->commitTransaction();
+        } catch (PDOException $e) {
+            $this->rollbackTransaction();
+            throw $e;
         }
-        $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
-        $this->getPDO()->prepare($sql)->execute();
+
+        $this->ftsTableCache = [];
 
         return true;
     }
@@ -2776,25 +2834,20 @@ class SQLite extends MariaDB
         }
 
         $collection = $this->currentQueryCollection;
-        if ($collection === null) {
-            // No collection context — fall back to a LIKE scan so the query
-            // still returns plausible results instead of erroring out.
-            $binds[":{$placeholder}_0"] = '%' . $value . '%';
-            $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
-
-            return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
-        }
 
         // Look the FTS5 table up by attribute rather than computing the
         // name from the attribute alone — multi-column fulltext indexes
         // encode their full sorted attribute set in the table name, so
         // single-attribute searches against them would otherwise miss.
-        $ftsTable = $this->findFulltextTableForAttribute($collection, $attribute);
-        if ($ftsTable === null) {
-            $binds[":{$placeholder}_0"] = '%' . $value . '%';
-            $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
+        $ftsTable = $collection === null
+            ? null
+            : $this->findFulltextTableForAttribute($collection, $attribute);
 
-            return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
+        if ($ftsTable === null) {
+            // No collection context or no matching FTS5 table — fall back
+            // to a LIKE scan so the query still returns plausible results
+            // instead of erroring out.
+            return $this->buildSearchLikeFallback($attribute, $value, $alias, $placeholder, $method, $binds);
         }
 
         $binds[":{$placeholder}_0"] = $value;
@@ -2805,6 +2858,27 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Wrap a SEARCH/NOT_SEARCH query as a LIKE scan when no FTS5 table is
+     * available. Extracted so the no-collection-context and no-matching-FTS
+     * branches share the same shape.
+     *
+     * @param array<string,mixed> $binds
+     */
+    private function buildSearchLikeFallback(
+        string $attribute,
+        string $value,
+        string $alias,
+        string $placeholder,
+        string $method,
+        array &$binds,
+    ): string {
+        $binds[":{$placeholder}_0"] = '%' . $value . '%';
+        $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0";
+
+        return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
+    }
+
+    /**
      * Find the FTS5 virtual table on `$collection` that covers `$attribute`,
      * or null if none exists. Resolves the multi-column case where the
      * stored table name is keyed off the full sorted attribute set and
@@ -2812,14 +2886,19 @@ class SQLite extends MariaDB
      */
     protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
     {
-        $prefix = "{$this->getNamespace()}_{$this->tenant}_{$collection}_";
+        $cacheKey = "{$collection}::{$attribute}";
+        if (\array_key_exists($cacheKey, $this->ftsTableCache)) {
+            return $this->ftsTableCache[$cacheKey];
+        }
+
         $stmt = $this->getPDO()->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
               AND name LIKE :_prefix
-              AND name LIKE '%_fts'
+              AND name LIKE :_suffix
         ");
-        $stmt->bindValue(':_prefix', $prefix . '%');
+        $stmt->bindValue(':_prefix', $this->getFulltextTablePrefix($collection) . '%');
+        $stmt->bindValue(':_suffix', '%' . self::FTS_TABLE_SUFFIX);
         $stmt->execute();
         $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
         $stmt->closeCursor();
@@ -2831,12 +2910,12 @@ class SQLite extends MariaDB
             $info->closeCursor();
             foreach ($cols as $col) {
                 if (($col['name'] ?? null) === $attribute) {
-                    return $table;
+                    return $this->ftsTableCache[$cacheKey] = $table;
                 }
             }
         }
 
-        return null;
+        return $this->ftsTableCache[$cacheKey] = null;
     }
 
     /**

@@ -593,6 +593,41 @@ abstract class SQL extends Adapter
         $selections = $this->getAttributeSelections($queries);
         $alias = Query::DEFAULT_ALIAS;
 
+        // Fast path: single-row lookup by primary key with no projection,
+        // no shared-tenant filter, and no row lock. This is by far the most
+        // common shape (metadata fetch, primary cache miss, etc.); skip the
+        // builder pipeline and go directly to a parameterised SELECT.
+        if (
+            empty($selections)
+            && ! $forUpdate
+            && ! ($this->sharedTables && $this->tenant !== null)
+        ) {
+            $tableExpr = $this->getSQLTable($name);
+            $aliasQuoted = $this->quote($alias);
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE `_uid` = :_uid";
+
+            try {
+                /** @var \PDOStatement|PDOStatementProxy $stmt */
+                $stmt = $this->getPDO()->prepare($sql);
+                $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+                $this->execute($stmt);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+
+            /** @var array<string, mixed>|false $row */
+            $row = $stmt->fetch();
+            $stmt->closeCursor();
+
+            if (! is_array($row) || empty($row)) {
+                return new Document([]);
+            }
+
+            $this->remapRow($row);
+
+            return new Document($row);
+        }
+
         $builder = $this->newBuilder($name, $alias);
 
         if (! empty($selections) && ! \in_array('*', $selections)) {
@@ -1088,6 +1123,50 @@ abstract class SQL extends Adapter
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
+        // Fast path: trivial SELECT * with default ORDER BY _id and LIMIT/OFFSET.
+        // Triggered when there are no filters/joins/aggregations/cursor queries,
+        // a single default order attribute, ascending, no shared tenant, and no
+        // active permission filter. This is the common "list documents" case
+        // and bypasses Builder allocation entirely.
+        if (
+            empty($queries)
+            && empty($cursor)
+            && ! $this->authorization->getStatus()
+            && ! ($this->sharedTables && $this->tenant !== null)
+            && (count($orderAttributes) === 1)
+            && ($orderAttributes[0] === '$sequence')
+            && (empty($orderTypes) || ($orderTypes[0] ?? OrderDirection::Asc) === OrderDirection::Asc)
+            && $cursorDirection === CursorDirection::After
+        ) {
+            $internalOrder = $this->quote($this->getInternalKeyForAttribute('$sequence'));
+            $tableExpr = $this->getSQLTable($name);
+            $aliasQuoted = $this->quote($alias);
+            $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
+            $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($limit !== null ? ' OFFSET 0' : '');
+
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
+
+            try {
+                /** @var \PDOStatement|PDOStatementProxy $stmt */
+                $stmt = $this->getPDO()->prepare($sql);
+                $this->execute($stmt);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+
+            /** @var array<int, array<string, mixed>> $rows */
+            $rows = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            $documents = [];
+            foreach ($rows as $row) {
+                $this->remapRow($row);
+                $documents[] = new Document($row);
+            }
+
+            return $documents;
+        }
+
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         // Single pass partitioning: pull vector queries out for ORDER BY and
@@ -1454,6 +1533,33 @@ abstract class SQL extends Adapter
             }
         }
 
+        // Fast path: no filters, no permission subquery, no shared-tenant
+        // filter, no max. The Builder produces ~30 lines of SQL; bypassing
+        // it for the common "count all rows" case dodges thousands of PHP
+        // ops per call.
+        if (
+            empty($otherQueries)
+            && $max === null
+            && ! $this->authorization->getStatus()
+            && ! ($this->sharedTables && $this->tenant !== null)
+        ) {
+            $sql = "SELECT COUNT(1) AS `sum` FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+
+            try {
+                /** @var \PDOStatement|PDOStatementProxy $stmt */
+                $stmt = $this->getPDO()->prepare($sql);
+                $this->execute($stmt);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+
+            /** @var array<string, mixed>|false $row */
+            $row = $stmt->fetch();
+            $stmt->closeCursor();
+
+            return is_array($row) && is_numeric($row['sum'] ?? null) ? (int) $row['sum'] : 0;
+        }
+
         // Build inner query: SELECT 1 FROM table WHERE ... LIMIT
         $innerBuilder = $this->newBuilder($name, $alias);
         $innerBuilder->selectRaw('1');
@@ -1523,6 +1629,36 @@ abstract class SQL extends Adapter
             if (! $query->getMethod()->isVector()) {
                 $otherQueries[] = $query;
             }
+        }
+
+        // Fast path: trivial SUM(column) over the entire collection. Bypass
+        // the Builder's full SELECT/FROM/WHERE pipeline.
+        if (
+            empty($otherQueries)
+            && $max === null
+            && ! $this->authorization->getStatus()
+            && ! ($this->sharedTables && $this->tenant !== null)
+        ) {
+            $sql = "SELECT SUM({$this->quote($attribute)}) AS `sum` FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+
+            try {
+                /** @var \PDOStatement|PDOStatementProxy $stmt */
+                $stmt = $this->getPDO()->prepare($sql);
+                $this->execute($stmt);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+
+            /** @var array<string, mixed>|false $row */
+            $row = $stmt->fetch();
+            $stmt->closeCursor();
+            $sumVal = is_array($row) ? ($row['sum'] ?? 0) : 0;
+
+            if (is_numeric($sumVal)) {
+                return str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
+            }
+
+            return 0;
         }
 
         // Build inner query: SELECT attribute FROM table WHERE ... LIMIT

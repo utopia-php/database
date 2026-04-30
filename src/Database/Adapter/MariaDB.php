@@ -827,10 +827,21 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         return 25;
     }
 
+    /** Last value pushed to MariaDB session var max_statement_time, in seconds. */
+    private float $appliedMaxStatementTime = 0.0;
+
     protected function execute(mixed $stmt): bool
     {
-        $seconds = $this->timeout > 0 ? $this->timeout / 1000 : 0;
-        $this->getPDO()->exec("SET max_statement_time = " . (float) $seconds);
+        $seconds = $this->timeout > 0 ? $this->timeout / 1000.0 : 0.0;
+
+        // MariaDB inherits the session-level max_statement_time across
+        // statements. Only push it when the desired value changes; an
+        // unconditional SET per query doubles the round-trip count for
+        // every hot-path read.
+        if ($seconds !== $this->appliedMaxStatementTime) {
+            $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
+            $this->appliedMaxStatementTime = $seconds;
+        }
 
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();

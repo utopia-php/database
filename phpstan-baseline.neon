@@ -333,7 +333,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
 			identifier: method.notFound
-			count: 19
+			count: 23
 			path: src/Database/Adapter/SQL.php
 
 		-

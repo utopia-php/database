@@ -64,6 +64,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             Capability::TrigramIndex,
             Capability::POSIX,
             Capability::ObjectIndexes,
+            Capability::Upserts,
         ]);
     }
 

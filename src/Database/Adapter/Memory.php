@@ -2028,6 +2028,11 @@ class Memory extends Adapter
         return false;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForVectors(): bool
     {
         return false;

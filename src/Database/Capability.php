@@ -50,6 +50,8 @@ enum Capability
     case TrigramIndex;
     case UniqueIndex;
     case UpdateLock;
+    case Upserts;
+    case UpsertOnUniqueIndex;
     case Vectors;
     case Joins;
     case Aggregations;

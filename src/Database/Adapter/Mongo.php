@@ -136,6 +136,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::BatchCreateAttributes,
             Capability::Hostname,
             Capability::PCRE,
+            Capability::Upserts,
         ]);
     }
 

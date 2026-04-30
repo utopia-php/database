@@ -66,6 +66,8 @@ class SQLite extends SQL
             Capability::QueryContains,
             Capability::Hostname,
             Capability::AttributeResizing,
+            Capability::Upserts,
+            Capability::UpsertOnUniqueIndex,
         ];
 
         return array_merge(
@@ -678,10 +680,6 @@ class SQLite extends SQL
         return false;
     }
 
-    /**
-     * Get the maximum length for unique document IDs.
-     *
-     * SQLite uses VARCHAR(36) for the _uid column, unlike other SQL adapters
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html

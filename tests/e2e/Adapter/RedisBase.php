@@ -21,10 +21,24 @@ abstract class RedisBase extends Base
     public static ?Database $database = null;
     public static ?Redis $redisClient = null;
     public static string $redisNamespace = '';
+    public static ?Redis $cacheRedisClient = null;
+    /** @var array<int, string> Glob patterns the run owns, scrubbed in tearDownAfterClass. */
+    protected static array $cacheKeyPatterns = [];
 
     public static function getAdapterName(): string
     {
         return 'redis';
+    }
+
+    /**
+     * Subclasses may override to flip shared-tables/tenant on. Called once
+     * before `create()` so the configured namespace and tenancy mode reach
+     * the underlying adapter from the start — patching them after-the-fact
+     * leaks keys under the original namespace.
+     */
+    protected function configureDatabase(Database $database): void
+    {
+        // Default: per-run unique namespace, no shared tables.
     }
 
     public function getDatabase(): Database
@@ -44,9 +58,14 @@ abstract class RedisBase extends Base
         $client->connect($host, $port);
         self::$redisClient = $client;
 
+        $cacheHost = \getenv('CACHE_REDIS_HOST') ?: 'redis';
+        $cachePort = (int) (\getenv('CACHE_REDIS_PORT') ?: 6379);
         $cacheRedis = new Redis();
-        $cacheRedis->connect('redis', 6379);
-        $cacheRedis->flushAll();
+        $cacheRedis->connect($cacheHost, $cachePort);
+        self::$cacheRedisClient = $cacheRedis;
+        // Contract.md forbids FLUSHALL/FLUSHDB — the runner shares the
+        // cache instance across workers. Cache keys are scrubbed at
+        // tearDownAfterClass via the namespace-scoped scan below.
         $cache = new Cache(new RedisCacheAdapter($cacheRedis));
 
         $adapter = new RedisAdapter($client);
@@ -58,6 +77,15 @@ abstract class RedisBase extends Base
             ->setDatabase('utopiaTests')
             ->setNamespace(self::$redisNamespace);
 
+        $this->configureDatabase($database);
+
+        // Track every key pattern this run owns so tearDownAfterClass can
+        // scrub both the adapter's keyspace and the cache's keys without
+        // a global FLUSH. The configureDatabase() call above may have
+        // mutated the namespace (shared-tables uses ''), so capture the
+        // post-configure namespace too.
+        self::$cacheKeyPatterns = self::buildKeyPatterns(self::$redisNamespace, $database->getNamespace(), $database->getDatabase());
+
         if ($database->exists()) {
             $database->delete();
         }
@@ -65,6 +93,30 @@ abstract class RedisBase extends Base
         $database->create();
 
         return self::$database = $database;
+    }
+
+    /**
+     * Build SCAN MATCH patterns covering both the adapter keyspace and the
+     * cache keyspace for the namespaces this test class actually wrote to.
+     * The two-namespace form (initial + post-configure) covers the
+     * shared-tables case where setNamespace('') is applied before create().
+     *
+     * @return array<int, string>
+     */
+    protected static function buildKeyPatterns(string $initialNamespace, string $effectiveNamespace, string $database): array
+    {
+        $patterns = [];
+        $namespaces = \array_unique([$initialNamespace, $effectiveNamespace]);
+        foreach ($namespaces as $namespace) {
+            // Adapter writes: `KEY_PREFIX:{namespace}:{database}:*`. Empty
+            // namespace produces a literal double-colon, which is a valid
+            // SCAN pattern.
+            $patterns[] = RedisAdapter::KEY_PREFIX . ':' . $namespace . ':' . $database . ':*';
+            // Cache writes go through Utopia\Cache\Adapter\Redis which
+            // composes its own keys; scope by namespace+database too.
+            $patterns[] = $namespace . ':' . $database . ':*';
+        }
+        return \array_values(\array_unique($patterns));
     }
 
     protected function deleteColumn(string $collection, string $column): bool
@@ -81,27 +133,37 @@ abstract class RedisBase extends Base
     public static function tearDownAfterClass(): void
     {
         try {
-            if (self::$redisNamespace !== '' && self::$redisClient instanceof Redis) {
-                $client = self::$redisClient;
-                $iterator = null;
-                // Adapter-produced keys live under `KEY_PREFIX:{ns}:...`. The
-                // SCAN pattern must include the prefix or test cleanup leaks
-                // every key written during the run.
-                $pattern = RedisAdapter::KEY_PREFIX . ':' . self::$redisNamespace . ':*';
-                while (($keys = $client->scan($iterator, $pattern, 500)) !== false) {
-                    if (\is_array($keys) && \count($keys) > 0) {
-                        $client->del($keys);
-                    }
-                    if ($iterator === 0) {
-                        break;
-                    }
-                }
+            if (self::$cacheKeyPatterns !== [] && self::$redisClient instanceof Redis) {
+                self::scrubKeys(self::$redisClient, self::$cacheKeyPatterns);
+            }
+            if (self::$cacheKeyPatterns !== [] && self::$cacheRedisClient instanceof Redis) {
+                self::scrubKeys(self::$cacheRedisClient, self::$cacheKeyPatterns);
             }
         } finally {
             self::$database = null;
             self::$redisClient = null;
+            self::$cacheRedisClient = null;
             self::$redisNamespace = '';
+            self::$cacheKeyPatterns = [];
             parent::tearDownAfterClass();
+        }
+    }
+
+    /**
+     * @param array<int, string> $patterns
+     */
+    private static function scrubKeys(Redis $client, array $patterns): void
+    {
+        foreach ($patterns as $pattern) {
+            $iterator = null;
+            while (($keys = $client->scan($iterator, $pattern, 500)) !== false) {
+                if (\is_array($keys) && \count($keys) > 0) {
+                    $client->del($keys);
+                }
+                if ($iterator === 0) {
+                    break;
+                }
+            }
         }
     }
 }

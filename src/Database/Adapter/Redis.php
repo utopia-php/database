@@ -11,9 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -21,15 +19,9 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * Redis-backed adapter mirroring Memory adapter's surface.
+ * Redis-backed adapter mirroring the Memory adapter's surface.
  *
- * Wave-2 architects fill in the body of each marked method group below;
- * the surface, helper signatures, constants, and contract are locked in
- * Wave 1 and must not be modified by downstream architects. If you find
- * a contract gap, escalate via CONTRACT_GAP.md instead of editing this
- * file's locked regions.
- *
- * Storage key schema:
+ * Storage key schema (every key is prefixed with `KEY_PREFIX:`):
  *
  *     {ns}                      = getNamespace()
  *     {db}                      = current setDatabase() value
@@ -42,42 +34,44 @@ use Utopia\Database\Validator\Authorization;
  *     {ns}:{db}:meta:{col}                         | HASH | fields: schema, attrs, indexes, docCount, sizeBytes
  *     {ns}:{db}:doc:{col}:{id}                     | STRING | JSON-encoded Document
  *     {ns}:{db}:idx:{col}                          | SET  | doc IDs in collection (for SCAN/list)
- *     {ns}:{db}:perm:{col}:r/w/u/d:{role}          | SET  | doc IDs by action+role
+ *     {ns}:{db}:perm:{col}:{r|c|u|d|w}:{role}      | SET  | doc IDs by action+role (non-shared)
+ *     {ns}:{db}:perm:t:{tenant}:{col}:{letter}:{role} | SET | shared-tables variant
  *     {ns}:{db}:perm:doc:{col}:{id}                | HASH | role -> csv("read,update,delete")
- *     {ns}:{db}:tenants:{col}:{tenant}             | SET  | doc IDs filtered by tenant (shared mode)
- *     {ns}:{db}:journal:{txid}                     | LIST | WAL entries for rollback (T56 owns)
+ *     {ns}:{db}:perm:t:{tenant}:doc:{col}:{id}     | HASH | shared-tables variant
+ *     {ns}:{db}:tenants:{col}:{tenant}             | SET  | doc IDs filtered by tenant
  *
- * DSN format: redis://[user:pass@]host:port[/db]
- * No query parameters; the path segment is the namespace, defaulting
- * to "utopia" when the segment is omitted.
+ * Transaction model: `tx()` is a single-shot wrapper that surfaces
+ * `\RedisException` as `TransactionException`. There is NO retry, no
+ * `WATCH`/`MULTI`/`EXEC`, and no automatic OCC — retrying would replay
+ * journal side-effects (duplicate `INCR` on sequence keys, double
+ * pipelined SADDs). Real OCC is a follow-up; `getSupportForTransactionRetries()`
+ * returns `false` so the shared trait's OCC tests stay off. Pessimistic
+ * update locks are intentionally unsupported.
  *
- * Transaction model: optimistic via WATCH/MULTI/EXEC retry (max 3
- * retries with 10/50/250 ms back-off). Pessimistic update locks are
- * intentionally unsupported; getSupportForUpdateLock returns false.
- *
- * Rollback contract: rollbackJournal() MUST use raw \Redis client
- * commands only — never public adapter methods, which would re-enter
- * the journal and infinitely recurse. T56 owns the implementation.
- *
- * Wave-2 architects throw the imported exception types from their
- * implementations:
- *
- * @see DuplicateException Raised on unique-index collisions in T20/T30/T40.
- * @see NotFoundException Raised when a document or collection is missing.
- * @see OrderException Raised by T40 on invalid order/cursor combinations.
- * @see QueryException Raised by T40 on malformed queries.
- * @see TimeoutException Raised by T56 on transaction timeout escalation.
- * @see TransactionException Raised by T56 on commit/rollback failures.
- * @see Authorization Used by T50 when applying permission filters.
- * @see Permission Used by T50 when serialising permission strings.
- * @see ID Used by T30 when generating new document identifiers.
- * @see Query Argument type for T40 evaluateQueries.
+ * Rollback contract: `rollbackJournal()` MUST use raw `\Redis` client
+ * commands only — calling a public adapter method re-enters `journal()`
+ * and recurses infinitely. All inverses route through `rawDeleteDoc()`
+ * and `rawRestoreDoc()`.
  */
 class Redis extends Adapter
 {
     public const string KEY_PREFIX = 'utopia';
 
     public const string SEP = ':';
+
+    /**
+     * Default SCAN MATCH batch size — also the variadic DEL chunk size
+     * used by collection purge. Aligned with the test harness teardown
+     * documented in Contract.md.
+     */
+    private const int SCAN_BATCH_SIZE = 500;
+
+    /**
+     * Maximum depth for `json_decode` when reading document payloads and
+     * meta-hash fields. Matches the PHP default; hoisted so the value is
+     * named once instead of repeated 8+ times across the file.
+     */
+    private const int JSON_DECODE_DEPTH = 512;
 
     private RedisClient $client;
 
@@ -110,7 +104,7 @@ class Redis extends Adapter
      */
     private function ns(): string
     {
-        return self::KEY_PREFIX . self::SEP . $this->getNamespace() . self::SEP . $this->getDatabase();
+        return $this->nsFor($this->getNamespace(), $this->getDatabase());
     }
 
     /**
@@ -133,7 +127,7 @@ class Redis extends Adapter
     {
         try {
             /** @var array<string, mixed> $data */
-            $data = \json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+            $data = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw new DatabaseException('Document decode failed: ' . $e->getMessage(), 0, $e);
         }
@@ -1311,7 +1305,7 @@ class Redis extends Adapter
             return [];
         }
         /** @var array<int, array<string, mixed>> $decoded */
-        $decoded = \json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
 
         return \array_values($decoded);
     }
@@ -1361,16 +1355,36 @@ class Redis extends Adapter
 
         /** @var array<int, string>|false $docIds */
         $docIds = $client->sMembers($idxKey);
-        if (\is_array($docIds)) {
+        if (\is_array($docIds) && $docIds !== []) {
+            // Variadic DEL keeps the per-doc cleanup in O(batch / SCAN_BATCH)
+            // round trips instead of N. Permission HASH key here uses the
+            // non-shared layout; the shared-tables perm:t:* sweep below
+            // covers the tenant-bucketed variant.
+            $keys = [];
             foreach ($docIds as $docId) {
-                $client->del(
-                    $this->key($prefix, 'doc', $collection, $docId),
-                    $this->key($prefix, 'perm', 'doc', $collection, $docId),
-                );
+                $keys[] = $this->key($prefix, 'doc', $collection, $docId);
+                $keys[] = $this->key($prefix, 'perm', 'doc', $collection, $docId);
+                if (\count($keys) >= self::SCAN_BATCH_SIZE) {
+                    $client->del(...$keys);
+                    $keys = [];
+                }
+            }
+            if ($keys !== []) {
+                $client->del(...$keys);
             }
         }
 
+        // Non-shared-tables perm-set sweep. permKey() emits this layout when
+        // shared tables is OFF: `{prefix}:perm:{col}:{letter}:{role}`.
         $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection) . self::SEP . '*');
+        // Shared-tables perm sweep. permKey()/permDocKey() emit
+        // `{prefix}:perm:t:{tenant}:{col}:...` and
+        // `{prefix}:perm:t:{tenant}:doc:{col}:...` respectively. The non-shared
+        // pattern above does NOT match these, so without this sweep dropping a
+        // collection under shared tables leaves stale role/doc HASH keys
+        // behind — and a recreated collection inherits stale grants.
+        $this->deleteByPattern($client, $prefix . self::SEP . 'perm' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection . self::SEP . '*');
+        $this->deleteByPattern($client, $prefix . self::SEP . 'perm' . self::SEP . 't' . self::SEP . '*' . self::SEP . 'doc' . self::SEP . $collection . self::SEP . '*');
         $this->deleteByPattern($client, $this->key($prefix, 'tenants', $collection) . self::SEP . '*');
 
         $client->del($metaKey, $idxKey, $seqKey);
@@ -1386,7 +1400,7 @@ class Redis extends Adapter
         $cursor = null;
         do {
             /** @var array<int, string>|false $batch */
-            $batch = $client->scan($cursor, $pattern, 500);
+            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
             if (\is_array($batch) && $batch !== []) {
                 $client->del(...$batch);
             }
@@ -1428,7 +1442,7 @@ class Redis extends Adapter
         $cursor = null;
         do {
             /** @var array<int, string>|false $batch */
-            $batch = $this->client->scan($cursor, $permPrefix, 500);
+            $batch = $this->client->scan($cursor, $permPrefix, self::SCAN_BATCH_SIZE);
             if (\is_array($batch)) {
                 foreach ($batch as $key) {
                     $total += $this->measureKey($key);
@@ -1506,6 +1520,21 @@ class Redis extends Adapter
         }
 
         $document = $this->decode($payload);
+
+        // Mirror the loadCollectionDocuments tenant filter: under shared
+        // tables a doc key written for tenant A must not surface for tenant
+        // B. Permission filtering can't catch this on the single-doc path
+        // because the caller already knows the id. METADATA collections
+        // are exempt — they intentionally serve null-tenant rows to every
+        // tenant.
+        if ($this->getSharedTables()) {
+            $rowTenant = $document->getAttribute('$tenant');
+            $tenant = $this->getTenant();
+            $allowNullTenant = $col === Database::METADATA && $rowTenant === null;
+            if (! $allowNullTenant && $rowTenant !== $tenant) {
+                return new Document([]);
+            }
+        }
 
         $selections = [];
         foreach ($queries as $query) {
@@ -2299,7 +2328,7 @@ class Redis extends Adapter
         if (! \is_string($raw) || $raw === '') {
             return [];
         }
-        $decoded = \json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
         if (! \is_array($decoded)) {
             return [];
         }
@@ -2352,9 +2381,9 @@ class Redis extends Adapter
 
             if ($sharedTables) {
                 $rowTenant = $document->getAttribute('$tenant');
-                if ($allowNullTenant && $rowTenant === null) {
-                    // visible
-                } elseif ($rowTenant !== $tenant) {
+                $crossTenant = $rowTenant !== $tenant
+                    && ! ($allowNullTenant && $rowTenant === null);
+                if ($crossTenant) {
                     continue;
                 }
             }

@@ -1000,6 +1000,232 @@ class Redis extends Adapter
         return $value;
     }
 
+    /**
+     * Surface relationship attributes registered on the collection's meta.attrs
+     * as null when the document does not carry them — mirrors MariaDB selecting
+     * a `DEFAULT NULL` column even when no row has set it (and Memory's
+     * `documentToRow` null-surface pass).
+     *
+     * METADATA is exempt: relationship attributes for user collections are
+     * nested inside the metadata row's `attributes` payload, not stored as
+     * top-level keys. Surfacing nulls there would clobber that nested array.
+     *
+     * @phpstan-ignore method.unused (wired up by T3 read-path call sites)
+     */
+    private function surfaceRelationshipAttributes(string $collection, Document $document): Document
+    {
+        if ($collection === Database::METADATA) {
+            return $document;
+        }
+
+        $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+        $attributes = $this->readAttributesField($this->client, $metaKey);
+        $relationshipKeys = $this->extractRelationshipKeys($attributes);
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        return $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
+    }
+
+    /**
+     * Loop-friendly companion to `surfaceRelationshipAttributes`. Callers that
+     * iterate large result sets (e.g. `find()` / `loadCollectionDocuments`)
+     * read meta.attrs once, derive the relationship key list via
+     * `extractRelationshipKeys`, and pass it here per document — avoiding N
+     * round trips to Redis for the same meta hash.
+     *
+     * @param array<int, string> $relationshipKeys
+     */
+    private function surfaceRelationshipAttributesUsing(array $relationshipKeys, Document $document): Document
+    {
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        $payload = $document->getArrayCopy();
+        foreach ($relationshipKeys as $key) {
+            if (! \array_key_exists($key, $payload)) {
+                $document->setAttribute($key, null);
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * Extract the list of relationship attribute keys from a decoded
+     * meta.attrs records array. Returned as a positional list so callers can
+     * iterate without extra `array_keys` calls.
+     *
+     * @param array<int, array<string, mixed>> $attributes
+     * @return array<int, string>
+     */
+    private function extractRelationshipKeys(array $attributes): array
+    {
+        $keys = [];
+        foreach ($attributes as $attribute) {
+            if (($attribute['type'] ?? null) !== Database::VAR_RELATIONSHIP) {
+                continue;
+            }
+            $key = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $keys[] = $key;
+        }
+
+        return $keys;
+    }
+
+    /**
+     * Rename a top-level field across every document in a collection. Mirrors
+     * Memory's `renameDocumentField`. Used by `updateRelationship` to migrate
+     * stored payloads when a relationship key is renamed.
+     *
+     * Schema-level (non-journalled): same convention as `createAttribute` /
+     * `renameAttribute` — schema mutations are not transactional and therefore
+     * do not register inverse entries with `journal()`. The transaction
+     * wrapper is used solely to surface `\RedisException` as
+     * `TransactionException`.
+     *
+     * @phpstan-ignore method.unused (wired up by T2 updateRelationship)
+     */
+    private function renameDocumentField(string $collection, string $oldKey, string $newKey): void
+    {
+        $collection = $this->filter($collection);
+        $oldKey = $this->filter($oldKey);
+        $newKey = $this->filter($newKey);
+
+        if ($oldKey === $newKey) {
+            return;
+        }
+
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
+
+        $this->tx(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->key($this->ns(), 'doc', $collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($oldKey, $decoded)) {
+                    continue;
+                }
+
+                $decoded[$newKey] = $decoded[$oldKey];
+                unset($decoded[$oldKey]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    /**
+     * Remove a top-level field from every document in a collection. Mirrors
+     * Memory's `dropDocumentField`. Used by `deleteRelationship` to scrub
+     * stored payloads when a relationship column is dropped.
+     *
+     * Same non-journalled schema-op contract as `renameDocumentField`.
+     *
+     * @phpstan-ignore method.unused (wired up by T2 deleteRelationship)
+     */
+    private function dropDocumentField(string $collection, string $field): void
+    {
+        $collection = $this->filter($collection);
+        $field = $this->filter($field);
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
+
+        $this->tx(function (RedisClient $client) use ($collection, $field, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->key($this->ns(), 'doc', $collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($field, $decoded)) {
+                    continue;
+                }
+
+                unset($decoded[$field]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    /**
+     * Resolve the junction collection name for an M2M relationship. Mirrors
+     * `Database::getJunctionCollection` — the junction is named after the
+     * parent/child sequence pair (`_{parent}_{child}` for the parent side,
+     * reversed for the child side).
+     *
+     * Reads the METADATA collection's docs for both sides and extracts each
+     * `$sequence`. Returns null when either METADATA row is missing or has
+     * no sequence — callers treat that as a no-op (skip the rename).
+     *
+     * @phpstan-ignore method.unused (wired up by T2 updateRelationship M2M branch)
+     */
+    private function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string
+    {
+        $collectionDoc = $this->loadMetadataDocument($collection);
+        $relatedDoc = $this->loadMetadataDocument($relatedCollection);
+        if ($collectionDoc === null || $relatedDoc === null) {
+            return null;
+        }
+
+        $collectionSequence = $collectionDoc->getSequence();
+        $relatedSequence = $relatedDoc->getSequence();
+        if ($collectionSequence === null || $relatedSequence === null || $collectionSequence === '' || $relatedSequence === '') {
+            return null;
+        }
+
+        return $side === Database::RELATION_SIDE_PARENT
+            ? '_' . $collectionSequence . '_' . $relatedSequence
+            : '_' . $relatedSequence . '_' . $collectionSequence;
+    }
+
+    /**
+     * Read a single METADATA document directly from the doc key, bypassing
+     * the public `getDocument` path so this helper can be called from inside
+     * schema operations (which build a Document collection lazily).
+     */
+    private function loadMetadataDocument(string $collection): ?Document
+    {
+        $docKey = $this->key($this->ns(), 'doc', Database::METADATA, \strtolower($this->filter($collection)));
+        $payload = $this->client->get($docKey);
+        if (! \is_string($payload) || $payload === '') {
+            return null;
+        }
+
+        return $this->decode($payload);
+    }
+
     // === @architect:T20 owns: schema + collection + attribute ops ===
 
     public function create(string $name): bool

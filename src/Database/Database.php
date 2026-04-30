@@ -1536,30 +1536,38 @@ class Database
     {
         /** @var array<array<string, mixed>|Document> $allAttributes */
         $allAttributes = $collection->getAttribute('attributes', []);
-        $attributes = \array_filter(
-            $allAttributes,
-            fn (array|Document $attribute) => $attribute['type'] !== ColumnType::Relationship->value
-        );
 
-        $relationships = \array_filter(
-            $allAttributes,
-            fn (array|Document $attribute) => $attribute['type'] === ColumnType::Relationship->value
-        );
+        // Single-pass partition into relationships vs regular attributes.
+        // Replaces two array_filter passes that each walked the full list.
+        $attributes = [];
+        $relationships = [];
+        $relationshipType = ColumnType::Relationship->value;
+        foreach ($allAttributes as $attribute) {
+            if (($attribute['type'] ?? '') === $relationshipType) {
+                $relationships[] = $attribute;
+            } else {
+                $attributes[] = $attribute;
+            }
+        }
 
         $filteredValue = [];
 
-        foreach ($relationships as $relationship) {
-            /** @var string $key */
-            $key = $relationship['$id'] ?? '';
+        if (! empty($relationships)) {
+            $documentArray = (array) $document;
+            foreach ($relationships as $relationship) {
+                /** @var string $key */
+                $key = $relationship['$id'] ?? '';
+                $filteredKey = $this->adapter->filter($key);
 
-            if (
-                \array_key_exists($key, (array) $document)
-                || \array_key_exists($this->adapter->filter($key), (array) $document)
-            ) {
-                $value = $document->getAttribute($key);
-                $value ??= $document->getAttribute($this->adapter->filter($key));
-                $document->removeAttribute($this->adapter->filter($key));
-                $document->setAttribute($key, $value);
+                if (
+                    \array_key_exists($key, $documentArray)
+                    || \array_key_exists($filteredKey, $documentArray)
+                ) {
+                    $value = $document->getAttribute($key);
+                    $value ??= $document->getAttribute($filteredKey);
+                    $document->removeAttribute($filteredKey);
+                    $document->setAttribute($key, $value);
+                }
             }
         }
 
@@ -1567,24 +1575,30 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $hasSelections = ! empty($selections);
+        $selectAll = $hasSelections && \in_array('*', $selections, true);
+        $selectionsMap = ($hasSelections && ! $selectAll)
+            ? \array_fill_keys($selections, true)
+            : null;
+
         foreach ($attributes as $attribute) {
             /** @var string $key */
             $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
+            if ($key === '$permissions') {
+                continue;
+            }
+
             $array = $attribute['array'] ?? false;
             /** @var array<string> $filters */
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
-            if ($key === '$permissions') {
-                continue;
-            }
-
             if (\is_null($value)) {
-                $value = $document->getAttribute($this->adapter->filter($key));
+                $filteredKey = $this->adapter->filter($key);
+                $value = $document->getAttribute($filteredKey);
 
                 if (! \is_null($value)) {
-                    $document->removeAttribute($this->adapter->filter($key));
+                    $document->removeAttribute($filteredKey);
                 }
             }
 
@@ -1596,46 +1610,52 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
+            // Reverse filter application without allocating a new array
+            // for each document. Walking the array backwards avoids
+            // array_reverse() per attribute per document.
+            $filterCount = \count($filters);
+
             /** @var array<int|string, mixed> $value */
             foreach ($value as $index => $node) {
-                foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+                for ($i = $filterCount - 1; $i >= 0; $i--) {
+                    $node = $this->decodeAttribute($filters[$i], $node, $document, $key);
                 }
                 $value[$index] = $node;
             }
 
-            $filteredValue[$key] = ($array) ? $value : $value[0];
+            $resolved = $array ? $value : $value[0];
+            $filteredValue[$key] = $resolved;
 
             if (
-                empty($selections)
-                || \in_array($key, $selections)
-                || \in_array('*', $selections)
+                ! $hasSelections
+                || $selectAll
+                || isset($selectionsMap[$key])
             ) {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+                $document->setAttribute($key, $resolved);
             }
         }
 
-        $hasRelationshipSelections = false;
-        if (! empty($selections)) {
+        if ($hasSelections && ! $selectAll) {
+            $hasRelationshipSelections = false;
             foreach ($selections as $selection) {
                 if (\str_contains($selection, '.')) {
                     $hasRelationshipSelections = true;
                     break;
                 }
             }
-        }
 
-        if ($hasRelationshipSelections && ! empty($selections) && ! \in_array('*', $selections)) {
-            foreach ($allAttributes as $attribute) {
-                /** @var string $key */
-                $key = $attribute['$id'] ?? '';
+            if ($hasRelationshipSelections) {
+                foreach ($allAttributes as $attribute) {
+                    /** @var string $key */
+                    $key = $attribute['$id'] ?? '';
 
-                if ($attribute['type'] === ColumnType::Relationship->value || $key === '$permissions') {
-                    continue;
-                }
+                    if (($attribute['type'] ?? '') === $relationshipType || $key === '$permissions') {
+                        continue;
+                    }
 
-                if (! in_array($key, $selections) && isset($filteredValue[$key])) {
-                    $document->setAttribute($key, $filteredValue[$key]);
+                    if (! isset($selectionsMap[$key]) && isset($filteredValue[$key])) {
+                        $document->setAttribute($key, $filteredValue[$key]);
+                    }
                 }
             }
         }

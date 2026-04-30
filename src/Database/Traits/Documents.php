@@ -2125,7 +2125,15 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
+        // Inline silent() to avoid the per-find closure allocation; only the
+        // CollectionRead event needs to be suppressed for this lookup.
+        $previousSilenced = $this->eventsSilenced;
+        $this->eventsSilenced = true;
+        try {
+            $collection = $this->getCollection($collection);
+        } finally {
+            $this->eventsSilenced = $previousSilenced;
+        }
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');

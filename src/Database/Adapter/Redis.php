@@ -99,7 +99,6 @@ class Redis extends Adapter
         $this->client = $client;
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function key(string ...$parts): string
     {
         return self::KEY_PREFIX . self::SEP . \implode(self::SEP, $parts);
@@ -604,82 +603,505 @@ class Redis extends Adapter
 
     public function create(string $name): bool
     {
-        throw new \LogicException('owned by T20');
+        $name = $this->filter($name);
+        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+
+        $this->tx(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
+
+        return true;
     }
 
     public function exists(string $database, ?string $collection = null): bool
     {
-        throw new \LogicException('owned by T20');
+        $database = $this->filter($database);
+        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+
+        if ((bool) $this->client->sIsMember($dbsKey, $database) === false) {
+            return false;
+        }
+
+        if ($collection === null) {
+            return true;
+        }
+
+        $collection = $this->filter($collection);
+        $colsKey = $this->key($this->getNamespace(), $database, 'cols');
+
+        return (bool) $this->client->sIsMember($colsKey, $collection);
     }
 
     public function list(): array
     {
-        throw new \LogicException('owned by T20');
+        $dbsKey = $this->key($this->getNamespace(), $this->getDatabase(), 'dbs');
+        /** @var array<int, string>|false $names */
+        $names = $this->client->sMembers($dbsKey);
+        if ($names === false) {
+            $names = [];
+        }
+
+        $databases = [];
+        foreach ($names as $name) {
+            $databases[] = new Document(['name' => $name]);
+        }
+
+        return $databases;
     }
 
     public function delete(string $name): bool
     {
-        throw new \LogicException('owned by T20');
+        $name = $this->filter($name);
+        $namespace = $this->getNamespace();
+        $dbsKey = $this->key($namespace, $this->getDatabase(), 'dbs');
+        $colsKey = $this->key($namespace, $name, 'cols');
+
+        $this->tx(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
+            /** @var array<int, string>|false $collections */
+            $collections = $client->sMembers($colsKey);
+            if (\is_array($collections)) {
+                foreach ($collections as $collection) {
+                    $this->purgeCollectionKeys($client, $namespace, $name, $collection);
+                }
+            }
+
+            $client->del($colsKey);
+            $client->sRem($dbsKey, $name);
+        });
+
+        return true;
     }
 
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        throw new \LogicException('owned by T20');
+        $id = $this->filter($name);
+        $namespace = $this->getNamespace();
+        $database = $this->getDatabase();
+        $colsKey = $this->key($namespace, $database, 'cols');
+        $metaKey = $this->key($namespace, $database, 'meta', $id);
+        $idxKey = $this->key($namespace, $database, 'idx', $id);
+
+        if ((bool) $this->client->exists($metaKey)) {
+            throw new DuplicateException('Collection already exists');
+        }
+
+        $attributePayload = [];
+        foreach ($attributes as $attribute) {
+            $attributePayload[] = $attribute->getArrayCopy();
+        }
+        $indexPayload = [];
+        foreach ($indexes as $index) {
+            $indexPayload[] = $index->getArrayCopy();
+        }
+
+        $schema = new Document([
+            '$id' => $id,
+            'name' => $name,
+            'attributes' => $attributePayload,
+            'indexes' => $indexPayload,
+        ]);
+
+        $this->tx(function (RedisClient $client) use ($id, $colsKey, $metaKey, $idxKey, $schema, $attributePayload, $indexPayload): void {
+            $client->hMSet($metaKey, [
+                'schema' => \json_encode($schema->getArrayCopy(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'attrs' => \json_encode($attributePayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'indexes' => \json_encode($indexPayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'docCount' => '0',
+                'sizeBytes' => '0',
+            ]);
+            // Reserve the doc-id index set so SCAN/list operations work even
+            // before the first document write. Redis cannot persist empty
+            // sets, so we materialise the key on first write — but we still
+            // delete it on collection drop to clean up any prior contents.
+            $client->del($idxKey);
+            $client->sAdd($colsKey, $id);
+        });
+
+        return true;
     }
 
     public function deleteCollection(string $id): bool
     {
-        throw new \LogicException('owned by T20');
+        $id = $this->filter($id);
+        $namespace = $this->getNamespace();
+        $database = $this->getDatabase();
+        $colsKey = $this->key($namespace, $database, 'cols');
+
+        $this->tx(function (RedisClient $client) use ($id, $namespace, $database, $colsKey): void {
+            $this->purgeCollectionKeys($client, $namespace, $database, $id);
+            $client->sRem($colsKey, $id);
+        });
+
+        return true;
     }
 
     public function analyzeCollection(string $collection): bool
     {
-        throw new \LogicException('owned by T20');
+        // Redis maintains no internal table statistics; mirrors Memory's
+        // behavior for adapters without a stats subsystem.
+        return false;
     }
 
     public function getSizeOfCollection(string $collection): int
     {
-        throw new \LogicException('owned by T20');
+        return $this->computeCollectionSize($collection);
     }
 
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        throw new \LogicException('owned by T20');
+        // Redis stores the working set in memory; on-disk size mirrors
+        // logical size for the purposes of the size-tracking tests.
+        return $this->computeCollectionSize($collection);
     }
 
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
-        throw new \LogicException('owned by T20');
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $id, $type, $size, $signed, $array, $required): void {
+            $attrs = $this->readAttributesField($client, $metaKey);
+            $attrs = $this->upsertAttributeRecord($attrs, [
+                '$id' => $id,
+                'key' => $id,
+                'type' => $type,
+                'size' => $size,
+                'signed' => $signed,
+                'array' => $array,
+                'required' => $required,
+            ]);
+            $client->hSet(
+                $metaKey,
+                'attrs',
+                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+        });
+
+        return true;
     }
 
     public function createAttributes(string $collection, array $attributes): bool
     {
-        throw new \LogicException('owned by T20');
+        foreach ($attributes as $attribute) {
+            $this->createAttribute(
+                $collection,
+                (string) $attribute['$id'],
+                (string) $attribute['type'],
+                (int) ($attribute['size'] ?? 0),
+                (bool) ($attribute['signed'] ?? true),
+                (bool) ($attribute['array'] ?? false),
+                (bool) ($attribute['required'] ?? false),
+            );
+        }
+
+        return true;
     }
 
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
-        throw new \LogicException('owned by T20');
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        if (! empty($newKey) && $newKey !== $id) {
+            $this->renameAttribute($collection, $id, $newKey);
+            $id = $this->filter($newKey);
+        }
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $id, $type, $size, $signed, $array, $required): void {
+            $attrs = $this->readAttributesField($client, $metaKey);
+            $attrs = $this->upsertAttributeRecord($attrs, [
+                '$id' => $id,
+                'key' => $id,
+                'type' => $type,
+                'size' => $size,
+                'signed' => $signed,
+                'array' => $array,
+                'required' => $required,
+            ]);
+            $client->hSet(
+                $metaKey,
+                'attrs',
+                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+        });
+
+        return true;
     }
 
     public function deleteAttribute(string $collection, string $id): bool
     {
-        throw new \LogicException('owned by T20');
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return true;
+        }
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $id): void {
+            $attrs = $this->readAttributesField($client, $metaKey);
+            $filtered = [];
+            foreach ($attrs as $attribute) {
+                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                if ($this->filter($existingId) === $id) {
+                    continue;
+                }
+                $filtered[] = $attribute;
+            }
+            $client->hSet(
+                $metaKey,
+                'attrs',
+                \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+        });
+
+        return true;
     }
 
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        throw new \LogicException('owned by T20');
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $metaKey = $this->key($this->getNamespace(), $this->getDatabase(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): void {
+            $attrs = $this->readAttributesField($client, $metaKey);
+            $touched = false;
+            foreach ($attrs as $i => $attribute) {
+                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                if ($this->filter($existingId) !== $old) {
+                    continue;
+                }
+                $attribute['$id'] = $new;
+                $attribute['key'] = $new;
+                $attrs[$i] = $attribute;
+                $touched = true;
+            }
+            if (! $touched) {
+                return;
+            }
+            $client->hSet(
+                $metaKey,
+                'attrs',
+                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
+        });
+
+        return true;
     }
 
     public function getSchemaAttributes(string $collection): array
     {
-        throw new \LogicException('owned by T20');
+        return [];
     }
 
     public function getCountOfAttributes(Document $collection): int
     {
-        throw new \LogicException('owned by T20');
+        return \count($collection->getAttribute('attributes', [])) + $this->getCountOfDefaultAttributes();
+    }
+
+    /**
+     * Read and decode the `attrs` JSON field on a collection meta hash. Returns
+     * a plain list of attribute record arrays (empty when the field is absent
+     * or stored empty).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function readAttributesField(RedisClient $client, string $metaKey): array
+    {
+        $raw = $client->hGet($metaKey, 'attrs');
+        if (! \is_string($raw) || $raw === '') {
+            return [];
+        }
+        /** @var array<int, array<string, mixed>> $decoded */
+        $decoded = \json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+        return \array_values($decoded);
+    }
+
+    /**
+     * Insert or replace an attribute record matched by `$id`/`key`. Returns a
+     * fresh list (re-indexed) so the JSON encodes as an array, never an object.
+     *
+     * @param array<int, array<string, mixed>> $attrs
+     * @param array<string, mixed> $record
+     * @return array<int, array<string, mixed>>
+     */
+    private function upsertAttributeRecord(array $attrs, array $record): array
+    {
+        $targetId = (string) ($record['$id'] ?? '');
+        $replaced = false;
+        foreach ($attrs as $i => $existing) {
+            $existingId = (string) ($existing['$id'] ?? $existing['key'] ?? '');
+            if ($existingId !== $targetId) {
+                continue;
+            }
+            $attrs[$i] = $record;
+            $replaced = true;
+            break;
+        }
+        if (! $replaced) {
+            $attrs[] = $record;
+        }
+
+        return \array_values($attrs);
+    }
+
+    /**
+     * Drop every key associated with a single collection inside `{ns}:{db}`.
+     * Used by both deleteCollection and the cascading delete() path. Permission
+     * sets and document blobs are SCANned because we can't enumerate them
+     * without an index — the doc-id set under `idx:{col}` is authoritative for
+     * existing documents but permission roles vary, so we SCAN the prefix.
+     */
+    private function purgeCollectionKeys(RedisClient $client, string $namespace, string $database, string $collection): void
+    {
+        $collection = $this->filter($collection);
+        $metaKey = $this->key($namespace, $database, 'meta', $collection);
+        $idxKey = $this->key($namespace, $database, 'idx', $collection);
+
+        /** @var array<int, string>|false $docIds */
+        $docIds = $client->sMembers($idxKey);
+        if (\is_array($docIds)) {
+            foreach ($docIds as $docId) {
+                $client->del(
+                    $this->key($namespace, $database, 'doc', $collection, $docId),
+                    $this->key($namespace, $database, 'perm', 'doc', $collection, $docId),
+                );
+            }
+        }
+
+        $this->deleteByPattern($client, $this->key($namespace, $database, 'perm', $collection) . self::SEP . '*');
+        $this->deleteByPattern($client, $this->key($namespace, $database, 'tenants', $collection) . self::SEP . '*');
+
+        $client->del($metaKey, $idxKey);
+    }
+
+    /**
+     * SCAN-and-DEL helper — MATCHes the supplied glob in batches so we don't
+     * block the server with a giant KEYS call. Honours the same 500-key batch
+     * size used by the test harness teardown.
+     */
+    private function deleteByPattern(RedisClient $client, string $pattern): void
+    {
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $client->scan($cursor, $pattern, 500);
+            if (\is_array($batch) && $batch !== []) {
+                $client->del(...$batch);
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+    }
+
+    /**
+     * Compute the size of a collection by summing memory used by its meta
+     * hash, every document blob, the doc-id index, and any permission sets.
+     *
+     * Redis `MEMORY USAGE` is used when supported (Redis 4.0+). We fall back
+     * to STRLEN/HLEN approximations so the adapter still produces a non-zero
+     * size on builds (or test doubles) where MEMORY USAGE isn't routed.
+     */
+    private function computeCollectionSize(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $namespace = $this->getNamespace();
+        $database = $this->getDatabase();
+        $metaKey = $this->key($namespace, $database, 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return 0;
+        }
+
+        $total = $this->measureKey($metaKey);
+
+        $idxKey = $this->key($namespace, $database, 'idx', $collection);
+        $total += $this->measureKey($idxKey);
+
+        /** @var array<int, string>|false $docIds */
+        $docIds = $this->client->sMembers($idxKey);
+        if (\is_array($docIds)) {
+            foreach ($docIds as $docId) {
+                $total += $this->measureKey($this->key($namespace, $database, 'doc', $collection, $docId));
+                $total += $this->measureKey($this->key($namespace, $database, 'perm', 'doc', $collection, $docId));
+            }
+        }
+
+        $permPrefix = $this->key($namespace, $database, 'perm', $collection) . self::SEP . '*';
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $this->client->scan($cursor, $permPrefix, 500);
+            if (\is_array($batch)) {
+                foreach ($batch as $key) {
+                    $total += $this->measureKey($key);
+                }
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+
+        return $total;
+    }
+
+    /**
+     * Best-effort size probe for a single Redis key. Prefers `MEMORY USAGE`
+     * (returns the bytes Redis itself reports). Falls back to the encoded
+     * payload length when MEMORY USAGE is unavailable, so the result remains
+     * a stable monotonically-growing integer for size-tracking tests.
+     */
+    private function measureKey(string $key): int
+    {
+        try {
+            /** @var int|false|null $usage */
+            $usage = $this->client->rawCommand('MEMORY', 'USAGE', $key);
+            if (\is_int($usage)) {
+                return $usage;
+            }
+        } catch (\Throwable) {
+            // Fall through to the structural fallback below.
+        }
+
+        $type = $this->client->type($key);
+        switch ($type) {
+            case RedisClient::REDIS_STRING:
+                $value = $this->client->get($key);
+
+                return \is_string($value) ? \strlen($value) + \strlen($key) : 0;
+            case RedisClient::REDIS_HASH:
+                $entries = $this->client->hGetAll($key);
+                $bytes = \strlen($key);
+                if (\is_array($entries)) {
+                    foreach ($entries as $field => $value) {
+                        $bytes += \strlen((string) $field) + \strlen((string) $value);
+                    }
+                }
+
+                return $bytes;
+            case RedisClient::REDIS_SET:
+                $members = $this->client->sMembers($key);
+                $bytes = \strlen($key);
+                if (\is_array($members)) {
+                    foreach ($members as $member) {
+                        $bytes += \strlen((string) $member);
+                    }
+                }
+
+                return $bytes;
+            default:
+                return 0;
+        }
     }
 
     // === @architect:T20 end ===

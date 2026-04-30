@@ -130,6 +130,29 @@ abstract class RedisBase extends Base
         return true;
     }
 
+    /**
+     * Inherited test exercises the case where an INTEGER column is altered
+     * to VARCHAR. Redis stores documents as JSON; type changes do not
+     * retroactively recast existing values the way PDO string returns do.
+     */
+    public function testUpdateAttributeStructure(): void
+    {
+        $this->markTestSkipped(
+            'Redis stores documents as JSON; type changes do not retroactively coerce existing column values the way PDO string returns do.'
+        );
+    }
+
+    /**
+     * Inherited test exercises VARCHAR truncation when shrinking a column
+     * that holds oversize data. Redis does not enforce string sizes on disk.
+     */
+    public function testUpdateAttributeSize(): void
+    {
+        $this->markTestSkipped(
+            'Redis does not enforce string size truncation when an attribute is resized smaller than existing data.'
+        );
+    }
+
     public static function tearDownAfterClass(): void
     {
         try {

@@ -3162,6 +3162,17 @@ class SQLite extends MariaDB
         ];
 
         if (\in_array($method, $likeMethods, true)) {
+            // Array CONTAINS via json_each — exact element match without
+            // LIKE substring false positives (`%2%` matching `[12, 200]`).
+            $arrayContainsMethods = [
+                Query::TYPE_CONTAINS,
+                Query::TYPE_CONTAINS_ANY,
+                Query::TYPE_NOT_CONTAINS,
+            ];
+            if ($query->onArray() && \in_array($method, $arrayContainsMethods, true)) {
+                return $this->buildArrayContainsCondition($query, $binds);
+            }
+
             return $this->getLikeCondition($query, $binds);
         }
 
@@ -3216,6 +3227,41 @@ class SQLite extends MariaDB
         $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0 ESCAPE '\\'";
 
         return $method === Query::TYPE_SEARCH ? $sql : "NOT ({$sql})";
+    }
+
+    /**
+     * Array CONTAINS / CONTAINS_ANY / NOT_CONTAINS via json_each. Exact
+     * element match — avoids the LIKE substring false positives where
+     * `%2%` matches `[12, 200]` and `%"apple"%` matches `["pineapple"]`.
+     *
+     * @param array<string,mixed> $binds
+     */
+    private function buildArrayContainsCondition(Query $query, array &$binds): string
+    {
+        $method = $query->getMethod();
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->quote($this->filter($query->getAttribute()));
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
+
+        $values = $query->getValues();
+        if (empty($values)) {
+            return '';
+        }
+
+        $params = [];
+        foreach ($values as $key => $value) {
+            $param = ":{$placeholder}_{$key}";
+            $binds[$param] = $value;
+            $params[] = $param;
+        }
+
+        $expression = "EXISTS (SELECT 1 FROM json_each({$alias}.{$attribute}) WHERE value IN ("
+            . \implode(', ', $params)
+            . '))';
+
+        return $method === Query::TYPE_NOT_CONTAINS ? "NOT {$expression}" : $expression;
     }
 
     /**
@@ -3276,16 +3322,12 @@ class SQLite extends MariaDB
             Query::TYPE_NOT_CONTAINS,
         ], true);
 
-        $onArray = $query->onArray();
-
         $conditions = [];
         foreach ($query->getValues() as $key => $value) {
             $bound = match ($method) {
                 Query::TYPE_STARTS_WITH, Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH, Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => $onArray
-                    ? '%' . $this->escapeWildcards((string) (\json_encode($value) ?: '')) . '%'
-                    : '%' . $this->escapeWildcards($value) . '%',
+                Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => '%' . $this->escapeWildcards($value) . '%',
                 default => $value,
             };
 

@@ -1627,12 +1627,30 @@ class MariaDB extends SQL
             case Query::TYPE_CONTAINS:
             case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
-                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                if ($query->onArray()) {
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                    return $isNot
-                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
-                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+
+                    if ($this->getSupportForJSONOverlaps()) {
+                        $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                        return $isNot
+                            ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                            : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+                    }
+
+                    // JSON_CONTAINS per element OR'd together — exact
+                    // element match without LIKE's substring false positives
+                    // (`%2%` matching `[12, 200]`, `%"apple"%` matching
+                    // `["pineapple"]`).
+                    $conditions = [];
+                    foreach ($query->getValues() as $key => $value) {
+                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                        $conditions[] = "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_{$key})";
+                    }
+                    if (empty($conditions)) {
+                        return '';
+                    }
+                    $expression = '(' . implode(' OR ', $conditions) . ')';
+                    return $isNot ? "NOT {$expression}" : $expression;
                 }
                 // no break
             default:
@@ -1649,8 +1667,7 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? '%' . $this->escapeWildcards((string) (\json_encode($value) ?: '')) . '%' : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? '%' . $this->escapeWildcards((string) (\json_encode($value) ?: '')) . '%' : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 

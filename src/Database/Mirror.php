@@ -87,6 +87,19 @@ class Mirror extends Database
     }
 
     /**
+     * Delegate metadata reads to the source database. Mirror's schema mutator
+     * overrides forward writes to source/destination directly without going
+     * through Mirror's own Database traits, so Mirror's per-instance
+     * `collectionMetadataCache` never gets invalidated. Routing reads through
+     * the source — whose cache is correctly invalidated on every mutation —
+     * keeps Mirror's view of attributes and relationships in lockstep.
+     */
+    public function getCollection(string $id): Document
+    {
+        return $this->source->getCollection($id);
+    }
+
+    /**
      * Get the destination database instance, if configured.
      *
      * @return Database|null

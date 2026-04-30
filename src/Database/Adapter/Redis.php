@@ -79,10 +79,6 @@ class Redis extends Adapter
 
     public const string SEP = ':';
 
-    private const int TX_MAX_RETRIES = 3;
-
-    private const array TX_BACKOFF_MS = [10, 50, 250];
-
     private RedisClient $client;
 
     /**
@@ -146,28 +142,23 @@ class Redis extends Adapter
     }
 
     /**
-     * Network-error retry loop. Does NOT provide optimistic-concurrency
-     * isolation — concurrent writes to the same keys may interleave.
-     * `getSupportForTransactionRetries()` returns `false` for that reason,
-     * so the shared trait suite skips OCC-retry assertions. Replacing this
-     * body with a real WATCH/MULTI/EXEC loop and flipping the support flag
-     * is deferred to a follow-up PR.
+     * Single-shot wrapper for journal-tracked Redis operations. Does NOT
+     * retry — Redis transient errors propagate as `TransactionException`.
+     * Retrying here would replay journal side-effects (duplicate entries,
+     * non-idempotent commands like `INCR` on the sequence key advancing
+     * twice) so we leave retry policy to call sites that can prove
+     * idempotency. OCC support via WATCH/MULTI/EXEC is a follow-up
+     * (see Contract.md). `getSupportForTransactionRetries()` returns
+     * `false` so the shared trait suite skips OCC-retry assertions.
      *
      * @param callable(RedisClient): mixed $fn
      */
     protected function tx(callable $fn): mixed
     {
-        $attempt = 0;
-        while (true) {
-            try {
-                return $fn($this->client);
-            } catch (\RedisException $exception) {
-                if ($attempt >= self::TX_MAX_RETRIES) {
-                    throw new TransactionException('tx exhausted retries: ' . $exception->getMessage(), 0, $exception);
-                }
-                \usleep(self::TX_BACKOFF_MS[$attempt] * 1000);
-                $attempt++;
-            }
+        try {
+            return $fn($this->client);
+        } catch (\RedisException $exception) {
+            throw new TransactionException('tx failed: ' . $exception->getMessage(), 0, $exception);
         }
     }
 
@@ -175,6 +166,14 @@ class Redis extends Adapter
      * Persist a document's permissions into the inverted role/action sets and
      * the per-document role->letters HASH. The same writes are journalled so
      * T56 can revert them on rollback.
+     *
+     * NOTE: opens its own `multi(\Redis::PIPELINE)` block. MUST NOT be wrapped
+     * inside a MULTI/EXEC: phpredis does not support nested MULTI, and
+     * pipelining inside a transaction would queue commands incorrectly. If
+     * `tx()` ever gains real WATCH/MULTI/EXEC, this method must be refactored
+     * to either share the outer connection's mode, take an `inMulti` flag,
+     * or be split into a non-pipelined variant. Same constraint applies to
+     * `clearPermissions()` and `getSequences()`.
      */
     private function writePermissions(string $collection, string $id, Document $document): void
     {
@@ -211,7 +210,14 @@ class Redis extends Adapter
             $this->client->hMSet($hashKey, $hashFields);
             $this->client->exec();
         } catch (\Throwable $e) {
-            $this->client->discard();
+            // PIPELINE-mode discard is version-dependent across phpredis
+            // (no-op in 5.x, raises in some 4.x). Swallow any failure here
+            // so we propagate the original cause, not a teardown error.
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
             throw $e;
         }
 
@@ -231,6 +237,10 @@ class Redis extends Adapter
      * Strip every permission entry for ($collection, $id) from the inverted
      * sets and the per-doc HASH, recording the previous state in the journal
      * so T56 can replay it on rollback.
+     *
+     * NOTE: same nested-pipeline constraint as `writePermissions()`. MUST NOT
+     * be wrapped inside a MULTI/EXEC. See `writePermissions()` docblock for
+     * the refactor checklist if `tx()` ever gains real transaction support.
      */
     private function clearPermissions(string $collection, string $id): void
     {
@@ -260,7 +270,13 @@ class Redis extends Adapter
             $this->client->del($hashKey);
             $this->client->exec();
         } catch (\Throwable $e) {
-            $this->client->discard();
+            // PIPELINE-mode discard is version-dependent across phpredis;
+            // swallow the teardown error so we surface the original cause.
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
             throw $e;
         }
 
@@ -1782,13 +1798,21 @@ class Redis extends Adapter
             // No work queued — discard the empty pipeline so the connection
             // does not stay in MULTI mode after returning early.
             if ($indexes === []) {
-                $this->client->discard();
+                try {
+                    $this->client->discard();
+                } catch (\Throwable) {
+                    // PIPELINE-mode discard is version-dependent across phpredis.
+                }
                 return $documents;
             }
             $payloads = $this->client->exec();
         } catch (\Throwable $e) {
-            $this->client->discard();
-            throw $e;
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // PIPELINE-mode discard is version-dependent across phpredis.
+            }
+            throw new TransactionException('Failed to load sequences: ' . $e->getMessage(), 0, $e);
         }
         if (! \is_array($payloads)) {
             return $documents;
@@ -2195,14 +2219,22 @@ class Redis extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        // Fast path: no query filters and authorization disabled means we can
-        // use the cardinality of the index set directly. Authorization-on
-        // requires a hydration pass through `loadCollectionDocuments` so the
-        // permission filter actually runs.
+        // Fast path: no query filters, authorization disabled, and shared
+        // tables off means the `idx:{collection}` SET cardinality matches the
+        // visible doc count directly. Under shared tables the SET is shared
+        // across tenants — `sCard` would return the union count, leaking
+        // cross-tenant rows — so we fall through to the slow path which
+        // hydrates and tenant-filters via `loadCollectionDocuments`.
+        // Authorization-on also requires hydration so the permission filter
+        // actually runs.
         // TODO: this path still scans the full collection when queries are
         // present — acceptable parity with Memory, but a known scaling limit
         // and unsuitable for large production collections.
-        if (empty($queries) && $this->authorization->getStatus() === false) {
+        if (
+            empty($queries)
+            && $this->authorization->getStatus() === false
+            && $this->getSharedTables() === false
+        ) {
             $idxKey = $this->key($this->ns(), 'idx', $collectionId);
             $cardinality = $this->client->sCard($idxKey);
             if (\is_int($cardinality)) {

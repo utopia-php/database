@@ -57,7 +57,7 @@ redis://[user:pass@]host:port[/db]
 | `private function ns(): string` | Returns `"{KEY_PREFIX}:{namespace}:{database}"`. Every adapter-produced key starts with this prefix. |
 | `private function encode(Document $document): string` | `json_encode` with `JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE`. |
 | `private function decode(string $payload): Document` | Wraps `json_decode` (`JSON_THROW_ON_ERROR`) in a `Document`. |
-| `protected function tx(callable $fn): mixed` | Network-error retry loop. Does NOT provide isolation. `getSupportForTransactionRetries()` returns `false` to keep the trait's OCC tests off. Real `WATCH`/`MULTI`/`EXEC` is a follow-up. |
+| `protected function tx(callable $fn): mixed` | Single-shot wrapper for journal-tracked Redis operations. Does NOT retry — Redis transient errors propagate as `TransactionException`. Retrying would replay journal side-effects (duplicate entries, double-`INCR` on sequence keys). `getSupportForTransactionRetries()` returns `false` so the trait's OCC tests stay off. Real `WATCH`/`MULTI`/`EXEC` is a follow-up. |
 
 ### Cross-architect (locked signatures, stub-throwing in Wave 1)
 
@@ -138,7 +138,7 @@ buffer between adjacent regions are locked.
 | `getSupportForTrigramIndex` | `false` | `false` | Match. |
 | `getSupportForPCRERegex` | `true` | `true` | Match — Wave 2 evaluates via PHP `preg_match`. |
 | `getSupportForPOSIXRegex` | `false` | `false` | Match. |
-| `getSupportForTransactionRetries` | `false` | `false` | `tx()` is currently a network-error retry loop, NOT optimistic concurrency control. Real `WATCH`/`MULTI`/`EXEC` is deferred to a follow-up PR. |
+| `getSupportForTransactionRetries` | `false` | `false` | `tx()` is currently a single-shot wrapper that surfaces transient errors as `TransactionException` — NOT optimistic concurrency control. Real `WATCH`/`MULTI`/`EXEC` is deferred to a follow-up PR. |
 | `getSupportForNestedTransactions` | `true` | `true` | Match — modelled via journal stack. |
 
 Total abstract methods on `Adapter`: **119** (counted via

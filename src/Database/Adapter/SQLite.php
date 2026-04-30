@@ -1043,7 +1043,7 @@ class SQLite extends MariaDB
                 : ($index['attributes'] ?? []);
 
             $internal = \array_map(
-                fn ($a) => $this->getInternalKeyForAttribute((string) $a),
+                fn (string $a) => $this->getInternalKeyForAttribute($a),
                 (array) $attributes
             );
             $candidate = $this->getFulltextTableName($collection, $internal);
@@ -2906,7 +2906,7 @@ class SQLite extends MariaDB
                         : ($index['attributes'] ?? []);
 
                     $internal = \array_map(
-                        fn ($a) => $this->getInternalKeyForAttribute((string) $a),
+                        fn (string $a) => $this->getInternalKeyForAttribute($a),
                         (array) $attributes
                     );
                     $hashToId[$this->getFulltextTableName($collection, $internal)] = $this->filter((string) $indexId);

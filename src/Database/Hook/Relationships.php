@@ -143,8 +143,8 @@ class Relationships implements Hook
         $stackCount = \count($this->writeStack);
 
         foreach ($relationships as $relationship) {
-            $typedRelAttr = Attribute::fromDocument($relationship);
-            $key = $typedRelAttr->key;
+            /** @var string $key */
+            $key = $relationship->getAttribute('key', $relationship->getId());
             $value = $document->getAttribute($key);
             $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);
@@ -293,8 +293,8 @@ class Relationships implements Hook
         $stackCount = \count($this->writeStack);
 
         foreach ($relationships as $index => $relationship) {
-            $typedRelAttr = Attribute::fromDocument($relationship);
-            $key = $typedRelAttr->key;
+            /** @var string $key */
+            $key = $relationship->getAttribute('key', $relationship->getId());
             $value = $document->getAttribute($key);
 
             $value = $this->coerceToDocument($document, $key, $value);
@@ -819,21 +819,28 @@ class Relationships implements Hook
                     $relationships = [];
 
                     foreach ($popAttributes as $attribute) {
-                        $typedPopAttr = Attribute::fromDocument($attribute);
-                        if ($typedPopAttr->type === ColumnType::Relationship) {
-                            if ($typedPopAttr->key === $skipKey) {
-                                continue;
-                            }
+                        // Avoid the Attribute::fromDocument allocation —
+                        // we only need the type and key here, both of
+                        // which are plain Document attributes.
+                        if (! Attribute::isRelationship($attribute)) {
+                            continue;
+                        }
 
-                            if (! $parentHasExplicitSelects || \array_key_exists($typedPopAttr->key, $sels)) {
-                                $relationships[] = $attribute;
-                            }
+                        /** @var string $popKey */
+                        $popKey = $attribute->getAttribute('key', $attribute->getId());
+
+                        if ($popKey === $skipKey) {
+                            continue;
+                        }
+
+                        if (! $parentHasExplicitSelects || \array_key_exists($popKey, $sels)) {
+                            $relationships[] = $attribute;
                         }
                     }
 
                     foreach ($relationships as $relationship) {
-                        $typedRelAttr = Attribute::fromDocument($relationship);
-                        $key = $typedRelAttr->key;
+                        /** @var string $key */
+                        $key = $relationship->getAttribute('key', $relationship->getId());
                         $queries = $sels[$key] ?? [];
                         $relationship->setAttribute('collection', $coll->getId());
                         $isAtMaxDepth = ($currentDepth + 1) >= Database::RELATION_MAX_DEPTH;

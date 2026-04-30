@@ -79,18 +79,14 @@ class Redis extends Adapter
 
     public const string SEP = ':';
 
-    /** @phpstan-ignore-next-line classConstant.unused */
     private const int TX_MAX_RETRIES = 3;
 
-    /** @phpstan-ignore-next-line classConstant.unused */
     private const array TX_BACKOFF_MS = [10, 50, 250];
 
     private RedisClient $client;
 
     /**
      * @var array<int, array<int, array{op: string, payload: array<string, mixed>}>>
-     *
-     * @phpstan-ignore-next-line property.onlyWritten
      */
     private array $journalStack = [];
 
@@ -99,13 +95,11 @@ class Redis extends Adapter
         $this->client = $client;
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function key(string ...$parts): string
     {
         return self::KEY_PREFIX . self::SEP . \implode(self::SEP, $parts);
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function ns(): string
     {
         return self::KEY_PREFIX . self::SEP . $this->getNamespace() . self::SEP . $this->getDatabase();
@@ -135,8 +129,18 @@ class Redis extends Adapter
      */
     protected function tx(callable $fn): mixed
     {
-        // PASS-THROUGH: T56 replaces with WATCH/MULTI/EXEC retry loop in Wave 2.
-        return $fn($this->client);
+        $attempt = 0;
+        while (true) {
+            try {
+                return $fn($this->client);
+            } catch (\RedisException $exception) {
+                if ($attempt >= self::TX_MAX_RETRIES) {
+                    throw new TransactionException('tx exhausted retries: ' . $exception->getMessage(), 0, $exception);
+                }
+                \usleep(self::TX_BACKOFF_MS[$attempt] * 1000);
+                $attempt++;
+            }
+        }
     }
 
     /** @phpstan-ignore-next-line method.unused */
@@ -163,33 +167,167 @@ class Redis extends Adapter
     }
 
     /**
+     * Append a mutation entry to the topmost journal frame. Outside a
+     * transaction the entry is dropped — non-transactional writes pay
+     * zero overhead. The `op` discriminator drives `rollbackJournal()`'s
+     * dispatch to raw inverse helpers.
+     *
      * @param array<string, mixed> $payload
      */
     protected function journal(string $op, array $payload): void
     {
-        throw new \LogicException('owned by T56');
+        if ($this->inTransaction === 0) {
+            return;
+        }
+        $this->journalStack[\count($this->journalStack) - 1][] = [
+            'op' => $op,
+            'payload' => $payload,
+        ];
     }
 
+    /**
+     * Pop the topmost journal frame and replay its inverse operations in
+     * reverse order. Uses raw `\Redis` client commands only — calling a
+     * public adapter method would re-enter `journal()` and recurse
+     * infinitely. New `op` discriminators must be added to the dispatch
+     * switch below.
+     */
     protected function rollbackJournal(): void
     {
-        throw new \LogicException('owned by T56');
+        $frame = \array_pop($this->journalStack);
+        if ($frame === null) {
+            return;
+        }
+
+        for ($i = \count($frame) - 1; $i >= 0; $i--) {
+            $entry = $frame[$i];
+            $op = $entry['op'];
+            $payload = $entry['payload'];
+
+            switch ($op) {
+                case 'createDoc':
+                    /** @var string $collection */
+                    $collection = $payload['collection'];
+                    /** @var string $id */
+                    $id = $payload['id'];
+                    $this->rawDeleteDoc($collection, $id);
+                    if (isset($payload['permissions']) && \is_array($payload['permissions'])) {
+                        foreach ($payload['permissions'] as $role => $csv) {
+                            if (!\is_string($role) || !\is_string($csv)) {
+                                continue;
+                            }
+                            foreach (\explode(',', $csv) as $action) {
+                                $action = \trim($action);
+                                if ($action === '') {
+                                    continue;
+                                }
+                                $this->client->sRem($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
+                            }
+                        }
+                    }
+                    break;
+
+                case 'deleteDoc':
+                    /** @var string $collection */
+                    $collection = $payload['collection'];
+                    /** @var string $id */
+                    $id = $payload['id'];
+                    /** @var string $beforePayload */
+                    $beforePayload = $payload['payload'];
+                    $this->rawRestoreDoc($collection, $id, $beforePayload);
+                    if (isset($payload['permissions']) && \is_array($payload['permissions'])) {
+                        $docPermKey = $this->key($this->ns(), 'perm', 'doc', $collection, $id);
+                        foreach ($payload['permissions'] as $role => $csv) {
+                            if (!\is_string($role) || !\is_string($csv)) {
+                                continue;
+                            }
+                            $this->client->hSet($docPermKey, $role, $csv);
+                            foreach (\explode(',', $csv) as $action) {
+                                $action = \trim($action);
+                                if ($action === '') {
+                                    continue;
+                                }
+                                $this->client->sAdd($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
+                            }
+                        }
+                    }
+                    break;
+
+                case 'updateDoc':
+                    /** @var string $collection */
+                    $collection = $payload['collection'];
+                    /** @var string $id */
+                    $id = $payload['id'];
+                    /** @var string $beforePayload */
+                    $beforePayload = $payload['payload'];
+                    $this->client->set($this->key($this->ns(), 'doc', $collection, $id), $beforePayload);
+                    break;
+
+                case 'createPerm':
+                    /** @var string $collection */
+                    $collection = $payload['collection'];
+                    /** @var string $action */
+                    $action = $payload['action'];
+                    /** @var string $role */
+                    $role = $payload['role'];
+                    /** @var string $id */
+                    $id = $payload['id'];
+                    $this->client->sRem($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
+                    $this->client->hDel($this->key($this->ns(), 'perm', 'doc', $collection, $id), $role);
+                    break;
+
+                case 'deletePerm':
+                    /** @var string $collection */
+                    $collection = $payload['collection'];
+                    /** @var string $action */
+                    $action = $payload['action'];
+                    /** @var string $role */
+                    $role = $payload['role'];
+                    /** @var string $id */
+                    $id = $payload['id'];
+                    $this->client->sAdd($this->key($this->ns(), 'perm', $collection, $action, $role), $id);
+                    if (isset($payload['previous']) && \is_string($payload['previous'])) {
+                        $this->client->hSet($this->key($this->ns(), 'perm', 'doc', $collection, $id), $role, $payload['previous']);
+                    }
+                    break;
+
+                default:
+                    throw new TransactionException('Unknown journal op: ' . $op);
+            }
+        }
     }
 
+    /**
+     * Pop the topmost journal frame and, when nested, splice its entries
+     * onto the parent frame so an outer rollback still rewinds inner
+     * work. At the outermost level the frame is discarded — Wave-2
+     * writes go directly to Redis (no two-phase commit), so the journal
+     * exists purely for rollback compensation.
+     */
     protected function commitJournal(): void
     {
-        throw new \LogicException('owned by T56');
+        $frame = \array_pop($this->journalStack);
+        if ($frame === null) {
+            return;
+        }
+
+        if ($frame !== [] && $this->journalStack !== []) {
+            $outerIndex = \count($this->journalStack) - 1;
+            \array_push($this->journalStack[$outerIndex], ...$frame);
+        }
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function rawDeleteDoc(string $collection, string $id): void
     {
-        throw new \LogicException('owned by T56');
+        $this->client->del($this->key($this->ns(), 'doc', $collection, $id));
+        $this->client->sRem($this->key($this->ns(), 'idx', $collection), $id);
+        $this->client->del($this->key($this->ns(), 'perm', 'doc', $collection, $id));
     }
 
-    /** @phpstan-ignore-next-line method.unused */
     private function rawRestoreDoc(string $collection, string $id, string $payload): void
     {
-        throw new \LogicException('owned by T56');
+        $this->client->set($this->key($this->ns(), 'doc', $collection, $id), $payload);
+        $this->client->sAdd($this->key($this->ns(), 'idx', $collection), $id);
     }
 
     /**
@@ -831,17 +969,34 @@ class Redis extends Adapter
 
     public function startTransaction(): bool
     {
-        throw new \LogicException('owned by T56');
+        $this->journalStack[] = [];
+        $this->inTransaction++;
+
+        return true;
     }
 
     public function commitTransaction(): bool
     {
-        throw new \LogicException('owned by T56');
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        $this->commitJournal();
+        $this->inTransaction--;
+
+        return true;
     }
 
     public function rollbackTransaction(): bool
     {
-        throw new \LogicException('owned by T56');
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        $this->rollbackJournal();
+        $this->inTransaction--;
+
+        return true;
     }
 
     // === @architect:T56 end ===

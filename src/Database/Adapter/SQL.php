@@ -604,7 +604,8 @@ abstract class SQL extends Adapter
         ) {
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
-            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE `_uid` = :_uid";
+            $uidQuoted = $this->quote('_uid');
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
 
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
@@ -1549,7 +1550,7 @@ abstract class SQL extends Adapter
             && ! $this->authorization->getStatus()
             && ! ($this->sharedTables && $this->tenant !== null)
         ) {
-            $sql = "SELECT COUNT(1) AS `sum` FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+            $sql = "SELECT COUNT(1) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
@@ -1645,7 +1646,7 @@ abstract class SQL extends Adapter
             && ! $this->authorization->getStatus()
             && ! ($this->sharedTables && $this->tenant !== null)
         ) {
-            $sql = "SELECT SUM({$this->quote($attribute)}) AS `sum` FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+            $sql = "SELECT SUM({$this->quote($attribute)}) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */

@@ -274,7 +274,16 @@ trait Collections
      */
     public function getCollection(string $id): Document
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        // Inline silent() to avoid the per-call Closure allocation. The
+        // outer event suppression scope is preserved via try/finally so any
+        // ambient silent context still wins.
+        $previousSilenced = $this->eventsSilenced;
+        $this->eventsSilenced = true;
+        try {
+            $collection = $this->getDocument(self::METADATA, $id);
+        } finally {
+            $this->eventsSilenced = $previousSilenced;
+        }
 
         if (
             $id !== self::METADATA

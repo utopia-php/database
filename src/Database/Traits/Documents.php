@@ -2385,18 +2385,24 @@ trait Documents
             }
         }
 
+        // Hoist invariants out of the per-document loop. Collection id and
+        // documentType lookup don't change per result row, but were being
+        // re-evaluated for every document on every find.
+        $collectionId = $collection->getId();
+        $hasCustomType = isset($this->documentTypes[$collectionId]);
+
         foreach ($results as $index => $node) {
             $node = $this->adapter->castingAfter($collection, $node);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
 
             // Convert to custom document type if mapped
-            if (isset($this->documentTypes[$collection->getId()])) {
-                $node = $this->createDocumentInstance($collection->getId(), $node->getArrayCopy());
+            if ($hasCustomType) {
+                $node = $this->createDocumentInstance($collectionId, $node->getArrayCopy());
             }
 
             if (! $node->isEmpty()) {
-                $node->setAttribute('$collection', $collection->getId());
+                $node->setAttribute('$collection', $collectionId);
             }
 
             $results[$index] = $node;

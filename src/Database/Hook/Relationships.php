@@ -916,6 +916,12 @@ class Relationships implements Hook
     {
         $nestedSelections = [];
 
+        // Fast exit: collections without relationships short-circuit before
+        // walking the query list. This is the common case for flat tables.
+        if (empty($relationships)) {
+            return $nestedSelections;
+        }
+
         // Pre-index relationships by key once so per-value lookups are O(1)
         // instead of O(relationships) with a fresh array_filter each iteration.
         /** @var array<string, Document> $relationshipsByKey */
@@ -999,6 +1005,12 @@ class Relationships implements Hook
      */
     public function convertQueries(array $relationships, array $queries, ?Document $collection = null): ?array
     {
+        // Fast exit: nothing to convert when the collection has no
+        // relationship attributes — saves the per-find query walk.
+        if (empty($relationships)) {
+            return $queries;
+        }
+
         $hasRelationshipQuery = false;
         foreach ($queries as $query) {
             $attr = $query->getAttribute();

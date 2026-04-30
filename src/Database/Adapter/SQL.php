@@ -638,7 +638,7 @@ abstract class SQL extends Adapter
 
             $this->remapRow($row);
 
-            return new Document($row);
+            return Document::fromRow($row);
         }
 
         $builder = $this->newBuilder($name, $alias);
@@ -675,7 +675,7 @@ abstract class SQL extends Adapter
 
         $this->remapRow($document);
 
-        return new Document($document);
+        return Document::fromRow($document);
     }
 
     /**
@@ -1174,7 +1174,7 @@ abstract class SQL extends Adapter
             $documents = [];
             foreach ($rows as $row) {
                 $this->remapRow($row);
-                $documents[] = new Document($row);
+                $documents[] = Document::fromRow($row);
             }
 
             return $documents;
@@ -1494,7 +1494,7 @@ abstract class SQL extends Adapter
         if ($hasAggregation) {
             foreach ($results as $row) {
                 /** @var array<string, mixed> $row */
-                $documents[] = new Document($row);
+                $documents[] = Document::fromRow($row);
             }
 
             return $documents;
@@ -1503,7 +1503,7 @@ abstract class SQL extends Adapter
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
             $this->remapRow($row);
-            $documents[] = new Document($row);
+            $documents[] = Document::fromRow($row);
         }
 
         if ($cursorDirection === CursorDirection::Before) {
@@ -1537,7 +1537,7 @@ abstract class SQL extends Adapter
         $documents = [];
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
-            $documents[] = new Document($row);
+            $documents[] = Document::fromRow($row);
         }
 
         return $documents;

@@ -79,6 +79,41 @@ class Document extends ArrayObject
     }
 
     /**
+     * Construct from a raw PDO row.
+     *
+     * Fast path that skips nested-Document detection. Raw PDO rows from
+     * `$stmt->fetch()` only contain scalars or JSON-encoded strings — there
+     * are never nested arrays carrying `$id`/`$collection`, so the
+     * nested-detection foreach in the constructor is pure waste per row.
+     *
+     * Callers that build documents from relationship-resolved trees or
+     * arbitrary user input must continue to use the regular constructor.
+     *
+     * @param  array<string, mixed>  $row
+     *
+     * @throws DatabaseException
+     */
+    public static function fromRow(array $row): self
+    {
+        if (array_key_exists('$id', $row) && ! \is_string($row['$id'])) {
+            throw new StructureException('$id must be of type string');
+        }
+
+        if (array_key_exists('$permissions', $row) && ! is_array($row['$permissions'])) {
+            throw new StructureException('$permissions must be of type array');
+        }
+
+        if (array_key_exists('$permissions', $row) && is_array($row['$permissions'])) {
+            $row['$permissions'] = \array_values(\array_unique($row['$permissions']));
+        }
+
+        $document = new self();
+        $document->exchangeArray($row);
+
+        return $document;
+    }
+
+    /**
      * Get the document's unique identifier.
      *
      * @return string The document ID, or empty string if not set.

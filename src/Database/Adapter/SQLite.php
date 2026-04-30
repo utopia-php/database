@@ -1292,6 +1292,15 @@ class SQLite extends MariaDB
     }
 
     /**
+     * SQLite has no JSON_OVERLAPS — fall back to the LIKE-based default
+     * inherited from MariaDB::getSQLCondition for CONTAINS queries on arrays.
+     */
+    public function getSupportForJSONOverlaps(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is hostname supported?
      *
      * @return bool

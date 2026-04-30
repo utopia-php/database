@@ -1167,11 +1167,13 @@ abstract class SQL extends Adapter
             return $documents;
         }
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
         // Single pass partitioning: pull vector queries out for ORDER BY and
         // detect aggregation/join shape in the same walk. Each Method::value
         // is checked once per query rather than three times.
+        // Defer the defensive `clone` until we know the query path will mutate
+        // the Query objects (joins or aggregations-with-joins). The vast
+        // majority of finds take neither path and don't need a per-query
+        // clone allocation.
         $vectorQueries = [];
         $otherQueries = [];
         $hasAggregation = false;
@@ -1197,6 +1199,10 @@ abstract class SQL extends Adapter
         }
 
         $queries = $otherQueries;
+
+        if ($hasJoins) {
+            $queries = \array_map(static fn ($query) => clone $query, $queries);
+        }
 
         $builder = $this->newBuilder($name, $alias);
 

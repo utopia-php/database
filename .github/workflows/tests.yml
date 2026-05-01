@@ -80,7 +80,6 @@ jobs:
             Mirror,
             Pool,
             Redis,
-            RedisCrossProcess,
             SharedTables/MongoDB,
             SharedTables/MariaDB,
             SharedTables/MySQL,

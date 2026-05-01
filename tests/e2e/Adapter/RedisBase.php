@@ -3,7 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use Utopia\Cache\Adapter\Redis as RedisCacheAdapter;
+use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
@@ -21,9 +21,8 @@ abstract class RedisBase extends Base
     public static ?Database $database = null;
     public static ?Redis $redisClient = null;
     public static string $redisNamespace = '';
-    public static ?Redis $cacheRedisClient = null;
-    /** @var array<int, string> Glob patterns the run owns, scrubbed in tearDownAfterClass. */
-    protected static array $cacheKeyPatterns = [];
+    /** @var array<int, string> Adapter-keyspace SCAN patterns the run owns, scrubbed in tearDownAfterClass. */
+    protected static array $keyPatterns = [];
 
     public static function getAdapterName(): string
     {
@@ -58,15 +57,11 @@ abstract class RedisBase extends Base
         $client->connect($host, $port);
         self::$redisClient = $client;
 
-        $cacheHost = \getenv('CACHE_REDIS_HOST') ?: 'redis';
-        $cachePort = (int) (\getenv('CACHE_REDIS_PORT') ?: 6379);
-        $cacheRedis = new Redis();
-        $cacheRedis->connect($cacheHost, $cachePort);
-        self::$cacheRedisClient = $cacheRedis;
-        // Contract.md forbids FLUSHALL/FLUSHDB — the runner shares the
-        // cache instance across workers. Cache keys are scrubbed at
-        // tearDownAfterClass via the namespace-scoped scan below.
-        $cache = new Cache(new RedisCacheAdapter($cacheRedis));
+        // Redis-as-adapter makes the Cache layer redundant — adapter reads
+        // and cache reads cost the same Redis round trip, and any
+        // invalidation gap between them just becomes a stale-read window.
+        // None() short-circuits the cache so reads always hit Redis.
+        $cache = new Cache(new NoneCacheAdapter());
 
         $adapter = new RedisAdapter($client);
 
@@ -79,12 +74,12 @@ abstract class RedisBase extends Base
 
         $this->configureDatabase($database);
 
-        // Track every key pattern this run owns so tearDownAfterClass can
-        // scrub both the adapter's keyspace and the cache's keys without
-        // a global FLUSH. The configureDatabase() call above may have
-        // mutated the namespace (shared-tables uses ''), so capture the
-        // post-configure namespace too.
-        self::$cacheKeyPatterns = self::buildKeyPatterns(self::$redisNamespace, $database->getNamespace(), $database->getDatabase());
+        // Track every adapter-keyspace pattern this run owns so
+        // tearDownAfterClass can scrub without a global FLUSH. The
+        // configureDatabase() call above may have mutated the namespace
+        // (shared-tables uses ''), so capture the post-configure namespace
+        // too.
+        self::$keyPatterns = self::buildKeyPatterns(self::$redisNamespace, $database->getNamespace(), $database->getDatabase());
 
         if ($database->exists()) {
             $database->delete();
@@ -96,10 +91,10 @@ abstract class RedisBase extends Base
     }
 
     /**
-     * Build SCAN MATCH patterns covering both the adapter keyspace and the
-     * cache keyspace for the namespaces this test class actually wrote to.
-     * The two-namespace form (initial + post-configure) covers the
-     * shared-tables case where setNamespace('') is applied before create().
+     * Build SCAN MATCH patterns covering the adapter keyspace for every
+     * namespace this test class actually wrote to. The two-namespace form
+     * (initial + post-configure) covers the shared-tables case where
+     * setNamespace('') is applied before create().
      *
      * @return array<int, string>
      */
@@ -112,9 +107,6 @@ abstract class RedisBase extends Base
             // namespace produces a literal double-colon, which is a valid
             // SCAN pattern.
             $patterns[] = RedisAdapter::KEY_PREFIX . ':' . $namespace . ':' . $database . ':*';
-            // Cache writes go through Utopia\Cache\Adapter\Redis which
-            // composes its own keys; scope by namespace+database too.
-            $patterns[] = $namespace . ':' . $database . ':*';
         }
         return \array_values(\array_unique($patterns));
     }
@@ -156,18 +148,14 @@ abstract class RedisBase extends Base
     public static function tearDownAfterClass(): void
     {
         try {
-            if (self::$cacheKeyPatterns !== [] && self::$redisClient instanceof Redis) {
-                self::scrubKeys(self::$redisClient, self::$cacheKeyPatterns);
-            }
-            if (self::$cacheKeyPatterns !== [] && self::$cacheRedisClient instanceof Redis) {
-                self::scrubKeys(self::$cacheRedisClient, self::$cacheKeyPatterns);
+            if (self::$keyPatterns !== [] && self::$redisClient instanceof Redis) {
+                self::scrubKeys(self::$redisClient, self::$keyPatterns);
             }
         } finally {
             self::$database = null;
             self::$redisClient = null;
-            self::$cacheRedisClient = null;
             self::$redisNamespace = '';
-            self::$cacheKeyPatterns = [];
+            self::$keyPatterns = [];
             parent::tearDownAfterClass();
         }
     }

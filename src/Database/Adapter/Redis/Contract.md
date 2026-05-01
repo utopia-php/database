@@ -179,9 +179,8 @@ inverse operations through `rawDeleteDoc()` and `rawRestoreDoc()`.
 Relationship support is split across waves: T1 (this PR) lands the helper
 contract; T2 implements `createRelationship` / `updateRelationship` /
 `deleteRelationship`; T3 wires read-path null surfacing into every decoded
-document path; T4 flips the capability bit and adds a cross-process smoke
-test. The rules below are the locked contract — Wave-2 architects MUST NOT
-deviate.
+document path; T4 flips the capability bit. The rules below are the
+locked contract — Wave-2 architects MUST NOT deviate.
 
 1. **Storage policy.** Relationship attributes ride on the existing
    `meta:{col}` HASH's `attrs` JSON field. The adapter writes a MINIMAL
@@ -247,8 +246,8 @@ deviate.
    | `private function loadMetadataDocument(string $collection): ?Document` | T1 |
 
 7. **Capability bit.** `getSupportForRelationships()` returns `true` —
-   T2 (schema ops), T3 (read-path null surfacing), and T4 (capability flip
-   + cross-process smoke) have all shipped.
+   T2 (schema ops), T3 (read-path null surfacing), and T4 (capability flip)
+   have all shipped.
 
 ## Known limitations
 

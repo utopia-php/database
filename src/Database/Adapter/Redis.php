@@ -1869,11 +1869,22 @@ class Redis extends Adapter
         if (\is_array($docIds)) {
             foreach ($docIds as $docId) {
                 $total += $this->measureKey($this->docKey($collection, (string) $docId));
-                $total += $this->measureKey($this->key($this->ns(), 'perm', 'doc', $collection, $docId));
+                // Route through permDocKey() so the tenant-bucketed shape is
+                // honoured under shared tables; otherwise the per-document
+                // perm HASH is missed entirely.
+                $total += $this->measureKey($this->permDocKey($collection, (string) $docId));
             }
         }
 
-        $permPrefix = $this->key($this->ns(), 'perm', $collection) . self::SEP . '*';
+        // Inverted permission SETs live under permKey()'s shape — tenant
+        // bucketed under shared tables, flat otherwise. Pick the matching
+        // SCAN prefix so both layouts contribute to the size estimate.
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            $permPrefix = $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . $collection . self::SEP . '*';
+        } else {
+            $permPrefix = $this->key($this->ns(), 'perm', $collection) . self::SEP . '*';
+        }
         $cursor = null;
         do {
             /** @var array<int, string>|false $batch */
@@ -2329,6 +2340,11 @@ class Redis extends Adapter
 
                     $results[] = $mergedDocument;
                 } else {
+                    // Insert path: parity with createDocument — reject writes
+                    // that would violate a UNIQUE index before the row lands
+                    // in the keyspace.
+                    $this->enforceUniqueIndexes($r, $col, $document);
+
                     $sequence = $document->getSequence();
                     if (empty($sequence)) {
                         $next = $r->incr($seqKey);

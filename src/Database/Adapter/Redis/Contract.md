@@ -55,7 +55,7 @@ redis://[user:pass@]host:port[/db]
 |-----------|---------|
 | `private function key(string ...$parts): string` | Joins parts with `SEP`. Does NOT prepend `KEY_PREFIX` — call sites compose the prefix by passing `$this->ns()` as the first argument. |
 | `private function ns(): string` | Returns `"{KEY_PREFIX}:{namespace}:{database}"`. Every adapter-produced key starts with this prefix. |
-| `private function encode(Document $document): string` | `json_encode` with `JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE`. |
+| `private function encode(Document $document): string` | `json_encode` with `JSON_THROW_ON_ERROR \| JSON_UNESCAPED_UNICODE`. |
 | `private function decode(string $payload): Document` | Wraps `json_decode` (`JSON_THROW_ON_ERROR`) in a `Document`. |
 | `protected function tx(callable $fn): mixed` | Single-shot wrapper for journal-tracked Redis operations. Does NOT retry — Redis transient errors propagate as `TransactionException`. Retrying would replay journal side-effects (duplicate entries, double-`INCR` on sequence keys). `getSupportForTransactionRetries()` returns `false` so the trait's OCC tests stay off. Real `WATCH`/`MULTI`/`EXEC` is a follow-up. |
 | `private function surfaceRelationshipAttributes(string $collection, Document $document): Document` | Reads `meta.attrs`, materialises any registered relationship attribute as `null` when the document does not carry it. METADATA is exempt (relationship attrs there live nested inside the row's `attributes` array). Mirrors `Memory::documentToRow`'s null-surface pass. |

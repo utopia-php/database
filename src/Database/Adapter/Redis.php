@@ -2311,18 +2311,19 @@ class Redis extends Adapter
         }
 
         $col = $this->filter($collection->getId());
-        $idxKey = $this->idxKey($col);
-        $seqKey = $this->seqKey($col);
 
-        return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes, $idxKey, $seqKey): array {
+        return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes): array {
             $results = [];
 
             // Phase 1: pipeline GETs of every doc so we know create vs update
-            // in a single round trip.
+            // in a single round trip. Mirror createDocument and route every
+            // doc/idx/seq key through the document's own tenant so a batch
+            // that mixes tenants under shared tables doesn't silently
+            // misroute to the adapter-bound bucket.
             $redis->multi(\Redis::PIPELINE);
             foreach ($changes as $change) {
                 $document = $change->getNew();
-                $redis->get($this->docKey($col, $document->getId()));
+                $redis->get($this->docKey($col, $document->getId(), $document->getTenant()));
             }
             $existingPayloads = $redis->exec();
             if (! \is_array($existingPayloads)) {
@@ -2342,7 +2343,10 @@ class Redis extends Adapter
             foreach ($changes as $i => $change) {
                 $document = $change->getNew();
                 $id = $document->getId();
-                $docKey = $this->docKey($col, $id);
+                $tenant = $document->getTenant();
+                $docKey = $this->docKey($col, $id, $tenant);
+                $idxKey = $this->idxKey($col, $tenant);
+                $seqKey = $this->seqKey($col, $tenant);
                 $existingPayload = $existingPayloads[$i] ?? false;
 
                 if (\is_string($existingPayload) && $existingPayload !== '') {

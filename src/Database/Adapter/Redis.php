@@ -6,74 +6,58 @@ namespace Utopia\Database\Adapter;
 
 use Redis as RedisClient;
 use Utopia\Database\Adapter;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Redis-backed adapter mirroring the Memory adapter's surface.
  *
  * Storage key schema (every key is prefixed with `KEY_PREFIX:`):
  *
- *     {ns}                      = getNamespace()
- *     {db}                      = current setDatabase() value
- *     {col}                     = collection ID
+ *     {ns}:dbs                                | SET  | database names
+ *     {ns}:{db}:cols                          | SET  | collection IDs
+ *     {ns}:{db}:meta:{col}                    | HASH | schema/attrs/indexes
+ *     {ns}:{db}:doc:{col}:{id}                | STRING | JSON Document
+ *     {ns}:{db}:idx:{col}                     | SET  | doc IDs in collection
+ *     {ns}:{db}:perm:{col}:{letter}:{role}    | SET  | doc IDs by action+role
+ *     {ns}:{db}:perm:doc:{col}:{id}           | HASH | role -> csv letters
  *
- *     Key                                          | Type | Holds
- *     ---------------------------------------------+------+----------------------------------
- *     {ns}:{db}:dbs                                | SET  | database names
- *     {ns}:{db}:cols                               | SET  | collection IDs in this db
- *     {ns}:{db}:meta:{col}                         | HASH | fields: schema, attrs, indexes, docCount, sizeBytes
- *     {ns}:{db}:doc:{col}:{id}                     | STRING | JSON-encoded Document
- *     {ns}:{db}:idx:{col}                          | SET  | doc IDs in collection (for SCAN/list)
- *     {ns}:{db}:perm:{col}:{r|c|u|d|w}:{role}      | SET  | doc IDs by action+role (non-shared)
- *     {ns}:{db}:perm:t:{tenant}:{col}:{letter}:{role} | SET | shared-tables variant
- *     {ns}:{db}:perm:doc:{col}:{id}                | HASH | role -> csv("read,update,delete")
- *     {ns}:{db}:perm:t:{tenant}:doc:{col}:{id}     | HASH | shared-tables variant
- *     {ns}:{db}:tenants:{col}:{tenant}             | SET  | doc IDs filtered by tenant
- *
- * Transaction model: `tx()` is a single-shot wrapper that surfaces
- * `\RedisException` as `TransactionException`. There is NO retry, no
- * `WATCH`/`MULTI`/`EXEC`, and no automatic OCC — retrying would replay
- * journal side-effects (duplicate `INCR` on sequence keys, double
- * pipelined SADDs). Real OCC is a follow-up; `getSupportForTransactionRetries()`
- * returns `false` so the shared trait's OCC tests stay off. Pessimistic
- * update locks are intentionally unsupported.
- *
- * Rollback contract: `rollbackJournal()` MUST use raw `\Redis` client
- * commands only — calling a public adapter method re-enters `journal()`
- * and recurses infinitely. All inverses route through `rawDeleteDoc()`
- * and `rawRestoreDoc()`.
+ * Shared-tables variants bucket on tenant under `t:{tenant}` segments.
  */
-class Redis extends Adapter
+class Redis extends Adapter implements
+    Feature\Relationships,
+    Feature\Upserts,
+    Feature\ConnectionId
 {
     public const string KEY_PREFIX = 'utopia';
 
     public const string SEP = ':';
 
-    /**
-     * Default SCAN MATCH batch size — also the variadic DEL chunk size
-     * used by collection purge. Aligned with the test harness teardown
-     * documented in Contract.md.
-     */
     private const int SCAN_BATCH_SIZE = 500;
 
-    /**
-     * Maximum depth for `json_decode` when reading document payloads and
-     * meta-hash fields. Matches the PHP default; hoisted so the value is
-     * named once instead of repeated 8+ times across the file.
-     */
     private const int JSON_DECODE_DEPTH = 512;
 
     private RedisClient $client;
@@ -83,604 +67,11 @@ class Redis extends Adapter
      */
     private array $journalStack = [];
 
+    private bool $supportForAttributes = true;
+
     public function __construct(RedisClient $client)
     {
         $this->client = $client;
-    }
-
-    /**
-     * Join the supplied parts with `SEP`. Does NOT prepend `KEY_PREFIX` —
-     * call sites compose the prefix by passing `$this->ns()` (which is
-     * `'KEY_PREFIX:{namespace}:{database}'`) as the first argument.
-     */
-    private function key(string ...$parts): string
-    {
-        return \implode(self::SEP, $parts);
-    }
-
-    /**
-     * Build the `'KEY_PREFIX:{namespace}:{database}'` prefix shared by
-     * every adapter-produced key. All call sites that construct a Redis
-     * key MUST pass `$this->ns()` as the first argument to `key()` —
-     * passing the raw namespace/database produces unprefixed keys that
-     * collide across processes.
-     */
-    private function ns(): string
-    {
-        return $this->nsFor($this->getNamespace(), $this->getDatabase());
-    }
-
-    /**
-     * Variant of `ns()` that targets a specific database name within the
-     * current namespace. Used by `exists()` / `delete()` and similar
-     * cross-database operations where the Adapter's bound database is
-     * not the database under inspection.
-     */
-    private function nsFor(string $namespace, string $database): string
-    {
-        return self::KEY_PREFIX . self::SEP . $namespace . self::SEP . $database;
-    }
-
-    /**
-     * Build the namespace-only prefix `'KEY_PREFIX:{namespace}'`.
-     * Used for keys that are shared across all databases in a namespace,
-     * such as the database-registry SET (`dbs`). Unlike `ns()` this does
-     * NOT include the currently bound database name, so `create()`,
-     * `exists()`, `list()`, and `delete()` all read/write the same key
-     * regardless of which database is currently selected.
-     */
-    private function nsBase(): string
-    {
-        return self::KEY_PREFIX . self::SEP . $this->getNamespace();
-    }
-
-    /**
-     * Build the document storage key. Lower-cases `$id` to match MariaDB's
-     * default case-insensitive UID semantics. Under shared tables every doc
-     * key is bucketed by tenant so two tenants can hold the same id without
-     * colliding — `null` tenants land under the `_` bucket alongside global
-     * METADATA rows.
-     */
-    private function docKey(string $collection, string $id, int|string|null $tenant = null): string
-    {
-        $id = \strtolower($id);
-        if (! $this->getSharedTables()) {
-            return $this->key($this->ns(), 'doc', $collection, $id);
-        }
-
-        $bucket = $this->bucketFor($tenant);
-
-        return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
-    }
-
-    /**
-     * Build the doc-id index SET key for a collection. Tenant-scoped under
-     * shared tables so per-tenant `find()` / `count()` see only their own
-     * ids and a recreated collection does not inherit foreign ids.
-     */
-    private function idxKey(string $collection, int|string|null $tenant = null): string
-    {
-        if (! $this->getSharedTables()) {
-            return $this->key($this->ns(), 'idx', $collection);
-        }
-
-        return $this->key($this->ns(), 'idx', 't', $this->bucketFor($tenant), $collection);
-    }
-
-    /**
-     * Build the sequence counter key for a collection. Tenant-scoped under
-     * shared tables so each tenant gets an independent monotonic id space.
-     */
-    private function seqKey(string $collection, int|string|null $tenant = null): string
-    {
-        if (! $this->getSharedTables()) {
-            return $this->key($this->ns(), 'seq', $collection);
-        }
-
-        return $this->key($this->ns(), 'seq', 't', $this->bucketFor($tenant), $collection);
-    }
-
-    /**
-     * Resolve the tenant-bucket segment for shared-tables doc/idx/seq keys,
-     * mapping `null` to the literal `'_'` so all shared-tables keys share a
-     * single bucket convention.
-     */
-    private function bucketFor(int|string|null $tenant): string
-    {
-        if ($tenant === null) {
-            $tenant = $this->getTenant();
-        }
-
-        return $tenant === null ? '_' : (string) $tenant;
-    }
-
-    private function encode(Document $document): string
-    {
-        return \json_encode(
-            $document->getArrayCopy(),
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
-        );
-    }
-
-    private function decode(string $payload): Document
-    {
-        try {
-            /** @var array<string, mixed> $data */
-            $data = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw new DatabaseException('Document decode failed: ' . $e->getMessage(), 0, $e);
-        }
-
-        return new Document($data);
-    }
-
-    /**
-     * Single-shot wrapper for journal-tracked Redis operations. Does NOT
-     * retry — Redis transient errors propagate as `TransactionException`.
-     * Retrying here would replay journal side-effects (duplicate entries,
-     * non-idempotent commands like `INCR` on the sequence key advancing
-     * twice) so we leave retry policy to call sites that can prove
-     * idempotency. OCC support via WATCH/MULTI/EXEC is a follow-up
-     * (see Contract.md). `getSupportForTransactionRetries()` returns
-     * `false` so the shared trait suite skips OCC-retry assertions.
-     *
-     * @param callable(RedisClient): mixed $fn
-     */
-    protected function tx(callable $fn): mixed
-    {
-        try {
-            return $fn($this->client);
-        } catch (\RedisException $exception) {
-            throw new TransactionException('tx failed: ' . $exception->getMessage(), 0, $exception);
-        }
-    }
-
-    /**
-     * Persist a document's permissions into the inverted role/action sets and
-     * the per-document role->letters HASH. The same writes are journalled so
-     * T56 can revert them on rollback.
-     *
-     * NOTE: opens its own `multi(\Redis::PIPELINE)` block. MUST NOT be wrapped
-     * inside a MULTI/EXEC: phpredis does not support nested MULTI, and
-     * pipelining inside a transaction would queue commands incorrectly. If
-     * `tx()` ever gains real WATCH/MULTI/EXEC, this method must be refactored
-     * to either share the outer connection's mode, take an `inMulti` flag,
-     * or be split into a non-pipelined variant. Same constraint applies to
-     * `clearPermissions()` and `getSequences()`.
-     */
-    private function writePermissions(string $collection, string $id, Document $document): void
-    {
-        // Document keys (`doc:{col}:{id}`) and the index SET (`idx:{col}`) both
-        // use `\strtolower($id)`. The inverted permission SETs must follow the
-        // same convention so `applyPermissionFilter()` can intersect ids from
-        // the index SET with the perm SETs without case mismatch.
-        $id = \strtolower($id);
-
-        $byRole = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $role) {
-                $byRole[$role][] = self::actionLetter($type);
-            }
-        }
-
-        if ($byRole === []) {
-            return;
-        }
-
-        $hashKey = $this->permDocKey($collection, $id);
-        $hashFields = [];
-        $writes = [];
-        foreach ($byRole as $role => $letters) {
-            $unique = \array_values(\array_unique($letters));
-            \sort($unique);
-            $hashFields[$role] = \implode(',', $unique);
-            foreach ($unique as $letter) {
-                $writes[] = [$role, $letter];
-            }
-        }
-
-        // Pipeline the SADD writes so a doc with N (role,action) pairs hits
-        // Redis in a single round trip rather than N+1 sequential sends.
-        $this->client->multi(\Redis::PIPELINE);
-        try {
-            foreach ($writes as [$role, $letter]) {
-                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
-            }
-            $this->client->hMSet($hashKey, $hashFields);
-            $this->client->exec();
-        } catch (\Throwable $e) {
-            // PIPELINE-mode discard is version-dependent across phpredis
-            // (no-op in 5.x, raises in some 4.x). Swallow any failure here
-            // so we propagate the original cause, not a teardown error.
-            try {
-                $this->client->discard();
-            } catch (\Throwable) {
-                // ignore
-            }
-            throw $e;
-        }
-
-        // Journal one entry per (role, letter) pair so rollback dispatches
-        // through the existing 'createPerm' case without a bespoke handler.
-        foreach ($writes as [$role, $letter]) {
-            $this->journal('createPerm', [
-                'collection' => $collection,
-                'id' => $id,
-                'role' => $role,
-                'letter' => $letter,
-            ]);
-        }
-    }
-
-    /**
-     * Strip every permission entry for ($collection, $id) from the inverted
-     * sets and the per-doc HASH, recording the previous state in the journal
-     * so T56 can replay it on rollback.
-     *
-     * NOTE: same nested-pipeline constraint as `writePermissions()`. MUST NOT
-     * be wrapped inside a MULTI/EXEC. See `writePermissions()` docblock for
-     * the refactor checklist if `tx()` ever gains real transaction support.
-     */
-    private function clearPermissions(string $collection, string $id): void
-    {
-        // Mirror writePermissions(): all perm-set operations key off the
-        // lowercased id so reads and writes stay symmetric.
-        $id = \strtolower($id);
-        $hashKey = $this->permDocKey($collection, $id);
-        /** @var array<string, string>|false $hash */
-        $hash = $this->client->hGetAll($hashKey);
-        if ($hash === false || $hash === []) {
-            return;
-        }
-
-        $removals = [];
-        foreach ($hash as $role => $letterCsv) {
-            if ($letterCsv === '') {
-                continue;
-            }
-            foreach (\explode(',', $letterCsv) as $letter) {
-                $removals[] = [$role, $letter];
-            }
-        }
-
-        // Pipeline the SREMs and HDEL together — one round trip per call site.
-        $this->client->multi(\Redis::PIPELINE);
-        try {
-            foreach ($removals as [$role, $letter]) {
-                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
-            }
-            $this->client->del($hashKey);
-            $this->client->exec();
-        } catch (\Throwable $e) {
-            // PIPELINE-mode discard is version-dependent across phpredis;
-            // swallow the teardown error so we surface the original cause.
-            try {
-                $this->client->discard();
-            } catch (\Throwable) {
-                // ignore
-            }
-            throw $e;
-        }
-
-        // Emit one 'deletePerm' per pair so rollback can replay each SADD
-        // and rehydrate the per-doc HASH entry independently.
-        foreach ($removals as [$role, $letter]) {
-            $this->journal('deletePerm', [
-                'collection' => $collection,
-                'id' => $id,
-                'role' => $role,
-                'letter' => $letter,
-                'previous' => $hash[$role] ?? '',
-            ]);
-        }
-    }
-
-    /**
-     * Restrict $ids to those visible to the current authorization context for
-     * the given $action. Returns $ids unchanged when authorization is off so
-     * privileged code paths bypass the filter.
-     *
-     * @param array<int, string> $ids
-     * @return array<int, string>
-     */
-    private function applyPermissionFilter(string $collection, array $ids, string $action): array
-    {
-        if ($ids === []) {
-            return $ids;
-        }
-        if ($this->authorization->getStatus() === false) {
-            return $ids;
-        }
-
-        $roles = $this->authorization->getRoles();
-        if ($roles === []) {
-            return [];
-        }
-
-        $letter = self::actionLetter($action);
-        $keys = [];
-        foreach ($roles as $role) {
-            $keys[] = $this->permKey($collection, $letter, $role);
-        }
-
-        if (\count($keys) === 1) {
-            /** @var array<int, string>|false $allowed */
-            $allowed = $this->client->sMembers($keys[0]);
-        } else {
-            $first = \array_shift($keys);
-            /** @var array<int, string>|false $allowed */
-            $allowed = $this->client->sUnion($first, ...$keys);
-        }
-        if ($allowed === false || $allowed === []) {
-            return [];
-        }
-
-        $allowedSet = \array_flip($allowed);
-
-        return \array_values(\array_filter($ids, static fn (string $id): bool => isset($allowedSet[$id])));
-    }
-
-    /**
-     * Translate a `Database::PERMISSION_*` action string to the single-letter
-     * suffix used in `{ns}:{db}:perm:{col}:{letter}:{role}` set keys.
-     */
-    private static function actionLetter(string $action): string
-    {
-        return match ($action) {
-            Database::PERMISSION_READ => 'r',
-            Database::PERMISSION_CREATE => 'c',
-            Database::PERMISSION_UPDATE => 'u',
-            Database::PERMISSION_DELETE => 'd',
-            Database::PERMISSION_WRITE => 'w',
-            default => throw new DatabaseException('Unknown permission action: ' . $action),
-        };
-    }
-
-    /**
-     * Resolve the tenant-bucket segment for shared-tables perm keys, mapping
-     * a null tenant to the literal `'_'` so all shared-tables perm keys share
-     * a single inversion convention. Returns null when shared tables are off.
-     */
-    private function tenantBucket(): ?string
-    {
-        if (! $this->getSharedTables()) {
-            return null;
-        }
-        $tenant = $this->getTenant();
-
-        return $tenant === null ? '_' : (string) $tenant;
-    }
-
-    /**
-     * Build the role/action set key, scoping by tenant under shared tables so
-     * cross-tenant role overlaps don't leak document ids.
-     */
-    private function permKey(string $collection, string $letter, string $role): string
-    {
-        $bucket = $this->tenantBucket();
-        if ($bucket !== null) {
-            return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . $collection . self::SEP . $letter . self::SEP . $role;
-        }
-
-        return $this->ns() . self::SEP . 'perm' . self::SEP . $collection . self::SEP . $letter . self::SEP . $role;
-    }
-
-    /**
-     * Build the per-document role->letters HASH key for ($collection, $id),
-     * applying the same tenant scoping as `permKey()` so reads/writes stay
-     * symmetric under shared tables.
-     */
-    private function permDocKey(string $collection, string $id): string
-    {
-        $bucket = $this->tenantBucket();
-        if ($bucket !== null) {
-            return $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
-        }
-
-        return $this->ns() . self::SEP . 'perm' . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
-    }
-
-    /**
-     * Append a mutation entry to the topmost journal frame. Outside a
-     * transaction the entry is dropped — non-transactional writes pay
-     * zero overhead. The `op` discriminator drives `rollbackJournal()`'s
-     * dispatch to raw inverse helpers.
-     *
-     * @param array<string, mixed> $payload
-     */
-    protected function journal(string $op, array $payload): void
-    {
-        if ($this->inTransaction === 0) {
-            return;
-        }
-        $this->journalStack[\count($this->journalStack) - 1][] = [
-            'op' => $op,
-            'payload' => $payload,
-        ];
-    }
-
-    /**
-     * Pop the topmost journal frame and replay its inverse operations in
-     * reverse order. Uses raw `\Redis` client commands only — calling a
-     * public adapter method would re-enter `journal()` and recurse
-     * infinitely. New `op` discriminators must be added to the dispatch
-     * switch below.
-     */
-    protected function rollbackJournal(): void
-    {
-        $frame = \array_pop($this->journalStack);
-        if ($frame === null) {
-            return;
-        }
-
-        for ($i = \count($frame) - 1; $i >= 0; $i--) {
-            $entry = $frame[$i];
-            $op = $entry['op'];
-            $payload = $entry['payload'];
-
-            switch ($op) {
-                case 'createDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    $this->rawDeleteDoc(
-                        $collection,
-                        $id,
-                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
-                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
-                        isset($payload['permDocKey']) ? (string) $payload['permDocKey'] : null,
-                    );
-                    break;
-
-                case 'deleteDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    /** @var string $beforePayload */
-                    $beforePayload = $payload['payload'];
-                    $this->rawRestoreDoc(
-                        $collection,
-                        $id,
-                        $beforePayload,
-                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
-                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
-                    );
-                    break;
-
-                case 'updateDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    /** @var string $beforePayload */
-                    $beforePayload = $payload['payload'];
-                    $docKey = isset($payload['docKey']) ? (string) $payload['docKey'] : $this->docKey($collection, $id);
-                    $this->client->set($docKey, $beforePayload);
-                    // If the update changed the id, the new key must be removed
-                    // and the old id restored to the index set.
-                    if (isset($payload['newId']) && \is_string($payload['newId']) && $payload['newId'] !== $id) {
-                        $newId = $payload['newId'];
-                        $newDocKey = isset($payload['newDocKey']) ? (string) $payload['newDocKey'] : $this->docKey($collection, $newId);
-                        $this->client->del($newDocKey);
-                        $idxKey = isset($payload['idxKey']) ? (string) $payload['idxKey'] : $this->idxKey($collection);
-                        $this->client->sRem($idxKey, \strtolower($newId));
-                        $this->client->sAdd($idxKey, \strtolower($id));
-                    }
-                    break;
-
-                case 'createPerm':
-                    // Inverse of writePermissions: drop the (role, letter)
-                    // membership and the per-doc HASH entry for that role.
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $letter */
-                    $letter = $payload['letter'];
-                    /** @var string $role */
-                    $role = $payload['role'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    $this->client->sRem($this->permKey($collection, $letter, $role), $id);
-                    $this->client->hDel($this->permDocKey($collection, $id), $role);
-                    break;
-
-                case 'deletePerm':
-                    // Inverse of clearPermissions: restore the (role, letter)
-                    // membership and rehydrate the per-doc HASH entry.
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $letter */
-                    $letter = $payload['letter'];
-                    /** @var string $role */
-                    $role = $payload['role'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
-                    if (isset($payload['previous']) && \is_string($payload['previous']) && $payload['previous'] !== '') {
-                        $this->client->hSet($this->permDocKey($collection, $id), $role, $payload['previous']);
-                    }
-                    break;
-
-                default:
-                    throw new TransactionException('Unknown journal op: ' . $op);
-            }
-        }
-    }
-
-    /**
-     * Pop the topmost journal frame and, when nested, splice its entries
-     * onto the parent frame so an outer rollback still rewinds inner
-     * work. At the outermost level the frame is discarded — Wave-2
-     * writes go directly to Redis (no two-phase commit), so the journal
-     * exists purely for rollback compensation.
-     */
-    protected function commitJournal(): void
-    {
-        $frame = \array_pop($this->journalStack);
-        if ($frame === null) {
-            return;
-        }
-
-        if ($frame !== [] && $this->journalStack !== []) {
-            $outerIndex = \count($this->journalStack) - 1;
-            \array_push($this->journalStack[$outerIndex], ...$frame);
-        }
-    }
-
-    private function rawDeleteDoc(string $collection, string $id, ?string $docKey = null, ?string $idxKey = null, ?string $permDocKey = null): void
-    {
-        // writePermissions/clearPermissions key the per-doc HASH off the
-        // lowercased id; lowercase here too so rollback of a mixed-case
-        // create id actually deletes the perm doc HASH that was written.
-        $lowerId = \strtolower($id);
-        $this->client->del($docKey ?? $this->docKey($collection, $lowerId));
-        $this->client->sRem($idxKey ?? $this->idxKey($collection), $lowerId);
-        $this->client->del($permDocKey ?? $this->permDocKey($collection, $lowerId));
-    }
-
-    private function rawRestoreDoc(string $collection, string $id, string $payload, ?string $docKey = null, ?string $idxKey = null): void
-    {
-        $lowerId = \strtolower($id);
-        $this->client->set($docKey ?? $this->docKey($collection, $lowerId), $payload);
-        $this->client->sAdd($idxKey ?? $this->idxKey($collection), $lowerId);
-    }
-
-    /**
-     * @param array<int, Query> $queries
-     * @param array<int, string> $orderAttributes
-     * @param array<int, string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @return array<int, Document>
-     */
-    protected function evaluateQueries(string $collection, array $queries, ?int $limit, ?int $offset, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
-    {
-        $collectionId = $this->filter($collection);
-        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
-
-        if ((bool) $this->client->exists($metaKey) === false) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection): array {
-            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
-            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
-            $documents = $this->orderDocuments($documents, $orderAttributes, $orderTypes, $cursorDirection);
-            $documents = $this->cursorDocuments($documents, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
-
-            if (! \is_null($offset)) {
-                $documents = \array_slice($documents, $offset);
-            }
-            if (! \is_null($limit)) {
-                $documents = \array_slice($documents, 0, $limit);
-            }
-
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $documents = \array_reverse($documents);
-            }
-
-            return $documents;
-        });
     }
 
     public function getDriver(): mixed
@@ -688,7 +79,34 @@ class Redis extends Adapter
         return 'redis';
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    /**
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Schemas,
+            Capability::Fulltext,
+            Capability::Casting,
+            Capability::QueryContains,
+            Capability::BatchOperations,
+            Capability::BatchCreateAttributes,
+            Capability::AttributeResizing,
+            Capability::Objects,
+            Capability::Operators,
+            Capability::OrderRandom,
+            Capability::DefinedAttributes,
+            Capability::NestedTransactions,
+            Capability::PCRE,
+            Capability::Regex,
+        ]);
+    }
+
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
     {
     }
 
@@ -701,616 +119,41 @@ class Redis extends Adapter
     {
     }
 
-    protected function quote(string $string): string
+    public function startTransaction(): bool
     {
-        return '"' . $string . '"';
-    }
+        $this->journalStack[] = [];
+        $this->inTransaction++;
 
-    public function getLimitForString(): int
-    {
-        return 4294967295;
-    }
-
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    public function getMaxIndexLength(): int
-    {
-        return 1024;
-    }
-
-    public function getMaxVarcharLength(): int
-    {
-        return 16381;
-    }
-
-    public function getMaxUIDLength(): int
-    {
-        return 255;
-    }
-
-    public function getMinDateTime(): \DateTime
-    {
-        return new \DateTime('0001-01-01 00:00:00');
-    }
-
-    public function getIdAttributeType(): string
-    {
-        // Sequence ids are sourced from `INCR`, which returns integers.
-        // The validator rejects string-valued sequences when this returns
-        // VAR_STRING, so mirror Memory's VAR_INTEGER stance.
-        return Database::VAR_INTEGER;
-    }
-
-    public function getSupportForSchemas(): bool
-    {
         return true;
     }
 
-    public function getSupportForAttributes(): bool
+    public function commitTransaction(): bool
     {
-        return true;
-    }
-
-    public function setSupportForAttributes(bool $support): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCasting(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForQueryContains(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForTimeouts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchOperations(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAttributeResizing(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForGetConnectionId(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpsertOnUniqueIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForVectors(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCacheSkipOnFailure(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForReconnection(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForHostname(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOperators(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOrderRandom(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForInternalCasting(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForAlterLocks(): bool
-    {
-        return false;
-    }
-
-    public function getSupportNonUtfCharacters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTransactionRetries(): bool
-    {
-        // The current `tx()` body is a network-error retry loop, not a
-        // WATCH/MULTI/EXEC OCC implementation. Reporting `false` keeps the
-        // shared trait's OCC-retry tests from running against semantics this
-        // adapter doesn't yet provide. Mirror Memory's stance until a real
-        // optimistic concurrency layer lands.
-        return false;
-    }
-
-    public function getSupportForNestedTransactions(): bool
-    {
-        return true;
-    }
-
-    public function getCountOfDefaultAttributes(): int
-    {
-        return \count(Database::INTERNAL_ATTRIBUTES);
-    }
-
-    public function getCountOfDefaultIndexes(): int
-    {
-        return \count(Database::INTERNAL_INDEXES);
-    }
-
-    public function getDocumentSizeLimit(): int
-    {
-        return 0;
-    }
-
-    public function getAttributeWidth(Document $collection): int
-    {
-        return 0;
-    }
-
-    public function getKeywords(): array
-    {
-        return [];
-    }
-
-    /**
-     * @param array<int, string> $selections
-     */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        return $selections;
-    }
-
-    public function getConnectionId(): string
-    {
-        return '0';
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
-    protected function execute(mixed $stmt): bool
-    {
-        return true;
-    }
-
-    public function decodePoint(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Redis adapter');
-    }
-
-    public function decodeLinestring(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Redis adapter');
-    }
-
-    public function decodePolygon(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Redis adapter');
-    }
-
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function setUTCDatetime(string $value): mixed
-    {
-        return $value;
-    }
-
-    /**
-     * Surface relationship attributes registered on the collection's meta.attrs
-     * as null when the document does not carry them — mirrors MariaDB selecting
-     * a `DEFAULT NULL` column even when no row has set it (and Memory's
-     * `documentToRow` null-surface pass).
-     *
-     * METADATA is exempt: relationship attributes for user collections are
-     * nested inside the metadata row's `attributes` payload, not stored as
-     * top-level keys. Surfacing nulls there would clobber that nested array.
-     */
-    private function surfaceRelationshipAttributes(string $collection, Document $document): Document
-    {
-        if ($collection === Database::METADATA) {
-            return $document;
+        if ($this->inTransaction === 0) {
+            return false;
         }
 
-        $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
-        $attributes = $this->readAttributesField($this->client, $metaKey);
-        $relationshipKeys = $this->extractRelationshipKeys($attributes);
-        if ($relationshipKeys === []) {
-            return $document;
+        $frame = \array_pop($this->journalStack);
+        if ($frame !== null && $frame !== [] && $this->journalStack !== []) {
+            $outerIndex = \count($this->journalStack) - 1;
+            \array_push($this->journalStack[$outerIndex], ...$frame);
         }
+        $this->inTransaction--;
 
-        return $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
+        return true;
     }
 
-    /**
-     * Loop-friendly companion to `surfaceRelationshipAttributes`. Callers that
-     * iterate large result sets (e.g. `find()` / `loadCollectionDocuments`)
-     * read meta.attrs once, derive the relationship key list via
-     * `extractRelationshipKeys`, and pass it here per document — avoiding N
-     * round trips to Redis for the same meta hash.
-     *
-     * @param array<int, string> $relationshipKeys
-     */
-    private function surfaceRelationshipAttributesUsing(array $relationshipKeys, Document $document): Document
+    public function rollbackTransaction(): bool
     {
-        if ($relationshipKeys === []) {
-            return $document;
+        if ($this->inTransaction === 0) {
+            return false;
         }
 
-        $payload = $document->getArrayCopy();
-        foreach ($relationshipKeys as $key) {
-            if (! \array_key_exists($key, $payload)) {
-                $document->setAttribute($key, null);
-            }
-        }
+        $this->rollbackJournal();
+        $this->inTransaction--;
 
-        return $document;
+        return true;
     }
-
-    /**
-     * Extract the list of relationship attribute keys from a decoded
-     * meta.attrs records array. Returned as a positional list so callers can
-     * iterate without extra `array_keys` calls.
-     *
-     * @param array<int, array<string, mixed>> $attributes
-     * @return array<int, string>
-     */
-    private function extractRelationshipKeys(array $attributes): array
-    {
-        $keys = [];
-        foreach ($attributes as $attribute) {
-            if (($attribute['type'] ?? null) !== Database::VAR_RELATIONSHIP) {
-                continue;
-            }
-            $key = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
-            if ($key === '') {
-                continue;
-            }
-            $keys[] = $key;
-        }
-
-        return $keys;
-    }
-
-    /**
-     * Rename a top-level field across every document in a collection. Mirrors
-     * Memory's `renameDocumentField`. Used by `updateRelationship` to migrate
-     * stored payloads when a relationship key is renamed.
-     *
-     * Schema-level (non-journalled): same convention as `createAttribute` /
-     * `renameAttribute` — schema mutations are not transactional and therefore
-     * do not register inverse entries with `journal()`. The transaction
-     * wrapper is used solely to surface `\RedisException` as
-     * `TransactionException`.
-     */
-    private function renameDocumentField(string $collection, string $oldKey, string $newKey): void
-    {
-        $collection = $this->filter($collection);
-        $oldKey = $this->filter($oldKey);
-        $newKey = $this->filter($newKey);
-
-        if ($oldKey === $newKey) {
-            return;
-        }
-
-        $idxKey = $this->idxKey($collection);
-
-        $this->tx(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
-            /** @var array<int, string>|false $docIds */
-            $docIds = $client->sMembers($idxKey);
-            if (! \is_array($docIds) || $docIds === []) {
-                return;
-            }
-
-            foreach ($docIds as $docId) {
-                $docKey = $this->docKey($collection, $docId);
-                $payload = $client->get($docKey);
-                if (! \is_string($payload) || $payload === '') {
-                    continue;
-                }
-
-                /** @var array<string, mixed> $decoded */
-                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
-                if (! \array_key_exists($oldKey, $decoded)) {
-                    continue;
-                }
-
-                $decoded[$newKey] = $decoded[$oldKey];
-                unset($decoded[$oldKey]);
-
-                $client->set(
-                    $docKey,
-                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
-                );
-            }
-        });
-    }
-
-    /**
-     * Remove a top-level field from every document in a collection. Mirrors
-     * Memory's `dropDocumentField`. Used by `deleteRelationship` to scrub
-     * stored payloads when a relationship column is dropped.
-     *
-     * Same non-journalled schema-op contract as `renameDocumentField`.
-     */
-    private function dropDocumentField(string $collection, string $field): void
-    {
-        $collection = $this->filter($collection);
-        $field = $this->filter($field);
-        $idxKey = $this->idxKey($collection);
-
-        $this->tx(function (RedisClient $client) use ($collection, $field, $idxKey): void {
-            /** @var array<int, string>|false $docIds */
-            $docIds = $client->sMembers($idxKey);
-            if (! \is_array($docIds) || $docIds === []) {
-                return;
-            }
-
-            foreach ($docIds as $docId) {
-                $docKey = $this->docKey($collection, $docId);
-                $payload = $client->get($docKey);
-                if (! \is_string($payload) || $payload === '') {
-                    continue;
-                }
-
-                /** @var array<string, mixed> $decoded */
-                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
-                if (! \array_key_exists($field, $decoded)) {
-                    continue;
-                }
-
-                unset($decoded[$field]);
-
-                $client->set(
-                    $docKey,
-                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
-                );
-            }
-        });
-    }
-
-    /**
-     * Resolve the junction collection name for an M2M relationship. Mirrors
-     * `Database::getJunctionCollection` — the junction is named after the
-     * parent/child sequence pair (`_{parent}_{child}` for the parent side,
-     * reversed for the child side).
-     *
-     * Reads the METADATA collection's docs for both sides and extracts each
-     * `$sequence`. Returns null when either METADATA row is missing or has
-     * no sequence — callers treat that as a no-op (skip the rename).
-     */
-    private function resolveJunctionCollection(string $collection, string $relatedCollection, string $side): ?string
-    {
-        $collectionDoc = $this->loadMetadataDocument($collection);
-        $relatedDoc = $this->loadMetadataDocument($relatedCollection);
-        if ($collectionDoc === null || $relatedDoc === null) {
-            return null;
-        }
-
-        $collectionSequence = $collectionDoc->getSequence();
-        $relatedSequence = $relatedDoc->getSequence();
-        if ($collectionSequence === null || $relatedSequence === null || $collectionSequence === '' || $relatedSequence === '') {
-            return null;
-        }
-
-        return $side === Database::RELATION_SIDE_PARENT
-            ? '_' . $collectionSequence . '_' . $relatedSequence
-            : '_' . $relatedSequence . '_' . $collectionSequence;
-    }
-
-    /**
-     * Read a single METADATA document directly from the doc key, bypassing
-     * the public `getDocument` path so this helper can be called from inside
-     * schema operations (which build a Document collection lazily).
-     */
-    private function loadMetadataDocument(string $collection): ?Document
-    {
-        $id = $this->filter($collection);
-        $payload = $this->client->get($this->docKey(Database::METADATA, $id));
-        // Fall back to the null-tenant METADATA row under shared tables —
-        // bootstrap writes the global metadata schema with $tenant=null.
-        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables()) {
-            $payload = $this->client->get($this->docKey(Database::METADATA, $id, '_'));
-        }
-        if (! \is_string($payload) || $payload === '') {
-            return null;
-        }
-
-        return $this->decode($payload);
-    }
-
-    // === @architect:T20 owns: schema + collection + attribute ops ===
 
     public function create(string $name): bool
     {
@@ -1395,11 +238,27 @@ class Redis extends Adapter
 
         $attributePayload = [];
         foreach ($attributes as $attribute) {
-            $attributePayload[] = $attribute->getArrayCopy();
+            $attributePayload[] = [
+                '$id' => $attribute->key,
+                'key' => $attribute->key,
+                'type' => $attribute->type->value,
+                'size' => $attribute->size,
+                'signed' => $attribute->signed,
+                'array' => $attribute->array,
+                'required' => $attribute->required,
+            ];
         }
+
         $indexPayload = [];
         foreach ($indexes as $index) {
-            $indexPayload[] = $index->getArrayCopy();
+            $indexPayload[] = [
+                '$id' => $index->key,
+                'key' => $index->key,
+                'type' => $index->type->value,
+                'attributes' => $index->attributes,
+                'lengths' => $index->lengths,
+                'orders' => $index->orders,
+            ];
         }
 
         $schema = new Document([
@@ -1417,10 +276,6 @@ class Redis extends Adapter
                 'docCount' => '0',
                 'sizeBytes' => '0',
             ]);
-            // Reserve the doc-id index set so SCAN/list operations work even
-            // before the first document write. Redis cannot persist empty
-            // sets, so we materialise the key on first write — but we still
-            // delete it on collection drop to clean up any prior contents.
             $client->del($idxKey);
             $client->sAdd($colsKey, $id);
         });
@@ -1445,8 +300,6 @@ class Redis extends Adapter
 
     public function analyzeCollection(string $collection): bool
     {
-        // Redis maintains no internal table statistics; mirrors Memory's
-        // behavior for adapters without a stats subsystem.
         return false;
     }
 
@@ -1457,37 +310,33 @@ class Redis extends Adapter
 
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        // Redis stores the working set in memory; on-disk size mirrors
-        // logical size for the purposes of the size-tracking tests.
         return $this->computeCollectionSize($collection);
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    public function createAttribute(string $collection, Attribute $attribute): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($attribute->key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             throw new NotFoundException('Collection not found');
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $id, $type, $size, $signed, $array, $required): void {
+        $record = [
+            '$id' => $id,
+            'key' => $id,
+            'type' => $attribute->type->value,
+            'size' => $attribute->size,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
             $attrs = $this->readAttributesField($client, $metaKey);
-            $attrs = $this->upsertAttributeRecord($attrs, [
-                '$id' => $id,
-                'key' => $id,
-                'type' => $type,
-                'size' => $size,
-                'signed' => $signed,
-                'array' => $array,
-                'required' => $required,
-            ]);
-            $client->hSet(
-                $metaKey,
-                'attrs',
-                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
+            $attrs = $this->upsertAttributeRecord($attrs, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         return true;
@@ -1496,24 +345,16 @@ class Redis extends Adapter
     public function createAttributes(string $collection, array $attributes): bool
     {
         foreach ($attributes as $attribute) {
-            $this->createAttribute(
-                $collection,
-                (string) $attribute['$id'],
-                (string) $attribute['type'],
-                (int) ($attribute['size'] ?? 0),
-                (bool) ($attribute['signed'] ?? true),
-                (bool) ($attribute['array'] ?? false),
-                (bool) ($attribute['required'] ?? false),
-            );
+            $this->createAttribute($collection, $attribute);
         }
 
         return true;
     }
 
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
+        $id = $this->filter($attribute->key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
@@ -1525,22 +366,20 @@ class Redis extends Adapter
             $id = $this->filter($newKey);
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $id, $type, $size, $signed, $array, $required): void {
+        $record = [
+            '$id' => $id,
+            'key' => $id,
+            'type' => $attribute->type->value,
+            'size' => $attribute->size,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
             $attrs = $this->readAttributesField($client, $metaKey);
-            $attrs = $this->upsertAttributeRecord($attrs, [
-                '$id' => $id,
-                'key' => $id,
-                'type' => $type,
-                'size' => $size,
-                'signed' => $signed,
-                'array' => $array,
-                'required' => $required,
-            ]);
-            $client->hSet(
-                $metaKey,
-                'attrs',
-                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
+            $attrs = $this->upsertAttributeRecord($attrs, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         return true;
@@ -1560,17 +399,13 @@ class Redis extends Adapter
             $attrs = $this->readAttributesField($client, $metaKey);
             $filtered = [];
             foreach ($attrs as $attribute) {
-                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) === $id) {
                     continue;
                 }
                 $filtered[] = $attribute;
             }
-            $client->hSet(
-                $metaKey,
-                'attrs',
-                \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
+            $client->hSet($metaKey, 'attrs', \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         $this->dropDocumentField($collection, $id);
@@ -1593,7 +428,7 @@ class Redis extends Adapter
             $attrs = $this->readAttributesField($client, $metaKey);
             $touched = false;
             foreach ($attrs as $i => $attribute) {
-                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) !== $old) {
                     continue;
                 }
@@ -1605,11 +440,7 @@ class Redis extends Adapter
             if (! $touched) {
                 return;
             }
-            $client->hSet(
-                $metaKey,
-                'attrs',
-                \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
+            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         $this->renameDocumentField($collection, $old, $new);
@@ -1617,379 +448,292 @@ class Redis extends Adapter
         return true;
     }
 
-    public function getSchemaAttributes(string $collection): array
+    public function createRelationship(Relationship $relationship): bool
     {
-        return [];
-    }
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
+        $id = $relationship->key;
+        $twoWayKey = $relationship->twoWayKey;
+        $twoWay = $relationship->twoWay;
 
-    public function getCountOfAttributes(Document $collection): int
-    {
-        return \count($collection->getAttribute('attributes', [])) + $this->getCountOfDefaultAttributes();
-    }
-
-    /**
-     * Read and decode the `attrs` JSON field on a collection meta hash. Returns
-     * a plain list of attribute record arrays (empty when the field is absent
-     * or stored empty).
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function readAttributesField(RedisClient $client, string $metaKey): array
-    {
-        $raw = $client->hGet($metaKey, 'attrs');
-        if (! \is_string($raw) || $raw === '') {
-            return [];
-        }
-        /** @var array<int, array<string, mixed>> $decoded */
-        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
-
-        return \array_values($decoded);
-    }
-
-    /**
-     * Pre-flight unique-index check: scan the collection's existing rows for
-     * conflicts with `$document` against every UNIQUE index on the collection,
-     * mirroring Memory's `checkUniqueSignatures`. Throws DuplicateException
-     * on the first collision so callers don't waste a write round trip when
-     * MariaDB would have rejected the row.
-     *
-     * `$excludeId` lets `updateDocument` skip the document being updated.
-     */
-    private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
-    {
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
-        $indexes = $this->readIndexesField($client, $metaKey);
-
-        $uniqueIndexes = [];
-        foreach ($indexes as $index) {
-            if (($index['type'] ?? '') !== Database::INDEX_UNIQUE) {
-                continue;
-            }
-            $attributes = $index['attributes'] ?? [];
-            if (empty($attributes)) {
-                continue;
-            }
-            $uniqueIndexes[] = $attributes;
-        }
-
-        if ($uniqueIndexes === []) {
-            return;
-        }
-
-        // Build the new document's signatures up-front. Indexes that have any
-        // null component are treated as distinct (mirrors MariaDB's UNIQUE
-        // semantics — NULL never collides with another NULL).
-        $newSignatures = [];
-        $sharedTables = $this->getSharedTables();
-        $tenant = $sharedTables ? ($document->getAttribute('$tenant') ?? $this->getTenant()) : null;
-        foreach ($uniqueIndexes as $i => $attributes) {
-            $signature = [];
-            $hasNull = false;
-            foreach ($attributes as $attribute) {
-                $value = $this->resolveDocumentAttribute($document, (string) $attribute);
-                if ($value === null) {
-                    $hasNull = true;
-                    break;
+        switch ($relationship->type) {
+            case RelationType::OneToOne:
+                $this->registerRelationshipField($collection, $id);
+                if ($twoWay) {
+                    $this->registerRelationshipField($relatedCollection, $twoWayKey);
                 }
-                $signature[] = $this->normalizeIndexValue($value);
-            }
-            if ($hasNull) {
-                continue;
-            }
-            if ($sharedTables) {
-                \array_unshift($signature, $tenant);
-            }
-            $newSignatures[$i] = \serialize($signature);
+                break;
+            case RelationType::OneToMany:
+                $this->registerRelationshipField($relatedCollection, $twoWayKey);
+                break;
+            case RelationType::ManyToOne:
+                $this->registerRelationshipField($collection, $id);
+                break;
+            case RelationType::ManyToMany:
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
         }
 
-        if ($newSignatures === []) {
-            return;
-        }
+        return true;
+    }
 
-        $idxKey = $this->idxKey($collection);
-        /** @var array<int, string> $docIds */
-        $docIds = $client->sMembers($idxKey);
-        if (empty($docIds)) {
-            return;
-        }
+    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    {
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $newKey = $newKey !== null ? $this->filter($newKey) : null;
+        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
+        $side = $relationship->side;
+        $twoWay = $relationship->twoWay;
 
-        $excludeKey = $excludeId !== null ? \strtolower($excludeId) : null;
-        $docKeys = [];
-        foreach ($docIds as $docId) {
-            if ($excludeKey !== null && \strtolower((string) $docId) === $excludeKey) {
-                continue;
-            }
-            $docKeys[(string) $docId] = $this->docKey($collection, (string) $docId);
-        }
-        if ($docKeys === []) {
-            return;
-        }
-
-        /** @var array<int, mixed> $payloads */
-        $payloads = $client->mGet(\array_values($docKeys));
-        $position = 0;
-        foreach ($docKeys as $docId => $_) {
-            $payload = $payloads[$position++] ?? null;
-            if (! \is_string($payload) || $payload === '') {
-                continue;
-            }
-            $existing = $this->decode($payload);
-            if ($sharedTables) {
-                $rowTenant = $existing->getAttribute('$tenant');
-                if ($rowTenant !== $tenant) {
-                    continue;
+        switch ($relationship->type) {
+            case RelationType::OneToOne:
+                if ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
                 }
-            }
-            foreach ($newSignatures as $i => $newHash) {
-                $attributes = $uniqueIndexes[$i];
-                $signature = [];
-                $hasNull = false;
-                foreach ($attributes as $attribute) {
-                    $value = $this->resolveDocumentAttribute($existing, (string) $attribute);
-                    if ($value === null) {
-                        $hasNull = true;
-                        break;
+                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                    $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
-                    $signature[] = $this->normalizeIndexValue($value);
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($collection, $key, $newKey);
+                    }
                 }
-                if ($hasNull) {
-                    continue;
+                break;
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Child) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($collection, $key, $newKey);
+                    }
                 }
-                if ($sharedTables) {
-                    \array_unshift($signature, $tenant);
+                break;
+            case RelationType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($junction, $key, $newKey);
+                    }
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($junction, $twoWayKey, $newTwoWayKey);
+                    }
                 }
-                if (\serialize($signature) === $newHash) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
-                }
-            }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
         }
+
+        return true;
     }
 
-    /**
-     * Insert or replace an attribute record matched by `$id`/`key`. Returns a
-     * fresh list (re-indexed) so the JSON encodes as an array, never an object.
-     *
-     * @param array<int, array<string, mixed>> $attrs
-     * @param array<string, mixed> $record
-     * @return array<int, array<string, mixed>>
-     */
-    private function upsertAttributeRecord(array $attrs, array $record): array
+    public function deleteRelationship(Relationship $relationship): bool
     {
-        $targetId = (string) ($record['$id'] ?? '');
-        $replaced = false;
-        foreach ($attrs as $i => $existing) {
-            $existingId = (string) ($existing['$id'] ?? $existing['key'] ?? '');
-            if ($existingId !== $targetId) {
-                continue;
-            }
-            $attrs[$i] = $record;
-            $replaced = true;
-            break;
-        }
-        if (! $replaced) {
-            $attrs[] = $record;
-        }
+        $collection = $relationship->collection;
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key);
+        $twoWayKey = $this->filter($relationship->twoWayKey);
+        $twoWay = $relationship->twoWay;
+        $side = $relationship->side;
 
-        return \array_values($attrs);
-    }
-
-    /**
-     * Drop every key associated with a single collection inside `{ns}:{db}`.
-     * Used by both deleteCollection and the cascading delete() path. Permission
-     * sets and document blobs are SCANned because we can't enumerate them
-     * without an index — the doc-id set under `idx:{col}` is authoritative for
-     * existing documents but permission roles vary, so we SCAN the prefix.
-     */
-    private function purgeCollectionKeys(RedisClient $client, string $namespace, string $database, string $collection): void
-    {
-        $collection = $this->filter($collection);
-        $prefix = $this->nsFor($namespace, $database);
-        $metaKey = $this->key($prefix, 'meta', $collection);
-        $idxKey = $this->key($prefix, 'idx', $collection);
-        $seqKey = $this->key($prefix, 'seq', $collection);
-
-        // Non-shared layout: walk the doc-id index for variadic DEL of every
-        // doc + perm-doc HASH. Cheap when the set is empty.
-        /** @var array<int, string>|false $docIds */
-        $docIds = $client->sMembers($idxKey);
-        if (\is_array($docIds) && $docIds !== []) {
-            $keys = [];
-            foreach ($docIds as $docId) {
-                $keys[] = $this->key($prefix, 'doc', $collection, $docId);
-                $keys[] = $this->key($prefix, 'perm', 'doc', $collection, $docId);
-                if (\count($keys) >= self::SCAN_BATCH_SIZE) {
-                    $client->del(...$keys);
-                    $keys = [];
+        switch ($relationship->type) {
+            case RelationType::OneToOne:
+                if ($side === RelationSide::Parent) {
+                    $this->deleteAttribute($collection, $key);
+                    if ($twoWay) {
+                        $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    }
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    if ($twoWay) {
+                        $this->deleteAttribute($collection, $key);
+                    }
                 }
-            }
-            if ($keys !== []) {
-                $client->del(...$keys);
-            }
+                break;
+            case RelationType::OneToMany:
+                if ($side === RelationSide::Parent) {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                } else {
+                    $this->deleteAttribute($collection, $key);
+                }
+                break;
+            case RelationType::ManyToOne:
+                if ($side === RelationSide::Parent) {
+                    $this->deleteAttribute($collection, $key);
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                }
+                break;
+            case RelationType::ManyToMany:
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
         }
 
-        // Shared-tables doc/idx/seq sweep: tenants-bucketed under
-        // `{prefix}:doc:t:{tenant}:{col}:*`, `{prefix}:idx:t:{tenant}:{col}`
-        // and `{prefix}:seq:t:{tenant}:{col}`. Run unconditionally so a
-        // collection populated while shared-tables was on can still be
-        // purged after the test resets the flag back off.
-        $this->deleteByPattern($client, $prefix . self::SEP . 'doc' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection . self::SEP . '*');
-        $this->deleteByPattern($client, $prefix . self::SEP . 'idx' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection);
-        $this->deleteByPattern($client, $prefix . self::SEP . 'seq' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection);
-
-        // Non-shared-tables perm-set sweep. permKey() emits this layout when
-        // shared tables is OFF: `{prefix}:perm:{col}:{letter}:{role}`.
-        $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection) . self::SEP . '*');
-        // Shared-tables perm sweep. permKey()/permDocKey() emit
-        // `{prefix}:perm:t:{tenant}:{col}:...` and
-        // `{prefix}:perm:t:{tenant}:doc:{col}:...` respectively. The non-shared
-        // pattern above does NOT match these, so without this sweep dropping a
-        // collection under shared tables leaves stale role/doc HASH keys
-        // behind — and a recreated collection inherits stale grants.
-        $this->deleteByPattern($client, $prefix . self::SEP . 'perm' . self::SEP . 't' . self::SEP . '*' . self::SEP . $collection . self::SEP . '*');
-        $this->deleteByPattern($client, $prefix . self::SEP . 'perm' . self::SEP . 't' . self::SEP . '*' . self::SEP . 'doc' . self::SEP . $collection . self::SEP . '*');
-        $this->deleteByPattern($client, $this->key($prefix, 'tenants', $collection) . self::SEP . '*');
-
-        $client->del($metaKey, $idxKey, $seqKey);
+        return true;
     }
 
-    /**
-     * SCAN-and-DEL helper — MATCHes the supplied glob in batches so we don't
-     * block the server with a giant KEYS call. Honours the same 500-key batch
-     * size used by the test harness teardown.
-     */
-    private function deleteByPattern(RedisClient $client, string $pattern): void
-    {
-        $cursor = null;
-        do {
-            /** @var array<int, string>|false $batch */
-            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
-            if (\is_array($batch) && $batch !== []) {
-                $client->del(...$batch);
-            }
-        } while ($cursor !== 0 && $cursor !== null);
-    }
-
-    /**
-     * Compute the size of a collection by summing memory used by its meta
-     * hash, every document blob, the doc-id index, and any permission sets.
-     *
-     * Redis `MEMORY USAGE` is used when supported (Redis 4.0+). We fall back
-     * to STRLEN/HLEN approximations so the adapter still produces a non-zero
-     * size on builds (or test doubles) where MEMORY USAGE isn't routed.
-     */
-    private function computeCollectionSize(string $collection): int
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $collection = $this->filter($collection);
+        $id = $this->filter($index->key);
         $metaKey = $this->key($this->ns(), 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
-            return 0;
+            throw new NotFoundException('Collection not found');
         }
 
-        $total = $this->measureKey($metaKey);
+        $type = $index->type->value;
+        $attributes = $index->attributes;
+        $lengths = $index->lengths;
+        $orders = $index->orders;
 
-        $idxKey = $this->idxKey($collection);
-        $total += $this->measureKey($idxKey);
+        $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
+            $indexes = $this->readIndexesField($client, $metaKey);
 
-        /** @var array<int, string>|false $docIds */
-        $docIds = $this->client->sMembers($idxKey);
-        if (\is_array($docIds)) {
-            foreach ($docIds as $docId) {
-                $total += $this->measureKey($this->docKey($collection, (string) $docId));
-                // Route through permDocKey() so the tenant-bucketed shape is
-                // honoured under shared tables; otherwise the per-document
-                // perm HASH is missed entirely.
-                $total += $this->measureKey($this->permDocKey($collection, (string) $docId));
-            }
-        }
-
-        // Inverted permission SETs live under permKey()'s shape — tenant
-        // bucketed under shared tables, flat otherwise. Pick the matching
-        // SCAN prefix so both layouts contribute to the size estimate.
-        $bucket = $this->tenantBucket();
-        if ($bucket !== null) {
-            $permPrefix = $this->ns() . self::SEP . 'perm' . self::SEP . 't' . self::SEP . $bucket . self::SEP . $collection . self::SEP . '*';
-        } else {
-            $permPrefix = $this->key($this->ns(), 'perm', $collection) . self::SEP . '*';
-        }
-        $cursor = null;
-        do {
-            /** @var array<int, string>|false $batch */
-            $batch = $this->client->scan($cursor, $permPrefix, self::SCAN_BATCH_SIZE);
-            if (\is_array($batch)) {
-                foreach ($batch as $key) {
-                    $total += $this->measureKey($key);
+            foreach ($indexes as $existing) {
+                if (($existing['$id'] ?? $existing['key'] ?? null) === $id) {
+                    throw new DuplicateException('Index already exists');
                 }
             }
-        } while ($cursor !== 0 && $cursor !== null);
 
-        return $total;
+            if ($type === IndexType::Unique->value && ! empty($attributes)) {
+                $idxKey = $this->idxKey($collection);
+                /** @var array<int, string>|false $docIds */
+                $docIds = $client->sMembers($idxKey);
+                if (\is_array($docIds) && $docIds !== []) {
+                    $sharedTables = $this->getSharedTables();
+                    $currentTenant = $sharedTables ? $this->getTenant() : null;
+                    $docKeys = [];
+                    foreach ($docIds as $docId) {
+                        $docKeys[] = $this->docKey($collection, (string) $docId);
+                    }
+                    /** @var array<int, mixed> $payloads */
+                    $payloads = $client->mGet($docKeys);
+                    $seen = [];
+                    foreach ($payloads as $payload) {
+                        if (! \is_string($payload)) {
+                            continue;
+                        }
+                        $document = $this->decode($payload);
+                        if ($sharedTables) {
+                            $rowTenant = $document->getAttribute('$tenant');
+                            if ($rowTenant !== $currentTenant) {
+                                continue;
+                            }
+                        }
+                        $signature = [];
+                        $hasNull = false;
+                        foreach ($attributes as $attribute) {
+                            $value = $this->resolveDocumentAttribute($document, (string) $attribute);
+                            if ($value === null) {
+                                $hasNull = true;
+                                break;
+                            }
+                            $signature[] = $this->normalizeIndexValue($value);
+                        }
+                        if ($hasNull) {
+                            continue;
+                        }
+                        if ($sharedTables) {
+                            \array_unshift($signature, $currentTenant);
+                        }
+                        $hash = \serialize($signature);
+                        if (isset($seen[$hash])) {
+                            throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
+                        }
+                        $seen[$hash] = true;
+                    }
+                }
+            }
+
+            $indexes[] = [
+                '$id' => $id,
+                'key' => $id,
+                'type' => $type,
+                'attributes' => \array_values($attributes),
+                'lengths' => \array_values($lengths),
+                'orders' => \array_values($orders),
+            ];
+
+            $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        return true;
     }
 
-    /**
-     * Best-effort size probe for a single Redis key. Prefers `MEMORY USAGE`
-     * (returns the bytes Redis itself reports). Falls back to the encoded
-     * payload length when MEMORY USAGE is unavailable, so the result remains
-     * a stable monotonically-growing integer for size-tracking tests.
-     */
-    private function measureKey(string $key): int
+    public function deleteIndex(string $collection, string $id): bool
     {
-        try {
-            /** @var int|false|null $usage */
-            $usage = $this->client->rawCommand('MEMORY', 'USAGE', $key);
-            if (\is_int($usage)) {
-                return $usage;
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return true;
+        }
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $id): void {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $filtered = [];
+            foreach ($indexes as $index) {
+                if (($index['$id'] ?? $index['key'] ?? null) === $id) {
+                    continue;
+                }
+                $filtered[] = $index;
             }
-        } catch (\Throwable) {
-            // Fall through to the structural fallback below.
-        }
+            $client->hSet($metaKey, 'indexes', \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
 
-        $type = $this->client->type($key);
-        switch ($type) {
-            case RedisClient::REDIS_STRING:
-                $value = $this->client->get($key);
-
-                return \is_string($value) ? \strlen($value) + \strlen($key) : 0;
-            case RedisClient::REDIS_HASH:
-                $entries = $this->client->hGetAll($key);
-                $bytes = \strlen($key);
-                if (\is_array($entries)) {
-                    foreach ($entries as $field => $value) {
-                        $bytes += \strlen((string) $field) + \strlen((string) $value);
-                    }
-                }
-
-                return $bytes;
-            case RedisClient::REDIS_SET:
-                $members = $this->client->sMembers($key);
-                $bytes = \strlen($key);
-                if (\is_array($members)) {
-                    foreach ($members as $member) {
-                        $bytes += \strlen((string) $member);
-                    }
-                }
-
-                return $bytes;
-            default:
-                return 0;
-        }
+        return true;
     }
 
-    // === @architect:T20 end ===
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
 
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
 
+        $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): void {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $changed = false;
+            foreach ($indexes as $i => $index) {
+                if (($index['$id'] ?? $index['key'] ?? null) === $old) {
+                    $indexes[$i]['$id'] = $new;
+                    $indexes[$i]['key'] = $new;
+                    $changed = true;
+                    break;
+                }
+            }
+            if (! $changed) {
+                return;
+            }
+            $client->hSet($metaKey, 'indexes', \json_encode(\array_values($indexes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
 
-
-
-    // === @architect:T30 owns: document CRUD + bulk + increase ===
+        return true;
+    }
 
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $col = $this->filter($collection->getId());
         $payload = $this->client->get($this->docKey($col, $id));
-        // Mirror Memory's METADATA fallback: under shared tables the
-        // bootstrap METADATA row is written with a null tenant and must
-        // be visible to every tenant.
+
         if ((! \is_string($payload) || $payload === '') && $this->getSharedTables() && $col === Database::METADATA) {
             $payload = $this->client->get($this->docKey($col, $id, '_'));
         }
@@ -2000,12 +744,6 @@ class Redis extends Adapter
 
         $document = $this->decode($payload);
 
-        // Mirror the loadCollectionDocuments tenant filter: under shared
-        // tables a doc key written for tenant A must not surface for tenant
-        // B. Permission filtering can't catch this on the single-doc path
-        // because the caller already knows the id. METADATA collections
-        // are exempt — they intentionally serve null-tenant rows to every
-        // tenant.
         if ($this->getSharedTables()) {
             $rowTenant = $document->getAttribute('$tenant');
             $tenant = $this->getTenant();
@@ -2019,28 +757,9 @@ class Redis extends Adapter
             $document = $this->surfaceRelationshipAttributes($col, $document);
         }
 
-        $selections = [];
-        foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Query::TYPE_SELECT) {
-                foreach ($query->getValues() as $value) {
-                    $selections[] = (string) $value;
-                }
-            }
-        }
-
+        $selections = $this->extractSelections($queries);
         if (! empty($selections) && ! \in_array('*', $selections, true)) {
-            $projected = [];
-            foreach ($document->getArrayCopy() as $field => $value) {
-                if (\str_starts_with((string) $field, '$') || \str_starts_with((string) $field, '_')) {
-                    $projected[$field] = $value;
-
-                    continue;
-                }
-                if (\in_array($field, $selections, true)) {
-                    $projected[$field] = $value;
-                }
-            }
-            $document = new Document($projected);
+            $document = $this->projectDocument($document, $selections);
         }
 
         return $document;
@@ -2063,9 +782,6 @@ class Redis extends Adapter
         return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
             if ((bool) $redis->exists($docKey)) {
                 if ($this->skipDuplicates) {
-                    // Mirrors MariaDB's `INSERT IGNORE` and Memory's skipDuplicates path:
-                    // duplicate primary key is silently dropped and the existing row's
-                    // sequence is returned so the caller can still emit an onNext event.
                     $existingPayload = $redis->get($docKey);
                     if (\is_string($existingPayload) && $existingPayload !== '') {
                         $existing = $this->decode($existingPayload);
@@ -2130,9 +846,7 @@ class Redis extends Adapter
         $col = $this->filter($collection->getId());
         $oldKey = $this->docKey($col, $id);
         $idxKey = $this->idxKey($col);
-        // METADATA fallback: under shared tables the bootstrap METADATA row
-        // is written with a null tenant; subsequent updates from another
-        // tenant must still resolve to that row instead of throwing.
+
         $useNullTenant = false;
         if ($col === Database::METADATA && $this->getSharedTables() && $this->getTenant() !== null) {
             if ((bool) $this->client->exists($oldKey) === false) {
@@ -2152,12 +866,7 @@ class Redis extends Adapter
                 $existing = $this->surfaceRelationshipAttributes($col, $existing);
             }
             $newId = $document->getId() !== '' ? $document->getId() : $id;
-            // Stay on the null-tenant key when the existing row was located
-            // there; rewriting under the current tenant would split the row.
             $newKey = $useNullTenant ? $this->docKey($col, $newId, '_') : $this->docKey($col, $newId);
-            // Idx set scoping mirrors the located row so per-tenant ids remain
-            // separate but the null-tenant METADATA row stays in the null
-            // tenant's idx set.
             $effectiveIdxKey = $useNullTenant ? $this->idxKey($col, '_') : $idxKey;
 
             if ($newId !== $id && (bool) $redis->exists($newKey)) {
@@ -2217,15 +926,9 @@ class Redis extends Adapter
         }
 
         $col = $this->filter($collection->getId());
-
-        // Drop any caller-provided keys: pipeline results are indexed
-        // sequentially, so positional iteration here MUST start at 0.
         $documents = \array_values($documents);
 
         return $this->tx(function (RedisClient $redis) use ($col, $documents, $updates, $attrs, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
-            // Pipeline existing-payload GETs in a single round trip — mirrors
-            // upsertDocuments() and avoids one synchronous round trip per
-            // document, which dominates wall time on bulk updates.
             $docKeys = [];
             foreach ($documents as $doc) {
                 $docKeys[] = $this->docKey($col, $doc->getId());
@@ -2240,12 +943,9 @@ class Redis extends Adapter
                 $existingPayloads = [];
             }
 
-            // Cache the relationship-key list once per bulk call so the
-            // null-surface pass is N reads of a local list, not N reads of
-            // meta.attrs.
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
-                $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
+                $metaKey = $this->key($this->ns(), 'meta', $col);
                 $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
@@ -2301,11 +1001,8 @@ class Redis extends Adapter
         });
     }
 
-    public function upsertDocuments(
-        Document $collection,
-        string $attribute,
-        array $changes
-    ): array {
+    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+    {
         if (empty($changes)) {
             return $changes;
         }
@@ -2315,11 +1012,6 @@ class Redis extends Adapter
         return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes): array {
             $results = [];
 
-            // Phase 1: pipeline GETs of every doc so we know create vs update
-            // in a single round trip. Mirror createDocument and route every
-            // doc/idx/seq key through the document's own tenant so a batch
-            // that mixes tenants under shared tables doesn't silently
-            // misroute to the adapter-bound bucket.
             $redis->multi(\Redis::PIPELINE);
             foreach ($changes as $change) {
                 $document = $change->getNew();
@@ -2330,12 +1022,9 @@ class Redis extends Adapter
                 $existingPayloads = [];
             }
 
-            // Cache the relationship-key list once per bulk call (see
-            // updateDocuments) so we surface nulls without re-reading
-            // meta.attrs per change.
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
-                $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
+                $metaKey = $this->key($this->ns(), 'meta', $col);
                 $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
@@ -2383,9 +1072,6 @@ class Redis extends Adapter
 
                     $results[] = $mergedDocument;
                 } else {
-                    // Insert path: parity with createDocument — reject writes
-                    // that would violate a UNIQUE index before the row lands
-                    // in the keyspace.
                     $this->enforceUniqueIndexes($redis, $col, $document);
 
                     $sequence = $document->getSequence();
@@ -2432,6 +1118,8 @@ class Redis extends Adapter
             return $documents;
         }
 
+        $col = $this->filter($collection);
+
         $this->client->multi(\Redis::PIPELINE);
         try {
             $indexes = [];
@@ -2439,17 +1127,16 @@ class Redis extends Adapter
                 if (! empty($doc->getSequence())) {
                     continue;
                 }
-                $this->client->get($this->docKey($collection, $doc->getId()));
+                $this->client->get($this->docKey($col, $doc->getId(), $doc->getTenant()));
                 $indexes[] = $index;
             }
-            // No work queued — discard the empty pipeline so the connection
-            // does not stay in MULTI mode after returning early.
             if ($indexes === []) {
                 try {
                     $this->client->discard();
                 } catch (\Throwable) {
                     // PIPELINE-mode discard is version-dependent across phpredis.
                 }
+
                 return $documents;
             }
             $payloads = $this->client->exec();
@@ -2459,7 +1146,7 @@ class Redis extends Adapter
             } catch (\Throwable) {
                 // PIPELINE-mode discard is version-dependent across phpredis.
             }
-            throw new TransactionException('Failed to load sequences: ' . $e->getMessage(), 0, $e);
+            throw new TransactionException('Failed to load sequences: '.$e->getMessage(), 0, $e);
         }
         if (! \is_array($payloads)) {
             return $documents;
@@ -2567,8 +1254,6 @@ class Redis extends Adapter
                 $redis->sRem($idxKey, \strtolower((string) $documentId));
             }
 
-            // Permission-only cleanup for ids the caller listed but that did
-            // not match by sequence — mirrors Memory adapter semantics.
             foreach ($permissionIds as $permissionId) {
                 $documentId = (string) $permissionId;
                 if (isset($deleted[$documentId])) {
@@ -2581,228 +1266,7 @@ class Redis extends Adapter
         });
     }
 
-    public function increaseDocumentAttribute(
-        string $collection,
-        string $id,
-        string $attribute,
-        int|float $value,
-        string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
-    ): bool {
-        $collection = $this->filter($collection);
-        $docKey = $this->docKey($collection, $id);
-
-        return $this->tx(function (RedisClient $redis) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
-            $payload = $redis->get($docKey);
-            if (! \is_string($payload) || $payload === '') {
-                throw new NotFoundException('Document not found');
-            }
-
-            $document = $this->decode($payload);
-            $current = $document->getAttribute($attribute);
-            $current = \is_numeric($current) ? $current + 0 : 0;
-
-            // Mirrors MariaDB's bound semantics — silent no-op when bounds
-            // exclude the row. Caller has pre-adjusted bounds by $value.
-            if (! \is_null($min) && $current < $min) {
-                return true;
-            }
-            if (! \is_null($max) && $current > $max) {
-                return true;
-            }
-
-            $document->setAttribute($attribute, $current + $value);
-            $document->setAttribute('$updatedAt', $updatedAt);
-
-            $redis->set($docKey, $this->encode($document));
-
-            $this->journal('updateDoc', [
-                'collection' => $collection,
-                'id' => $id,
-                'newId' => $id,
-                'payload' => $payload,
-                'docKey' => $docKey,
-            ]);
-
-            return true;
-        });
-    }
-
-    // === @architect:T30 end ===
-
-
-
-
-
-    // === @architect:T40 owns: indexes + queries + counts ===
-
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
-    {
-        $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
-
-        if ((bool) $this->client->exists($metaKey) === false) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        return $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): bool {
-            $indexes = $this->readIndexesField($client, $metaKey);
-
-            foreach ($indexes as $existing) {
-                if (($existing['$id'] ?? $existing['key'] ?? null) === $id) {
-                    throw new DuplicateException('Index already exists');
-                }
-            }
-
-            // Unique-index pre-flight: scan existing documents for collisions so
-            // index creation fails up-front rather than silently allowing
-            // duplicate values to coexist under a "unique" constraint.
-            if ($type === Database::INDEX_UNIQUE && ! empty($attributes)) {
-                $idxKey = $this->idxKey($collection);
-                /** @var array<int, string> $docIds */
-                $docIds = $client->sMembers($idxKey);
-                if (! empty($docIds)) {
-                    $sharedTables = $this->getSharedTables();
-                    $currentTenant = $sharedTables ? $this->getTenant() : null;
-                    // Single mGet round trip instead of N sequential GETs so
-                    // unique-index creation on a populated collection scales
-                    // with payload size rather than RTT count.
-                    $docKeys = [];
-                    foreach ($docIds as $docId) {
-                        $docKeys[] = $this->docKey($collection, (string) $docId);
-                    }
-                    /** @var array<int, mixed> $payloads */
-                    $payloads = $client->mGet($docKeys);
-                    $seen = [];
-                    foreach ($payloads as $payload) {
-                        if (! \is_string($payload)) {
-                            continue;
-                        }
-                        $document = $this->decode($payload);
-                        // Under shared tables the inverted-index set fans
-                        // across every tenant; only probe rows that belong
-                        // to the active tenant so cross-tenant rows don't
-                        // produce spurious collisions.
-                        if ($sharedTables) {
-                            $rowTenant = $document->getAttribute('$tenant');
-                            if ($rowTenant !== $currentTenant) {
-                                continue;
-                            }
-                        }
-                        $signature = [];
-                        $hasNull = false;
-                        foreach ($attributes as $attribute) {
-                            $value = $this->resolveDocumentAttribute($document, (string) $attribute);
-                            if ($value === null) {
-                                $hasNull = true;
-                                break;
-                            }
-                            $signature[] = $this->normalizeIndexValue($value);
-                        }
-                        if ($hasNull) {
-                            continue;
-                        }
-                        if ($sharedTables) {
-                            \array_unshift($signature, $currentTenant);
-                        }
-                        $hash = \serialize($signature);
-                        if (isset($seen[$hash])) {
-                            throw new DuplicateException('Cannot create unique index: existing rows already contain duplicate values');
-                        }
-                        $seen[$hash] = true;
-                    }
-                }
-            }
-
-            $indexes[] = [
-                '$id' => $id,
-                'key' => $id,
-                'type' => $type,
-                'attributes' => \array_values($attributes),
-                'lengths' => \array_values($lengths),
-                'orders' => \array_values($orders),
-            ];
-
-            $client->hSet(
-                $metaKey,
-                'indexes',
-                \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
-
-            return true;
-        });
-    }
-
-    public function deleteIndex(string $collection, string $id): bool
-    {
-        $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
-
-        if ((bool) $this->client->exists($metaKey) === false) {
-            return true;
-        }
-
-        return $this->tx(function (RedisClient $client) use ($metaKey, $id): bool {
-            $indexes = $this->readIndexesField($client, $metaKey);
-            $filtered = [];
-            foreach ($indexes as $index) {
-                if (($index['$id'] ?? $index['key'] ?? null) === $id) {
-                    continue;
-                }
-                $filtered[] = $index;
-            }
-
-            $client->hSet(
-                $metaKey,
-                'indexes',
-                \json_encode(\array_values($filtered), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
-
-            return true;
-        });
-    }
-
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
-
-        if ((bool) $this->client->exists($metaKey) === false) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        return $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): bool {
-            $indexes = $this->readIndexesField($client, $metaKey);
-            $changed = false;
-            foreach ($indexes as $i => $index) {
-                if (($index['$id'] ?? $index['key'] ?? null) === $old) {
-                    $indexes[$i]['$id'] = $new;
-                    $indexes[$i]['key'] = $new;
-                    $changed = true;
-                    break;
-                }
-            }
-
-            if (! $changed) {
-                return true;
-            }
-
-            $client->hSet(
-                $metaKey,
-                'indexes',
-                \json_encode(\array_values($indexes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            );
-
-            return true;
-        });
-    }
-
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $collectionId = $this->filter($collection->getId());
         $metaKey = $this->key($this->ns(), 'meta', $collectionId);
@@ -2824,7 +1288,7 @@ class Redis extends Adapter
                 $documents = \array_slice($documents, 0, $limit);
             }
 
-            $selections = $this->extractSelectionsFromQueries($queries);
+            $selections = $this->extractSelections($queries);
             if (! empty($selections)) {
                 $projected = [];
                 foreach ($documents as $document) {
@@ -2833,7 +1297,7 @@ class Redis extends Adapter
                 $documents = $projected;
             }
 
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
+            if ($cursorDirection === CursorDirection::Before) {
                 $documents = \array_reverse($documents);
             }
 
@@ -2851,7 +1315,7 @@ class Redis extends Adapter
         }
 
         return $this->tx(function (RedisClient $client) use ($collectionId, $attribute, $queries, $max): float|int {
-            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
+            $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
             $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
 
             if (! \is_null($max)) {
@@ -2886,17 +1350,6 @@ class Redis extends Adapter
             throw new NotFoundException('Collection not found');
         }
 
-        // Fast path: no query filters, authorization disabled, and shared
-        // tables off means the `idx:{collection}` SET cardinality matches the
-        // visible doc count directly. Under shared tables the SET is shared
-        // across tenants — `sCard` would return the union count, leaking
-        // cross-tenant rows — so we fall through to the slow path which
-        // hydrates and tenant-filters via `loadCollectionDocuments`.
-        // Authorization-on also requires hydration so the permission filter
-        // actually runs.
-        // TODO: this path still scans the full collection when queries are
-        // present — acceptable parity with Memory, but a known scaling limit
-        // and unsuitable for large production collections.
         if (
             empty($queries)
             && $this->authorization->getStatus() === false
@@ -2910,7 +1363,7 @@ class Redis extends Adapter
         }
 
         return $this->tx(function (RedisClient $client) use ($collectionId, $queries, $max): int {
-            $documents = $this->loadCollectionDocuments($client, $collectionId, Database::PERMISSION_READ);
+            $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
             $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
 
             if (! \is_null($max)) {
@@ -2921,22 +1374,620 @@ class Redis extends Adapter
         });
     }
 
-    public function getSchemaIndexes(string $collection): array
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
-        // Mirror Memory: Redis maintains no on-disk schema, so the adapter
-        // exposes no schema-level indexes. Index metadata lives on the
-        // collection Document and is read by Database via getCollection().
-        return [];
+        $collection = $this->filter($collection);
+        $docKey = $this->docKey($collection, $id);
+
+        return $this->tx(function (RedisClient $redis) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
+            $payload = $redis->get($docKey);
+            if (! \is_string($payload) || $payload === '') {
+                throw new NotFoundException('Document not found');
+            }
+
+            $document = $this->decode($payload);
+            $current = $document->getAttribute($attribute);
+            $current = \is_numeric($current) ? $current + 0 : 0;
+
+            if (! \is_null($min) && $current < $min) {
+                return true;
+            }
+            if (! \is_null($max) && $current > $max) {
+                return true;
+            }
+
+            $document->setAttribute($attribute, $current + $value);
+            $document->setAttribute('$updatedAt', $updatedAt);
+
+            $redis->set($docKey, $this->encode($document));
+
+            $this->journal('updateDoc', [
+                'collection' => $collection,
+                'id' => $id,
+                'newId' => $id,
+                'payload' => $payload,
+                'docKey' => $docKey,
+            ]);
+
+            return true;
+        });
+    }
+
+    public function getLimitForString(): int
+    {
+        return 4294967295;
+    }
+
+    public function getLimitForInt(): int
+    {
+        return 4294967295;
+    }
+
+    public function getLimitForAttributes(): int
+    {
+        return 1017;
+    }
+
+    public function getLimitForIndexes(): int
+    {
+        return 64;
+    }
+
+    public function getMaxIndexLength(): int
+    {
+        return 1024;
+    }
+
+    public function getMaxVarcharLength(): int
+    {
+        return 16381;
+    }
+
+    public function getMaxUIDLength(): int
+    {
+        return 255;
+    }
+
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('0001-01-01 00:00:00');
+    }
+
+    public function getIdAttributeType(): string
+    {
+        return ColumnType::Integer->value;
+    }
+
+    public function getCountOfAttributes(Document $collection): int
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        return (\is_array($attributes) ? \count($attributes) : 0) + $this->getCountOfDefaultAttributes();
     }
 
     public function getCountOfIndexes(Document $collection): int
     {
-        return \count($collection->getAttribute('indexes', [])) + \count(Database::INTERNAL_INDEXES);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        return (\is_array($indexes) ? \count($indexes) : 0) + $this->getCountOfDefaultIndexes();
+    }
+
+    public function getCountOfDefaultAttributes(): int
+    {
+        return \count(Database::INTERNAL_ATTRIBUTES);
+    }
+
+    public function getCountOfDefaultIndexes(): int
+    {
+        return \count(Database::INTERNAL_INDEXES);
+    }
+
+    public function getDocumentSizeLimit(): int
+    {
+        return 0;
+    }
+
+    public function getAttributeWidth(Document $collection): int
+    {
+        return 0;
+    }
+
+    public function getKeywords(): array
+    {
+        return [];
+    }
+
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
+    public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+        return '';
+    }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        $this->supportForAttributes = $support;
+
+        return $this->supportForAttributes;
+    }
+
+    public function getConnectionId(): string
+    {
+        return '0';
     }
 
     /**
-     * Read and JSON-decode the indexes field on a collection meta hash.
-     *
+     * @param array<int, string> $selections
+     */
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    {
+        return $selections;
+    }
+
+    protected function execute(mixed $stmt): bool
+    {
+        return true;
+    }
+
+    protected function quote(string $string): string
+    {
+        return '"'.$string.'"';
+    }
+
+    private function key(string ...$parts): string
+    {
+        return \implode(self::SEP, $parts);
+    }
+
+    private function ns(): string
+    {
+        return $this->nsFor($this->getNamespace(), $this->getDatabase());
+    }
+
+    private function nsFor(string $namespace, string $database): string
+    {
+        return self::KEY_PREFIX.self::SEP.$namespace.self::SEP.$database;
+    }
+
+    private function nsBase(): string
+    {
+        return self::KEY_PREFIX.self::SEP.$this->getNamespace();
+    }
+
+    private function docKey(string $collection, string $id, int|string|null $tenant = null): string
+    {
+        $id = \strtolower($id);
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'doc', $collection, $id);
+        }
+
+        $bucket = $this->bucketFor($tenant);
+
+        return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
+    }
+
+    private function idxKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'idx', $collection);
+        }
+
+        return $this->key($this->ns(), 'idx', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    private function seqKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->getSharedTables()) {
+            return $this->key($this->ns(), 'seq', $collection);
+        }
+
+        return $this->key($this->ns(), 'seq', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    private function bucketFor(int|string|null $tenant): string
+    {
+        if ($tenant === null) {
+            $tenant = $this->getTenant();
+        }
+
+        return $tenant === null ? '_' : (string) $tenant;
+    }
+
+    private function tenantBucket(): ?string
+    {
+        if (! $this->getSharedTables()) {
+            return null;
+        }
+        $tenant = $this->getTenant();
+
+        return $tenant === null ? '_' : (string) $tenant;
+    }
+
+    private function permKey(string $collection, string $letter, string $role): string
+    {
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
+        }
+
+        return $this->ns().self::SEP.'perm'.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
+    }
+
+    private function permDocKey(string $collection, string $id): string
+    {
+        $id = \strtolower($id);
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.'doc'.self::SEP.$collection.self::SEP.$id;
+        }
+
+        return $this->ns().self::SEP.'perm'.self::SEP.'doc'.self::SEP.$collection.self::SEP.$id;
+    }
+
+    private function encode(Document $document): string
+    {
+        return \json_encode(
+            $document->getArrayCopy(),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+        );
+    }
+
+    private function decode(string $payload): Document
+    {
+        try {
+            /** @var array<string, mixed> $data */
+            $data = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new DatabaseException('Document decode failed: '.$e->getMessage(), 0, $e);
+        }
+
+        return new Document($data);
+    }
+
+    /**
+     * @template T
+     * @param callable(RedisClient): T $fn
+     * @return T
+     */
+    protected function tx(callable $fn): mixed
+    {
+        try {
+            return $fn($this->client);
+        } catch (\RedisException $exception) {
+            throw new TransactionException('tx failed: '.$exception->getMessage(), 0, $exception);
+        }
+    }
+
+    private function writePermissions(string $collection, string $id, Document $document): void
+    {
+        $id = \strtolower($id);
+
+        $byRole = [];
+        foreach ([PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete] as $type) {
+            foreach ($document->getPermissionsByType($type) as $role) {
+                $byRole[(string) $role][] = $this->actionLetter($type);
+            }
+        }
+
+        if ($byRole === []) {
+            return;
+        }
+
+        $hashKey = $this->permDocKey($collection, $id);
+        $hashFields = [];
+        $writes = [];
+        foreach ($byRole as $role => $letters) {
+            $unique = \array_values(\array_unique($letters));
+            \sort($unique);
+            $hashFields[$role] = \implode(',', $unique);
+            foreach ($unique as $letter) {
+                $writes[] = [$role, $letter];
+            }
+        }
+
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($writes as [$role, $letter]) {
+                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+            }
+            $this->client->hMSet($hashKey, $hashFields);
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
+            throw $e;
+        }
+
+        foreach ($writes as [$role, $letter]) {
+            $this->journal('createPerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+            ]);
+        }
+    }
+
+    private function clearPermissions(string $collection, string $id): void
+    {
+        $id = \strtolower($id);
+        $hashKey = $this->permDocKey($collection, $id);
+        /** @var array<string, string>|false $hash */
+        $hash = $this->client->hGetAll($hashKey);
+        if ($hash === false || $hash === []) {
+            return;
+        }
+
+        $removals = [];
+        foreach ($hash as $role => $letterCsv) {
+            if ($letterCsv === '') {
+                continue;
+            }
+            foreach (\explode(',', $letterCsv) as $letter) {
+                $removals[] = [$role, $letter];
+            }
+        }
+
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($removals as [$role, $letter]) {
+                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+            }
+            $this->client->del($hashKey);
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
+            throw $e;
+        }
+
+        foreach ($removals as [$role, $letter]) {
+            $this->journal('deletePerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+                'previous' => $hash[$role] ?? '',
+            ]);
+        }
+    }
+
+    /**
+     * @param array<int, string> $ids
+     * @return array<int, string>
+     */
+    private function applyPermissionFilter(string $collection, array $ids, PermissionType $action): array
+    {
+        if ($ids === []) {
+            return $ids;
+        }
+        if ($this->authorization->getStatus() === false) {
+            return $ids;
+        }
+
+        $roles = $this->authorization->getRoles();
+        if ($roles === []) {
+            return [];
+        }
+
+        $letter = $this->actionLetter($action);
+        $keys = [];
+        foreach ($roles as $role) {
+            $keys[] = $this->permKey($collection, $letter, $role);
+        }
+
+        if (\count($keys) === 1) {
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sMembers($keys[0]);
+        } else {
+            $first = \array_shift($keys);
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sUnion($first, ...$keys);
+        }
+        if ($allowed === false || $allowed === []) {
+            return [];
+        }
+
+        $allowedSet = \array_flip($allowed);
+
+        return \array_values(\array_filter($ids, static fn (string $id): bool => isset($allowedSet[$id])));
+    }
+
+    private function actionLetter(PermissionType $action): string
+    {
+        return match ($action) {
+            PermissionType::Read => 'r',
+            PermissionType::Create => 'c',
+            PermissionType::Update => 'u',
+            PermissionType::Delete => 'd',
+            PermissionType::Write => 'w',
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    protected function journal(string $op, array $payload): void
+    {
+        if ($this->inTransaction === 0) {
+            return;
+        }
+        $this->journalStack[\count($this->journalStack) - 1][] = [
+            'op' => $op,
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadString(array $payload, string $key): ?string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadStringOr(array $payload, string $key, string $default): string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : $default;
+    }
+
+    private function stringOrEmpty(mixed $value): string
+    {
+        return \is_string($value) ? $value : '';
+    }
+
+    private function numericOr(mixed $value, int|float $default): int|float
+    {
+        return \is_numeric($value) ? $value + 0 : $default;
+    }
+
+    private function intOr(mixed $value, int $default): int
+    {
+        return \is_numeric($value) ? (int) $value : $default;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function recordIdentifier(array $record): string
+    {
+        $id = $record['$id'] ?? null;
+        if (\is_string($id)) {
+            return $id;
+        }
+        $key = $record['key'] ?? null;
+
+        return \is_string($key) ? $key : '';
+    }
+
+    protected function rollbackJournal(): void
+    {
+        $frame = \array_pop($this->journalStack);
+        if ($frame === null) {
+            return;
+        }
+
+        for ($i = \count($frame) - 1; $i >= 0; $i--) {
+            $entry = $frame[$i];
+            $op = $entry['op'];
+            $payload = $entry['payload'];
+
+            switch ($op) {
+                case 'createDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $this->rawDeleteDoc(
+                        $collection,
+                        $id,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
+                        $this->payloadString($payload, 'permDocKey'),
+                    );
+                    break;
+
+                case 'deleteDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
+                    $this->rawRestoreDoc(
+                        $collection,
+                        $id,
+                        $beforePayload,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
+                    );
+                    break;
+
+                case 'updateDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
+                    $docKey = $this->payloadString($payload, 'docKey') ?? $this->docKey($collection, $id);
+                    $this->client->set($docKey, $beforePayload);
+                    $newId = $this->payloadString($payload, 'newId');
+                    if ($newId !== null && $newId !== $id) {
+                        $newDocKey = $this->payloadString($payload, 'newDocKey') ?? $this->docKey($collection, $newId);
+                        $this->client->del($newDocKey);
+                        $idxKey = $this->payloadString($payload, 'idxKey') ?? $this->idxKey($collection);
+                        $this->client->sRem($idxKey, \strtolower($newId));
+                        $this->client->sAdd($idxKey, \strtolower($id));
+                    }
+                    break;
+
+                case 'createPerm':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+                    $this->client->hDel($this->permDocKey($collection, $id), $role);
+                    break;
+
+                case 'deletePerm':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+                    $previous = $this->payloadString($payload, 'previous');
+                    if ($previous !== null && $previous !== '') {
+                        $this->client->hSet($this->permDocKey($collection, $id), $role, $previous);
+                    }
+                    break;
+
+                default:
+                    throw new TransactionException('Unknown journal op: '.$op);
+            }
+        }
+    }
+
+    private function rawDeleteDoc(string $collection, string $id, ?string $docKey = null, ?string $idxKey = null, ?string $permDocKey = null): void
+    {
+        $lowerId = \strtolower($id);
+        $this->client->del($docKey ?? $this->docKey($collection, $lowerId));
+        $this->client->sRem($idxKey ?? $this->idxKey($collection), $lowerId);
+        $this->client->del($permDocKey ?? $this->permDocKey($collection, $lowerId));
+    }
+
+    private function rawRestoreDoc(string $collection, string $id, string $payload, ?string $docKey = null, ?string $idxKey = null): void
+    {
+        $lowerId = \strtolower($id);
+        $this->client->set($docKey ?? $this->docKey($collection, $lowerId), $payload);
+        $this->client->sAdd($idxKey ?? $this->idxKey($collection), $lowerId);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function readAttributesField(RedisClient $client, string $metaKey): array
+    {
+        $raw = $client->hGet($metaKey, 'attrs');
+        if (! \is_string($raw) || $raw === '') {
+            return [];
+        }
+        /** @var array<int, array<string, mixed>> $decoded */
+        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+
+        return \array_values($decoded);
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function readIndexesField(RedisClient $client, string $metaKey): array
@@ -2955,22 +2006,488 @@ class Redis extends Adapter
     }
 
     /**
-     * Hydrate every document in the collection's id-set, applying tenant and
-     * permission filters. Returns Documents in insertion-set order.
-     *
+     * @param array<int, array<string, mixed>> $attrs
+     * @param array<string, mixed> $record
+     * @return array<int, array<string, mixed>>
+     */
+    private function upsertAttributeRecord(array $attrs, array $record): array
+    {
+        $targetId = $this->stringOrEmpty($record['$id'] ?? '');
+        $replaced = false;
+        foreach ($attrs as $i => $existing) {
+            $existingId = $this->recordIdentifier($existing);
+            if ($existingId !== $targetId) {
+                continue;
+            }
+            $attrs[$i] = $record;
+            $replaced = true;
+            break;
+        }
+        if (! $replaced) {
+            $attrs[] = $record;
+        }
+
+        return \array_values($attrs);
+    }
+
+    private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
+    {
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $indexes = $this->readIndexesField($client, $metaKey);
+
+        $uniqueIndexes = [];
+        foreach ($indexes as $index) {
+            if (($index['type'] ?? '') !== IndexType::Unique->value) {
+                continue;
+            }
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes) || ! \is_array($attributes)) {
+                continue;
+            }
+            $names = [];
+            foreach ($attributes as $attribute) {
+                if (\is_string($attribute) && $attribute !== '') {
+                    $names[] = $attribute;
+                }
+            }
+            if ($names === []) {
+                continue;
+            }
+            $uniqueIndexes[] = $names;
+        }
+
+        if ($uniqueIndexes === []) {
+            return;
+        }
+
+        $newSignatures = [];
+        $sharedTables = $this->getSharedTables();
+        $tenant = $sharedTables ? ($document->getAttribute('$tenant') ?? $this->getTenant()) : null;
+        foreach ($uniqueIndexes as $i => $attributes) {
+            $signature = [];
+            $hasNull = false;
+            foreach ($attributes as $attribute) {
+                $value = $this->resolveDocumentAttribute($document, $attribute);
+                if ($value === null) {
+                    $hasNull = true;
+                    break;
+                }
+                $signature[] = $this->normalizeIndexValue($value);
+            }
+            if ($hasNull) {
+                continue;
+            }
+            if ($sharedTables) {
+                \array_unshift($signature, $tenant);
+            }
+            $newSignatures[$i] = \serialize($signature);
+        }
+
+        if ($newSignatures === []) {
+            return;
+        }
+
+        $idxKey = $this->idxKey($collection);
+        /** @var array<int, string>|false $docIds */
+        $docIds = $client->sMembers($idxKey);
+        if (! \is_array($docIds) || empty($docIds)) {
+            return;
+        }
+
+        $excludeKey = $excludeId !== null ? \strtolower($excludeId) : null;
+        $docKeys = [];
+        foreach ($docIds as $docId) {
+            if ($excludeKey !== null && \strtolower((string) $docId) === $excludeKey) {
+                continue;
+            }
+            $docKeys[(string) $docId] = $this->docKey($collection, (string) $docId);
+        }
+        if ($docKeys === []) {
+            return;
+        }
+
+        /** @var array<int, mixed> $payloads */
+        $payloads = $client->mGet(\array_values($docKeys));
+        $position = 0;
+        foreach ($docKeys as $docId => $_) {
+            $payload = $payloads[$position++] ?? null;
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $existing = $this->decode($payload);
+            if ($sharedTables) {
+                $rowTenant = $existing->getAttribute('$tenant');
+                if ($rowTenant !== $tenant) {
+                    continue;
+                }
+            }
+            foreach ($newSignatures as $i => $newHash) {
+                $attributes = $uniqueIndexes[$i];
+                $signature = [];
+                $hasNull = false;
+                foreach ($attributes as $attribute) {
+                    $value = $this->resolveDocumentAttribute($existing, $attribute);
+                    if ($value === null) {
+                        $hasNull = true;
+                        break;
+                    }
+                    $signature[] = $this->normalizeIndexValue($value);
+                }
+                if ($hasNull) {
+                    continue;
+                }
+                if ($sharedTables) {
+                    \array_unshift($signature, $tenant);
+                }
+                if (\serialize($signature) === $newHash) {
+                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                }
+            }
+        }
+    }
+
+    private function purgeCollectionKeys(RedisClient $client, string $namespace, string $database, string $collection): void
+    {
+        $collection = $this->filter($collection);
+        $prefix = $this->nsFor($namespace, $database);
+        $metaKey = $this->key($prefix, 'meta', $collection);
+        $idxKey = $this->key($prefix, 'idx', $collection);
+        $seqKey = $this->key($prefix, 'seq', $collection);
+
+        /** @var array<int, string>|false $docIds */
+        $docIds = $client->sMembers($idxKey);
+        if (\is_array($docIds) && $docIds !== []) {
+            $keys = [];
+            foreach ($docIds as $docId) {
+                $keys[] = $this->key($prefix, 'doc', $collection, $docId);
+                $keys[] = $this->key($prefix, 'perm', 'doc', $collection, $docId);
+                if (\count($keys) >= self::SCAN_BATCH_SIZE) {
+                    $client->del(...$keys);
+                    $keys = [];
+                }
+            }
+            if ($keys !== []) {
+                $client->del(...$keys);
+            }
+        }
+
+        $this->deleteByPattern($client, $prefix.self::SEP.'doc'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
+        $this->deleteByPattern($client, $prefix.self::SEP.'idx'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
+        $this->deleteByPattern($client, $prefix.self::SEP.'seq'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
+
+        $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection).self::SEP.'*');
+        $this->deleteByPattern($client, $prefix.self::SEP.'perm'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
+        $this->deleteByPattern($client, $prefix.self::SEP.'perm'.self::SEP.'t'.self::SEP.'*'.self::SEP.'doc'.self::SEP.$collection.self::SEP.'*');
+        $this->deleteByPattern($client, $this->key($prefix, 'tenants', $collection).self::SEP.'*');
+
+        $client->del($metaKey, $idxKey, $seqKey);
+    }
+
+    private function deleteByPattern(RedisClient $client, string $pattern): void
+    {
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
+            if (\is_array($batch) && $batch !== []) {
+                $client->del(...$batch);
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+    }
+
+    private function computeCollectionSize(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return 0;
+        }
+
+        $total = $this->measureKey($metaKey);
+
+        $idxKey = $this->idxKey($collection);
+        $total += $this->measureKey($idxKey);
+
+        /** @var array<int, string>|false $docIds */
+        $docIds = $this->client->sMembers($idxKey);
+        if (\is_array($docIds)) {
+            foreach ($docIds as $docId) {
+                $total += $this->measureKey($this->docKey($collection, (string) $docId));
+                $total += $this->measureKey($this->permDocKey($collection, (string) $docId));
+            }
+        }
+
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            $permPrefix = $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.$collection.self::SEP.'*';
+        } else {
+            $permPrefix = $this->key($this->ns(), 'perm', $collection).self::SEP.'*';
+        }
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $this->client->scan($cursor, $permPrefix, self::SCAN_BATCH_SIZE);
+            if (\is_array($batch)) {
+                foreach ($batch as $key) {
+                    $total += $this->measureKey($key);
+                }
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+
+        return $total;
+    }
+
+    private function measureKey(string $key): int
+    {
+        try {
+            /** @var int|false|null $usage */
+            $usage = $this->client->rawCommand('MEMORY', 'USAGE', $key);
+            if (\is_int($usage)) {
+                return $usage;
+            }
+        } catch (\Throwable) {
+            // Fall through to the structural fallback below.
+        }
+
+        $type = $this->client->type($key);
+        switch ($type) {
+            case RedisClient::REDIS_STRING:
+                $value = $this->client->get($key);
+
+                return \is_string($value) ? \strlen($value) + \strlen($key) : 0;
+            case RedisClient::REDIS_HASH:
+                $entries = $this->client->hGetAll($key);
+                $bytes = \strlen($key);
+                if (\is_array($entries)) {
+                    foreach ($entries as $field => $value) {
+                        $bytes += \strlen((string) $field) + \strlen((string) $value);
+                    }
+                }
+
+                return $bytes;
+            case RedisClient::REDIS_SET:
+                $members = $this->client->sMembers($key);
+                $bytes = \strlen($key);
+                if (\is_array($members)) {
+                    foreach ($members as $member) {
+                        $bytes += \strlen((string) $member);
+                    }
+                }
+
+                return $bytes;
+            default:
+                return 0;
+        }
+    }
+
+    private function registerRelationshipField(string $collection, string $field): void
+    {
+        $collection = $this->filter($collection);
+        $field = $this->filter($field);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return;
+        }
+
+        $record = [
+            '$id' => $field,
+            'key' => $field,
+            'type' => ColumnType::Relationship->value,
+            'size' => 0,
+            'signed' => true,
+            'array' => false,
+            'required' => false,
+        ];
+
+        $this->tx(function (RedisClient $client) use ($metaKey, $record): void {
+            $attrs = $this->readAttributesField($client, $metaKey);
+            $attrs = $this->upsertAttributeRecord($attrs, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+    }
+
+    private function renameDocumentField(string $collection, string $oldKey, string $newKey): void
+    {
+        $collection = $this->filter($collection);
+        $oldKey = $this->filter($oldKey);
+        $newKey = $this->filter($newKey);
+
+        if ($oldKey === $newKey) {
+            return;
+        }
+
+        $idxKey = $this->idxKey($collection);
+
+        $this->tx(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->docKey($collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($oldKey, $decoded)) {
+                    continue;
+                }
+
+                $decoded[$newKey] = $decoded[$oldKey];
+                unset($decoded[$oldKey]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    private function dropDocumentField(string $collection, string $field): void
+    {
+        $collection = $this->filter($collection);
+        $field = $this->filter($field);
+        $idxKey = $this->idxKey($collection);
+
+        $this->tx(function (RedisClient $client) use ($collection, $field, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->docKey($collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($field, $decoded)) {
+                    continue;
+                }
+
+                unset($decoded[$field]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    private function resolveJunctionCollection(string $collection, string $relatedCollection, RelationSide $side): ?string
+    {
+        $collectionDoc = $this->loadMetadataDocument($collection);
+        $relatedDoc = $this->loadMetadataDocument($relatedCollection);
+        if ($collectionDoc === null || $relatedDoc === null) {
+            return null;
+        }
+
+        $collectionSequence = $collectionDoc->getSequence();
+        $relatedSequence = $relatedDoc->getSequence();
+        if ($collectionSequence === null || $relatedSequence === null || $collectionSequence === '' || $relatedSequence === '') {
+            return null;
+        }
+
+        return $side === RelationSide::Parent
+            ? '_'.$collectionSequence.'_'.$relatedSequence
+            : '_'.$relatedSequence.'_'.$collectionSequence;
+    }
+
+    private function loadMetadataDocument(string $collection): ?Document
+    {
+        $id = $this->filter($collection);
+        $payload = $this->client->get($this->docKey(Database::METADATA, $id));
+        if ((! \is_string($payload) || $payload === '') && $this->getSharedTables()) {
+            $payload = $this->client->get($this->docKey(Database::METADATA, $id, '_'));
+        }
+        if (! \is_string($payload) || $payload === '') {
+            return null;
+        }
+
+        return $this->decode($payload);
+    }
+
+    private function surfaceRelationshipAttributes(string $collection, Document $document): Document
+    {
+        if ($collection === Database::METADATA) {
+            return $document;
+        }
+
+        $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+        $attributes = $this->readAttributesField($this->client, $metaKey);
+        $relationshipKeys = $this->extractRelationshipKeys($attributes);
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        return $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
+    }
+
+    /**
+     * @param array<int, string> $relationshipKeys
+     */
+    private function surfaceRelationshipAttributesUsing(array $relationshipKeys, Document $document): Document
+    {
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        $payload = $document->getArrayCopy();
+        foreach ($relationshipKeys as $key) {
+            if (! \array_key_exists($key, $payload)) {
+                $document->setAttribute($key, null);
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $attributes
+     * @return array<int, string>
+     */
+    private function extractRelationshipKeys(array $attributes): array
+    {
+        $keys = [];
+        foreach ($attributes as $attribute) {
+            if (($attribute['type'] ?? null) !== ColumnType::Relationship->value) {
+                continue;
+            }
+            $key = $this->recordIdentifier($attribute);
+            if ($key === '') {
+                continue;
+            }
+            $keys[] = $key;
+        }
+
+        return $keys;
+    }
+
+    /**
      * @return array<int, Document>
      */
-    private function loadCollectionDocuments(RedisClient $client, string $collection, string $forPermission): array
+    private function loadCollectionDocuments(RedisClient $client, string $collection, PermissionType $forPermission): array
     {
         $idxKey = $this->idxKey($collection);
-        /** @var array<int, string> $ids */
+        /** @var array<int, string>|false $ids */
         $ids = $client->sMembers($idxKey);
-        if (empty($ids)) {
+        if (! \is_array($ids) || empty($ids)) {
             return [];
         }
 
-        // Permission filter through the T50-owned hook before fetching to
-        // avoid round-tripping payloads we will discard anyway.
         if ($this->authorization->getStatus()) {
             $ids = $this->applyPermissionFilter($collection, $ids, $forPermission);
             if (empty($ids)) {
@@ -2989,9 +2506,6 @@ class Redis extends Adapter
         $tenant = $sharedTables ? $this->getTenant() : null;
         $allowNullTenant = $sharedTables && $collection === Database::METADATA;
 
-        // Read meta.attrs once and cache the relationship-key list across the
-        // decode loop — `surfaceRelationshipAttributes` would re-read meta on
-        // every document otherwise.
         $relationshipKeys = [];
         if ($collection !== Database::METADATA) {
             $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
@@ -3026,10 +2540,8 @@ class Redis extends Adapter
     }
 
     /**
-     * Apply non-pagination query filters to the supplied documents.
-     *
-     * @param  array<int, Document>  $documents
-     * @param  array<int, Query>  $queries
+     * @param array<int, Document> $documents
+     * @param array<Query> $queries
      * @return array<int, Document>
      */
     private function filterDocumentsByQueries(string $collection, array $documents, array $queries): array
@@ -3042,14 +2554,14 @@ class Redis extends Adapter
         foreach ($queries as $query) {
             $method = $query->getMethod();
             if (\in_array($method, [
-                Query::TYPE_SELECT,
-                Query::TYPE_ORDER_ASC,
-                Query::TYPE_ORDER_DESC,
-                Query::TYPE_ORDER_RANDOM,
-                Query::TYPE_LIMIT,
-                Query::TYPE_OFFSET,
-                Query::TYPE_CURSOR_AFTER,
-                Query::TYPE_CURSOR_BEFORE,
+                Method::Select,
+                Method::OrderAsc,
+                Method::OrderDesc,
+                Method::OrderRandom,
+                Method::Limit,
+                Method::Offset,
+                Method::CursorAfter,
+                Method::CursorBefore,
             ], true)) {
                 continue;
             }
@@ -3077,15 +2589,11 @@ class Redis extends Adapter
         return $output;
     }
 
-    /**
-     * Resolve a single Query against a Document, mirroring Memory's matches()
-     * but operating on the Document's natural `$id`/`$tenant`/etc. layout.
-     */
     private function matchesDocument(Document $document, Query $query): bool
     {
         $method = $query->getMethod();
 
-        if ($method === Query::TYPE_AND) {
+        if ($method === Method::And) {
             foreach ($query->getValues() as $sub) {
                 if (! ($sub instanceof Query) || ! $this->matchesDocument($document, $sub)) {
                     return false;
@@ -3095,7 +2603,7 @@ class Redis extends Adapter
             return true;
         }
 
-        if ($method === Query::TYPE_OR) {
+        if ($method === Method::Or) {
             foreach ($query->getValues() as $sub) {
                 if ($sub instanceof Query && $this->matchesDocument($document, $sub)) {
                     return true;
@@ -3114,8 +2622,14 @@ class Redis extends Adapter
         }
 
         switch ($method) {
-            case Query::TYPE_EQUAL:
+            case Method::Equal:
+                if ($value === null) {
+                    return false;
+                }
                 foreach ($values as $candidate) {
+                    if ($candidate === null) {
+                        continue;
+                    }
                     if ($this->valuesEqual($value, $candidate)) {
                         return true;
                     }
@@ -3123,11 +2637,14 @@ class Redis extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_EQUAL:
+            case Method::NotEqual:
                 if ($value === null) {
                     return false;
                 }
                 foreach ($values as $candidate) {
+                    if ($candidate === null) {
+                        return false;
+                    }
                     if ($this->valuesEqual($value, $candidate)) {
                         return false;
                     }
@@ -3135,56 +2652,56 @@ class Redis extends Adapter
 
                 return true;
 
-            case Query::TYPE_LESSER:
+            case Method::LessThan:
                 return $value !== null && $value < $values[0];
 
-            case Query::TYPE_LESSER_EQUAL:
+            case Method::LessThanEqual:
                 return $value !== null && $value <= $values[0];
 
-            case Query::TYPE_GREATER:
+            case Method::GreaterThan:
                 return $value !== null && $value > $values[0];
 
-            case Query::TYPE_GREATER_EQUAL:
+            case Method::GreaterThanEqual:
                 return $value !== null && $value >= $values[0];
 
-            case Query::TYPE_IS_NULL:
+            case Method::IsNull:
                 return $value === null;
 
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNotNull:
                 return $value !== null;
 
-            case Query::TYPE_BETWEEN:
+            case Method::Between:
                 return $value !== null && $value >= $values[0] && $value <= $values[1];
 
-            case Query::TYPE_NOT_BETWEEN:
+            case Method::NotBetween:
                 if ($value === null) {
                     return false;
                 }
 
                 return $value < $values[0] || $value > $values[1];
 
-            case Query::TYPE_STARTS_WITH:
-                return \is_string($value) && \is_string($values[0] ?? null) && \str_starts_with($value, (string) $values[0]);
+            case Method::StartsWith:
+                return \is_string($value) && isset($values[0]) && \is_string($values[0]) && \str_starts_with($value, $values[0]);
 
-            case Query::TYPE_NOT_STARTS_WITH:
+            case Method::NotStartsWith:
                 if ($value === null) {
                     return false;
                 }
 
-                return ! \is_string($value) || ! \is_string($values[0] ?? null) || ! \str_starts_with($value, (string) $values[0]);
+                return ! \is_string($value) || ! isset($values[0]) || ! \is_string($values[0]) || ! \str_starts_with($value, $values[0]);
 
-            case Query::TYPE_ENDS_WITH:
-                return \is_string($value) && \is_string($values[0] ?? null) && \str_ends_with($value, (string) $values[0]);
+            case Method::EndsWith:
+                return \is_string($value) && isset($values[0]) && \is_string($values[0]) && \str_ends_with($value, $values[0]);
 
-            case Query::TYPE_NOT_ENDS_WITH:
+            case Method::NotEndsWith:
                 if ($value === null) {
                     return false;
                 }
 
-                return ! \is_string($value) || ! \is_string($values[0] ?? null) || ! \str_ends_with($value, (string) $values[0]);
+                return ! \is_string($value) || ! isset($values[0]) || ! \is_string($values[0]) || ! \str_ends_with($value, $values[0]);
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
+            case Method::Contains:
+            case Method::ContainsAny:
                 $haystack = $this->coerceArrayValue($value);
                 if ($haystack === null && \is_string($value)) {
                     foreach ($values as $needle) {
@@ -3208,14 +2725,14 @@ class Redis extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::NotContains:
                 if ($value === null) {
                     return false;
                 }
 
-                return ! $this->matchesDocument($document, new Query(Query::TYPE_CONTAINS, $attribute, $values));
+                return ! $this->matchesDocument($document, new Query(Method::Contains, $attribute, $values));
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 $haystack = $this->coerceArrayValue($value);
                 if (! \is_array($haystack)) {
                     return false;
@@ -3235,48 +2752,44 @@ class Redis extends Adapter
 
                 return true;
 
-            case Query::TYPE_SEARCH:
+            case Method::Search:
                 if (! \is_string($value)) {
                     return false;
                 }
-                $needle = (string) ($values[0] ?? '');
+                $needle = $this->stringOrEmpty($values[0] ?? '');
                 if ($needle === '') {
                     return false;
                 }
 
                 return $this->matchesFulltextRedis($value, $needle);
 
-            case Query::TYPE_NOT_SEARCH:
+            case Method::NotSearch:
                 if ($value === null) {
                     return false;
                 }
                 if (! \is_string($value)) {
                     return true;
                 }
-                $needle = (string) ($values[0] ?? '');
+                $needle = $this->stringOrEmpty($values[0] ?? '');
                 if ($needle === '') {
                     return true;
                 }
 
                 return ! $this->matchesFulltextRedis($value, $needle);
 
-            case Query::TYPE_REGEX:
+            case Method::Regex:
                 if (! \is_string($value)) {
                     return false;
                 }
-                $pattern = (string) ($values[0] ?? '');
-                $delimited = '#' . \str_replace('#', '\\#', $pattern) . '#u';
+                $pattern = $this->stringOrEmpty($values[0] ?? '');
+                $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
 
                 return @\preg_match($delimited, $value) === 1;
         }
 
-        throw new QueryException('Query method not supported by Redis adapter: ' . $method);
+        throw new QueryException('Query method not supported by Redis adapter: '.$method->value);
     }
 
-    /**
-     * Object-attribute query semantics — JSONB-style containment used for
-     * Postgres-flavoured equal/contains operators against decoded objects.
-     */
     private function matchesDocumentObject(mixed $value, Query $query): bool
     {
         $haystack = $this->decodeObjectishValue($value);
@@ -3284,7 +2797,7 @@ class Redis extends Adapter
         $method = $query->getMethod();
 
         switch ($method) {
-            case Query::TYPE_EQUAL:
+            case Method::Equal:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3296,7 +2809,7 @@ class Redis extends Adapter
 
                 return false;
 
-            case Query::TYPE_NOT_EQUAL:
+            case Method::NotEqual:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3308,8 +2821,8 @@ class Redis extends Adapter
 
                 return true;
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_CONTAINS_ANY:
+            case Method::Contains:
+            case Method::ContainsAny:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3321,7 +2834,7 @@ class Redis extends Adapter
 
                 return false;
 
-            case Query::TYPE_CONTAINS_ALL:
+            case Method::ContainsAll:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3333,7 +2846,7 @@ class Redis extends Adapter
 
                 return true;
 
-            case Query::TYPE_NOT_CONTAINS:
+            case Method::NotContains:
                 if ($haystack === null) {
                     return false;
                 }
@@ -3345,36 +2858,33 @@ class Redis extends Adapter
 
                 return true;
 
-            case Query::TYPE_IS_NULL:
+            case Method::IsNull:
                 return $value === null;
 
-            case Query::TYPE_IS_NOT_NULL:
+            case Method::IsNotNull:
                 return $value !== null;
         }
 
-        throw new QueryException('Query method ' . $method . ' not supported for object attributes');
+        throw new QueryException('Query method '.$method->value.' not supported for object attributes');
     }
 
     /**
-     * Stable ordering across Documents. Random short-circuits via shuffle to
-     * preserve usort transitivity; absent attributes fall back to $sequence.
-     *
-     * @param  array<int, Document>  $documents
-     * @param  array<int, string>  $orderAttributes
-     * @param  array<int, string>  $orderTypes
+     * @param array<int, Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
      * @return array<int, Document>
      */
-    private function orderDocuments(array $documents, array $orderAttributes, array $orderTypes, string $cursorDirection): array
+    private function orderDocuments(array $documents, array $orderAttributes, array $orderTypes, CursorDirection $cursorDirection): array
     {
         foreach ($orderTypes as $type) {
-            if ($type === Database::ORDER_RANDOM) {
+            if ($type === OrderDirection::Random) {
                 \shuffle($documents);
 
                 return $documents;
             }
         }
 
-        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $reverse = $cursorDirection === CursorDirection::Before;
 
         if (empty($orderAttributes)) {
             \usort($documents, function (Document $a, Document $b) use ($reverse): int {
@@ -3395,11 +2905,11 @@ class Redis extends Adapter
 
         $directions = [];
         foreach ($orderAttributes as $i => $attribute) {
-            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            $direction = $orderTypes[$i] ?? OrderDirection::Asc;
             if ($reverse) {
-                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
-            $directions[$i] = $direction === Database::ORDER_ASC ? 1 : -1;
+            $directions[$i] = $direction === OrderDirection::Asc ? 1 : -1;
         }
 
         \usort($documents, function (Document $a, Document $b) use ($orderAttributes, $directions): int {
@@ -3427,15 +2937,13 @@ class Redis extends Adapter
     }
 
     /**
-     * Discard documents preceding the supplied cursor on the active sort.
-     *
-     * @param  array<int, Document>  $documents
-     * @param  array<int, string>  $orderAttributes
-     * @param  array<int, string>  $orderTypes
-     * @param  array<string, mixed>  $cursor
+     * @param array<int, Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
+     * @param array<string, mixed> $cursor
      * @return array<int, Document>
      */
-    private function cursorDocuments(array $documents, array $orderAttributes, array $orderTypes, array $cursor, string $cursorDirection): array
+    private function cursorDocuments(array $documents, array $orderAttributes, array $orderTypes, array $cursor, CursorDirection $cursorDirection): array
     {
         if (empty($cursor)) {
             return $documents;
@@ -3443,19 +2951,19 @@ class Redis extends Adapter
 
         if (empty($orderAttributes)) {
             $orderAttributes = ['$sequence'];
-            $orderTypes = [Database::ORDER_ASC];
+            $orderTypes = [OrderDirection::Asc];
         }
 
-        $reverse = $cursorDirection === Database::CURSOR_BEFORE;
+        $reverse = $cursorDirection === CursorDirection::Before;
         $resolved = [];
         foreach ($orderAttributes as $i => $attribute) {
-            $direction = $orderTypes[$i] ?? Database::ORDER_ASC;
+            $direction = $orderTypes[$i] ?? OrderDirection::Asc;
             if ($reverse) {
-                $direction = $direction === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
             }
             $resolved[] = [
                 'attribute' => $attribute,
-                'asc' => $direction === Database::ORDER_ASC,
+                'asc' => $direction === OrderDirection::Asc,
                 'ref' => $cursor[$attribute] ?? null,
             ];
         }
@@ -3493,16 +3001,8 @@ class Redis extends Adapter
         return $output;
     }
 
-    /**
-     * Resolve a dotted attribute path on a Document, falling back to nested
-     * decoded JSON traversal when the head segment holds a string payload.
-     */
     private function resolveDocumentAttribute(Document $document, string $attribute): mixed
     {
-        // Redis stores documents as raw JSON, so attribute keys keep symbols
-        // (`$`, `.`, etc.) verbatim. Try a direct lookup first — only when the
-        // literal key misses do we fall back to the filtered alias and then to
-        // dotted-path traversal (mirrors Memory's `resolveAttributeValue`).
         if ($document->offsetExists($attribute)) {
             return $document->getAttribute($attribute);
         }
@@ -3531,9 +3031,6 @@ class Redis extends Adapter
         return $this->traverseNestedPath($value, $rest);
     }
 
-    /**
-     * Walk a remaining dotted path through arrays, returning null on miss.
-     */
     private function traverseNestedPath(mixed $value, string $path): mixed
     {
         foreach (\explode('.', $path) as $part) {
@@ -3552,14 +3049,13 @@ class Redis extends Adapter
         return $value;
     }
 
-    /**
-     * Normalise a value for unique-index hashing. Booleans collapse to ints
-     * and numeric strings collapse to numbers so signatures match SQL casts.
-     */
     private function normalizeIndexValue(mixed $value): mixed
     {
         if (\is_bool($value)) {
             return $value ? 1 : 0;
+        }
+        if (\is_array($value)) {
+            return \json_encode($value);
         }
         if (\is_string($value) && \is_numeric($value)) {
             return $value + 0;
@@ -3568,10 +3064,6 @@ class Redis extends Adapter
         return $value;
     }
 
-    /**
-     * Equal-with-numeric-coercion mirroring Memory::looseEquals — covers the
-     * "1" == 1 case Database tests rely on.
-     */
     private function valuesEqual(mixed $a, mixed $b): bool
     {
         if ($a === $b) {
@@ -3585,9 +3077,6 @@ class Redis extends Adapter
     }
 
     /**
-     * Decode a CONTAINS-target into an array if possible. Returns null when
-     * the value is neither an array nor a JSON-encoded array string.
-     *
      * @return array<mixed>|null
      */
     private function coerceArrayValue(mixed $value): ?array
@@ -3604,9 +3093,6 @@ class Redis extends Adapter
         return null;
     }
 
-    /**
-     * Decode an object-typed attribute value for JSONB-style containment.
-     */
     private function decodeObjectishValue(mixed $value): mixed
     {
         if ($value === null) {
@@ -3628,10 +3114,6 @@ class Redis extends Adapter
         return $value;
     }
 
-    /**
-     * Postgres `@>` JSONB containment in PHP — recursive subset semantics
-     * with list-element matching for array haystacks.
-     */
     private function jsonContainment(mixed $haystack, mixed $candidate): bool
     {
         if (\is_array($haystack) && \array_is_list($haystack)) {
@@ -3681,10 +3163,6 @@ class Redis extends Adapter
         return false;
     }
 
-    /**
-     * Wrap `['skills' => 'typescript']` into `['skills' => ['typescript']]`
-     * so contains-style probes hit array entries inside the haystack.
-     */
     private function wrapScalarObjectCandidate(mixed $candidate): mixed
     {
         if (! \is_array($candidate) || \count($candidate) !== 1) {
@@ -3699,11 +3177,6 @@ class Redis extends Adapter
         return [$key => [$value]];
     }
 
-    /**
-     * Natural-language fulltext approximation: tokenise on
-     * whitespace/punctuation, support trailing wildcard prefix matching, and
-     * honour quoted phrases as case-insensitive substring probes.
-     */
     private function matchesFulltextRedis(string $haystack, string $needle): bool
     {
         if (\preg_match('/^"(.*)"$/u', \trim($needle), $matches) === 1) {
@@ -3755,18 +3228,14 @@ class Redis extends Adapter
     }
 
     /**
-     * Extract user-requested attributes from any TYPE_SELECT queries. Internal
-     * attributes (prefixed with `$` or `_`) are always preserved — only user
-     * attributes are subject to projection.
-     *
-     * @param  array<int, Query>  $queries
+     * @param array<Query> $queries
      * @return array<int, string>
      */
-    private function extractSelectionsFromQueries(array $queries): array
+    protected function extractSelections(array $queries): array
     {
         $selections = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() !== Query::TYPE_SELECT) {
+            if ($query->getMethod() !== Method::Select) {
                 continue;
             }
             foreach ($query->getValues() as $value) {
@@ -3780,11 +3249,7 @@ class Redis extends Adapter
     }
 
     /**
-     * Project a Document down to the supplied user-attribute selection.
-     * `*` short-circuits projection (no filter applied). Internal attributes
-     * (prefixed `$` / `_`) are always retained.
-     *
-     * @param  array<int, string>  $selections
+     * @param array<int, string> $selections
      */
     private function projectDocument(Document $document, array $selections): Document
     {
@@ -3794,7 +3259,7 @@ class Redis extends Adapter
 
         $projected = [];
         foreach ($document->getArrayCopy() as $field => $value) {
-            if (\is_string($field) && (\str_starts_with($field, '$') || \str_starts_with($field, '_'))) {
+            if (\str_starts_with($field, '$') || \str_starts_with($field, '_')) {
                 $projected[$field] = $value;
 
                 continue;
@@ -3807,196 +3272,9 @@ class Redis extends Adapter
         return new Document($projected);
     }
 
-    // === @architect:T40 end ===
-
-
-
-
-
-    // === @architect:T50 owns: permissions + relationships ===
-
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
-    {
-        // Redis stores documents as flexible JSON blobs, so the relationship
-        // "column" is registered on the collection's meta.attrs list rather
-        // than added as a physical schema column. Mirrors Memory's
-        // `registerRelationshipField` — minimal record only; the orchestrator
-        // writes the full options (onDelete / side / related-collection) onto
-        // the METADATA collection separately. The M2M junction collection
-        // itself is created by the wrapper via the standard createCollection
-        // path with explicit attributes.
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                $this->createAttribute($collection, $id, Database::VAR_RELATIONSHIP, 0, true, false, false);
-                if ($twoWay) {
-                    $this->createAttribute($relatedCollection, $twoWayKey, Database::VAR_RELATIONSHIP, 0, true, false, false);
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                $this->createAttribute($relatedCollection, $twoWayKey, Database::VAR_RELATIONSHIP, 0, true, false, false);
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                $this->createAttribute($collection, $id, Database::VAR_RELATIONSHIP, 0, true, false, false);
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                // Junction columns live on the junction collection, which is
-                // created with explicit attributes by the wrapper.
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        return true;
-    }
-
-    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
-    {
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-        $newKey = $newKey !== null ? $this->filter($newKey) : null;
-        $newTwoWayKey = $newTwoWayKey !== null ? $this->filter($newTwoWayKey) : null;
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($newKey !== null && $newKey !== $key) {
-                    $this->renameAttribute($collection, $key, $newKey);
-                }
-                if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
-                    $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
-                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                    }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameAttribute($collection, $key, $newKey);
-                    }
-                }
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
-                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                    }
-                } else {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameAttribute($collection, $key, $newKey);
-                    }
-                }
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
-                if ($junction !== null) {
-                    if ($newKey !== null && $newKey !== $key) {
-                        $this->renameAttribute($junction, $key, $newKey);
-                    }
-                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
-                        $this->renameAttribute($junction, $twoWayKey, $newTwoWayKey);
-                    }
-                }
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        return true;
-    }
-
-    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
-    {
-        $key = $this->filter($key);
-        $twoWayKey = $this->filter($twoWayKey);
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->deleteAttribute($collection, $key);
-                    if ($twoWay) {
-                        $this->deleteAttribute($relatedCollection, $twoWayKey);
-                    }
-                } else {
-                    $this->deleteAttribute($relatedCollection, $twoWayKey);
-                    if ($twoWay) {
-                        $this->deleteAttribute($collection, $key);
-                    }
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->deleteAttribute($relatedCollection, $twoWayKey);
-                } else {
-                    $this->deleteAttribute($collection, $key);
-                }
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $this->deleteAttribute($collection, $key);
-                } else {
-                    $this->deleteAttribute($relatedCollection, $twoWayKey);
-                }
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                // Junction collection is dropped by the wrapper via cleanupCollection.
-                break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
-        }
-
-        return true;
-    }
-
-    // === @architect:T50 end ===
-
-
-
-
-
-    // === @architect:T56 owns: transactions + journal ===
-
-    public function startTransaction(): bool
-    {
-        $this->journalStack[] = [];
-        $this->inTransaction++;
-
-        return true;
-    }
-
-    public function commitTransaction(): bool
-    {
-        if ($this->inTransaction === 0) {
-            return false;
-        }
-
-        $this->commitJournal();
-        $this->inTransaction--;
-
-        return true;
-    }
-
-    public function rollbackTransaction(): bool
-    {
-        if ($this->inTransaction === 0) {
-            return false;
-        }
-
-        $this->rollbackJournal();
-        $this->inTransaction--;
-
-        return true;
-    }
-
-    // === @architect:T56 end ===
-
     /**
-     * Resolve any Operator-typed attributes against the existing document
-     * before persisting. Mirrors Memory::applyOperators — non-operator
-     * values pass through untouched.
-     *
-     * @param  array<string, mixed>  $attrs  Incoming attributes (may contain Operator instances)
-     * @param  array<string, mixed>  $existing  Decoded document used as the operator's "current" value
+     * @param array<string, mixed> $attrs
+     * @param array<string, mixed> $existing
      * @return array<string, mixed>
      */
     protected function applyOperators(array $attrs, array $existing): array
@@ -4015,102 +3293,99 @@ class Redis extends Adapter
         return $result;
     }
 
-    /**
-     * Apply a single Operator to a stored value and return the new value.
-     * Mirrors Memory::applyOperator — the SQL adapters express the same
-     * semantics in CASE/JSON helpers (see MariaDB::getOperatorSQL).
-     */
     protected function applyOperator(mixed $current, Operator $operator): mixed
     {
         $values = $operator->getValues();
         $method = $operator->getMethod();
 
         switch ($method) {
-            case Operator::TYPE_INCREMENT:
-                $by = $values[0] ?? 1;
+            case OperatorType::Increment:
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($max !== null) {
-                    if ($base >= $max || ($max - $base) <= $by) {
-                        return $this->preserveNumericType($base, $max);
+                $base = $this->numericOr($current, 0);
+                if ($max !== null && \is_numeric($max)) {
+                    $maxNumeric = $max + 0;
+                    if ($base >= $maxNumeric || ($maxNumeric - $base) <= $by) {
+                        return $this->preserveNumericType($base, $maxNumeric);
                     }
                 }
 
                 return $this->preserveNumericType($base, $base + $by);
 
-            case Operator::TYPE_DECREMENT:
-                $by = $values[0] ?? 1;
+            case OperatorType::Decrement:
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $min = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($min !== null) {
-                    if ($base <= $min || ($base - $min) <= $by) {
-                        return $this->preserveNumericType($base, $min);
+                $base = $this->numericOr($current, 0);
+                if ($min !== null && \is_numeric($min)) {
+                    $minNumeric = $min + 0;
+                    if ($base <= $minNumeric || ($base - $minNumeric) <= $by) {
+                        return $this->preserveNumericType($base, $minNumeric);
                     }
                 }
 
                 return $this->preserveNumericType($base, $base - $by);
 
-            case Operator::TYPE_MULTIPLY:
-                $by = $values[0] ?? 1;
+            case OperatorType::Multiply:
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
                 return $this->applyNumericLimit($base * $by, $max, true);
 
-            case Operator::TYPE_DIVIDE:
+            case OperatorType::Divide:
                 $by = $values[0] ?? 1;
                 $min = $values[1] ?? null;
-                if ($by == 0) {
+                if (! \is_numeric($by) || $by == 0) {
                     return $current;
                 }
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
-                return $this->applyNumericLimit($base / $by, $min, false);
+                return $this->applyNumericLimit($base / ($by + 0), $min, false);
 
-            case Operator::TYPE_MODULO:
+            case OperatorType::Modulo:
                 $by = $values[0] ?? 1;
-                if ($by == 0) {
+                if (! \is_numeric($by) || $by == 0) {
                     return $current;
                 }
                 $base = \is_numeric($current) ? (int) $current : 0;
 
                 return $base % (int) $by;
 
-            case Operator::TYPE_POWER:
-                $by = $values[0] ?? 1;
+            case OperatorType::Power:
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
                 return $this->applyNumericLimit($base ** $by, $max, true);
 
-            case Operator::TYPE_STRING_CONCAT:
-                return ((string) ($current ?? '')) . (string) ($values[0] ?? '');
+            case OperatorType::StringConcat:
+                return $this->stringOrEmpty($current).$this->stringOrEmpty($values[0] ?? '');
 
-            case Operator::TYPE_STRING_REPLACE:
-                $search = (string) ($values[0] ?? '');
-                $replace = (string) ($values[1] ?? '');
+            case OperatorType::StringReplace:
+                $search = $this->stringOrEmpty($values[0] ?? '');
+                $replace = $this->stringOrEmpty($values[1] ?? '');
                 if ($current === null) {
                     return null;
                 }
 
-                return \str_replace($search, $replace, (string) $current);
+                return \str_replace($search, $replace, $this->stringOrEmpty($current));
 
-            case Operator::TYPE_TOGGLE:
+            case OperatorType::Toggle:
                 return ! (bool) $current;
 
-            case Operator::TYPE_ARRAY_APPEND:
+            case OperatorType::ArrayAppend:
                 $list = $this->coerceArray($current);
 
                 return [...$list, ...\array_values($values)];
 
-            case Operator::TYPE_ARRAY_PREPEND:
+            case OperatorType::ArrayPrepend:
                 $list = $this->coerceArray($current);
 
                 return [...\array_values($values), ...$list];
 
-            case Operator::TYPE_ARRAY_INSERT:
+            case OperatorType::ArrayInsert:
                 $list = $this->coerceArray($current);
-                $index = (int) ($values[0] ?? 0);
+                $index = $this->intOr($values[0] ?? 0, 0);
                 $value = $values[1] ?? null;
                 if ($index < 0) {
                     $index = 0;
@@ -4122,68 +3397,63 @@ class Redis extends Adapter
 
                 return $list;
 
-            case Operator::TYPE_ARRAY_REMOVE:
+            case OperatorType::ArrayRemove:
                 $list = $this->coerceArray($current);
                 $needle = $values[0] ?? null;
 
                 return \array_values(\array_filter($list, fn ($item) => $item !== $needle));
 
-            case Operator::TYPE_ARRAY_UNIQUE:
+            case OperatorType::ArrayUnique:
                 $list = $this->coerceArray($current);
 
                 return \array_values(\array_unique($list, SORT_REGULAR));
 
-            case Operator::TYPE_ARRAY_INTERSECT:
+            case OperatorType::ArrayIntersect:
                 $list = $this->coerceArray($current);
                 $other = \array_values($values);
 
                 return \array_values(\array_filter($list, fn ($item) => \in_array($item, $other, false)));
 
-            case Operator::TYPE_ARRAY_DIFF:
+            case OperatorType::ArrayDiff:
                 $list = $this->coerceArray($current);
                 $other = \array_values($values);
 
                 return \array_values(\array_filter($list, fn ($item) => ! \in_array($item, $other, false)));
 
-            case Operator::TYPE_ARRAY_FILTER:
+            case OperatorType::ArrayFilter:
                 $list = $this->coerceArray($current);
-                $condition = (string) ($values[0] ?? '');
+                $condition = $this->stringOrEmpty($values[0] ?? '');
                 $compare = $values[1] ?? null;
 
                 return \array_values(\array_filter($list, fn ($item) => $this->matchesArrayFilter($item, $condition, $compare)));
 
-            case Operator::TYPE_DATE_ADD_DAYS:
-                $days = (int) ($values[0] ?? 0);
+            case OperatorType::DateAddDays:
+                $days = $this->intOr($values[0] ?? 0, 0);
 
                 return $this->shiftDate($current, $days * 86400);
 
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $days = (int) ($values[0] ?? 0);
+            case OperatorType::DateSubDays:
+                $days = $this->intOr($values[0] ?? 0, 0);
 
                 return $this->shiftDate($current, -$days * 86400);
 
-            case Operator::TYPE_DATE_SET_NOW:
+            case OperatorType::DateSetNow:
                 return DateTime::now();
         }
-
-        throw new OperatorException("Invalid operator: {$method}");
     }
 
-    protected function applyNumericLimit(int|float $value, int|float|null $bound, bool $isUpper): int|float
+    protected function applyNumericLimit(mixed $value, mixed $bound, bool $isUpper): int|float
     {
-        if ($bound === null) {
-            return $value;
+        $numericValue = \is_numeric($value) ? $value + 0 : 0;
+        if (! \is_numeric($bound)) {
+            return $numericValue;
         }
+        $numericBound = $bound + 0;
 
-        return $isUpper ? \min($value, $bound) : \max($value, $bound);
+        return $isUpper ? \min($numericValue, $numericBound) : \max($numericValue, $numericBound);
     }
 
-    /**
-     * Preserve int-ness when the original value is an int — without this,
-     * PHP's arithmetic promotes the result to float and the Range validator
-     * rejects an integer column post-update.
-     */
-    protected function preserveNumericType(int|float $original, int|float $result): int|float
+    protected function preserveNumericType(mixed $original, mixed $result): mixed
     {
         if (\is_int($original) && \is_float($result) && $result === (float) (int) $result) {
             return (int) $result;
@@ -4213,14 +3483,14 @@ class Redis extends Adapter
     protected function matchesArrayFilter(mixed $item, string $condition, mixed $compare): bool
     {
         return match ($condition) {
-            Query::TYPE_EQUAL => $item == $compare,
-            Query::TYPE_NOT_EQUAL => $item != $compare,
-            Query::TYPE_GREATER => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
-            Query::TYPE_GREATER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
-            Query::TYPE_LESSER => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
-            Query::TYPE_LESSER_EQUAL => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
-            Query::TYPE_IS_NULL => $item === null,
-            Query::TYPE_IS_NOT_NULL => $item !== null,
+            Method::Equal->value => $item == $compare,
+            Method::NotEqual->value => $item != $compare,
+            Method::GreaterThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
+            Method::GreaterThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
+            Method::LessThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
+            Method::LessThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
+            Method::IsNull->value => $item === null,
+            Method::IsNotNull->value => $item !== null,
             default => true,
         };
     }
@@ -4230,12 +3500,13 @@ class Redis extends Adapter
         if ($current === null) {
             return null;
         }
+        $stringified = $this->stringOrEmpty($current);
         try {
-            $base = new \DateTime((string) $current);
+            $base = new \DateTime($stringified);
         } catch (\Throwable) {
-            return $current === '' ? null : (string) $current;
+            return $stringified === '' ? null : $stringified;
         }
-        $base->modify(($seconds >= 0 ? '+' : '') . $seconds . ' seconds');
+        $base->modify(($seconds >= 0 ? '+' : '').$seconds.' seconds');
 
         return DateTime::format($base);
     }

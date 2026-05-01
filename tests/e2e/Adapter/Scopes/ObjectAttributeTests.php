@@ -3,16 +3,21 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait ObjectAttributeTests
 {
@@ -20,23 +25,18 @@ trait ObjectAttributeTests
      * Helper function to create an attribute if adapter supports attributes,
      * otherwise returns true to allow tests to continue
      *
-     * @param Database $database
-     * @param string $collectionId
-     * @param string $attributeId
-     * @param string $type
-     * @param int $size
-     * @param bool $required
-     * @param mixed $default
-     * @return bool
+     * @param  string  $type
+     * @param  mixed  $default
      */
-    private function createAttribute(Database $database, string $collectionId, string $attributeId, string $type, int $size, bool $required, $default = null): bool
+    private function createAttribute(Database $database, string $collectionId, string $attributeId, ColumnType $type, int $size, bool $required, $default = null): bool
     {
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             return true;
         }
 
-        $result = $database->createAttribute($collectionId, $attributeId, $type, $size, $required, $default);
+        $result = $database->createAttribute($collectionId, new Attribute(key: $attributeId, type: $type, size: $size, required: $required, default: $default));
         $this->assertEquals(true, $result);
+
         return $result;
     }
 
@@ -46,7 +46,7 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (! $database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -54,7 +54,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // Test 1: Create and read document with object attribute
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -65,10 +65,10 @@ trait ObjectAttributeTests
                 'skills' => ['react', 'node'],
                 'user' => [
                     'info' => [
-                        'country' => 'IN'
-                    ]
-                ]
-            ]
+                        'country' => 'IN',
+                    ],
+                ],
+            ],
         ]));
 
         $this->assertIsArray($doc1->getAttribute('meta'));
@@ -78,7 +78,7 @@ trait ObjectAttributeTests
 
         // Test 2: Query::equal with simple key-value pair
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['age' => 25]])
+            Query::equal('meta', [['age' => 25]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -88,17 +88,17 @@ trait ObjectAttributeTests
             Query::equal('meta', [[
                 'user' => [
                     'info' => [
-                        'country' => 'IN'
-                    ]
-                ]
-            ]])
+                        'country' => 'IN',
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
 
         // Test 4: Query::contains for array element
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['skills' => 'react']])
+            Query::contains('meta', [['skills' => 'react']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -112,15 +112,15 @@ trait ObjectAttributeTests
                 'skills' => ['python', 'java'],
                 'user' => [
                     'info' => [
-                        'country' => 'US'
-                    ]
-                ]
-            ]
+                        'country' => 'US',
+                    ],
+                ],
+            ],
         ]));
 
         // Test 6: Query should return only doc1
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['age' => 25]])
+            Query::equal('meta', [['age' => 25]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -130,10 +130,10 @@ trait ObjectAttributeTests
             Query::equal('meta', [[
                 'user' => [
                     'info' => [
-                        'country' => 'US'
-                    ]
-                ]
-            ]])
+                        'country' => 'US',
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc2', $results[0]->getId());
@@ -147,10 +147,10 @@ trait ObjectAttributeTests
                 'skills' => ['react', 'node', 'typescript'],
                 'user' => [
                     'info' => [
-                        'country' => 'CA'
-                    ]
-                ]
-            ]
+                        'country' => 'CA',
+                    ],
+                ],
+            ],
         ]));
 
         $this->assertEquals(26, $updatedDoc->getAttribute('meta')['age']);
@@ -159,27 +159,27 @@ trait ObjectAttributeTests
 
         // Test 9: Query updated document
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['age' => 26]])
+            Query::equal('meta', [['age' => 26]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
 
         // Test 10: Query with multiple conditions using contains
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['skills' => 'typescript']])
+            Query::contains('meta', [['skills' => 'typescript']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
 
         // Test 11: Negative test - query that shouldn't match
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['age' => 99]])
+            Query::equal('meta', [['age' => 99]]),
         ]);
         $this->assertCount(0, $results);
 
         // Test 11d: notEqual on scalar inside object should exclude doc1
         $results = $database->find($collectionId, [
-            Query::notEqual('meta', ['age' => 26])
+            Query::notEqual('meta', ['age' => 26]),
         ]);
         // Should return doc2 only
         $this->assertCount(1, $results);
@@ -188,7 +188,7 @@ trait ObjectAttributeTests
         try {
             // test -> not equal allows one value only
             $results = $database->find($collectionId, [
-                Query::notEqual('meta', [['age' => 26], ['age' => 27]])
+                Query::notEqual('meta', [['age' => 26], ['age' => 27]]),
             ]);
             $this->fail('No query thrown');
         } catch (Exception $e) {
@@ -200,10 +200,10 @@ trait ObjectAttributeTests
             Query::notEqual('meta', [
                 'user' => [
                     'info' => [
-                        'country' => 'CA'
-                    ]
-                ]
-            ])
+                        'country' => 'CA',
+                    ],
+                ],
+            ]),
         ]);
         // Should return doc2 only
         $this->assertCount(1, $results);
@@ -220,7 +220,7 @@ trait ObjectAttributeTests
         // Test 11b: Test Query::select to limit returned attributes
         $results = $database->find($collectionId, [
             Query::select(['$id', 'meta']),
-            Query::equal('meta', [['age' => 26]])
+            Query::equal('meta', [['age' => 26]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -230,7 +230,7 @@ trait ObjectAttributeTests
         // Test 11c: Test Query::select with only $id (exclude meta)
         $results = $database->find($collectionId, [
             Query::select(['$id']),
-            Query::equal('meta', [['age' => 30]])
+            Query::equal('meta', [['age' => 30]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc2', $results[0]->getId());
@@ -241,7 +241,7 @@ trait ObjectAttributeTests
         $doc3 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc3',
             '$permissions' => [Permission::read(Role::any())],
-            'meta' => null
+            'meta' => null,
         ]));
         $this->assertNull($doc3->getAttribute('meta'));
 
@@ -249,7 +249,7 @@ trait ObjectAttributeTests
         $doc4 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc4',
             '$permissions' => [Permission::read(Role::any())],
-            'meta' => []
+            'meta' => [],
         ]));
         $this->assertIsArray($doc4->getAttribute('meta'));
         $this->assertEmpty($doc4->getAttribute('meta'));
@@ -263,12 +263,12 @@ trait ObjectAttributeTests
                     'level2' => [
                         'level3' => [
                             'level4' => [
-                                'level5' => 'deep_value'
-                            ]
-                        ]
-                    ]
-                ]
-            ]
+                                'level5' => 'deep_value',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
         ]));
         $this->assertEquals('deep_value', $doc5->getAttribute('meta')['level1']['level2']['level3']['level4']['level5']);
 
@@ -279,12 +279,12 @@ trait ObjectAttributeTests
                     'level2' => [
                         'level3' => [
                             'level4' => [
-                                'level5' => 'deep_value'
-                            ]
-                        ]
-                    ]
-                ]
-            ]])
+                                'level5' => 'deep_value',
+                            ],
+                        ],
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc5', $results[0]->getId());
@@ -296,12 +296,12 @@ trait ObjectAttributeTests
                     'level2' => [
                         'level3' => [
                             'level4' => [
-                                'level5' => 'deep_value'
-                            ]
-                        ]
-                    ]
-                ]
-            ]])
+                                'level5' => 'deep_value',
+                            ],
+                        ],
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
 
@@ -316,8 +316,8 @@ trait ObjectAttributeTests
                 'boolean' => true,
                 'null_value' => null,
                 'array' => [1, 2, 3],
-                'object' => ['key' => 'value']
-            ]
+                'object' => ['key' => 'value'],
+            ],
         ]));
         $this->assertEquals('text', $doc6->getAttribute('meta')['string']);
         $this->assertEquals(42, $doc6->getAttribute('meta')['number']);
@@ -327,21 +327,21 @@ trait ObjectAttributeTests
 
         // Test 18: Query with boolean value
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['boolean' => true]])
+            Query::equal('meta', [['boolean' => true]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc6', $results[0]->getId());
 
         // Test 19: Query with numeric value
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['number' => 42]])
+            Query::equal('meta', [['number' => 42]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc6', $results[0]->getId());
 
         // Test 20: Query with float value
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['float' => 3.14]])
+            Query::equal('meta', [['float' => 3.14]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc6', $results[0]->getId());
@@ -351,11 +351,11 @@ trait ObjectAttributeTests
             '$id' => 'doc7',
             '$permissions' => [Permission::read(Role::any())],
             'meta' => [
-                'tags' => ['php', 'javascript', 'python', 'go', 'rust']
-            ]
+                'tags' => ['php', 'javascript', 'python', 'go', 'rust'],
+            ],
         ]));
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['tags' => 'rust']])
+            Query::contains('meta', [['tags' => 'rust']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc7', $results[0]->getId());
@@ -365,24 +365,24 @@ trait ObjectAttributeTests
             '$id' => 'doc8',
             '$permissions' => [Permission::read(Role::any())],
             'meta' => [
-                'scores' => [85, 90, 95, 100]
-            ]
+                'scores' => [85, 90, 95, 100],
+            ],
         ]));
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['scores' => 95]])
+            Query::contains('meta', [['scores' => 95]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc8', $results[0]->getId());
 
         // Test 23: Negative test - contains query that shouldn't match
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['tags' => 'kotlin']])
+            Query::contains('meta', [['tags' => 'kotlin']]),
         ]);
         $this->assertCount(0, $results);
 
         // Test 23b: notContains should exclude doc7 (which has 'rust')
         $results = $database->find($collectionId, [
-            Query::notContains('meta', [['tags' => 'rust']])
+            Query::notContains('meta', [['tags' => 'rust']]),
         ]);
         // Should not include doc7; returns others (at least doc1, doc2, ...)
         $this->assertGreaterThanOrEqual(1, count($results));
@@ -401,16 +401,16 @@ trait ObjectAttributeTests
                     [
                         'name' => 'Project A',
                         'technologies' => ['react', 'node'],
-                        'active' => true
+                        'active' => true,
                     ],
                     [
                         'name' => 'Project B',
                         'technologies' => ['vue', 'python'],
-                        'active' => false
-                    ]
+                        'active' => false,
+                    ],
                 ],
-                'company' => 'TechCorp'
-            ]
+                'company' => 'TechCorp',
+            ],
         ]));
         $this->assertIsArray($doc9->getAttribute('meta')['projects']);
         $this->assertCount(2, $doc9->getAttribute('meta')['projects']);
@@ -418,7 +418,7 @@ trait ObjectAttributeTests
 
         // Test 25: Query using equal with nested key
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['company' => 'TechCorp']])
+            Query::equal('meta', [['company' => 'TechCorp']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc9', $results[0]->getId());
@@ -430,15 +430,15 @@ trait ObjectAttributeTests
                     [
                         'name' => 'Project A',
                         'technologies' => ['react', 'node'],
-                        'active' => true
+                        'active' => true,
                     ],
                     [
                         'name' => 'Project B',
                         'technologies' => ['vue', 'python'],
-                        'active' => false
-                    ]
-                ]
-            ]])
+                        'active' => false,
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc9', $results[0]->getId());
@@ -450,15 +450,15 @@ trait ObjectAttributeTests
             'meta' => [
                 'description' => 'Test with "quotes" and \'apostrophes\'',
                 'emoji' => '🚀🎉',
-                'symbols' => '@#$%^&*()'
-            ]
+                'symbols' => '@#$%^&*()',
+            ],
         ]));
         $this->assertEquals('Test with "quotes" and \'apostrophes\'', $doc10->getAttribute('meta')['description']);
         $this->assertEquals('🚀🎉', $doc10->getAttribute('meta')['emoji']);
 
         // Test 27: Query with special characters
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['emoji' => '🚀🎉']])
+            Query::equal('meta', [['emoji' => '🚀🎉']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc10', $results[0]->getId());
@@ -470,19 +470,19 @@ trait ObjectAttributeTests
             'meta' => [
                 'config' => [
                     'theme' => 'dark',
-                    'language' => 'en'
-                ]
-            ]
+                    'language' => 'en',
+                ],
+            ],
         ]));
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['config' => ['theme' => 'dark', 'language' => 'en']]])
+            Query::equal('meta', [['config' => ['theme' => 'dark', 'language' => 'en']]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc11', $results[0]->getId());
 
         // Test 29: Negative test - partial object match should still work (containment)
         $results = $database->find($collectionId, [
-            Query::equal('meta', [['config' => ['theme' => 'dark']]])
+            Query::equal('meta', [['config' => ['theme' => 'dark']]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc11', $results[0]->getId());
@@ -491,7 +491,7 @@ trait ObjectAttributeTests
         $updatedDoc11 = $database->updateDocument($collectionId, 'doc11', new Document([
             '$id' => 'doc11',
             '$permissions' => [Permission::read(Role::any())],
-            'meta' => []
+            'meta' => [],
         ]));
         $this->assertIsArray($updatedDoc11->getAttribute('meta'));
         $this->assertEmpty($updatedDoc11->getAttribute('meta'));
@@ -504,16 +504,16 @@ trait ObjectAttributeTests
                 'matrix' => [
                     [1, 2, 3],
                     [4, 5, 6],
-                    [7, 8, 9]
-                ]
-            ]
+                    [7, 8, 9],
+                ],
+            ],
         ]));
         $this->assertIsArray($doc12->getAttribute('meta')['matrix']);
         $this->assertEquals([1, 2, 3], $doc12->getAttribute('meta')['matrix'][0]);
 
         // Test 32: Contains query with nested array
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['matrix' => [[4, 5, 6]]]])
+            Query::contains('meta', [['matrix' => [[4, 5, 6]]]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc12', $results[0]->getId());
@@ -537,12 +537,12 @@ trait ObjectAttributeTests
                     'level2' => [
                         'level3' => [
                             'level4' => [
-                                'level5' => 'deep_value'
-                            ]
-                        ]
-                    ]
-                ]
-            ]])
+                                'level5' => 'deep_value',
+                            ],
+                        ],
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc5', $results[0]->getId());
@@ -551,7 +551,7 @@ trait ObjectAttributeTests
         // Test 35: Test selecting multiple documents and verifying object attributes
         $allDocs = $database->find($collectionId, [
             Query::select(['$id', 'meta']),
-            Query::limit(25)
+            Query::limit(25),
         ]);
         $this->assertGreaterThan(10, count($allDocs));
 
@@ -566,7 +566,7 @@ trait ObjectAttributeTests
         // Test 36: Test Query::select with only meta attribute
         $results = $database->find($collectionId, [
             Query::select(['meta']),
-            Query::equal('meta', [['tags' => ['php', 'javascript', 'python', 'go', 'rust']]])
+            Query::equal('meta', [['tags' => ['php', 'javascript', 'python', 'go', 'rust']]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertIsArray($results[0]->getAttribute('meta'));
@@ -581,7 +581,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object indexes');
         }
 
@@ -589,10 +589,10 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->createAttribute($database, $collectionId, 'data', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'data', ColumnType::Object, 0, false);
 
         // Test 1: Create Object index on object attribute
-        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::INDEX_OBJECT, ['data']);
+        $ginIndex = $database->createIndex($collectionId, new Index(key: 'idx_data_gin', type: IndexType::Object, attributes: ['data']));
         $this->assertTrue($ginIndex);
 
         // Test 2: Create documents with JSONB data
@@ -603,10 +603,10 @@ trait ObjectAttributeTests
                 'tags' => ['php', 'javascript', 'python'],
                 'config' => [
                     'env' => 'production',
-                    'debug' => false
+                    'debug' => false,
                 ],
-                'version' => '1.0.0'
-            ]
+                'version' => '1.0.0',
+            ],
         ]));
 
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -616,39 +616,39 @@ trait ObjectAttributeTests
                 'tags' => ['java', 'kotlin', 'scala'],
                 'config' => [
                     'env' => 'development',
-                    'debug' => true
+                    'debug' => true,
                 ],
-                'version' => '2.0.0'
-            ]
+                'version' => '2.0.0',
+            ],
         ]));
 
         // Test 3: Query with equal on indexed JSONB column
         $results = $database->find($collectionId, [
-            Query::equal('data', [['config' => ['env' => 'production']]])
+            Query::equal('data', [['config' => ['env' => 'production']]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin1', $results[0]->getId());
 
         // Test 4: Query with contains on indexed JSONB column
         $results = $database->find($collectionId, [
-            Query::contains('data', [['tags' => 'php']])
+            Query::contains('data', [['tags' => 'php']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin1', $results[0]->getId());
 
         // Test 5: Verify Object index improves performance for containment queries
         $results = $database->find($collectionId, [
-            Query::contains('data', [['tags' => 'kotlin']])
+            Query::contains('data', [['tags' => 'kotlin']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin2', $results[0]->getId());
 
         // Test 6: Try to create Object index on non-object attribute (should fail)
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_name_gin', Database::INDEX_OBJECT, ['name']);
+            $database->createIndex($collectionId, new Index(key: 'idx_name_gin', type: IndexType::Object, attributes: ['name']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -657,11 +657,11 @@ trait ObjectAttributeTests
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on non-object attribute');
 
         // Test 7: Try to create Object index on multiple attributes (should fail)
-        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'metadata', ColumnType::Object, 0, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_multi_gin', Database::INDEX_OBJECT, ['data', 'metadata']);
+            $database->createIndex($collectionId, new Index(key: 'idx_multi_gin', type: IndexType::Object, attributes: ['data', 'metadata']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -672,7 +672,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_ordered_gin', Database::INDEX_OBJECT, ['metadata'], [], [Database::ORDER_ASC]);
+            $database->createIndex($collectionId, new Index(key: 'idx_ordered_gin', type: IndexType::Object, attributes: ['metadata'], lengths: [], orders: [OrderDirection::Asc->value]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -684,284 +684,7 @@ trait ObjectAttributeTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testObjectAttributeInvalidCases(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
 
-        // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('Adapter does not support object attributes');
-        }
-
-        $collectionId = ID::unique();
-        $database->createCollection($collectionId);
-
-        // Create object attribute
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
-
-        // Test 1: Try to create document with string instead of object (should fail)
-        $exceptionThrown = false;
-        try {
-            $database->createDocument($collectionId, new Document([
-                '$id' => 'invalid1',
-                '$permissions' => [Permission::read(Role::any())],
-                'meta' => 'this is a string not an object'
-            ]));
-        } catch (\Exception $e) {
-            $exceptionThrown = true;
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-        $this->assertTrue($exceptionThrown, 'Expected Structure exception for string value');
-
-        // Test 2: Try to create document with integer instead of object (should fail)
-        $exceptionThrown = false;
-        try {
-            $database->createDocument($collectionId, new Document([
-                '$id' => 'invalid2',
-                '$permissions' => [Permission::read(Role::any())],
-                'meta' => 12345
-            ]));
-        } catch (\Exception $e) {
-            $exceptionThrown = true;
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-        $this->assertTrue($exceptionThrown, 'Expected Structure exception for integer value');
-
-        // Test 3: Try to create document with boolean instead of object (should fail)
-        $exceptionThrown = false;
-        try {
-            $database->createDocument($collectionId, new Document([
-                '$id' => 'invalid3',
-                '$permissions' => [Permission::read(Role::any())],
-                'meta' => true
-            ]));
-        } catch (\Exception $e) {
-            $exceptionThrown = true;
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-        $this->assertTrue($exceptionThrown, 'Expected Structure exception for boolean value');
-
-        // Test 4: Create valid document for query tests
-        $database->createDocument($collectionId, new Document([
-            '$id' => 'valid1',
-            '$permissions' => [Permission::read(Role::any())],
-            'meta' => [
-                'name' => 'John',
-                'age' => 30,
-                'settings' => [
-                    'notifications' => true,
-                    'theme' => 'dark'
-                ]
-            ]
-        ]));
-
-        // Test 5: Query with non-matching nested structure
-        $results = $database->find($collectionId, [
-            Query::equal('meta', [['settings' => ['notifications' => false]]])
-        ]);
-        $this->assertCount(0, $results, 'Should not match when nested value differs');
-
-        // Test 6: Query with non-existent key
-        $results = $database->find($collectionId, [
-            Query::equal('meta', [['nonexistent' => 'value']])
-        ]);
-        $this->assertCount(0, $results, 'Should not match non-existent keys');
-
-        // Test 7: Contains query with non-matching array element
-        $database->createDocument($collectionId, new Document([
-            '$id' => 'valid2',
-            '$permissions' => [Permission::read(Role::any())],
-            'meta' => [
-                'fruits' => ['apple', 'banana', 'orange']
-            ]
-        ]));
-        $results = $database->find($collectionId, [
-            Query::contains('meta', [['fruits' => 'grape']])
-        ]);
-        $this->assertCount(0, $results, 'Should not match non-existent array element');
-
-        // Test 8: Test order preservation in nested objects
-        $doc = $database->createDocument($collectionId, new Document([
-            '$id' => 'order_test',
-            '$permissions' => [Permission::read(Role::any())],
-            'meta' => [
-                'z_last' => 'value',
-                'a_first' => 'value',
-                'm_middle' => 'value'
-            ]
-        ]));
-        $meta = $doc->getAttribute('meta');
-        $this->assertIsArray($meta);
-        // Note: JSON objects don't guarantee key order, but we can verify all keys exist
-        $this->assertArrayHasKey('z_last', $meta);
-        $this->assertArrayHasKey('a_first', $meta);
-        $this->assertArrayHasKey('m_middle', $meta);
-
-        // Test 9: Test with very large nested structure
-        $largeStructure = [];
-        for ($i = 0; $i < 50; $i++) {
-            $largeStructure["key_$i"] = [
-                'id' => $i,
-                'name' => "Item $i",
-                'values' => range(1, 10)
-            ];
-        }
-        $docLarge = $database->createDocument($collectionId, new Document([
-            '$id' => 'large_structure',
-            '$permissions' => [Permission::read(Role::any())],
-            'meta' => $largeStructure
-        ]));
-        $this->assertIsArray($docLarge->getAttribute('meta'));
-        $this->assertCount(50, $docLarge->getAttribute('meta'));
-
-        // Test 10: Query within large structure
-        $results = $database->find($collectionId, [
-            Query::equal('meta', [['key_25' => ['id' => 25, 'name' => 'Item 25', 'values' => range(1, 10)]]])
-        ]);
-        $this->assertCount(1, $results);
-        $this->assertEquals('large_structure', $results[0]->getId());
-
-        // Test 11: Test getDocument with large structure
-        $fetchedLargeDoc = $database->getDocument($collectionId, 'large_structure');
-        $this->assertEquals('large_structure', $fetchedLargeDoc->getId());
-        $this->assertIsArray($fetchedLargeDoc->getAttribute('meta'));
-        $this->assertCount(50, $fetchedLargeDoc->getAttribute('meta'));
-        $this->assertEquals(25, $fetchedLargeDoc->getAttribute('meta')['key_25']['id']);
-        $this->assertEquals('Item 25', $fetchedLargeDoc->getAttribute('meta')['key_25']['name']);
-
-        // Test 12: Test Query::select with valid document
-        $results = $database->find($collectionId, [
-            Query::select(['$id', 'meta']),
-            Query::equal('meta', [['name' => 'John']])
-        ]);
-        $this->assertCount(1, $results);
-        $this->assertEquals('valid1', $results[0]->getId());
-        $this->assertIsArray($results[0]->getAttribute('meta'));
-        $this->assertEquals('John', $results[0]->getAttribute('meta')['name']);
-        $this->assertEquals(30, $results[0]->getAttribute('meta')['age']);
-
-        // Test 13: Test getDocument returns proper structure
-        $fetchedValid1 = $database->getDocument($collectionId, 'valid1');
-        $this->assertEquals('valid1', $fetchedValid1->getId());
-        $this->assertIsArray($fetchedValid1->getAttribute('meta'));
-        $this->assertEquals('John', $fetchedValid1->getAttribute('meta')['name']);
-        $this->assertTrue($fetchedValid1->getAttribute('meta')['settings']['notifications']);
-        $this->assertEquals('dark', $fetchedValid1->getAttribute('meta')['settings']['theme']);
-
-        // Test 14: Test Query::select excluding meta
-        $results = $database->find($collectionId, [
-            Query::select(['$id', '$permissions']),
-            Query::equal('meta', [['fruits' => ['apple', 'banana', 'orange']]])
-        ]);
-        $this->assertCount(1, $results);
-        $this->assertEquals('valid2', $results[0]->getId());
-        // Meta should be empty when not selected
-        $this->assertEmpty($results[0]->getAttribute('meta'));
-
-        // Test 15: Test getDocument with non-existent ID returns empty document
-        $nonExistent = $database->getDocument($collectionId, 'does_not_exist');
-        $this->assertTrue($nonExistent->isEmpty());
-
-        // Test 16: with multiple json
-        $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
-        $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
-        $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']], '$permissions' => [Permission::read(Role::any())]]));
-        $results = $database->find($collectionId, [
-            Query::equal('settings', [['config' => ['theme' => 'light']], ['config' => ['theme' => 'dark']]])
-        ]);
-        $this->assertCount(2, $results);
-
-        $results = $database->find($collectionId, [
-            // Containment: both documents have config.lang == 'en'
-            Query::contains('settings', [['config' => ['lang' => 'en']]])
-        ]);
-        $this->assertCount(2, $results);
-
-        // Clean up
-        $database->deleteCollection($collectionId);
-    }
-
-    public function testObjectAttributeDefaults(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        // Skip test if adapter doesn't support JSONB
-        if (!$database->getAdapter()->getSupportForObject() || !$database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('Adapter does not support object attributes');
-        }
-
-        $collectionId = ID::unique();
-        $database->createCollection($collectionId);
-
-        // 1) Default empty object
-        $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', Database::VAR_OBJECT, 0, false, []);
-
-        // 2) Default nested object
-        $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->createAttribute($database, $collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings);
-
-        // 3) Required without default (should fail when missing)
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, true, null);
-
-        // 4) Required with default (should auto-populate)
-        $this->createAttribute($database, $collectionId, 'profile2', Database::VAR_OBJECT, 0, false, ['name' => 'anon']);
-
-        // 5) Explicit null default
-        $this->createAttribute($database, $collectionId, 'misc', Database::VAR_OBJECT, 0, false, null);
-
-        // Create document missing all above attributes
-        $exceptionThrown = false;
-        try {
-            $doc = $database->createDocument($collectionId, new Document([
-                '$id' => 'def1',
-                '$permissions' => [Permission::read(Role::any())],
-            ]));
-            // Should not reach here because 'profile' is required and missing
-        } catch (\Exception $e) {
-            $exceptionThrown = true;
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-        $this->assertTrue($exceptionThrown, 'Expected Structure exception for missing required object attribute');
-
-        // Create document providing required 'profile' but omit others to test defaults
-        $doc = $database->createDocument($collectionId, new Document([
-            '$id' => 'def2',
-            '$permissions' => [Permission::read(Role::any())],
-            'profile' => ['name' => 'provided'],
-        ]));
-
-        // metaDefaultEmpty should default to []
-        $this->assertIsArray($doc->getAttribute('metaDefaultEmpty'));
-        $this->assertEmpty($doc->getAttribute('metaDefaultEmpty'));
-
-        // settings should default to nested object
-        $this->assertIsArray($doc->getAttribute('settings'));
-        $this->assertEquals('light', $doc->getAttribute('settings')['config']['theme']);
-        $this->assertEquals('en', $doc->getAttribute('settings')['config']['lang']);
-
-        // profile provided explicitly
-        $this->assertEquals('provided', $doc->getAttribute('profile')['name']);
-
-        // profile2 required with default should be auto-populated
-        $this->assertIsArray($doc->getAttribute('profile2'));
-        $this->assertEquals('anon', $doc->getAttribute('profile2')['name']);
-
-        // misc explicit null default remains null when omitted
-        $this->assertNull($doc->getAttribute('misc'));
-
-        // Query defaults work
-        $results = $database->find($collectionId, [
-            Query::equal('settings', [['config' => ['theme' => 'light']]])
-        ]);
-        $this->assertCount(1, $results);
-        $this->assertEquals('def2', $results[0]->getId());
-
-        // Clean up
-        $database->deleteCollection($collectionId);
-    }
 
     public function testMetadataWithVector(): void
     {
@@ -969,8 +692,9 @@ trait ObjectAttributeTests
         $database = static::getDatabase();
 
         // Skip if adapter doesn't support either vectors or object attributes
-        if (!$database->getAdapter()->getSupportForVectors() || !$database->getAdapter()->getSupportForObject()) {
+        if (! $database->getAdapter()->supports(Capability::Vectors) || ! $database->getAdapter()->supports(Capability::Objects)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -978,8 +702,8 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Attributes: 3D vector and nested metadata object
-        $this->createAttribute($database, $collectionId, 'embedding', Database::VAR_VECTOR, 3, true);
-        $this->createAttribute($database, $collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'embedding', ColumnType::Vector, 3, true);
+        $this->createAttribute($database, $collectionId, 'metadata', ColumnType::Object, 0, false);
 
         // Seed documents
         $docA = $database->createDocument($collectionId, new Document([
@@ -991,20 +715,20 @@ trait ObjectAttributeTests
                     'user' => [
                         'info' => [
                             'country' => 'IN',
-                            'score' => 100
-                        ]
-                    ]
+                            'score' => 100,
+                        ],
+                    ],
                 ],
                 'tags' => ['ai', 'ml', 'db'],
                 'settings' => [
                     'prefs' => [
                         'theme' => 'dark',
                         'features' => [
-                            'experimental' => true
-                        ]
-                    ]
-                ]
-            ]
+                            'experimental' => true,
+                        ],
+                    ],
+                ],
+            ],
         ]));
 
         $docB = $database->createDocument($collectionId, new Document([
@@ -1016,17 +740,17 @@ trait ObjectAttributeTests
                     'user' => [
                         'info' => [
                             'country' => 'US',
-                            'score' => 80
-                        ]
-                    ]
+                            'score' => 80,
+                        ],
+                    ],
                 ],
                 'tags' => ['search', 'analytics'],
                 'settings' => [
                     'prefs' => [
-                        'theme' => 'light'
-                    ]
-                ]
-            ]
+                        'theme' => 'light',
+                    ],
+                ],
+            ],
         ]));
 
         $docC = $database->createDocument($collectionId, new Document([
@@ -1038,26 +762,26 @@ trait ObjectAttributeTests
                     'user' => [
                         'info' => [
                             'country' => 'CA',
-                            'score' => 60
-                        ]
-                    ]
+                            'score' => 60,
+                        ],
+                    ],
                 ],
                 'tags' => ['ml', 'cv'],
                 'settings' => [
                     'prefs' => [
                         'theme' => 'dark',
                         'features' => [
-                            'experimental' => false
-                        ]
-                    ]
-                ]
-            ]
+                            'experimental' => false,
+                        ],
+                    ],
+                ],
+            ],
         ]));
 
         // 1) Vector similarity: closest to [0.0, 0.0, 1.0] should be vecA
         $results = $database->find($collectionId, [
             Query::vectorCosine('embedding', [0.0, 0.0, 1.0]),
-            Query::limit(1)
+            Query::limit(1),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('vecA', $results[0]->getId());
@@ -1068,11 +792,11 @@ trait ObjectAttributeTests
                 'profile' => [
                     'user' => [
                         'info' => [
-                            'country' => 'IN'
-                        ]
-                    ]
-                ]
-            ]])
+                            'country' => 'IN',
+                        ],
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('vecA', $results[0]->getId());
@@ -1080,8 +804,8 @@ trait ObjectAttributeTests
         // 3) Contains on nested array inside metadata
         $results = $database->find($collectionId, [
             Query::contains('metadata', [[
-                'tags' => 'ml'
-            ]])
+                'tags' => 'ml',
+            ]]),
         ]);
         $this->assertCount(2, $results); // vecA, vecC both have 'ml' in tags
 
@@ -1091,11 +815,11 @@ trait ObjectAttributeTests
             Query::equal('metadata', [[
                 'settings' => [
                     'prefs' => [
-                        'theme' => 'light'
-                    ]
-                ]
+                        'theme' => 'light',
+                    ],
+                ],
             ]]),
-            Query::limit(1)
+            Query::limit(1),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('vecB', $results[0]->getId());
@@ -1106,11 +830,11 @@ trait ObjectAttributeTests
                 'settings' => [
                     'prefs' => [
                         'features' => [
-                            'experimental' => true
-                        ]
-                    ]
-                ]
-            ]])
+                            'experimental' => true,
+                        ],
+                    ],
+                ],
+            ]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('vecA', $results[0]->getId());
@@ -1124,11 +848,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1136,14 +860,13 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // 1) KEY index on a nested object path (dot notation)
 
-
         // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
-        $created = $database->createIndex($collectionId, 'idx_profile_email_unique', Database::INDEX_UNIQUE, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email_unique', type: IndexType::Unique, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         $database->createDocument($collectionId, new Document([
@@ -1153,10 +876,10 @@ trait ObjectAttributeTests
                 'user' => [
                     'email' => 'a@example.com',
                     'info' => [
-                        'country' => 'IN'
-                    ]
-                ]
-            ]
+                        'country' => 'IN',
+                    ],
+                ],
+            ],
         ]));
 
         try {
@@ -1167,10 +890,10 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'a@example.com', // duplicate
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
             ]));
             $this->fail('Expected Duplicate exception for UNIQUE index on nested object path');
         } catch (Exception $e) {
@@ -1179,14 +902,14 @@ trait ObjectAttributeTests
 
         // 3) INDEX_OBJECT must NOT be allowed on nested paths
         try {
-            $database->createIndex($collectionId, 'idx_profile_nested_object', Database::INDEX_OBJECT, ['profile.user.email']);
+            $database->createIndex($collectionId, new Index(key: 'idx_profile_nested_object', type: IndexType::Object, attributes: ['profile.user.email']));
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
         }
 
         // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
         try {
-            $database->createIndex($collectionId, 'idx_name_nested', Database::INDEX_KEY, ['name.first']);
+            $database->createIndex($collectionId, new Index(key: 'idx_name_nested', type: IndexType::Key, attributes: ['name.first']));
             $this->fail('Expected Type exception for nested index on non-object base attribute');
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
@@ -1200,11 +923,11 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter does not support attributes (schemaful required for nested object attribute indexes)');
         }
 
-        if (!$database->getAdapter()->getSupportForObjectIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::ObjectIndexes)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1212,11 +935,11 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // Create index on nested email path
-        $created = $database->createIndex($collectionId, 'idx_profile_email', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Seed documents with different nested values
@@ -1229,11 +952,11 @@ trait ObjectAttributeTests
                         'email' => 'alice@example.com',
                         'info' => [
                             'country' => 'IN',
-                            'city' => 'BLR'
-                        ]
-                    ]
+                            'city' => 'BLR',
+                        ],
+                    ],
                 ],
-                'name' => 'Alice'
+                'name' => 'Alice',
             ]),
             new Document([
                 '$id' => 'd2',
@@ -1243,11 +966,11 @@ trait ObjectAttributeTests
                         'email' => 'bob@example.com',
                         'info' => [
                             'country' => 'US',
-                            'city' => 'NYC'
-                        ]
-                    ]
+                            'city' => 'NYC',
+                        ],
+                    ],
                 ],
-                'name' => 'Bob'
+                'name' => 'Bob',
             ]),
             new Document([
                 '$id' => 'd3',
@@ -1257,38 +980,38 @@ trait ObjectAttributeTests
                         'email' => 'carol@test.org',
                         'info' => [
                             'country' => 'CA',
-                            'city' => 'TOR'
-                        ]
-                    ]
+                            'city' => 'TOR',
+                        ],
+                    ],
                 ],
-                'name' => 'Carol'
-            ])
+                'name' => 'Carol',
+            ]),
         ]);
 
         // Equal on nested email
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['bob@example.com'])
+            Query::equal('profile.user.email', ['bob@example.com']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d2', $results[0]->getId());
 
         // Starts with on nested email
         $results = $database->find($collectionId, [
-            Query::startsWith('profile.user.email', 'alice@')
+            Query::startsWith('profile.user.email', 'alice@'),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d1', $results[0]->getId());
 
         // Ends with on nested email
         $results = $database->find($collectionId, [
-            Query::endsWith('profile.user.email', 'test.org')
+            Query::endsWith('profile.user.email', 'test.org'),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d3', $results[0]->getId());
 
         // Contains on nested country (as text)
         $results = $database->find($collectionId, [
-            Query::contains('profile.user.info.country', ['US'])
+            Query::contains('profile.user.info.country', ['US']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d2', $results[0]->getId());
@@ -1298,7 +1021,7 @@ trait ObjectAttributeTests
             Query::and([
                 Query::equal('profile.user.info.country', ['IN']),
                 Query::endsWith('profile.user.email', 'example.com'),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d1', $results[0]->getId());
@@ -1308,7 +1031,7 @@ trait ObjectAttributeTests
             Query::or([
                 Query::equal('profile.user.info.country', ['CA']),
                 Query::startsWith('profile.user.email', 'bob@'),
-            ])
+            ]),
         ]);
         $this->assertCount(2, $results);
         $ids = \array_map(fn (Document $d) => $d->getId(), $results);
@@ -1317,7 +1040,7 @@ trait ObjectAttributeTests
 
         // NOT: exclude emails ending with example.com
         $results = $database->find($collectionId, [
-            Query::notEndsWith('profile.user.email', 'example.com')
+            Query::notEndsWith('profile.user.email', 'example.com'),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d3', $results[0]->getId());
@@ -1330,7 +1053,7 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (! $database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
@@ -1338,12 +1061,12 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Base attributes
-        $this->createAttribute($database, $collectionId, 'profile', Database::VAR_OBJECT, 0, false);
-        $this->createAttribute($database, $collectionId, 'name', Database::VAR_STRING, 255, false);
-        $this->createAttribute($database, $collectionId, 'age', Database::VAR_INTEGER, 0, false);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
+        $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
+        $this->createAttribute($database, $collectionId, 'age', ColumnType::Integer, 0, false);
 
         // Edge Case 1: Deep nesting (5 levels deep)
-        $created = $database->createIndex($collectionId, 'idx_deep_nest', Database::INDEX_KEY, ['profile.level1.level2.level3.level4.value']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_deep_nest', type: IndexType::Key, attributes: ['profile.level1.level2.level3.level4.value']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1355,12 +1078,12 @@ trait ObjectAttributeTests
                         'level2' => [
                             'level3' => [
                                 'level4' => [
-                                    'value' => 'deep_value_1'
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
+                                    'value' => 'deep_value_1',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'deep2',
@@ -1370,19 +1093,19 @@ trait ObjectAttributeTests
                         'level2' => [
                             'level3' => [
                                 'level4' => [
-                                    'value' => 'deep_value_2'
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            ])
+                                    'value' => 'deep_value_2',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             try {
                 $database->find($collectionId, [
-                    Query::equal('profile.level1.level2.level3.level4.value', [10])
+                    Query::equal('profile.level1.level2.level3.level4.value', [10]),
                 ]);
                 $this->fail('Expected nesting as string');
             } catch (Exception $e) {
@@ -1392,17 +1115,17 @@ trait ObjectAttributeTests
         }
 
         $results = $database->find($collectionId, [
-            Query::equal('profile.level1.level2.level3.level4.value', ['deep_value_1'])
+            Query::equal('profile.level1.level2.level3.level4.value', ['deep_value_1']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('deep1', $results[0]->getId());
 
         // Edge Case 2: Multiple nested indexes on same base attribute
-        $created = $database->createIndex($collectionId, 'idx_email', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_email', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, 'idx_country', Database::INDEX_KEY, ['profile.user.info.country']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_country', type: IndexType::Key, attributes: ['profile.user.info.country']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, 'idx_city', Database::INDEX_KEY, ['profile.user.info.city']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_city', type: IndexType::Key, attributes: ['profile.user.info.city']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1414,10 +1137,10 @@ trait ObjectAttributeTests
                         'email' => 'multi1@test.com',
                         'info' => [
                             'country' => 'US',
-                            'city' => 'NYC'
-                        ]
-                    ]
-                ]
+                            'city' => 'NYC',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'multi2',
@@ -1427,30 +1150,30 @@ trait ObjectAttributeTests
                         'email' => 'multi2@test.com',
                         'info' => [
                             'country' => 'CA',
-                            'city' => 'TOR'
-                        ]
-                    ]
-                ]
-            ])
+                            'city' => 'TOR',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Query using first nested index
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['multi1@test.com'])
+            Query::equal('profile.user.email', ['multi1@test.com']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('multi1', $results[0]->getId());
 
         // Query using second nested index
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.info.country', ['US'])
+            Query::equal('profile.user.info.country', ['US']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('multi1', $results[0]->getId());
 
         // Query using third nested index
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.info.city', ['TOR'])
+            Query::equal('profile.user.info.city', ['TOR']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('multi2', $results[0]->getId());
@@ -1464,10 +1187,10 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => null, // null value
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'null2',
@@ -1476,21 +1199,21 @@ trait ObjectAttributeTests
                     'user' => [
                         // missing email key entirely
                         'info' => [
-                            'country' => 'CA'
-                        ]
-                    ]
-                ]
+                            'country' => 'CA',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'null3',
                 '$permissions' => [Permission::read(Role::any())],
-                'profile' => null // entire profile is null
-            ])
+                'profile' => null, // entire profile is null
+            ]),
         ]);
 
         // Query for null email should not match null1 (null values typically don't match equal queries)
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['non-existent@test.com'])
+            Query::equal('profile.user.email', ['non-existent@test.com']),
         ]);
         // Should not include null1, null2, or null3
         foreach ($results as $doc) {
@@ -1510,10 +1233,10 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'alice.mixed@test.com',
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'mixed2',
@@ -1524,21 +1247,21 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'bob.mixed@test.com',
                         'info' => [
-                            'country' => 'CA'
-                        ]
-                    ]
-                ]
-            ])
+                            'country' => 'CA',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Create indexes on regular attributes
-        $database->createIndex($collectionId, 'idx_name', Database::INDEX_KEY, ['name']);
-        $database->createIndex($collectionId, 'idx_age', Database::INDEX_KEY, ['age']);
+        $database->createIndex($collectionId, new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']));
+        $database->createIndex($collectionId, new Index(key: 'idx_age', type: IndexType::Key, attributes: ['age']));
 
         // Combined query: nested path + regular attribute
         $results = $database->find($collectionId, [
             Query::equal('profile.user.info.country', ['US']),
-            Query::equal('name', ['Alice'])
+            Query::equal('name', ['Alice']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('mixed1', $results[0]->getId());
@@ -1547,8 +1270,8 @@ trait ObjectAttributeTests
         $results = $database->find($collectionId, [
             Query::and([
                 Query::equal('profile.user.email', ['bob.mixed@test.com']),
-                Query::equal('age', [30])
-            ])
+                Query::equal('age', [30]),
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('mixed2', $results[0]->getId());
@@ -1563,15 +1286,15 @@ trait ObjectAttributeTests
                 'user' => [
                     'email' => 'alice.updated@test.com', // changed email
                     'info' => [
-                        'country' => 'CA' // changed country
-                    ]
-                ]
-            ]
+                        'country' => 'CA', // changed country
+                    ],
+                ],
+            ],
         ]));
 
         // Query with old email should not match
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['alice.mixed@test.com'])
+            Query::equal('profile.user.email', ['alice.mixed@test.com']),
         ]);
         foreach ($results as $doc) {
             $this->assertNotEquals('mixed1', $doc->getId());
@@ -1579,14 +1302,14 @@ trait ObjectAttributeTests
 
         // Query with new email should match
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['alice.updated@test.com'])
+            Query::equal('profile.user.email', ['alice.updated@test.com']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('mixed1', $results[0]->getId());
 
         // Query with new country should match
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.info.country', ['CA'])
+            Query::equal('profile.user.info.country', ['CA']),
         ]);
         $this->assertGreaterThanOrEqual(2, count($results)); // Should include mixed1 and mixed2
 
@@ -1600,10 +1323,10 @@ trait ObjectAttributeTests
                         'email' => 'noindex1@test.com',
                         'info' => [
                             'country' => 'US',
-                            'phone' => '+1234567890' // no index on this path
-                        ]
-                    ]
-                ]
+                            'phone' => '+1234567890', // no index on this path
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'noindex2',
@@ -1613,16 +1336,16 @@ trait ObjectAttributeTests
                         'email' => 'noindex2@test.com',
                         'info' => [
                             'country' => 'CA',
-                            'phone' => '+9876543210' // no index on this path
-                        ]
-                    ]
-                ]
-            ])
+                            'phone' => '+9876543210', // no index on this path
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Query on non-indexed nested path should still work
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.info.phone', ['+1234567890'])
+            Query::equal('profile.user.info.phone', ['+1234567890']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('noindex1', $results[0]->getId());
@@ -1638,10 +1361,10 @@ trait ObjectAttributeTests
                         'info' => [
                             'country' => 'US',
                             'city' => 'NYC',
-                            'zip' => '10001'
-                        ]
-                    ]
-                ]
+                            'zip' => '10001',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'complex2',
@@ -1652,10 +1375,10 @@ trait ObjectAttributeTests
                         'info' => [
                             'country' => 'US',
                             'city' => 'LAX',
-                            'zip' => '90001'
-                        ]
-                    ]
-                ]
+                            'zip' => '90001',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'complex3',
@@ -1666,19 +1389,19 @@ trait ObjectAttributeTests
                         'info' => [
                             'country' => 'CA',
                             'city' => 'TOR',
-                            'zip' => 'M5H1A1'
-                        ]
-                    ]
-                ]
-            ])
+                            'zip' => 'M5H1A1',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Complex AND with multiple nested paths
         $results = $database->find($collectionId, [
             Query::and([
                 Query::equal('profile.user.info.country', ['US']),
-                Query::equal('profile.user.info.city', ['NYC'])
-            ])
+                Query::equal('profile.user.info.city', ['NYC']),
+            ]),
         ]);
 
         $this->assertCount(2, $results);
@@ -1687,13 +1410,13 @@ trait ObjectAttributeTests
         $results = $database->find($collectionId, [
             Query::or([
                 Query::equal('profile.user.info.city', ['NYC']),
-                Query::equal('profile.user.info.city', ['TOR'])
-            ])
+                Query::equal('profile.user.info.city', ['TOR']),
+            ]),
         ]);
         $this->assertCount(4, $results);
         $ids = \array_map(fn (Document $d) => $d->getId(), $results);
         \sort($ids);
-        $this->assertEquals(['complex1', 'complex3','multi1','multi2'], $ids);
+        $this->assertEquals(['complex1', 'complex3', 'multi1', 'multi2'], $ids);
 
         // Complex nested AND/OR combination
         $results = $database->find($collectionId, [
@@ -1701,9 +1424,9 @@ trait ObjectAttributeTests
                 Query::equal('profile.user.info.country', ['US']),
                 Query::or([
                     Query::equal('profile.user.info.city', ['NYC']),
-                    Query::equal('profile.user.info.city', ['LAX'])
-                ])
-            ])
+                    Query::equal('profile.user.info.city', ['LAX']),
+                ]),
+            ]),
         ]);
         $this->assertCount(3, $results);
         $ids = \array_map(fn (Document $d) => $d->getId(), $results);
@@ -1719,10 +1442,10 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'a@order.com',
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'order2',
@@ -1731,10 +1454,10 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'b@order.com',
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'order3',
@@ -1743,17 +1466,17 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => 'c@order.com',
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
-            ])
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Limit with nested query
         $results = $database->find($collectionId, [
             Query::equal('profile.user.info.country', ['US']),
-            Query::limit(2)
+            Query::limit(2),
         ]);
         $this->assertCount(2, $results);
 
@@ -1761,7 +1484,7 @@ trait ObjectAttributeTests
         $results = $database->find($collectionId, [
             Query::equal('profile.user.info.country', ['US']),
             Query::offset(1),
-            Query::limit(1)
+            Query::limit(1),
         ]);
         $this->assertCount(1, $results);
 
@@ -1774,16 +1497,16 @@ trait ObjectAttributeTests
                     'user' => [
                         'email' => '', // empty string
                         'info' => [
-                            'country' => 'US'
-                        ]
-                    ]
-                ]
-            ])
+                            'country' => 'US',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // Query for empty string
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', [''])
+            Query::equal('profile.user.email', ['']),
         ]);
         $this->assertGreaterThanOrEqual(1, count($results));
         $found = false;
@@ -1800,23 +1523,23 @@ trait ObjectAttributeTests
 
         // Query should still work without index (just slower)
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['alice.updated@test.com'])
+            Query::equal('profile.user.email', ['alice.updated@test.com']),
         ]);
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Re-create index
-        $created = $database->createIndex($collectionId, 'idx_email_recreated', Database::INDEX_KEY, ['profile.user.email']);
+        $created = $database->createIndex($collectionId, new Index(key: 'idx_email_recreated', type: IndexType::Key, attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Query should still work with recreated index
         $results = $database->find($collectionId, [
-            Query::equal('profile.user.email', ['alice.updated@test.com'])
+            Query::equal('profile.user.email', ['alice.updated@test.com']),
         ]);
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
-        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
-            $created = $database->createIndex($collectionId, 'idx_unique_email', Database::INDEX_UNIQUE, ['profile.user.email']);
+        if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
+            $created = $database->createIndex($collectionId, new Index(key: 'idx_unique_email', type: IndexType::Unique, attributes: ['profile.user.email']));
             $this->assertTrue($created);
 
             // Try to create duplicate
@@ -1828,10 +1551,10 @@ trait ObjectAttributeTests
                         'user' => [
                             'email' => 'alice.updated@test.com', // duplicate
                             'info' => [
-                                'country' => 'XX'
-                            ]
-                        ]
-                    ]
+                                'country' => 'XX',
+                            ],
+                        ],
+                    ],
                 ]));
                 $this->fail('Expected Duplicate exception for UNIQUE index');
             } catch (Exception $e) {
@@ -1849,10 +1572,10 @@ trait ObjectAttributeTests
                         'email' => 'text1@example.org',
                         'info' => [
                             'country' => 'United States',
-                            'city' => 'New York City'
-                        ]
-                    ]
-                ]
+                            'city' => 'New York City',
+                        ],
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'text2',
@@ -1862,23 +1585,23 @@ trait ObjectAttributeTests
                         'email' => 'text2@test.com',
                         'info' => [
                             'country' => 'United Kingdom',
-                            'city' => 'London'
-                        ]
-                    ]
-                ]
-            ])
+                            'city' => 'London',
+                        ],
+                    ],
+                ],
+            ]),
         ]);
 
         // startsWith on nested path
         $results = $database->find($collectionId, [
-            Query::startsWith('profile.user.email', 'text1@')
+            Query::startsWith('profile.user.email', 'text1@'),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('text1', $results[0]->getId());
 
         // contains on nested path
         $results = $database->find($collectionId, [
-            Query::contains('profile.user.info.country', ['United'])
+            Query::contains('profile.user.info.country', ['United']),
         ]);
         $this->assertGreaterThanOrEqual(2, count($results));
 

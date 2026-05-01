@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 
 class CacheKeyTest extends TestCase
@@ -16,7 +17,12 @@ class CacheKeyTest extends TestCase
     private function createDatabase(array $instanceFilters = []): Database
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(false);
+        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
+            return match ($capability) {
+                Capability::Hostname => false,
+                default => false,
+            };
+        });
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
 
@@ -136,7 +142,12 @@ class CacheKeyTest extends TestCase
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
+            return match ($capability) {
+                Capability::Hostname => true,
+                default => false,
+            };
+        });
         $adapter->method('getHostname')->willReturn($hostname);
         $adapter->method('getTenant')->willReturn(999);
         $adapter->method('getSharedTables')->willReturn(true);

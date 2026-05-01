@@ -2,11 +2,19 @@
 
 namespace Utopia\Database;
 
+use DateInterval;
+use DateTime as PhpDateTime;
+use DateTimeZone;
+use Throwable;
 use Utopia\Database\Exception as DatabaseException;
 
+/**
+ * Utility class for formatting and manipulating date-time values in the database.
+ */
 class DateTime
 {
     protected static string $formatDb = 'Y-m-d H:i:s.v';
+
     protected static string $formatTz = 'Y-m-d\TH:i:s.vP';
 
     private function __construct()
@@ -14,36 +22,39 @@ class DateTime
     }
 
     /**
+     * Get the current date-time formatted for database storage.
+     *
      * @return string
      */
     public static function now(): string
     {
-        $date = new \DateTime();
+        $date = new PhpDateTime();
+
         return self::format($date);
     }
 
     /**
-     * @param \DateTime $date
+     * Format a DateTime object into the database storage format.
+     *
+     * @param PhpDateTime $date The date to format
      * @return string
      */
-    public static function format(\DateTime $date): string
+    public static function format(PhpDateTime $date): string
     {
         return $date->format(self::$formatDb);
     }
 
     /**
-     * @param \DateTime $date
-     * @param int $seconds
+     * Add seconds to a DateTime and return the formatted result.
+     *
+     * @param PhpDateTime $date The base date
+     * @param int $seconds Number of seconds to add
      * @return string
      * @throws DatabaseException
      */
-    public static function addSeconds(\DateTime $date, int $seconds): string
+    public static function addSeconds(PhpDateTime $date, int $seconds): string
     {
-        $interval  = \DateInterval::createFromDateString($seconds . ' seconds');
-
-        if (!$interval) {
-            throw new DatabaseException('Invalid interval');
-        }
+        $interval = DateInterval::createFromDateString($seconds.' seconds');
 
         $date->add($interval);
 
@@ -51,24 +62,29 @@ class DateTime
     }
 
     /**
-     * @param string $datetime
+     * Parse a datetime string and convert it to the system's default timezone.
+     *
+     * @param string $datetime The datetime string to convert
      * @return string
      * @throws DatabaseException
      */
     public static function setTimezone(string $datetime): string
     {
         try {
-            $value = new \DateTime($datetime);
-            $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+            $value = new PhpDateTime($datetime);
+            $value->setTimezone(new DateTimeZone(date_default_timezone_get()));
+
             return DateTime::format($value);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
     }
 
     /**
-     * @param string|null $dbFormat
-     * @return string|null
+     * Convert a database-format date string to a timezone-aware ISO 8601 format.
+     *
+     * @param string|null $dbFormat The date string in database format, or null
+     * @return string|null The formatted date string with timezone, or null if input is null
      */
     public static function formatTz(?string $dbFormat): ?string
     {
@@ -77,9 +93,10 @@ class DateTime
         }
 
         try {
-            $value = new \DateTime($dbFormat);
+            $value = new PhpDateTime($dbFormat);
+
             return $value->format(self::$formatTz);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return $dbFormat;
         }
     }

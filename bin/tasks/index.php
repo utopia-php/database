@@ -61,8 +61,9 @@ $cli
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported");
+
             return;
         }
 

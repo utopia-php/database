@@ -1,0 +1,12 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+        - tests
+    ignoreErrors:
+        -
+          message: '#(PDOStatementProxy|DetectsLostConnections)#'
+          reportUnmatched: false

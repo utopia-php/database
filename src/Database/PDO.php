@@ -2,23 +2,40 @@
 
 namespace Utopia\Database;
 
+use Exception;
 use InvalidArgumentException;
+use PDO as PhpPDO;
+use PDOStatement;
+use Throwable;
 use Utopia\Console;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
- * @mixin \PDO
+ * @mixin PhpPDO
+ *
+ * @method PDOStatement prepare(string $query, array<int, mixed> $options = [])
+ * @method int|false exec(string $statement)
+ * @method bool beginTransaction()
+ * @method bool commit()
+ * @method bool rollBack()
+ * @method bool inTransaction()
+ * @method string|false quote(string $string, int $type = PhpPDO::PARAM_STR)
+ * @method bool setAttribute(int $attribute, mixed $value)
+ * @method mixed getAttribute(int $attribute)
+ * @method string|false lastInsertId(?string $name = null)
  */
 class PDO
 {
-    protected \PDO $pdo;
+    protected PhpPDO $pdo;
 
     /**
-     * @param string $dsn
-     * @param ?string $username
-     * @param ?string $password
-     * @param array<mixed> $config
+     * Create a new PDO wrapper instance.
+     *
+     * @param string $dsn The Data Source Name
+     * @param string|null $username The database username
+     * @param string|null $password The database password
+     * @param  array<mixed>  $config PDO driver options
      */
     public function __construct(
         protected string $dsn,
@@ -26,7 +43,7 @@ class PDO
         protected ?string $password,
         protected array $config = []
     ) {
-        $this->pdo = new \PDO(
+        $this->pdo = new PhpPDO(
             $this->dsn,
             $this->username,
             $this->password,
@@ -35,18 +52,17 @@ class PDO
     }
 
     /**
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
-     * @throws \Throwable
+     * @param  array<mixed>  $args
+     *
+     * @throws Throwable
      */
     public function __call(string $method, array $args): mixed
     {
         try {
             return $this->pdo->{$method}(...$args);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if (Connection::hasError($e)) {
-                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning('[Database] '.$e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
                 $inTransaction = $this->pdo->inTransaction();
@@ -56,7 +72,7 @@ class PDO
 
                 // If we weren't in a transaction, also retry the query
                 // In a transaction we can't retry as the state is attached to the previous connection
-                if (!$inTransaction) {
+                if (! $inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
             }
@@ -67,12 +83,10 @@ class PDO
 
     /**
      * Create a new connection to the database
-     *
-     * @return void
      */
     public function reconnect(): void
     {
-        $this->pdo = new \PDO(
+        $this->pdo = new PhpPDO(
             $this->dsn,
             $this->username,
             $this->password,
@@ -83,8 +97,7 @@ class PDO
     /**
      * Get the hostname from the DSN.
      *
-     * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getHostname(): string
     {
@@ -93,7 +106,7 @@ class PDO
         /**
          * @var string $host
          */
-        $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
+        $host = $parts['host'] ?? throw new Exception('No host found in DSN');
 
         return $host;
     }
@@ -102,11 +115,12 @@ class PDO
      * Parse a PDO-style DSN string.
      *
      * @return array<string, string|int|float|bool|null>
+     *
      * @throws InvalidArgumentException If the DSN is malformed.
      */
     private function parseDsn(string $dsn): array
     {
-        if ($dsn === '' || !\str_contains($dsn, ':')) {
+        if ($dsn === '' || ! \str_contains($dsn, ':')) {
             throw new InvalidArgumentException('Malformed DSN: missing driver separator.');
         }
 
@@ -117,6 +131,7 @@ class PDO
         // Handle “path only” DSNs like sqlite:/path/to.db
         if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
             $parsed['path'] = \ltrim($parameterString, '/');
+
             return $parsed;
         }
 
@@ -125,7 +140,7 @@ class PDO
         foreach ($parameterSegments as $segment) {
             [$name, $rawValue] = \array_pad(\explode('=', $segment, 2), 2, null);
 
-            $name  = \trim($name);
+            $name = \trim((string) $name);
             $value = $rawValue !== null ? \trim($rawValue) : null;
 
             // Casting for scalars

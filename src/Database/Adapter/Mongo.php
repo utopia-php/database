@@ -1276,7 +1276,8 @@ class Mongo extends Adapter
             $record['_id'] = $sequence;
         }
         $options = $this->getTransactionOptions();
-        $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
+        //$record = $this->removeNullKeys($record);
+        $result = $this->insertDocument($name, $record, $options);
         $result = $this->replaceChars('_', '$', $result);
         // in order to keep the original object refrence.
         foreach ($result as $key => $value) {

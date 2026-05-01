@@ -2060,13 +2060,13 @@ class Redis extends Adapter
         $seqKey = $this->seqKey($col, $tenant);
         $permDocKey = $this->permDocKey($col, $id);
 
-        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
-            if ((bool) $r->exists($docKey)) {
+        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
+            if ((bool) $redis->exists($docKey)) {
                 if ($this->skipDuplicates) {
                     // Mirrors MariaDB's `INSERT IGNORE` and Memory's skipDuplicates path:
                     // duplicate primary key is silently dropped and the existing row's
                     // sequence is returned so the caller can still emit an onNext event.
-                    $existingPayload = $r->get($docKey);
+                    $existingPayload = $redis->get($docKey);
                     if (\is_string($existingPayload) && $existingPayload !== '') {
                         $existing = $this->decode($existingPayload);
                         $document->setAttribute('$sequence', $existing->getSequence() ?? '');
@@ -2078,7 +2078,7 @@ class Redis extends Adapter
             }
 
             try {
-                $this->enforceUniqueIndexes($r, $col, $document);
+                $this->enforceUniqueIndexes($redis, $col, $document);
             } catch (DuplicateException $e) {
                 if ($this->skipDuplicates) {
                     return $document;
@@ -2088,19 +2088,19 @@ class Redis extends Adapter
 
             $sequence = $document->getSequence();
             if (empty($sequence)) {
-                $next = $r->incr($seqKey);
+                $next = $redis->incr($seqKey);
                 $sequence = (string) $next;
             } else {
                 $sequence = (string) $sequence;
-                $current = $r->get($seqKey);
+                $current = $redis->get($seqKey);
                 if (! \is_string($current) || (int) $sequence > (int) $current) {
-                    $r->set($seqKey, $sequence);
+                    $redis->set($seqKey, $sequence);
                 }
             }
             $document->setAttribute('$sequence', $sequence);
 
-            $r->set($docKey, $this->encode($document));
-            $r->sAdd($idxKey, \strtolower($id));
+            $redis->set($docKey, $this->encode($document));
+            $redis->sAdd($idxKey, \strtolower($id));
 
             $this->writePermissions($col, $id, $document);
             $this->journal('createDoc', [
@@ -2141,8 +2141,8 @@ class Redis extends Adapter
             }
         }
 
-        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
-            $existingPayload = $r->get($oldKey);
+        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
+            $existingPayload = $redis->get($oldKey);
             if (! \is_string($existingPayload) || $existingPayload === '') {
                 throw new NotFoundException('Document not found');
             }
@@ -2160,7 +2160,7 @@ class Redis extends Adapter
             // tenant's idx set.
             $effectiveIdxKey = $useNullTenant ? $this->idxKey($col, '_') : $idxKey;
 
-            if ($newId !== $id && (bool) $r->exists($newKey)) {
+            if ($newId !== $id && (bool) $redis->exists($newKey)) {
                 throw new DuplicateException('Document already exists');
             }
 
@@ -2169,16 +2169,16 @@ class Redis extends Adapter
             $merged['$id'] = $newId;
             $mergedDocument = new Document($merged);
 
-            $this->enforceUniqueIndexes($r, $col, $mergedDocument, $id);
+            $this->enforceUniqueIndexes($redis, $col, $mergedDocument, $id);
 
             $payload = $this->encode($mergedDocument);
 
             if ($newId !== $id) {
-                $r->del($oldKey);
-                $r->sRem($effectiveIdxKey, \strtolower($id));
+                $redis->del($oldKey);
+                $redis->sRem($effectiveIdxKey, \strtolower($id));
             }
-            $r->set($newKey, $payload);
-            $r->sAdd($effectiveIdxKey, \strtolower($newId));
+            $redis->set($newKey, $payload);
+            $redis->sAdd($effectiveIdxKey, \strtolower($newId));
 
             $this->journal('updateDoc', [
                 'collection' => $col,
@@ -2222,7 +2222,7 @@ class Redis extends Adapter
         // sequentially, so positional iteration here MUST start at 0.
         $documents = \array_values($documents);
 
-        return $this->tx(function (RedisClient $r) use ($col, $documents, $updates, $attrs, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
+        return $this->tx(function (RedisClient $redis) use ($col, $documents, $updates, $attrs, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
             // Pipeline existing-payload GETs in a single round trip — mirrors
             // upsertDocuments() and avoids one synchronous round trip per
             // document, which dominates wall time on bulk updates.
@@ -2231,11 +2231,11 @@ class Redis extends Adapter
                 $docKeys[] = $this->docKey($col, $doc->getId());
             }
 
-            $r->multi(\Redis::PIPELINE);
+            $redis->multi(\Redis::PIPELINE);
             foreach ($docKeys as $docKey) {
-                $r->get($docKey);
+                $redis->get($docKey);
             }
-            $existingPayloads = $r->exec();
+            $existingPayloads = $redis->exec();
             if (! \is_array($existingPayloads)) {
                 $existingPayloads = [];
             }
@@ -2246,7 +2246,7 @@ class Redis extends Adapter
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
                 $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
-                $attributes = $this->readAttributesField($r, $metaKey);
+                $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
 
@@ -2279,7 +2279,7 @@ class Redis extends Adapter
                 }
 
                 $mergedDocument = new Document($merged);
-                $r->set($docKey, $this->encode($mergedDocument));
+                $redis->set($docKey, $this->encode($mergedDocument));
 
                 $this->journal('updateDoc', [
                     'collection' => $col,
@@ -2314,17 +2314,17 @@ class Redis extends Adapter
         $idxKey = $this->idxKey($col);
         $seqKey = $this->seqKey($col);
 
-        return $this->tx(function (RedisClient $r) use ($col, $attribute, $changes, $idxKey, $seqKey): array {
+        return $this->tx(function (RedisClient $redis) use ($col, $attribute, $changes, $idxKey, $seqKey): array {
             $results = [];
 
             // Phase 1: pipeline GETs of every doc so we know create vs update
             // in a single round trip.
-            $r->multi(\Redis::PIPELINE);
+            $redis->multi(\Redis::PIPELINE);
             foreach ($changes as $change) {
                 $document = $change->getNew();
-                $r->get($this->docKey($col, $document->getId()));
+                $redis->get($this->docKey($col, $document->getId()));
             }
-            $existingPayloads = $r->exec();
+            $existingPayloads = $redis->exec();
             if (! \is_array($existingPayloads)) {
                 $existingPayloads = [];
             }
@@ -2335,7 +2335,7 @@ class Redis extends Adapter
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
                 $metaKey = $this->key($this->ns(), 'meta', $this->filter($col));
-                $attributes = $this->readAttributesField($r, $metaKey);
+                $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
 
@@ -2364,7 +2364,7 @@ class Redis extends Adapter
                     }
 
                     $mergedDocument = new Document($merged);
-                    $r->set($docKey, $this->encode($mergedDocument));
+                    $redis->set($docKey, $this->encode($mergedDocument));
 
                     $this->journal('updateDoc', [
                         'collection' => $col,
@@ -2382,17 +2382,17 @@ class Redis extends Adapter
                     // Insert path: parity with createDocument — reject writes
                     // that would violate a UNIQUE index before the row lands
                     // in the keyspace.
-                    $this->enforceUniqueIndexes($r, $col, $document);
+                    $this->enforceUniqueIndexes($redis, $col, $document);
 
                     $sequence = $document->getSequence();
                     if (empty($sequence)) {
-                        $next = $r->incr($seqKey);
+                        $next = $redis->incr($seqKey);
                         $sequence = (string) $next;
                     } else {
                         $sequence = (string) $sequence;
-                        $current = $r->get($seqKey);
+                        $current = $redis->get($seqKey);
                         if (! \is_string($current) || (int) $sequence > (int) $current) {
-                            $r->set($seqKey, $sequence);
+                            $redis->set($seqKey, $sequence);
                         }
                     }
                     $document->setAttribute('$sequence', $sequence);
@@ -2402,8 +2402,8 @@ class Redis extends Adapter
                         $document->setAttribute($attr, $value);
                     }
 
-                    $r->set($docKey, $this->encode($document));
-                    $r->sAdd($idxKey, \strtolower($id));
+                    $redis->set($docKey, $this->encode($document));
+                    $redis->sAdd($idxKey, \strtolower($id));
 
                     $this->writePermissions($col, $id, $document);
                     $this->journal('createDoc', [
@@ -2482,8 +2482,8 @@ class Redis extends Adapter
         $docKey = $this->docKey($collection, $id);
         $idxKey = $this->idxKey($collection);
 
-        return $this->tx(function (RedisClient $r) use ($collection, $id, $docKey, $idxKey): bool {
-            $payload = $r->get($docKey);
+        return $this->tx(function (RedisClient $redis) use ($collection, $id, $docKey, $idxKey): bool {
+            $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 return false;
             }
@@ -2497,8 +2497,8 @@ class Redis extends Adapter
             ]);
 
             $this->clearPermissions($collection, $id);
-            $r->del($docKey);
-            $r->sRem($idxKey, \strtolower($id));
+            $redis->del($docKey);
+            $redis->sRem($idxKey, \strtolower($id));
 
             return true;
         });
@@ -2513,25 +2513,25 @@ class Redis extends Adapter
         $collection = $this->filter($collection);
         $idxKey = $this->idxKey($collection);
 
-        return $this->tx(function (RedisClient $r) use ($collection, $sequences, $permissionIds, $idxKey): int {
+        return $this->tx(function (RedisClient $redis) use ($collection, $sequences, $permissionIds, $idxKey): int {
             $sequenceSet = [];
             foreach ($sequences as $sequence) {
                 $sequenceSet[(string) $sequence] = true;
             }
 
-            $allIds = $r->sMembers($idxKey);
+            $allIds = $redis->sMembers($idxKey);
             if (! \is_array($allIds)) {
                 $allIds = [];
             }
 
             $docKeys = [];
-            $r->multi(\Redis::PIPELINE);
+            $redis->multi(\Redis::PIPELINE);
             foreach ($allIds as $id) {
                 $docKey = $this->docKey($collection, (string) $id);
                 $docKeys[(string) $id] = $docKey;
-                $r->get($docKey);
+                $redis->get($docKey);
             }
-            $payloads = $r->exec();
+            $payloads = $redis->exec();
             if (! \is_array($payloads)) {
                 $payloads = [];
             }
@@ -2559,8 +2559,8 @@ class Redis extends Adapter
                     'idxKey' => $idxKey,
                 ]);
                 $this->clearPermissions($collection, (string) $documentId);
-                $r->del($deletedDocKey);
-                $r->sRem($idxKey, \strtolower((string) $documentId));
+                $redis->del($deletedDocKey);
+                $redis->sRem($idxKey, \strtolower((string) $documentId));
             }
 
             // Permission-only cleanup for ids the caller listed but that did
@@ -2589,8 +2589,8 @@ class Redis extends Adapter
         $collection = $this->filter($collection);
         $docKey = $this->docKey($collection, $id);
 
-        return $this->tx(function (RedisClient $r) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
-            $payload = $r->get($docKey);
+        return $this->tx(function (RedisClient $redis) use ($collection, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
+            $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
                 throw new NotFoundException('Document not found');
             }
@@ -2611,7 +2611,7 @@ class Redis extends Adapter
             $document->setAttribute($attribute, $current + $value);
             $document->setAttribute('$updatedAt', $updatedAt);
 
-            $r->set($docKey, $this->encode($document));
+            $redis->set($docKey, $this->encode($document));
 
             $this->journal('updateDoc', [
                 'collection' => $collection,

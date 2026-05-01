@@ -801,7 +801,7 @@ class Redis extends Adapter
 
     public function getSupportForFulltextIndex(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForFulltextWildcardIndex(): bool

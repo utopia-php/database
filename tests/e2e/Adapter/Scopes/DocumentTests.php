@@ -1442,6 +1442,8 @@ trait DocumentTests
 
         $updatedAt = $document->getUpdatedAt();
 
+        \usleep(2000); // Ensure $updatedAt differs when adapter timestamp precision is milliseconds
+
         $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
         $this->assertEquals(101, $doc->getAttribute('increase'));
 
@@ -6035,6 +6037,8 @@ trait DocumentTests
         ]));
 
         $newUpdatedAt = $doc11->getUpdatedAt();
+
+        \usleep(2000); // Ensure $updatedAt differs when adapter timestamp precision is milliseconds
 
         $newDoc11 = new Document([
             'string' => 'no_dates_update',

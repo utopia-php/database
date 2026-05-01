@@ -15,7 +15,6 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
@@ -400,7 +399,7 @@ class Redis extends Adapter implements
             $attrs = $this->readAttributesField($client, $metaKey);
             $filtered = [];
             foreach ($attrs as $attribute) {
-                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) === $id) {
                     continue;
                 }
@@ -429,7 +428,7 @@ class Redis extends Adapter implements
             $attrs = $this->readAttributesField($client, $metaKey);
             $touched = false;
             foreach ($attrs as $i => $attribute) {
-                $existingId = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+                $existingId = $this->recordIdentifier($attribute);
                 if ($this->filter($existingId) !== $old) {
                     continue;
                 }
@@ -693,7 +692,7 @@ class Redis extends Adapter implements
                 }
                 $filtered[] = $index;
             }
-            $client->hSet($metaKey, 'indexes', \json_encode(\array_values($filtered), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            $client->hSet($metaKey, 'indexes', \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
         });
 
         return true;
@@ -1649,7 +1648,9 @@ class Redis extends Adapter implements
     }
 
     /**
-     * @param callable(RedisClient): mixed $fn
+     * @template T
+     * @param callable(RedisClient): T $fn
+     * @return T
      */
     protected function tx(callable $fn): mixed
     {
@@ -1826,6 +1827,55 @@ class Redis extends Adapter implements
         ];
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadString(array $payload, string $key): ?string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadStringOr(array $payload, string $key, string $default): string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : $default;
+    }
+
+    private function stringOrEmpty(mixed $value): string
+    {
+        return \is_string($value) ? $value : '';
+    }
+
+    private function numericOr(mixed $value, int|float $default): int|float
+    {
+        return \is_numeric($value) ? $value + 0 : $default;
+    }
+
+    private function intOr(mixed $value, int $default): int
+    {
+        return \is_numeric($value) ? (int) $value : $default;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function recordIdentifier(array $record): string
+    {
+        $id = $record['$id'] ?? null;
+        if (\is_string($id)) {
+            return $id;
+        }
+        $key = $record['key'] ?? null;
+
+        return \is_string($key) ? $key : '';
+    }
+
     protected function rollbackJournal(): void
     {
         $frame = \array_pop($this->journalStack);
@@ -1840,79 +1890,64 @@ class Redis extends Adapter implements
 
             switch ($op) {
                 case 'createDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
                     $this->rawDeleteDoc(
                         $collection,
                         $id,
-                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
-                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
-                        isset($payload['permDocKey']) ? (string) $payload['permDocKey'] : null,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
+                        $this->payloadString($payload, 'permDocKey'),
                     );
                     break;
 
                 case 'deleteDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    /** @var string $beforePayload */
-                    $beforePayload = $payload['payload'];
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
                     $this->rawRestoreDoc(
                         $collection,
                         $id,
                         $beforePayload,
-                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
-                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
                     );
                     break;
 
                 case 'updateDoc':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $id */
-                    $id = $payload['id'];
-                    /** @var string $beforePayload */
-                    $beforePayload = $payload['payload'];
-                    $docKey = isset($payload['docKey']) ? (string) $payload['docKey'] : $this->docKey($collection, $id);
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
+                    $docKey = $this->payloadString($payload, 'docKey') ?? $this->docKey($collection, $id);
                     $this->client->set($docKey, $beforePayload);
-                    if (isset($payload['newId']) && \is_string($payload['newId']) && $payload['newId'] !== $id) {
-                        $newId = $payload['newId'];
-                        $newDocKey = isset($payload['newDocKey']) ? (string) $payload['newDocKey'] : $this->docKey($collection, $newId);
+                    $newId = $this->payloadString($payload, 'newId');
+                    if ($newId !== null && $newId !== $id) {
+                        $newDocKey = $this->payloadString($payload, 'newDocKey') ?? $this->docKey($collection, $newId);
                         $this->client->del($newDocKey);
-                        $idxKey = isset($payload['idxKey']) ? (string) $payload['idxKey'] : $this->idxKey($collection);
+                        $idxKey = $this->payloadString($payload, 'idxKey') ?? $this->idxKey($collection);
                         $this->client->sRem($idxKey, \strtolower($newId));
                         $this->client->sAdd($idxKey, \strtolower($id));
                     }
                     break;
 
                 case 'createPerm':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $letter */
-                    $letter = $payload['letter'];
-                    /** @var string $role */
-                    $role = $payload['role'];
-                    /** @var string $id */
-                    $id = $payload['id'];
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
                     $this->client->sRem($this->permKey($collection, $letter, $role), $id);
                     $this->client->hDel($this->permDocKey($collection, $id), $role);
                     break;
 
                 case 'deletePerm':
-                    /** @var string $collection */
-                    $collection = $payload['collection'];
-                    /** @var string $letter */
-                    $letter = $payload['letter'];
-                    /** @var string $role */
-                    $role = $payload['role'];
-                    /** @var string $id */
-                    $id = $payload['id'];
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
                     $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
-                    if (isset($payload['previous']) && \is_string($payload['previous']) && $payload['previous'] !== '') {
-                        $this->client->hSet($this->permDocKey($collection, $id), $role, $payload['previous']);
+                    $previous = $this->payloadString($payload, 'previous');
+                    if ($previous !== null && $previous !== '') {
+                        $this->client->hSet($this->permDocKey($collection, $id), $role, $previous);
                     }
                     break;
 
@@ -1977,10 +2012,10 @@ class Redis extends Adapter implements
      */
     private function upsertAttributeRecord(array $attrs, array $record): array
     {
-        $targetId = (string) ($record['$id'] ?? '');
+        $targetId = $this->stringOrEmpty($record['$id'] ?? '');
         $replaced = false;
         foreach ($attrs as $i => $existing) {
-            $existingId = (string) ($existing['$id'] ?? $existing['key'] ?? '');
+            $existingId = $this->recordIdentifier($existing);
             if ($existingId !== $targetId) {
                 continue;
             }
@@ -2009,7 +2044,16 @@ class Redis extends Adapter implements
             if (empty($attributes) || ! \is_array($attributes)) {
                 continue;
             }
-            $uniqueIndexes[] = $attributes;
+            $names = [];
+            foreach ($attributes as $attribute) {
+                if (\is_string($attribute) && $attribute !== '') {
+                    $names[] = $attribute;
+                }
+            }
+            if ($names === []) {
+                continue;
+            }
+            $uniqueIndexes[] = $names;
         }
 
         if ($uniqueIndexes === []) {
@@ -2023,7 +2067,7 @@ class Redis extends Adapter implements
             $signature = [];
             $hasNull = false;
             foreach ($attributes as $attribute) {
-                $value = $this->resolveDocumentAttribute($document, (string) $attribute);
+                $value = $this->resolveDocumentAttribute($document, $attribute);
                 if ($value === null) {
                     $hasNull = true;
                     break;
@@ -2082,7 +2126,7 @@ class Redis extends Adapter implements
                 $signature = [];
                 $hasNull = false;
                 foreach ($attributes as $attribute) {
-                    $value = $this->resolveDocumentAttribute($existing, (string) $attribute);
+                    $value = $this->resolveDocumentAttribute($existing, $attribute);
                     if ($value === null) {
                         $hasNull = true;
                         break;
@@ -2422,7 +2466,7 @@ class Redis extends Adapter implements
             if (($attribute['type'] ?? null) !== ColumnType::Relationship->value) {
                 continue;
             }
-            $key = (string) ($attribute['$id'] ?? $attribute['key'] ?? '');
+            $key = $this->recordIdentifier($attribute);
             if ($key === '') {
                 continue;
             }
@@ -2497,7 +2541,7 @@ class Redis extends Adapter implements
 
     /**
      * @param array<int, Document> $documents
-     * @param array<int, Query> $queries
+     * @param array<Query> $queries
      * @return array<int, Document>
      */
     private function filterDocumentsByQueries(string $collection, array $documents, array $queries): array
@@ -2712,7 +2756,7 @@ class Redis extends Adapter implements
                 if (! \is_string($value)) {
                     return false;
                 }
-                $needle = (string) ($values[0] ?? '');
+                $needle = $this->stringOrEmpty($values[0] ?? '');
                 if ($needle === '') {
                     return false;
                 }
@@ -2726,7 +2770,7 @@ class Redis extends Adapter implements
                 if (! \is_string($value)) {
                     return true;
                 }
-                $needle = (string) ($values[0] ?? '');
+                $needle = $this->stringOrEmpty($values[0] ?? '');
                 if ($needle === '') {
                     return true;
                 }
@@ -2737,7 +2781,7 @@ class Redis extends Adapter implements
                 if (! \is_string($value)) {
                     return false;
                 }
-                $pattern = (string) ($values[0] ?? '');
+                $pattern = $this->stringOrEmpty($values[0] ?? '');
                 $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
 
                 return @\preg_match($delimited, $value) === 1;
@@ -2826,8 +2870,8 @@ class Redis extends Adapter implements
 
     /**
      * @param array<int, Document> $documents
-     * @param array<int, string> $orderAttributes
-     * @param array<int, OrderDirection> $orderTypes
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
      * @return array<int, Document>
      */
     private function orderDocuments(array $documents, array $orderAttributes, array $orderTypes, CursorDirection $cursorDirection): array
@@ -2894,8 +2938,8 @@ class Redis extends Adapter implements
 
     /**
      * @param array<int, Document> $documents
-     * @param array<int, string> $orderAttributes
-     * @param array<int, OrderDirection> $orderTypes
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
      * @param array<string, mixed> $cursor
      * @return array<int, Document>
      */
@@ -3184,7 +3228,7 @@ class Redis extends Adapter implements
     }
 
     /**
-     * @param array<int, Query> $queries
+     * @param array<Query> $queries
      * @return array<int, string>
      */
     protected function extractSelections(array $queries): array
@@ -3215,7 +3259,7 @@ class Redis extends Adapter implements
 
         $projected = [];
         foreach ($document->getArrayCopy() as $field => $value) {
-            if (\is_string($field) && (\str_starts_with($field, '$') || \str_starts_with($field, '_'))) {
+            if (\str_starts_with($field, '$') || \str_starts_with($field, '_')) {
                 $projected[$field] = $value;
 
                 continue;
@@ -3256,33 +3300,35 @@ class Redis extends Adapter implements
 
         switch ($method) {
             case OperatorType::Increment:
-                $by = $values[0] ?? 1;
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($max !== null && \is_numeric($by) && \is_numeric($max)) {
-                    if ($base >= $max || ($max - $base) <= $by) {
-                        return $this->preserveNumericType($base, $max);
+                $base = $this->numericOr($current, 0);
+                if ($max !== null && \is_numeric($max)) {
+                    $maxNumeric = $max + 0;
+                    if ($base >= $maxNumeric || ($maxNumeric - $base) <= $by) {
+                        return $this->preserveNumericType($base, $maxNumeric);
                     }
                 }
 
                 return $this->preserveNumericType($base, $base + $by);
 
             case OperatorType::Decrement:
-                $by = $values[0] ?? 1;
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $min = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
-                if ($min !== null && \is_numeric($by) && \is_numeric($min)) {
-                    if ($base <= $min || ($base - $min) <= $by) {
-                        return $this->preserveNumericType($base, $min);
+                $base = $this->numericOr($current, 0);
+                if ($min !== null && \is_numeric($min)) {
+                    $minNumeric = $min + 0;
+                    if ($base <= $minNumeric || ($base - $minNumeric) <= $by) {
+                        return $this->preserveNumericType($base, $minNumeric);
                     }
                 }
 
                 return $this->preserveNumericType($base, $base - $by);
 
             case OperatorType::Multiply:
-                $by = $values[0] ?? 1;
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
                 return $this->applyNumericLimit($base * $by, $max, true);
 
@@ -3292,9 +3338,9 @@ class Redis extends Adapter implements
                 if (! \is_numeric($by) || $by == 0) {
                     return $current;
                 }
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
-                return $this->applyNumericLimit($base / $by, $min, false);
+                return $this->applyNumericLimit($base / ($by + 0), $min, false);
 
             case OperatorType::Modulo:
                 $by = $values[0] ?? 1;
@@ -3306,23 +3352,23 @@ class Redis extends Adapter implements
                 return $base % (int) $by;
 
             case OperatorType::Power:
-                $by = $values[0] ?? 1;
+                $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
-                $base = \is_numeric($current) ? $current + 0 : 0;
+                $base = $this->numericOr($current, 0);
 
                 return $this->applyNumericLimit($base ** $by, $max, true);
 
             case OperatorType::StringConcat:
-                return ((string) ($current ?? '')).(string) ($values[0] ?? '');
+                return $this->stringOrEmpty($current).$this->stringOrEmpty($values[0] ?? '');
 
             case OperatorType::StringReplace:
-                $search = (string) ($values[0] ?? '');
-                $replace = (string) ($values[1] ?? '');
+                $search = $this->stringOrEmpty($values[0] ?? '');
+                $replace = $this->stringOrEmpty($values[1] ?? '');
                 if ($current === null) {
                     return null;
                 }
 
-                return \str_replace($search, $replace, (string) $current);
+                return \str_replace($search, $replace, $this->stringOrEmpty($current));
 
             case OperatorType::Toggle:
                 return ! (bool) $current;
@@ -3339,7 +3385,7 @@ class Redis extends Adapter implements
 
             case OperatorType::ArrayInsert:
                 $list = $this->coerceArray($current);
-                $index = (int) ($values[0] ?? 0);
+                $index = $this->intOr($values[0] ?? 0, 0);
                 $value = $values[1] ?? null;
                 if ($index < 0) {
                     $index = 0;
@@ -3376,26 +3422,24 @@ class Redis extends Adapter implements
 
             case OperatorType::ArrayFilter:
                 $list = $this->coerceArray($current);
-                $condition = (string) ($values[0] ?? '');
+                $condition = $this->stringOrEmpty($values[0] ?? '');
                 $compare = $values[1] ?? null;
 
                 return \array_values(\array_filter($list, fn ($item) => $this->matchesArrayFilter($item, $condition, $compare)));
 
             case OperatorType::DateAddDays:
-                $days = (int) ($values[0] ?? 0);
+                $days = $this->intOr($values[0] ?? 0, 0);
 
                 return $this->shiftDate($current, $days * 86400);
 
             case OperatorType::DateSubDays:
-                $days = (int) ($values[0] ?? 0);
+                $days = $this->intOr($values[0] ?? 0, 0);
 
                 return $this->shiftDate($current, -$days * 86400);
 
             case OperatorType::DateSetNow:
                 return DateTime::now();
         }
-
-        throw new OperatorException('Invalid operator: '.$method->value);
     }
 
     protected function applyNumericLimit(mixed $value, mixed $bound, bool $isUpper): int|float
@@ -3456,10 +3500,11 @@ class Redis extends Adapter implements
         if ($current === null) {
             return null;
         }
+        $stringified = $this->stringOrEmpty($current);
         try {
-            $base = new \DateTime((string) $current);
+            $base = new \DateTime($stringified);
         } catch (\Throwable) {
-            return $current === '' ? null : (string) $current;
+            return $stringified === '' ? null : $stringified;
         }
         $base->modify(($seconds >= 0 ? '+' : '').$seconds.' seconds');
 

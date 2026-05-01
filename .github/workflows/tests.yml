@@ -87,6 +87,8 @@ jobs:
             profiles: "--profile mariadb --profile mariadb-mirror --profile redis-mirror"
           - adapter: Pool
             profiles: "--profile mysql"
+          - adapter: Redis
+            profiles: ""
           - adapter: SharedTables/MongoDB
             profiles: "--profile mongo"
           - adapter: SharedTables/MariaDB
@@ -96,6 +98,8 @@ jobs:
           - adapter: SharedTables/Postgres
             profiles: "--profile postgres"
           - adapter: SharedTables/SQLite
+            profiles: ""
+          - adapter: SharedTables/Redis
             profiles: ""
           - adapter: Schemaless/MongoDB
             profiles: "--profile mongo"

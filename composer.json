@@ -38,6 +38,7 @@
         "ext-pdo": "*",
         "ext-mongodb": "*",
         "ext-mbstring": "*",
+        "ext-redis": "*",
         "utopia-php/validators": "0.2.*",
         "utopia-php/console": "0.1.*",
         "utopia-php/cache": "1.*",

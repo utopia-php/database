@@ -1440,12 +1440,12 @@ abstract class SQL extends Adapter
         // relevance. Anything else (multiple entries, or a leading attribute
         // other than $sequence) means the caller has an explicit order and
         // relevance ordering would silently override it.
-        $callerSuppliedOrder = ! (
+        $shouldAutoOrderByRelevance = (
             count($orderAttributes) === 0
             || (count($orderAttributes) === 1 && $orderAttributes[0] === '$sequence')
         );
 
-        if (! empty($searchQueries) && ! $callerSuppliedOrder) {
+        if (! empty($searchQueries) && $shouldAutoOrderByRelevance) {
             $builder->select(['*']);
             foreach ($searchQueries as $searchQuery) {
                 $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);

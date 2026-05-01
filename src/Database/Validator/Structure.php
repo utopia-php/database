@@ -114,9 +114,11 @@ class Structure extends Validator
     /**
      * Lazily-built merged attribute list (internal + collection).
      *
-     * Stable for the lifetime of this validator: $attributes is constant and
-     * $collection is readonly, so the merge result never changes after the
-     * first call.
+     * Cached for the lifetime of this validator. `$collection` is `readonly`
+     * (the property cannot be reassigned), but its inner Document state is
+     * not deep-frozen — callers that mutate `$collection->setAttribute(
+     * 'attributes', ...)` between `isValid()` calls would see a stale memo.
+     * Construct a fresh validator if the underlying schema may change.
      *
      * @var array<array<string, mixed>>|null
      */

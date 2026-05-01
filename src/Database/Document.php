@@ -99,11 +99,10 @@ class Document extends ArrayObject
             throw new StructureException('$id must be of type string');
         }
 
-        if (array_key_exists('$permissions', $row) && ! is_array($row['$permissions'])) {
-            throw new StructureException('$permissions must be of type array');
-        }
-
-        if (array_key_exists('$permissions', $row) && is_array($row['$permissions'])) {
+        if (array_key_exists('$permissions', $row)) {
+            if (! \is_array($row['$permissions'])) {
+                throw new StructureException('$permissions must be of type array');
+            }
             $row['$permissions'] = \array_values(\array_unique($row['$permissions']));
         }
 

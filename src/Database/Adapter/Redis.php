@@ -1310,8 +1310,6 @@ class Redis extends Adapter
         return $this->decode($payload);
     }
 
-    // === @architect:T20 owns: schema + collection + attribute ops ===
-
     public function create(string $name): bool
     {
         $name = $this->filter($name);
@@ -1975,14 +1973,6 @@ class Redis extends Adapter
         }
     }
 
-    // === @architect:T20 end ===
-
-
-
-
-
-    // === @architect:T30 owns: document CRUD + bulk + increase ===
-
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $col = $this->filter($collection->getId());
@@ -2628,14 +2618,6 @@ class Redis extends Adapter
             return true;
         });
     }
-
-    // === @architect:T30 end ===
-
-
-
-
-
-    // === @architect:T40 owns: indexes + queries + counts ===
 
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
     {
@@ -3356,8 +3338,9 @@ class Redis extends Adapter
     }
 
     /**
-     * Stable ordering across Documents. Random short-circuits via shuffle to
-     * preserve usort transitivity; absent attributes fall back to $sequence.
+     * Stable ordering across Documents. Random short-circuits to shuffle()
+     * because a non-deterministic comparator passed to usort is undefined;
+     * absent attributes fall back to $sequence.
      *
      * @param  array<int, Document>  $documents
      * @param  array<int, string>  $orderAttributes
@@ -3807,14 +3790,6 @@ class Redis extends Adapter
         return new Document($projected);
     }
 
-    // === @architect:T40 end ===
-
-
-
-
-
-    // === @architect:T50 owns: permissions + relationships ===
-
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
         // Redis stores documents as flexible JSON blobs, so the relationship
@@ -3948,14 +3923,6 @@ class Redis extends Adapter
         return true;
     }
 
-    // === @architect:T50 end ===
-
-
-
-
-
-    // === @architect:T56 owns: transactions + journal ===
-
     public function startTransaction(): bool
     {
         $this->journalStack[] = [];
@@ -3987,8 +3954,6 @@ class Redis extends Adapter
 
         return true;
     }
-
-    // === @architect:T56 end ===
 
     /**
      * Resolve any Operator-typed attributes against the existing document

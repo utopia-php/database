@@ -122,6 +122,19 @@ class Redis extends Adapter
     }
 
     /**
+     * Build the namespace-only prefix `'KEY_PREFIX:{namespace}'`.
+     * Used for keys that are shared across all databases in a namespace,
+     * such as the database-registry SET (`dbs`). Unlike `ns()` this does
+     * NOT include the currently bound database name, so `create()`,
+     * `exists()`, `list()`, and `delete()` all read/write the same key
+     * regardless of which database is currently selected.
+     */
+    private function nsBase(): string
+    {
+        return self::KEY_PREFIX . self::SEP . $this->getNamespace();
+    }
+
+    /**
      * Build the document storage key. Lower-cases `$id` to match MariaDB's
      * default case-insensitive UID semantics. Under shared tables every doc
      * key is bucketed by tenant so two tenants can hold the same id without
@@ -511,7 +524,13 @@ class Redis extends Adapter
                     $collection = $payload['collection'];
                     /** @var string $id */
                     $id = $payload['id'];
-                    $this->rawDeleteDoc($collection, $id);
+                    $this->rawDeleteDoc(
+                        $collection,
+                        $id,
+                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
+                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
+                        isset($payload['permDocKey']) ? (string) $payload['permDocKey'] : null,
+                    );
                     break;
 
                 case 'deleteDoc':
@@ -521,7 +540,13 @@ class Redis extends Adapter
                     $id = $payload['id'];
                     /** @var string $beforePayload */
                     $beforePayload = $payload['payload'];
-                    $this->rawRestoreDoc($collection, $id, $beforePayload);
+                    $this->rawRestoreDoc(
+                        $collection,
+                        $id,
+                        $beforePayload,
+                        isset($payload['docKey']) ? (string) $payload['docKey'] : null,
+                        isset($payload['idxKey']) ? (string) $payload['idxKey'] : null,
+                    );
                     break;
 
                 case 'updateDoc':
@@ -531,13 +556,15 @@ class Redis extends Adapter
                     $id = $payload['id'];
                     /** @var string $beforePayload */
                     $beforePayload = $payload['payload'];
-                    $this->client->set($this->docKey($collection, $id), $beforePayload);
+                    $docKey = isset($payload['docKey']) ? (string) $payload['docKey'] : $this->docKey($collection, $id);
+                    $this->client->set($docKey, $beforePayload);
                     // If the update changed the id, the new key must be removed
                     // and the old id restored to the index set.
                     if (isset($payload['newId']) && \is_string($payload['newId']) && $payload['newId'] !== $id) {
                         $newId = $payload['newId'];
-                        $this->client->del($this->docKey($collection, $newId));
-                        $idxKey = $this->idxKey($collection);
+                        $newDocKey = isset($payload['newDocKey']) ? (string) $payload['newDocKey'] : $this->docKey($collection, $newId);
+                        $this->client->del($newDocKey);
+                        $idxKey = isset($payload['idxKey']) ? (string) $payload['idxKey'] : $this->idxKey($collection);
                         $this->client->sRem($idxKey, \strtolower($newId));
                         $this->client->sAdd($idxKey, \strtolower($id));
                     }
@@ -601,22 +628,22 @@ class Redis extends Adapter
         }
     }
 
-    private function rawDeleteDoc(string $collection, string $id): void
+    private function rawDeleteDoc(string $collection, string $id, ?string $docKey = null, ?string $idxKey = null, ?string $permDocKey = null): void
     {
         // writePermissions/clearPermissions key the per-doc HASH off the
         // lowercased id; lowercase here too so rollback of a mixed-case
         // create id actually deletes the perm doc HASH that was written.
         $lowerId = \strtolower($id);
-        $this->client->del($this->docKey($collection, $lowerId));
-        $this->client->sRem($this->idxKey($collection), $lowerId);
-        $this->client->del($this->permDocKey($collection, $lowerId));
+        $this->client->del($docKey ?? $this->docKey($collection, $lowerId));
+        $this->client->sRem($idxKey ?? $this->idxKey($collection), $lowerId);
+        $this->client->del($permDocKey ?? $this->permDocKey($collection, $lowerId));
     }
 
-    private function rawRestoreDoc(string $collection, string $id, string $payload): void
+    private function rawRestoreDoc(string $collection, string $id, string $payload, ?string $docKey = null, ?string $idxKey = null): void
     {
         $lowerId = \strtolower($id);
-        $this->client->set($this->docKey($collection, $lowerId), $payload);
-        $this->client->sAdd($this->idxKey($collection), $lowerId);
+        $this->client->set($docKey ?? $this->docKey($collection, $lowerId), $payload);
+        $this->client->sAdd($idxKey ?? $this->idxKey($collection), $lowerId);
     }
 
     /**
@@ -1288,7 +1315,7 @@ class Redis extends Adapter
     public function create(string $name): bool
     {
         $name = $this->filter($name);
-        $dbsKey = $this->key($this->ns(), 'dbs');
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
 
         $this->tx(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
 
@@ -1298,7 +1325,7 @@ class Redis extends Adapter
     public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
-        $dbsKey = $this->key($this->ns(), 'dbs');
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
 
         if ((bool) $this->client->sIsMember($dbsKey, $database) === false) {
             return false;
@@ -1317,7 +1344,7 @@ class Redis extends Adapter
 
     public function list(): array
     {
-        $dbsKey = $this->key($this->ns(), 'dbs');
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
         /** @var array<int, string>|false $names */
         $names = $this->client->sMembers($dbsKey);
         if ($names === false) {
@@ -1336,7 +1363,7 @@ class Redis extends Adapter
     {
         $name = $this->filter($name);
         $namespace = $this->getNamespace();
-        $dbsKey = $this->key($this->ns(), 'dbs');
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
         $colsKey = $this->key($this->nsFor($namespace, $name), 'cols');
 
         $this->tx(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
@@ -2031,8 +2058,9 @@ class Redis extends Adapter
         $docKey = $this->docKey($col, $id, $tenant);
         $idxKey = $this->idxKey($col, $tenant);
         $seqKey = $this->seqKey($col, $tenant);
+        $permDocKey = $this->permDocKey($col, $id);
 
-        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $docKey, $idxKey, $seqKey): Document {
+        return $this->tx(function (RedisClient $r) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
             if ((bool) $r->exists($docKey)) {
                 if ($this->skipDuplicates) {
                     // Mirrors MariaDB's `INSERT IGNORE` and Memory's skipDuplicates path:
@@ -2075,7 +2103,13 @@ class Redis extends Adapter
             $r->sAdd($idxKey, \strtolower($id));
 
             $this->writePermissions($col, $id, $document);
-            $this->journal('createDoc', ['collection' => $col, 'id' => $id]);
+            $this->journal('createDoc', [
+                'collection' => $col,
+                'id' => $id,
+                'docKey' => $docKey,
+                'idxKey' => $idxKey,
+                'permDocKey' => $permDocKey,
+            ]);
 
             return $document;
         });
@@ -2151,6 +2185,9 @@ class Redis extends Adapter
                 'id' => $id,
                 'newId' => $newId,
                 'payload' => $existingPayload,
+                'docKey' => $oldKey,
+                'newDocKey' => $newKey,
+                'idxKey' => $effectiveIdxKey,
             ]);
 
             if (! $skipPermissions) {
@@ -2249,6 +2286,7 @@ class Redis extends Adapter
                     'id' => $uid,
                     'newId' => $uid,
                     'payload' => $existingPayload,
+                    'docKey' => $docKey,
                 ]);
 
                 if ($hasPermissions) {
@@ -2333,6 +2371,7 @@ class Redis extends Adapter
                         'id' => $id,
                         'newId' => $id,
                         'payload' => $existingPayload,
+                        'docKey' => $docKey,
                     ]);
 
                     $this->clearPermissions($col, $id);
@@ -2367,7 +2406,13 @@ class Redis extends Adapter
                     $r->sAdd($idxKey, \strtolower($id));
 
                     $this->writePermissions($col, $id, $document);
-                    $this->journal('createDoc', ['collection' => $col, 'id' => $id]);
+                    $this->journal('createDoc', [
+                        'collection' => $col,
+                        'id' => $id,
+                        'docKey' => $docKey,
+                        'idxKey' => $idxKey,
+                        'permDocKey' => $this->permDocKey($col, $id),
+                    ]);
 
                     $results[] = $document;
                 }
@@ -2447,6 +2492,8 @@ class Redis extends Adapter
                 'collection' => $collection,
                 'id' => $id,
                 'payload' => $payload,
+                'docKey' => $docKey,
+                'idxKey' => $idxKey,
             ]);
 
             $this->clearPermissions($collection, $id);
@@ -2477,9 +2524,12 @@ class Redis extends Adapter
                 $allIds = [];
             }
 
+            $docKeys = [];
             $r->multi(\Redis::PIPELINE);
             foreach ($allIds as $id) {
-                $r->get($this->docKey($collection, (string) $id));
+                $docKey = $this->docKey($collection, (string) $id);
+                $docKeys[(string) $id] = $docKey;
+                $r->get($docKey);
             }
             $payloads = $r->exec();
             if (! \is_array($payloads)) {
@@ -2495,18 +2545,21 @@ class Redis extends Adapter
                 $document = $this->decode($payload);
                 $matchesSequence = isset($sequenceSet[(string) $document->getSequence()]);
                 if ($matchesSequence) {
-                    $deleted[$document->getId()] = $payload;
+                    $deleted[$document->getId()] = ['payload' => $payload, 'docKey' => $docKeys[(string) $id]];
                 }
             }
 
-            foreach ($deleted as $documentId => $payload) {
+            foreach ($deleted as $documentId => $deleteEntry) {
+                $deletedDocKey = $deleteEntry['docKey'];
                 $this->journal('deleteDoc', [
                     'collection' => $collection,
                     'id' => (string) $documentId,
-                    'payload' => $payload,
+                    'payload' => $deleteEntry['payload'],
+                    'docKey' => $deletedDocKey,
+                    'idxKey' => $idxKey,
                 ]);
                 $this->clearPermissions($collection, (string) $documentId);
-                $r->del($this->docKey($collection, (string) $documentId));
+                $r->del($deletedDocKey);
                 $r->sRem($idxKey, \strtolower((string) $documentId));
             }
 
@@ -2565,6 +2618,7 @@ class Redis extends Adapter
                 'id' => $id,
                 'newId' => $id,
                 'payload' => $payload,
+                'docKey' => $docKey,
             ]);
 
             return true;
@@ -3802,23 +3856,19 @@ class Redis extends Adapter
             case Database::RELATION_ONE_TO_ONE:
                 if ($newKey !== null && $newKey !== $key) {
                     $this->renameAttribute($collection, $key, $newKey);
-                    $this->renameDocumentField($collection, $key, $newKey);
                 }
                 if ($twoWay && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                     $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                    $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
                 } else {
                     if ($newKey !== null && $newKey !== $key) {
                         $this->renameAttribute($collection, $key, $newKey);
-                        $this->renameDocumentField($collection, $key, $newKey);
                     }
                 }
                 break;
@@ -3826,12 +3876,10 @@ class Redis extends Adapter
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
-                        $this->renameDocumentField($relatedCollection, $twoWayKey, $newTwoWayKey);
                     }
                 } else {
                     if ($newKey !== null && $newKey !== $key) {
                         $this->renameAttribute($collection, $key, $newKey);
-                        $this->renameDocumentField($collection, $key, $newKey);
                     }
                 }
                 break;
@@ -3840,11 +3888,9 @@ class Redis extends Adapter
                 if ($junction !== null) {
                     if ($newKey !== null && $newKey !== $key) {
                         $this->renameAttribute($junction, $key, $newKey);
-                        $this->renameDocumentField($junction, $key, $newKey);
                     }
                     if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
                         $this->renameAttribute($junction, $twoWayKey, $newTwoWayKey);
-                        $this->renameDocumentField($junction, $twoWayKey, $newTwoWayKey);
                     }
                 }
                 break;
@@ -3864,36 +3910,28 @@ class Redis extends Adapter
             case Database::RELATION_ONE_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->deleteAttribute($collection, $key);
-                    $this->dropDocumentField($collection, $key);
                     if ($twoWay) {
                         $this->deleteAttribute($relatedCollection, $twoWayKey);
-                        $this->dropDocumentField($relatedCollection, $twoWayKey);
                     }
                 } else {
                     $this->deleteAttribute($relatedCollection, $twoWayKey);
-                    $this->dropDocumentField($relatedCollection, $twoWayKey);
                     if ($twoWay) {
                         $this->deleteAttribute($collection, $key);
-                        $this->dropDocumentField($collection, $key);
                     }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->deleteAttribute($relatedCollection, $twoWayKey);
-                    $this->dropDocumentField($relatedCollection, $twoWayKey);
                 } else {
                     $this->deleteAttribute($collection, $key);
-                    $this->dropDocumentField($collection, $key);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->deleteAttribute($collection, $key);
-                    $this->dropDocumentField($collection, $key);
                 } else {
                     $this->deleteAttribute($relatedCollection, $twoWayKey);
-                    $this->dropDocumentField($relatedCollection, $twoWayKey);
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:

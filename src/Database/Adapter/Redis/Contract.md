@@ -13,20 +13,31 @@ architects MUST NOT modify this file. If a contract gap is found, write
 
 Key                                          | Type   | Holds
 ---------------------------------------------+--------+----------------------------------
-{ns}:{db}:dbs                                | SET    | database names
+{ns}:dbs                                     | SET    | database names (keyed by namespace only, not per-db)
 {ns}:{db}:cols                               | SET    | collection IDs in this db
 {ns}:{db}:meta:{col}                         | HASH   | fields: schema, attrs, indexes, docCount, sizeBytes
-{ns}:{db}:doc:{col}:{id}                     | STRING | JSON-encoded Document
-{ns}:{db}:idx:{col}                          | SET    | doc IDs in collection (for SCAN/list)
-{ns}:{db}:perm:{col}:r/w/u/d:{role}          | SET    | doc IDs by action+role
-{ns}:{db}:perm:doc:{col}:{id}                | HASH   | role -> csv("read,update,delete")
+{ns}:{db}:doc:{col}:{id}                     | STRING | JSON-encoded Document (non-shared-tables)
+{ns}:{db}:doc:t:{bucket}:{col}:{id}          | STRING | JSON-encoded Document (shared-tables; bucket = tenant or `_`)
+{ns}:{db}:idx:{col}                          | SET    | doc IDs in collection (non-shared-tables)
+{ns}:{db}:idx:t:{bucket}:{col}              | SET    | doc IDs in collection (shared-tables; bucket = tenant or `_`)
+{ns}:{db}:perm:{col}:{r|c|u|d|w}:{role}     | SET    | doc IDs by action+role (non-shared-tables; actions: r=read, c=create, u=update, d=delete, w=write)
+{ns}:{db}:perm:t:{bucket}:{col}:{r|c|u|d|w}:{role} | SET | doc IDs by action+role (shared-tables)
+{ns}:{db}:perm:doc:{col}:{id}               | HASH   | role -> csv of action letters (non-shared-tables)
+{ns}:{db}:perm:t:{bucket}:doc:{col}:{id}    | HASH   | role -> csv of action letters (shared-tables)
 {ns}:{db}:tenants:{col}:{tenant}             | SET    | doc IDs filtered by tenant (shared mode)
 {ns}:{db}:journal:{txid}                     | LIST   | WAL entries for rollback (T56 owns)
 ```
 
-All keys begin with the static prefix `utopia:` (the `Redis::KEY_PREFIX`
-constant) joined by the `Redis::SEP` separator (`:`). The `{ns}:{db}` portion
-is produced by the locked `ns()` helper.
+Note: All keys in the table are shown without the leading `utopia:` (`KEY_PREFIX`) prefix.
+The actual Redis key for every entry prepends `utopia:` — e.g. the `{ns}:dbs` row becomes
+`utopia:{ns}:dbs` in Redis. The `utopia:` prefix applies to all keys including the `{ns}:dbs` entry.
+
+The database-registry `{ns}:dbs` key is intentionally **namespace-scoped only** (no `{db}` segment),
+produced by `nsBase()` = `KEY_PREFIX:{ns}`. This ensures `create`, `exists`, `list`, and `delete`
+all share a single canonical SET regardless of which database is currently bound via `setDatabase()`.
+All other keys are produced by `ns()` = `KEY_PREFIX:{ns}:{db}` and include the bound database.
+The `(non-shared-tables)`/`(shared-tables)` suffix in the table indicates whether tenant buckets are
+present in the key, not whether the `KEY_PREFIX` is applied (which it always is).
 
 ## DSN format
 

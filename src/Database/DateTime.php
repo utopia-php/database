@@ -56,10 +56,6 @@ class DateTime
     {
         $interval = DateInterval::createFromDateString($seconds.' seconds');
 
-        if (! $interval) {
-            throw new DatabaseException('Invalid interval');
-        }
-
         $date->add($interval);
 
         return self::format($date);

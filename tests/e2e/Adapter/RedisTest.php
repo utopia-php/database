@@ -42,7 +42,7 @@ class RedisTest extends Base
             self::$authorization = new \Utopia\Database\Validator\Authorization();
         }
 
-        $host = \getenv('REDIS_HOST') ?: 'redis-mirror';
+        $host = \getenv('REDIS_HOST') ?: 'redis';
         $port = (int) (\getenv('REDIS_PORT') ?: 6379);
 
         $client = new Redis();

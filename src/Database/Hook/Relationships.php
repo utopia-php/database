@@ -61,6 +61,9 @@ class Relationships implements Hook
      * validator cap would still see relationship updates throw QueryException
      * on the chunked find/update fallback.
      */
+    /**
+     * @return int<1, max>
+     */
     private function relationQueryChunkSize(): int
     {
         return \max(1, \min(Database::RELATION_QUERY_CHUNK_SIZE, $this->db->getMaxQueryValues()));

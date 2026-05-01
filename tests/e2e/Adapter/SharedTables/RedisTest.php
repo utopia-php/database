@@ -2,10 +2,10 @@
 
 namespace Tests\E2E\Adapter\SharedTables;
 
-use Tests\E2E\Adapter\RedisBase;
+use Tests\E2E\Adapter\RedisTest as BaseRedisTest;
 use Utopia\Database\Database;
 
-class RedisTest extends RedisBase
+class RedisTest extends BaseRedisTest
 {
     /**
      * Apply shared-tables config and the empty namespace BEFORE

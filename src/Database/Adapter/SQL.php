@@ -3620,9 +3620,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Compose a cache key scoped to the current database/namespace/tenant so
-     * that Pool sibling adapters reused across tenants never collide on a
-     * shared collection id.
+     * Compose a cache key scoped to the current database and namespace so
+     * that Pool sibling adapters reused across schemas never collide on a
+     * shared collection id. Tenant is intentionally excluded: collection
+     * schema (and therefore the spatial-attribute set) is shared across
+     * tenants under shared tables.
      */
     private function spatialCacheKey(string $collectionId): string
     {

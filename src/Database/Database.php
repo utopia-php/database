@@ -1098,6 +1098,13 @@ class Database
      */
     public function setMaxQueryValues(int $max): self
     {
+        if ($this->maxQueryValues !== $max) {
+            // Validator cache key encodes maxQueryValues; entries built under
+            // the previous limit must be discarded so subsequent validation
+            // honors the new ceiling.
+            $this->documentsValidatorCache = [];
+        }
+
         $this->maxQueryValues = $max;
 
         return $this;

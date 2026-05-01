@@ -3150,22 +3150,18 @@ class Memory extends Adapter
         throw new DatabaseException('Query method '.$method->value.' not supported for object attributes');
     }
 
-    protected function decodeObjectValue(mixed $value): mixed
+    protected function decodeObjectValue(mixed $value): ?array
     {
-        if ($value === null) {
-            return null;
-        }
         if (\is_array($value)) {
             return $value;
         }
         if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
             $decoded = \json_decode($value, true);
-            if (\is_array($decoded)) {
-                return $decoded;
-            }
+
+            return \is_array($decoded) ? $decoded : null;
         }
 
-        return $value;
+        return null;
     }
 
     /**

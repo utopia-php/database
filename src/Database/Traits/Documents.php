@@ -2337,8 +2337,10 @@ trait Documents
 
             if (! isset($results)) {
                 // Inline the auth-skip toggle to avoid the per-find Closure
-                // allocation that authorization->skip() requires. Still
-                // restores the original status on exception via try/finally.
+                // allocation that authorization->skip() requires. Mirrors
+                // Authorization::skip's restore semantics: the previous status
+                // is reapplied unconditionally so any nested toggle inside the
+                // try block cannot leak past this scope.
                 if ($skipAuth) {
                     $previousStatus = $this->authorization->getStatus();
                     $this->authorization->disable();
@@ -2355,9 +2357,7 @@ trait Documents
                             $forPermission
                         );
                     } finally {
-                        if ($previousStatus) {
-                            $this->authorization->enable();
-                        }
+                        $this->authorization->setStatus($previousStatus);
                     }
                 } else {
                     $results = $this->adapter->find(

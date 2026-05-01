@@ -482,11 +482,16 @@ class Relationships implements Hook
                             $removedDocuments = \array_values(\array_diff($oldIds, $newIds));
 
                             if (! empty($removedDocuments)) {
-                                $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-                                    $relatedCollection->getId(),
-                                    new Document([$twoWayKey => null]),
-                                    [Query::equal('$id', $removedDocuments)],
-                                )));
+                                // Chunk to honor the validator's maxQueryValues cap; without
+                                // this a relationship update with thousands of removed
+                                // children would throw QueryException.
+                                foreach (\array_chunk($removedDocuments, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                    $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
+                                        $relatedCollection->getId(),
+                                        new Document([$twoWayKey => null]),
+                                        [Query::equal('$id', $chunk)],
+                                    )));
+                                }
                             }
 
                             $stringRelations = [];
@@ -502,21 +507,28 @@ class Relationships implements Hook
                             }
 
                             if (! empty($stringRelations)) {
-                                $existing = $this->db->skipRelationships(
-                                    fn () => $this->db->find($relatedCollection->getId(), [
-                                        Query::select(['$id']),
-                                        Query::equal('$id', $stringRelations),
-                                        Query::limit(\count($stringRelations)),
-                                    ])
-                                );
+                                $existingIds = [];
+                                foreach (\array_chunk($stringRelations, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                    $existing = $this->db->skipRelationships(
+                                        fn () => $this->db->find($relatedCollection->getId(), [
+                                            Query::select(['$id']),
+                                            Query::equal('$id', $chunk),
+                                            Query::limit(\count($chunk)),
+                                        ])
+                                    );
+                                    foreach ($existing as $doc) {
+                                        $existingIds[] = $doc->getId();
+                                    }
+                                }
 
-                                if (! empty($existing)) {
-                                    $existingIds = \array_map(fn (Document $doc) => $doc->getId(), $existing);
-                                    $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-                                        $relatedCollection->getId(),
-                                        new Document([$twoWayKey => $document->getId()]),
-                                        [Query::equal('$id', $existingIds)],
-                                    ));
+                                if (! empty($existingIds)) {
+                                    foreach (\array_chunk($existingIds, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                        $this->db->skipRelationships(fn () => $this->db->updateDocuments(
+                                            $relatedCollection->getId(),
+                                            new Document([$twoWayKey => $document->getId()]),
+                                            [Query::equal('$id', $chunk)],
+                                        ));
+                                    }
                                 }
                             }
 
@@ -620,19 +632,29 @@ class Relationships implements Hook
                         if (! empty($removedDocuments)) {
                             $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                            $junctions = $this->db->find($junction, [
-                                Query::select(['$id']),
-                                Query::equal($key, $removedDocuments),
-                                Query::equal($twoWayKey, [$document->getId()]),
-                                Query::limit(PHP_INT_MAX),
-                            ]);
+                            // Chunk both the lookup and the delete so a many-to-many
+                            // diff with thousands of removed peers stays within the
+                            // validator's maxQueryValues ceiling.
+                            $junctionIds = [];
+                            foreach (\array_chunk($removedDocuments, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                $junctions = $this->db->find($junction, [
+                                    Query::select(['$id']),
+                                    Query::equal($key, $chunk),
+                                    Query::equal($twoWayKey, [$document->getId()]),
+                                    Query::limit(PHP_INT_MAX),
+                                ]);
+                                foreach ($junctions as $junctionDoc) {
+                                    $junctionIds[] = $junctionDoc->getId();
+                                }
+                            }
 
-                            if (! empty($junctions)) {
-                                $junctionIds = \array_map(fn (Document $junctionDoc) => $junctionDoc->getId(), $junctions);
-                                $this->db->getAuthorization()->skip(fn () => $this->db->deleteDocuments(
-                                    $junction,
-                                    [Query::equal('$id', $junctionIds)],
-                                ));
+                            if (! empty($junctionIds)) {
+                                foreach (\array_chunk($junctionIds, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                    $this->db->getAuthorization()->skip(fn () => $this->db->deleteDocuments(
+                                        $junction,
+                                        [Query::equal('$id', $chunk)],
+                                    ));
+                                }
                             }
                         }
 

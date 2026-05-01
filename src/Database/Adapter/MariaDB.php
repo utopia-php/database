@@ -816,7 +816,23 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
+        // Apply eagerly so direct $stmt->execute() paths (e.g. exists()) inherit
+        // the new timeout even before the next $this->execute() runs. Lazy
+        // application leaked stale timeouts across pool checkouts under paratest;
+        // mirrors the MySQL adapter's eager-apply fix for the same shape of bug.
+        $seconds = $milliseconds / 1000.0;
+        $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
+        $this->appliedMaxStatementTime = $seconds;
+
         parent::setTimeout($milliseconds, $event);
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->getPDO()->exec('SET max_statement_time = 0');
+        $this->appliedMaxStatementTime = 0.0;
+
+        parent::clearTimeout($event);
     }
 
     /**

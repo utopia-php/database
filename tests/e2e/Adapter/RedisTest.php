@@ -160,7 +160,7 @@ class RedisTest extends Base
         foreach ($patterns as $pattern) {
             $iterator = null;
             while (($keys = $client->scan($iterator, $pattern, 500)) !== false) {
-                if (\is_array($keys) && \count($keys) > 0) {
+                if (\count($keys) > 0) {
                     $client->del($keys);
                 }
                 if ($iterator === 0) {

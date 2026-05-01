@@ -53,6 +53,19 @@ class Relationships implements Hook
     ) {
     }
 
+    /**
+     * Effective per-query chunk size for relationship fan-out reads/writes.
+     *
+     * Capped by RELATION_QUERY_CHUNK_SIZE as a memory bound, but never larger
+     * than the configured maxQueryValues — otherwise a caller that lowers the
+     * validator cap would still see relationship updates throw QueryException
+     * on the chunked find/update fallback.
+     */
+    private function relationQueryChunkSize(): int
+    {
+        return \max(1, \min(Database::RELATION_QUERY_CHUNK_SIZE, $this->db->getMaxQueryValues()));
+    }
+
     private function coerceToDocument(Document $document, string $key, mixed $value): mixed
     {
         if (\is_array($value) && ! \array_is_list($value)) {
@@ -485,7 +498,7 @@ class Relationships implements Hook
                                 // Chunk to honor the validator's maxQueryValues cap; without
                                 // this a relationship update with thousands of removed
                                 // children would throw QueryException.
-                                foreach (\array_chunk($removedDocuments, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                foreach (\array_chunk($removedDocuments, $this->relationQueryChunkSize()) as $chunk) {
                                     $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
                                         $relatedCollection->getId(),
                                         new Document([$twoWayKey => null]),
@@ -508,7 +521,7 @@ class Relationships implements Hook
 
                             if (! empty($stringRelations)) {
                                 $existingIds = [];
-                                foreach (\array_chunk($stringRelations, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                foreach (\array_chunk($stringRelations, $this->relationQueryChunkSize()) as $chunk) {
                                     $existing = $this->db->skipRelationships(
                                         fn () => $this->db->find($relatedCollection->getId(), [
                                             Query::select(['$id']),
@@ -522,7 +535,7 @@ class Relationships implements Hook
                                 }
 
                                 if (! empty($existingIds)) {
-                                    foreach (\array_chunk($existingIds, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                    foreach (\array_chunk($existingIds, $this->relationQueryChunkSize()) as $chunk) {
                                         $this->db->skipRelationships(fn () => $this->db->updateDocuments(
                                             $relatedCollection->getId(),
                                             new Document([$twoWayKey => $document->getId()]),
@@ -636,7 +649,7 @@ class Relationships implements Hook
                             // diff with thousands of removed peers stays within the
                             // validator's maxQueryValues ceiling.
                             $junctionIds = [];
-                            foreach (\array_chunk($removedDocuments, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                            foreach (\array_chunk($removedDocuments, $this->relationQueryChunkSize()) as $chunk) {
                                 $junctions = $this->db->find($junction, [
                                     Query::select(['$id']),
                                     Query::equal($key, $chunk),
@@ -649,7 +662,7 @@ class Relationships implements Hook
                             }
 
                             if (! empty($junctionIds)) {
-                                foreach (\array_chunk($junctionIds, Database::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                                foreach (\array_chunk($junctionIds, $this->relationQueryChunkSize()) as $chunk) {
                                     $this->db->getAuthorization()->skip(fn () => $this->db->deleteDocuments(
                                         $junction,
                                         [Query::equal('$id', $chunk)],
@@ -1442,7 +1455,7 @@ class Relationships implements Hook
         $uniqueRelatedIds = \array_unique($relatedIds);
         $relatedDocuments = [];
 
-        $chunks = \array_chunk($uniqueRelatedIds, Database::RELATION_QUERY_CHUNK_SIZE);
+        $chunks = \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize());
 
         if (\count($chunks) > 1) {
             $collectionId = $relatedCollection->getId();
@@ -1540,7 +1553,7 @@ class Relationships implements Hook
 
         $relatedDocuments = [];
 
-        $chunks = \array_chunk($parentIds, Database::RELATION_QUERY_CHUNK_SIZE);
+        $chunks = \array_chunk($parentIds, $this->relationQueryChunkSize());
 
         if (\count($chunks) > 1) {
             $collectionId = $relatedCollection->getId();
@@ -1644,7 +1657,7 @@ class Relationships implements Hook
 
         $relatedDocuments = [];
 
-        $chunks = \array_chunk($childIds, Database::RELATION_QUERY_CHUNK_SIZE);
+        $chunks = \array_chunk($childIds, $this->relationQueryChunkSize());
 
         if (\count($chunks) > 1) {
             $collectionId = $relatedCollection->getId();
@@ -1732,7 +1745,7 @@ class Relationships implements Hook
 
         $junctions = [];
 
-        $junctionChunks = \array_chunk($documentIds, Database::RELATION_QUERY_CHUNK_SIZE);
+        $junctionChunks = \array_chunk($documentIds, $this->relationQueryChunkSize());
 
         if (\count($junctionChunks) > 1) {
             $tasks = \array_map(
@@ -1795,7 +1808,7 @@ class Relationships implements Hook
             $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
 
-            $relatedChunks = \array_chunk($uniqueRelatedIds, Database::RELATION_QUERY_CHUNK_SIZE);
+            $relatedChunks = \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize());
 
             if (\count($relatedChunks) > 1) {
                 $relatedCollectionId = $relatedCollection->getId();

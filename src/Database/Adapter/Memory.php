@@ -3150,6 +3150,14 @@ class Memory extends Adapter
         throw new DatabaseException('Query method '.$method->value.' not supported for object attributes');
     }
 
+    /**
+     * Return the decoded array if $value is already an array or looks like a
+     * JSON object/array literal; null otherwise. Mirrors decodeArrayValue and
+     * lets matchesObject's callers rely on a single `null === no match` guard
+     * rather than dispatching on raw scalar types.
+     *
+     * @return array<mixed>|null
+     */
     protected function decodeObjectValue(mixed $value): ?array
     {
         if (\is_array($value)) {

@@ -6038,6 +6038,8 @@ trait DocumentTests
 
         $newUpdatedAt = $doc11->getUpdatedAt();
 
+        \usleep(2000); // Ensure $updatedAt differs when adapter timestamp precision is milliseconds
+
         $newDoc11 = new Document([
             'string' => 'no_dates_update',
         ]);

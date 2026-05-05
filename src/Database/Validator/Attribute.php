@@ -432,7 +432,6 @@ class Attribute extends Validator
                     Database::VAR_LONGTEXT,
                     Database::VAR_INTEGER,
                     Database::VAR_BIGINT,
-                    Database::VAR_BIGINT,
                     Database::VAR_FLOAT,
                     Database::VAR_BOOLEAN,
                     Database::VAR_DATETIME,

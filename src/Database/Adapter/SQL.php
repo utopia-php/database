@@ -3331,11 +3331,11 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        if (\is_null($max)) {
+        if (empty($limit)) {
             $sql = "
-                SELECT COUNT(1) as sum
-				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-                {$sqlWhere}
+            SELECT COUNT(1) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
         ";
         } else {
             $sql = "
@@ -3425,7 +3425,7 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        if (\is_null($max)) {
+        if (empty($limit)) {
             $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum
 			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}

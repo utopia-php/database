@@ -3331,7 +3331,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+            SELECT COUNT(1) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3339,6 +3346,7 @@ abstract class SQL extends Adapter
                 {$limit}
 			) table_count
         ";
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
@@ -3417,7 +3425,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+			SELECT SUM({$this->quote($attribute)}) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3425,6 +3440,8 @@ abstract class SQL extends Adapter
 				{$limit}
 			) table_count
         ";
+        }
+
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 

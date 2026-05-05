@@ -539,7 +539,7 @@ class Attribute extends Validator
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }
-                if ($defaultType === 'string' && !BigInt::isIntegerString($default)) {
+                if ($defaultType === 'string' && !BigInt::isIntegerString($default, $attribute->getAttribute('signed', true))) {
                     $this->message = 'Default value ' . $default . ' is not a valid integer string for type bigint';
                     throw new DatabaseException($this->message);
                 }

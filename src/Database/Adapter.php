@@ -33,6 +33,8 @@ abstract class Adapter
 
     protected bool $alterLocks = false;
 
+    protected bool $skipDuplicates = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -390,6 +392,27 @@ abstract class Adapter
     public function inTransaction(): bool
     {
         return $this->inTransaction > 0;
+    }
+
+    /**
+     * Run a callback with skipDuplicates enabled.
+     * Duplicate key errors during createDocuments() will be silently skipped
+     * instead of thrown. Nestable — saves and restores previous state.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
     }
 
     /**
@@ -1072,6 +1095,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForUpserts(): bool;
+
+    /**
+     * Is upsert via arbitrary unique indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertOnUniqueIndex(): bool;
 
     /**
      * Is vector type supported?

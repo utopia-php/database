@@ -50,6 +50,18 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -419,6 +431,10 @@ abstract class SQL extends Adapter
         if (\array_key_exists('_updatedAt', $document)) {
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
+        }
+        if (\array_key_exists('_deletedAt', $document)) {
+            $document['$deletedAt'] = $document['_deletedAt'];
+            unset($document['_deletedAt']);
         }
         if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
@@ -1037,6 +1053,33 @@ abstract class SQL extends Adapter
     public function getSupportForHostname(): bool
     {
         return true;
+    }
+
+    /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(): string
+    {
+        return '';
     }
 
     /**
@@ -2295,19 +2338,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param ?string $forCollection Filtered collection id (for FTS5 routing).
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param ?string $forCollection See {@see getSQLCondition}.
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -2316,9 +2361,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 
@@ -2419,10 +2464,16 @@ abstract class SQL extends Adapter
             '$updatedAt',
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $hasDeletedAt = \in_array('$deletedAt', $selections);
+
+        $selections = \array_diff($selections, [...$internalKeys, '$deletedAt', '$collection']);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
+        }
+
+        if ($hasDeletedAt) {
+            $selections[] = $this->getInternalKeyForAttribute('$deletedAt');
         }
 
         $projections = [];
@@ -2444,6 +2495,7 @@ abstract class SQL extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };
@@ -2490,6 +2542,7 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
+
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {
@@ -2587,8 +2640,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
+                {$this->getInsertSuffix($name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2602,8 +2656,9 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions}
+                    {$this->getInsertPermissionsSuffix()}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -3128,7 +3183,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3272,7 +3327,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3358,7 +3413,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

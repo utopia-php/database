@@ -1763,7 +1763,7 @@ class Postgres extends SQL
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $isNestedObjectAttribute = $query->isObjectAttribute() && \str_contains($query->getAttribute(), '.');
@@ -1793,7 +1793,7 @@ class Postgres extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds);
+                    $conditions[] = $this->getSQLCondition($q, $binds, $forCollection);
                 }
 
                 $method = strtoupper($query->getMethod());
@@ -2159,6 +2159,11 @@ class Postgres extends SQL
         return true;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     /**
      * Is vector type supported?
      *
@@ -2351,6 +2356,35 @@ class Postgres extends SQL
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
         return false;
+    }
+
+    protected function getInsertKeyword(): string
+    {
+        return 'INSERT INTO';
+    }
+
+    protected function getInsertSuffix(string $table): string
+    {
+        if (!$this->skipDuplicates) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+    }
+
+    protected function getInsertPermissionsSuffix(): string
+    {
+        if (!$this->skipDuplicates) {
+            return '';
+        }
+
+        $conflictTarget = $this->sharedTables
+            ? '("_type", "_permission", "_document", "_tenant")'
+            : '("_type", "_permission", "_document")';
+
+        return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
     public function decodePoint(string $wkb): array

@@ -73,6 +73,21 @@ trait CollectionTests
         $this->assertEquals(false, $database->exists($this->testDatabase, 'actors'));
     }
 
+    public function testDatabaseHostname(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+
+        if (!$database->getAdapter()->getSupportForHostname()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $host = $database->getAdapter()->getHostname();
+        $this->assertContains($host, ['mysql', 'mariadb', 'postgres', 'mongo']);
+    }
+
     public function testCreateCollectionWithSchema(): void
     {
         /** @var Database $database */

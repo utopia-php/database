@@ -13,6 +13,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -77,6 +78,11 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function getHostname(): string
+    {
+        return $this->client->getHost();
+    }
+
     /**
      * Returns the current Mongo client
      * @return mixed
@@ -118,6 +124,11 @@ class Mongo extends Adapter
         // MongoDB doesn't support nested transactions/savepoints.
         // If already in a transaction, just run the callback directly.
         if ($this->inTransaction > 0) {
+            return $callback();
+        }
+
+        // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
+        if ($this->skipDuplicates) {
             return $callback();
         }
 
@@ -1415,7 +1426,11 @@ class Mongo extends Adapter
                 switch ($type) {
                     case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
-                            $node = new UTCDateTime(new \DateTime($node));
+                            try {
+                                $node = new UTCDateTime(new \DateTime($node));
+                            } catch (\Throwable $e) {
+                                throw new StructureException('Invalid datetime value for attribute "' . $key . '": ' . $e->getMessage());
+                            }
                         }
                         break;
                     case Database::VAR_OBJECT:
@@ -1486,6 +1501,42 @@ class Mongo extends Adapter
             }
 
             $records[] = $record;
+        }
+
+        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
+        if ($this->skipDuplicates) {
+            if (empty($records)) {
+                return [];
+            }
+
+            $operations = [];
+            foreach ($records as $record) {
+                $filter = ['_uid' => $record['_uid'] ?? ''];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                }
+
+                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
+                $setOnInsert = $record;
+                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+
+                if (empty($setOnInsert)) {
+                    continue;
+                }
+
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => ['$setOnInsert' => $setOnInsert],
+                ];
+            }
+
+            try {
+                $this->client->upsert($name, $operations, $options);
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            return $documents;
         }
 
         try {
@@ -2005,6 +2056,7 @@ class Mongo extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };
@@ -3257,6 +3309,11 @@ class Mongo extends Adapter
     public function getSupportForUpserts(): bool
     {
         return true;
+    }
+
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
     }
 
     public function getSupportForReconnection(): bool

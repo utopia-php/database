@@ -466,6 +466,7 @@ class Attribute extends Validator
         $required = $attribute->getAttribute('required', false);
         $type = $attribute->getAttribute('type');
         $array = $attribute->getAttribute('array', false);
+        $signed = $attribute->getAttribute('signed', true);
 
         if (\is_null($default)) {
             return true;
@@ -482,7 +483,7 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        $this->validateDefaultTypes($type, $default);
+        $this->validateDefaultTypes($type, $default, $signed);
 
         return true;
     }
@@ -492,11 +493,12 @@ class Attribute extends Validator
      *
      * @param string $type Type of the attribute
      * @param mixed $default Default value of the attribute
+     * @param bool $signed Whether the attribute is signed (relevant for bigint)
      *
      * @return void
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(string $type, mixed $default): void
+    protected function validateDefaultTypes(string $type, mixed $default, bool $signed = true): void
     {
         $defaultType = \gettype($default);
 
@@ -509,7 +511,7 @@ class Attribute extends Validator
             // Spatial types require the array itself
             if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::VAR_OBJECT) {
                 foreach ($default as $value) {
-                    $this->validateDefaultTypes($type, $value);
+                    $this->validateDefaultTypes($type, $value, $signed);
                 }
             }
             return;
@@ -539,7 +541,7 @@ class Attribute extends Validator
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
                     throw new DatabaseException($this->message);
                 }
-                if ($defaultType === 'string' && !BigInt::isIntegerString($default, $attribute->getAttribute('signed', true))) {
+                if ($defaultType === 'string' && !BigInt::isIntegerString($default, $signed)) {
                     $this->message = 'Default value ' . $default . ' is not a valid integer string for type bigint';
                     throw new DatabaseException($this->message);
                 }

@@ -2119,6 +2119,16 @@ class Memory extends Adapter
         return $document;
     }
 
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
     public function getSupportForInternalCasting(): bool
     {
         return false;

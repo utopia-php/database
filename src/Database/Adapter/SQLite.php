@@ -1679,6 +1679,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return false;
+    }
+
     /**
      * Are object (JSON) indexes supported?
      *

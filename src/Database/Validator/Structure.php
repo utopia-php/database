@@ -109,6 +109,7 @@ class Structure extends Validator
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
+        private readonly bool $supportUnsignedBigInt = true,
         private readonly ?Document $currentDocument = null
     ) {
     }
@@ -237,7 +238,7 @@ class Structure extends Validator
             return false;
         }
 
-        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+        if (!$this->checkForInvalidAttributeValues($document, $structure, $keys)) {
             return false;
         }
 
@@ -305,7 +306,7 @@ class Structure extends Validator
      *
      * @return bool
      */
-    protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
+    protected function checkForInvalidAttributeValues(Document $document, array $structure, array $keys): bool
     {
         foreach ($structure as $key => $value) {
             if (Operator::isOperator($value)) {
@@ -336,6 +337,15 @@ class Structure extends Validator
                 continue;
             }
 
+            // BIGINT accepts both PHP int and numeric strings.
+            // If the numeric string is within PHP's int range, normalize it to an int
+            // so downstream code gets a numeric value without precision loss.
+            if ($type === Database::VAR_BIGINT && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+                $normalized = (int)$value;
+                $document->setAttribute($key, $normalized);
+                $value = $normalized;
+            }
+
             $validators = [];
 
             switch ($type) {
@@ -353,14 +363,19 @@ class Structure extends Validator
 
                 case Database::VAR_INTEGER:
                     // Determine bit size based on attribute size in bytes
-                    $bits = $size >= 8 ? 64 : 32;
+                    // BIGINT is always 64-bit in SQL adapters; VAR_INTEGER uses size to decide.
+                    $bits =  $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     // The Range validator will restrict to positive values only
                     $unsigned = !$signed && $bits < 64;
                     $validators[] = new Integer(false, $bits, $unsigned);
-                    $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
+                    $max = $bits === 64 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, Database::VAR_INTEGER);
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $validators[] = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case Database::VAR_FLOAT:

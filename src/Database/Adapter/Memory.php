@@ -1924,6 +1924,11 @@ class Memory extends Adapter
         return false;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
+    }
+
     public function getSupportForVectors(): bool
     {
         return false;
@@ -2112,6 +2117,16 @@ class Memory extends Adapter
     public function castingAfter(Document $collection, Document $document): Document
     {
         return $document;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     public function getSupportForInternalCasting(): bool

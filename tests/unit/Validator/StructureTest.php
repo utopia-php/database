@@ -1135,4 +1135,122 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
     }
 
+    public function testBigIntSignedAcceptsNumericStringAndNormalizesToInt(): void
+    {
+        $collection = [
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'collections',
+            'attributes' => [
+                [
+                    '$id' => 'bigint_signed',
+                    'type' => Database::VAR_BIGINT,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ];
+
+        $validator = new Structure(
+            new Document($collection),
+            Database::VAR_INTEGER
+        );
+
+        $doc = new Document([
+            '$collection' => ID::custom('posts'),
+            'bigint_signed' => (string)PHP_INT_MAX,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertTrue($validator->isValid($doc));
+        $this->assertIsInt($doc->getAttribute('bigint_signed'));
+        $this->assertEquals(PHP_INT_MAX, $doc->getAttribute('bigint_signed'));
+    }
+
+    public function testBigIntUnsignedAcceptsLargeNumericStringAsString(): void
+    {
+        $collection = [
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'collections',
+            'attributes' => [
+                [
+                    '$id' => 'bigint_unsigned',
+                    'type' => Database::VAR_BIGINT,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => true,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ];
+
+        $validator = new Structure(
+            new Document($collection),
+            Database::VAR_INTEGER
+        );
+
+        $unsignedMax = '18446744073709551615';
+
+        $doc = new Document([
+            '$collection' => ID::custom('posts'),
+            'bigint_unsigned' => $unsignedMax,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertTrue($validator->isValid($doc));
+        $this->assertIsString($doc->getAttribute('bigint_unsigned'));
+        $this->assertEquals($unsignedMax, $doc->getAttribute('bigint_unsigned'));
+    }
+
+    public function testBigIntUnsignedRejectsNegativeNumericString(): void
+    {
+        $collection = [
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'collections',
+            'attributes' => [
+                [
+                    '$id' => 'bigint_unsigned',
+                    'type' => Database::VAR_BIGINT,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => true,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ];
+
+        $validator = new Structure(
+            new Document($collection),
+            Database::VAR_INTEGER
+        );
+
+        $doc = new Document([
+            '$collection' => ID::custom('posts'),
+            'bigint_unsigned' => '-1',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertFalse($validator->isValid($doc));
+        $this->assertEquals(
+            'Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid unsigned 64-bit integer between 0 and 18,446,744,073,709,551,615',
+            $validator->getDescription()
+        );
+    }
+
 }

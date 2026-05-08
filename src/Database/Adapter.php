@@ -904,6 +904,13 @@ abstract class Adapter
     abstract public function getLimitForInt(): int;
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    abstract public function getLimitForBigInt(): int;
+
+    /**
      * Get maximum attributes limit.
      *
      * @return int
@@ -1088,6 +1095,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForUpserts(): bool;
+
+    /**
+     * Is upsert via arbitrary unique indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertOnUniqueIndex(): bool;
 
     /**
      * Is vector type supported?
@@ -1464,6 +1478,11 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return false;
+    }
 
     /**
         * Returns the document after casting

@@ -1330,6 +1330,7 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_INTEGER:
+                    case Database::VAR_BIGINT:
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME:
@@ -2272,6 +2273,7 @@ class Mongo extends Adapter
             Database::VAR_MEDIUMTEXT => 'string',
             Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
+            Database::VAR_BIGINT => 'long',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',
@@ -3066,6 +3068,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
+    /**
      * Get maximum column limit.
      * Returns 0 to indicate no limit
      *
@@ -3297,6 +3309,11 @@ class Mongo extends Adapter
     public function getSupportForUpserts(): bool
     {
         return true;
+    }
+
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
     }
 
     public function getSupportForReconnection(): bool

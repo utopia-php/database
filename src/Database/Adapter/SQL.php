@@ -50,6 +50,18 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -901,6 +913,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
+    /**
      * Get maximum column limit.
      * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
      * Can be inherited by MySQL since we utilize the InnoDB engine
@@ -1193,6 +1215,10 @@ abstract class SQL extends Adapter
                     } else {
                         $total += 4; // INT 4 bytes
                     }
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $total += 8; //  BIGINT 8 bytes
                     break;
 
                 case Database::VAR_FLOAT:
@@ -2312,19 +2338,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param ?string $forCollection Filtered collection id (for FTS5 routing).
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param ?string $forCollection See {@see getSQLCondition}.
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -2333,9 +2361,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 
@@ -3155,7 +3183,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3299,7 +3327,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3317,7 +3345,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+            SELECT COUNT(1) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3325,6 +3360,7 @@ abstract class SQL extends Adapter
                 {$limit}
 			) table_count
         ";
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
@@ -3385,7 +3421,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3403,7 +3439,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+			SELECT SUM({$this->quote($attribute)}) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3411,6 +3454,8 @@ abstract class SQL extends Adapter
 				{$limit}
 			) table_count
         ";
+        }
+
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 

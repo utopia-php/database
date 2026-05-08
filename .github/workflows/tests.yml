@@ -79,11 +79,13 @@ jobs:
             Memory,
             Mirror,
             Pool,
+            Redis,
             SharedTables/MongoDB,
             SharedTables/MariaDB,
             SharedTables/MySQL,
             SharedTables/Postgres,
             SharedTables/SQLite,
+            SharedTables/Redis,
             Schemaless/MongoDB,
           ]
 

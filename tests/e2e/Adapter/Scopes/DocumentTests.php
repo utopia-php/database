@@ -1043,6 +1043,59 @@ trait DocumentTests
         }
     }
 
+    public function testUpsertOnUniqueIndexCanUpdateUid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = __FUNCTION__;
+
+        if (!$database->getAdapter()->getSupportForUpsertOnUniqueIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'email', Database::VAR_STRING, 255, true);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 255, true);
+        $database->createIndex($collection, 'email_unique', Database::INDEX_UNIQUE, ['email']);
+
+        $original = $database->createDocument($collection, new Document([
+            '$id' => 'original-id',
+            'email' => 'uid-upsert@example.test',
+            'name' => 'before',
+        ]));
+
+        $originalSequence = $original->getSequence();
+
+        $count = $database->upsertDocuments($collection, [
+            new Document([
+                '$id' => 'updated-id',
+                'email' => 'uid-upsert@example.test',
+                'name' => 'after',
+            ])
+        ]);
+
+        $this->assertEquals(1, $count);
+
+        $oldDoc = $database->getAuthorization()->skip(
+            fn () => $database->getDocument($collection, 'original-id')
+        );
+        $this->assertTrue($oldDoc->isEmpty());
+
+        $newDoc = $database->getAuthorization()->skip(
+            fn () => $database->getDocument($collection, 'updated-id')
+        );
+        $this->assertFalse($newDoc->isEmpty());
+        $this->assertEquals('after', $newDoc->getAttribute('name'));
+        $this->assertEquals('uid-upsert@example.test', $newDoc->getAttribute('email'));
+        $this->assertEquals($originalSequence, $newDoc->getSequence());
+
+        $allDocs = $database->getAuthorization()->skip(fn () => $database->find($collection));
+        $this->assertCount(1, $allDocs);
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpsertDocumentsPermissions(): void
     {
         /** @var Database $database */

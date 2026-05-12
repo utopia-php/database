@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a89678a703f615d8536691eff63964a6",
+    "content-hash": "856e1593b0c87290977437b9b35ddf5c",
     "packages": [
         {
             "name": "brick/math",
@@ -1316,16 +1316,16 @@
         },
         {
             "name": "symfony/deprecation-contracts",
-            "version": "v3.6.0",
+            "version": "v3.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/deprecation-contracts.git",
-                "reference": "63afe740e99a13ba87ec199bb07bbdee937a5b62"
+                "reference": "50f59d1f3ca46d41ac911f97a78626b6756af35b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/deprecation-contracts/zipball/63afe740e99a13ba87ec199bb07bbdee937a5b62",
-                "reference": "63afe740e99a13ba87ec199bb07bbdee937a5b62",
+                "url": "https://api.github.com/repos/symfony/deprecation-contracts/zipball/50f59d1f3ca46d41ac911f97a78626b6756af35b",
+                "reference": "50f59d1f3ca46d41ac911f97a78626b6756af35b",
                 "shasum": ""
             },
             "require": {
@@ -1338,7 +1338,7 @@
                     "name": "symfony/contracts"
                 },
                 "branch-alias": {
-                    "dev-main": "3.6-dev"
+                    "dev-main": "3.7-dev"
                 }
             },
             "autoload": {
@@ -1363,7 +1363,7 @@
             "description": "A generic function and convention to trigger deprecation notices",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/deprecation-contracts/tree/v3.6.0"
+                "source": "https://github.com/symfony/deprecation-contracts/tree/v3.7.0"
             },
             "funding": [
                 {
@@ -1375,11 +1375,15 @@
                     "type": "github"
                 },
                 {
+                    "url": "https://github.com/nicolas-grekas",
+                    "type": "github"
+                },
+                {
                     "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
                     "type": "tidelift"
                 }
             ],
-            "time": "2024-09-25T14:21:43+00:00"
+            "time": "2026-04-13T15:52:40+00:00"
         },
         {
             "name": "symfony/http-client",
@@ -1484,16 +1488,16 @@
         },
         {
             "name": "symfony/http-client-contracts",
-            "version": "v3.6.0",
+            "version": "v3.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/http-client-contracts.git",
-                "reference": "75d7043853a42837e68111812f4d964b01e5101c"
+                "reference": "4a2d00c37651c0bdc2b9e1c773487a8bf4edb12d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/http-client-contracts/zipball/75d7043853a42837e68111812f4d964b01e5101c",
-                "reference": "75d7043853a42837e68111812f4d964b01e5101c",
+                "url": "https://api.github.com/repos/symfony/http-client-contracts/zipball/4a2d00c37651c0bdc2b9e1c773487a8bf4edb12d",
+                "reference": "4a2d00c37651c0bdc2b9e1c773487a8bf4edb12d",
                 "shasum": ""
             },
             "require": {
@@ -1506,7 +1510,7 @@
                     "name": "symfony/contracts"
                 },
                 "branch-alias": {
-                    "dev-main": "3.6-dev"
+                    "dev-main": "3.7-dev"
                 }
             },
             "autoload": {
@@ -1542,7 +1546,7 @@
                 "standards"
             ],
             "support": {
-                "source": "https://github.com/symfony/http-client-contracts/tree/v3.6.0"
+                "source": "https://github.com/symfony/http-client-contracts/tree/v3.7.0"
             },
             "funding": [
                 {
@@ -1554,11 +1558,15 @@
                     "type": "github"
                 },
                 {
+                    "url": "https://github.com/nicolas-grekas",
+                    "type": "github"
+                },
+                {
                     "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
                     "type": "tidelift"
                 }
             ],
-            "time": "2025-04-29T11:18:49+00:00"
+            "time": "2026-03-06T13:17:50+00:00"
         },
         {
             "name": "symfony/polyfill-mbstring",
@@ -1887,16 +1895,16 @@
         },
         {
             "name": "symfony/service-contracts",
-            "version": "v3.6.1",
+            "version": "v3.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/service-contracts.git",
-                "reference": "45112560a3ba2d715666a509a0bc9521d10b6c43"
+                "reference": "d25d82433a80eba6aa0e6c24b61d7370d99e444a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/service-contracts/zipball/45112560a3ba2d715666a509a0bc9521d10b6c43",
-                "reference": "45112560a3ba2d715666a509a0bc9521d10b6c43",
+                "url": "https://api.github.com/repos/symfony/service-contracts/zipball/d25d82433a80eba6aa0e6c24b61d7370d99e444a",
+                "reference": "d25d82433a80eba6aa0e6c24b61d7370d99e444a",
                 "shasum": ""
             },
             "require": {
@@ -1914,7 +1922,7 @@
                     "name": "symfony/contracts"
                 },
                 "branch-alias": {
-                    "dev-main": "3.6-dev"
+                    "dev-main": "3.7-dev"
                 }
             },
             "autoload": {
@@ -1950,7 +1958,7 @@
                 "standards"
             ],
             "support": {
-                "source": "https://github.com/symfony/service-contracts/tree/v3.6.1"
+                "source": "https://github.com/symfony/service-contracts/tree/v3.7.0"
             },
             "funding": [
                 {
@@ -1970,7 +1978,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2025-07-15T11:30:57+00:00"
+            "time": "2026-03-28T09:44:51+00:00"
         },
         {
             "name": "tbachert/spi",
@@ -2026,23 +2034,24 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "1.0.1",
+            "version": "2.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "05ceba981436a4022553f7aaa2a05fa049d0f71c"
+                "reference": "ef1d122a464b3469f2a11c7d751214e72b76eee0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/05ceba981436a4022553f7aaa2a05fa049d0f71c",
-                "reference": "05ceba981436a4022553f7aaa2a05fa049d0f71c",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/ef1d122a464b3469f2a11c7d751214e72b76eee0",
+                "reference": "ef1d122a464b3469f2a11c7d751214e72b76eee0",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
                 "ext-memcached": "*",
                 "ext-redis": "*",
-                "php": ">=8.0",
+                "php": ">=8.2",
+                "utopia-php/circuit-breaker": "0.3.*",
                 "utopia-php/pools": "1.*",
                 "utopia-php/telemetry": "*"
             },
@@ -2072,9 +2081,71 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/1.0.1"
+                "source": "https://github.com/utopia-php/cache/tree/2.0.0"
             },
-            "time": "2026-03-12T03:39:09+00:00"
+            "time": "2026-05-12T10:55:15+00:00"
+        },
+        {
+            "name": "utopia-php/circuit-breaker",
+            "version": "0.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/circuit-breaker.git",
+                "reference": "064243c1667778c00abf027ff53a735a228776de"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/circuit-breaker/zipball/064243c1667778c00abf027ff53a735a228776de",
+                "reference": "064243c1667778c00abf027ff53a735a228776de",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.2"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.29",
+                "phpstan/phpstan": "^2.1",
+                "phpunit/phpunit": "^10.0",
+                "utopia-php/telemetry": "0.2.*"
+            },
+            "suggest": {
+                "ext-opentelemetry": "Required by utopia-php/telemetry when using OpenTelemetry metrics.",
+                "ext-protobuf": "Required by utopia-php/telemetry when using OpenTelemetry metrics.",
+                "ext-redis": "Required when using Utopia\\CircuitBreaker\\Adapter\\Redis with the phpredis extension.",
+                "ext-swoole": "Required when using Utopia\\CircuitBreaker\\Adapter\\SwooleTable.",
+                "utopia-php/telemetry": "Required when passing telemetry adapters or running the local telemetry demo."
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\CircuitBreaker\\": "src/CircuitBreaker"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Team Appwrite",
+                    "email": "team@appwrite.io"
+                }
+            ],
+            "description": "Light & simple Circuit Breaker for PHP to prevent cascading failures in distributed systems.",
+            "keywords": [
+                "circuit-breaker",
+                "fault-tolerance",
+                "framework",
+                "php",
+                "resilience",
+                "upf",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/circuit-breaker/issues",
+                "source": "https://github.com/utopia-php/circuit-breaker/tree/0.3.0"
+            },
+            "time": "2026-05-12T04:27:08+00:00"
         },
         {
             "name": "utopia-php/console",
@@ -4581,7 +4652,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4591,6 +4662,6 @@
         "ext-mbstring": "*",
         "ext-redis": "*"
     },
-    "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
 }

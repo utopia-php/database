@@ -676,28 +676,20 @@ trait GeneralTests
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
         $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
 
-        // Check we cannot modify data
-        try {
-            $database->updateDocument('testRedisFallback', 'doc1', new Document([
-                'string' => 'text📝 updated',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
+        // Writes must succeed even when the cache is unavailable (fail-open)
+        $updated = $database->updateDocument('testRedisFallback', 'doc1', new Document([
+            'string' => 'text📝 updated',
+        ]));
+        $this->assertEquals('text📝 updated', $updated->getAttribute('string'));
 
-        try {
-            $database->deleteDocument('testRedisFallback', 'doc1');
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
+        $deleted = $database->deleteDocument('testRedisFallback', 'doc1');
+        $this->assertTrue($deleted);
 
         // Bring backup Redis
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
         sleep(5);
 
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $this->assertCount(0, $database->find('testRedisFallback', [Query::equal('string', ['text📝 updated'])]));
     }
 
     public function testCacheReconnect(): void

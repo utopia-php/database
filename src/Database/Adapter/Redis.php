@@ -15,6 +15,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
@@ -405,6 +406,67 @@ class Redis extends Adapter
         }
 
         return $this->ns() . self::SEP . 'perm' . self::SEP . 'doc' . self::SEP . $collection . self::SEP . $id;
+    }
+
+    /**
+     * Build the document storage key for ($collection, $id), tenant-scoping
+     * the path under shared tables so two tenants can hold rows under the
+     * same `$id` without colliding. Off shared tables this matches the
+     * legacy layout (`{ns}:doc:{col}:{id}`).
+     */
+    private function docKey(string $collection, string $id): string
+    {
+        $id = \strtolower($id);
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
+        }
+
+        return $this->key($this->ns(), 'doc', $collection, $id);
+    }
+
+    /**
+     * Variant of `docKey()` that targets a specific namespace/database/tenant
+     * tuple. Used by cross-database cleanup paths (`purgeCollectionKeys`)
+     * that iterate doc-id sets gathered before the active context changed.
+     */
+    private function docKeyFor(string $namespace, string $database, ?string $tenantBucket, string $collection, string $id): string
+    {
+        $prefix = $this->nsFor($namespace, $database);
+        if ($tenantBucket !== null) {
+            return $this->key($prefix, 'doc', 't', $tenantBucket, $collection, $id);
+        }
+
+        return $this->key($prefix, 'doc', $collection, $id);
+    }
+
+    /**
+     * Build the doc-id SET key for `$collection`, tenant-scoping it under
+     * shared tables so each tenant's index set is isolated. Off shared tables
+     * this matches the legacy layout (`{ns}:idx:{col}`).
+     */
+    private function idxKey(string $collection): string
+    {
+        $bucket = $this->tenantBucket();
+        if ($bucket !== null) {
+            return $this->key($this->ns(), 'idx', 't', $bucket, $collection);
+        }
+
+        return $this->key($this->ns(), 'idx', $collection);
+    }
+
+    /**
+     * Variant of `idxKey()` for explicit namespace/database/tenant. See
+     * `docKeyFor()` for the cross-database cleanup rationale.
+     */
+    private function idxKeyFor(string $namespace, string $database, ?string $tenantBucket, string $collection): string
+    {
+        $prefix = $this->nsFor($namespace, $database);
+        if ($tenantBucket !== null) {
+            return $this->key($prefix, 'idx', 't', $tenantBucket, $collection);
+        }
+
+        return $this->key($prefix, 'idx', $collection);
     }
 
     /**
@@ -1433,6 +1495,16 @@ class Redis extends Adapter
             $id = $this->filter($newKey);
         }
 
+        // Redis stores documents as JSON blobs, so a smaller declared
+        // string size silently accepts oversized values. Mirror MariaDB
+        // by scanning every stored row for the column and raising
+        // TruncateException when any value would no longer fit. Skipped
+        // for arrays — the per-element size budget is enforced by the
+        // structure validator at write time.
+        if ($type === Database::VAR_STRING && $size > 0 && ! $array) {
+            $this->enforceAttributeSize($collection, $id, $size);
+        }
+
         $this->tx(function (RedisClient $client) use ($metaKey, $id, $type, $size, $signed, $array, $required): void {
             $attrs = $this->readAttributesField($client, $metaKey);
             $attrs = $this->upsertAttributeRecord($attrs, [
@@ -1452,6 +1524,49 @@ class Redis extends Adapter
         });
 
         return true;
+    }
+
+    /**
+     * Scan every stored document in `$collection` for `$attribute` values whose
+     * byte length exceeds `$size`. Throws TruncateException on the first
+     * oversized value so `updateAttribute` rejects shrink requests that would
+     * silently corrupt data, matching MariaDB/SQLite's behaviour.
+     */
+    private function enforceAttributeSize(string $collection, string $attribute, int $size): void
+    {
+        $idxKey = $this->key($this->ns(), 'idx', $collection);
+        /** @var array<int, string>|false $docIds */
+        $docIds = $this->client->sMembers($idxKey);
+        if (! \is_array($docIds) || $docIds === []) {
+            return;
+        }
+
+        $docKeys = [];
+        foreach ($docIds as $docId) {
+            $docKeys[] = $this->key($this->ns(), 'doc', $collection, (string) $docId);
+        }
+
+        /** @var array<int, mixed> $payloads */
+        $payloads = $this->client->mGet($docKeys);
+        $sharedTables = $this->getSharedTables();
+        $tenant = $sharedTables ? $this->getTenant() : null;
+
+        foreach ($payloads as $payload) {
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $document = $this->decode($payload);
+            if ($sharedTables && $document->getAttribute('$tenant') !== $tenant) {
+                continue;
+            }
+            $value = $this->resolveDocumentAttribute($document, $attribute);
+            if (! \is_string($value)) {
+                continue;
+            }
+            if (\strlen($value) > $size) {
+                throw new TruncateException("Attribute '{$attribute}' has values exceeding new size {$size}");
+            }
+        }
     }
 
     public function deleteAttribute(string $collection, string $id): bool
@@ -1480,6 +1595,12 @@ class Redis extends Adapter
                 \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             );
         });
+
+        // Redis documents are stored as JSON blobs (no DDL drops the column),
+        // so the dropped attribute's value would survive on every existing
+        // row and re-surface on the next read. Mirror MariaDB's column drop
+        // by scrubbing the field from every stored document.
+        $this->dropDocumentField($collection, $id);
 
         return true;
     }
@@ -1517,6 +1638,11 @@ class Redis extends Adapter
                 \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             );
         });
+
+        // Redis documents are stored as JSON blobs, so renaming the schema
+        // entry alone leaves the old key in every existing row. Migrate the
+        // stored payloads to match what reads expect under the new key.
+        $this->renameDocumentField($collection, $old, $new);
 
         return true;
     }

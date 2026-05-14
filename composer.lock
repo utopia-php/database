@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a89678a703f615d8536691eff63964a6",
+    "content-hash": "170abbbd0377636490cad3b645887048",
     "packages": [
         {
             "name": "brick/math",
@@ -2237,6 +2237,55 @@
                 "source": "https://github.com/utopia-php/pools/tree/1.0.3"
             },
             "time": "2026-02-26T08:42:40+00:00"
+        },
+        {
+            "name": "utopia-php/query",
+            "version": "0.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/query.git",
+                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/ca96081596aef2457aee6d653966a8f6a85f6f8c",
+                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.4"
+            },
+            "require-dev": {
+                "brianium/paratest": "*",
+                "laravel/pint": "*",
+                "mongodb/mongodb": "^2.0",
+                "phpstan/phpstan": "*",
+                "phpunit/phpcov": "*",
+                "phpunit/phpunit": "^12.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Query\\": "src/Query"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "A simple library providing a query abstraction for filtering, ordering, and pagination",
+            "keywords": [
+                "framework",
+                "php",
+                "query",
+                "upf",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/query/issues",
+                "source": "https://github.com/utopia-php/query/tree/0.2.0"
+            },
+            "time": "2026-04-23T10:57:49+00:00"
         },
         {
             "name": "utopia-php/telemetry",

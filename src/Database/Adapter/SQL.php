@@ -1943,14 +1943,17 @@ abstract class SQL extends Adapter
 
         $outerAlias = $this->quote($alias);
         $permsTable = $this->getSQLTable($collection . '_perms');
-        $tenantClause = $this->getTenantQuery($collection, 'perms');
+        // Leading-underscore sentinel to avoid collisions with caller-provided aliases
+        $innerAlias = '_perms_inner';
+        $innerAliasQuoted = $this->quote($innerAlias);
+        $tenantClause = $this->getTenantQuery($collection, $innerAlias);
 
         return "EXISTS (
             SELECT 1
-            FROM {$permsTable} AS perms
-            WHERE perms._document = {$outerAlias}._uid
-              AND perms._permission IN ({$roles})
-              AND perms._type = '{$type}'
+            FROM {$permsTable} AS {$innerAliasQuoted}
+            WHERE {$innerAliasQuoted}._document = {$outerAlias}._uid
+              AND {$innerAliasQuoted}._permission IN ({$roles})
+              AND {$innerAliasQuoted}._type = '{$type}'
               {$tenantClause}
         )";
     }

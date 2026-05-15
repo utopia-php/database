@@ -398,6 +398,18 @@ class Database
      */
     protected ?array $silentListeners = [];
 
+    /**
+     * In-process cache of collection metadata, keyed by
+     * "database:namespace:tenant:collectionId". Stores the raw array form so
+     * callers always get a fresh Document and cannot corrupt the cache.
+     * Invalidated via the EVENT_DOCUMENT_PURGE listener registered in the
+     * constructor, and fully cleared on context changes (setNamespace,
+     * setDatabase, setSharedTables, setTenant, delete).
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    protected array $collectionCache = [];
+
     protected ?\DateTime $timestamp = null;
 
     protected bool $resolveRelationships = true;
@@ -701,6 +713,21 @@ class Database
                 return is_array($decoded) ? $decoded : $value;
             }
         );
+
+        // Keep the in-process collection cache in sync with the existing
+        // EVENT_DOCUMENT_PURGE plumbing. Every metadata mutation already
+        // fires this event with $collection=METADATA; cross-region purges
+        // (cloud) also flow through here, so this listener stays correct
+        // without changes to consumers.
+        $this->on(
+            self::EVENT_DOCUMENT_PURGE,
+            'collection-cache-invalidator',
+            function (string $event, Document $payload): void {
+                if ($payload->getCollection() === self::METADATA) {
+                    $this->invalidateCollectionCache($payload->getId());
+                }
+            }
+        );
     }
 
     /**
@@ -930,6 +957,7 @@ class Database
     public function setNamespace(string $namespace): static
     {
         $this->adapter->setNamespace($namespace);
+        $this->clearCollectionCache();
 
         return $this;
     }
@@ -969,6 +997,7 @@ class Database
     public function setDatabase(string $name): static
     {
         $this->adapter->setDatabase($name);
+        $this->clearCollectionCache();
 
         return $this;
     }
@@ -1253,6 +1282,7 @@ class Database
     public function setSharedTables(bool $sharedTables): static
     {
         $this->adapter->setSharedTables($sharedTables);
+        $this->clearCollectionCache();
 
         return $this;
     }
@@ -1268,6 +1298,7 @@ class Database
     public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
+        $this->clearCollectionCache();
 
         return $this;
     }
@@ -1664,6 +1695,7 @@ class Database
         }
 
         $this->cache->flush();
+        $this->clearCollectionCache();
 
         return $deleted;
     }
@@ -1923,6 +1955,11 @@ class Database
     /**
      * Get Collection
      *
+     * Reads collection metadata. Cached in-process per (database, namespace,
+     * tenant, id) tuple to avoid redundant Redis lookups on hot paths like
+     * find()/cascade — a single request often touches the same collection
+     * 20-50× via relationship resolution and internal helpers.
+     *
      * @param string $id
      *
      * @return Document
@@ -1930,7 +1967,20 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $cacheKey = $this->collectionCacheKey($id);
+
+        if (isset($this->collectionCache[$cacheKey])) {
+            // Rebuild a fresh Document on every hit so callers can mutate the
+            // returned collection (setAttribute on attributes/indexes, etc.)
+            // without poisoning the cache.
+            $collection = new Document($this->collectionCache[$cacheKey]);
+        } else {
+            $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+            if (!$collection->isEmpty()) {
+                $this->collectionCache[$cacheKey] = $this->arrayifyDocuments($collection->getArrayCopy());
+            }
+        }
 
         if (
             $id !== self::METADATA
@@ -1948,6 +1998,65 @@ class Database
         }
 
         return $collection;
+    }
+
+    /**
+     * Build the per-instance cache key for a collection id.
+     *
+     * @param string $id
+     * @return string
+     */
+    private function collectionCacheKey(string $id): string
+    {
+        return $this->adapter->getDatabase()
+            . ':' . $this->adapter->getNamespace()
+            . ':' . ($this->adapter->getTenant() ?? '')
+            . ':' . $id;
+    }
+
+    /**
+     * Drop a single collection from the in-process cache.
+     * Invoked by the EVENT_DOCUMENT_PURGE listener registered in __construct.
+     *
+     * @param string $id
+     * @return void
+     */
+    private function invalidateCollectionCache(string $id): void
+    {
+        unset($this->collectionCache[$this->collectionCacheKey($id)]);
+    }
+
+    /**
+     * Wipe the in-process cache entirely. Called from context-changing
+     * setters (namespace/database/sharedTables/tenant) since those alter the
+     * cache key shape, and from delete() since the underlying data is gone.
+     *
+     * @return void
+     */
+    private function clearCollectionCache(): void
+    {
+        $this->collectionCache = [];
+    }
+
+    /**
+     * Recursively convert nested Document instances to plain arrays so the
+     * cache stores fully isolated data. A caller mutating the returned
+     * Document (or any nested attribute/index Document) cannot reach back
+     * into the cache.
+     *
+     * @param array<string, mixed> $arr
+     * @return array<string, mixed>
+     */
+    private function arrayifyDocuments(array $arr): array
+    {
+        foreach ($arr as $k => $v) {
+            if ($v instanceof Document) {
+                $arr[$k] = $this->arrayifyDocuments($v->getArrayCopy());
+            } elseif (\is_array($v)) {
+                $arr[$k] = $this->arrayifyDocuments($v);
+            }
+        }
+        return $arr;
     }
 
     /**

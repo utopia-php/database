@@ -1914,6 +1914,9 @@ abstract class SQL extends Adapter
     /**
      * Get SQL condition for permissions
      *
+     * Uses correlated EXISTS so the planner can short-circuit at the first matching
+     * _perms row per outer document, instead of materializing IN (subquery).
+     *
      * @param string $collection
      * @param array<string> $roles
      * @param string $alias
@@ -1931,15 +1934,27 @@ abstract class SQL extends Adapter
             throw new DatabaseException('Unknown permission type: ' . $type);
         }
 
+        if (empty($roles)) {
+            return '1 = 0';
+        }
+
         $roles = \array_map(fn ($role) => $this->getPDO()->quote($role), $roles);
         $roles = \implode(', ', $roles);
 
-        return "{$this->quote($alias)}.{$this->quote('_uid')} IN (
-            SELECT _document
-            FROM {$this->getSQLTable($collection . '_perms')}
-            WHERE _permission IN ({$roles})
-              AND _type = '{$type}'
-              {$this->getTenantQuery($collection)}
+        $outerAlias = $this->quote($alias);
+        $permsTable = $this->getSQLTable($collection . '_perms');
+        // Leading-underscore sentinel to avoid collisions with caller-provided aliases
+        $innerAlias = '_perms_inner';
+        $innerAliasQuoted = $this->quote($innerAlias);
+        $tenantClause = $this->getTenantQuery($collection, $innerAlias);
+
+        return "EXISTS (
+            SELECT 1
+            FROM {$permsTable} AS {$innerAliasQuoted}
+            WHERE {$innerAliasQuoted}._document = {$outerAlias}._uid
+              AND {$innerAliasQuoted}._permission IN ({$roles})
+              AND {$innerAliasQuoted}._type = '{$type}'
+              {$tenantClause}
         )";
     }
 

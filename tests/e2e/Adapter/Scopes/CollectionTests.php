@@ -1685,7 +1685,8 @@ trait CollectionTests
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
-        if (!$database->getAdapter() instanceof SQL) {
+
+        if ($database->getAdapter() instanceof SQL) {
             $this->assertStringContainsString('/* scope: api.users */', $capturedSql);
         }
 

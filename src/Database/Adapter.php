@@ -41,6 +41,34 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
+     * Captured query plans while inside Database::withExplain().
+     * - null = capture disabled (the normal mode; reads pay nothing extra)
+     * - array = capture enabled; each entry is one explained read
+     *
+     * Mirrors the preserveDates / validate / resolveRelationships scoped-flag
+     * pattern: a single inline null-check on hot paths, opt-in only via the
+     * matching with*() method on Database.
+     *
+     * @var ?array<int, array<string, mixed>>
+     */
+    protected ?array $explainBuffer = null;
+
+    /**
+     * Maps internal column names back to user-facing names in plan output.
+     * Single source of truth for the rename — same shape used by find()'s
+     * result post-processing in the SQL/Mongo adapters.
+     *
+     * @var array<string, string>
+     */
+    protected const EXPLAIN_COLUMN_RENAMES = [
+        '_uid'         => '$id',
+        '_createdAt'   => '$createdAt',
+        '_updatedAt'   => '$updatedAt',
+        '_permissions' => '$permissions',
+        '_tenant'      => '$tenant',
+    ];
+
+    /**
      * @var array<string, array<callable>>
      */
     protected array $transformations = [
@@ -103,6 +131,135 @@ abstract class Adapter
 
         return $this;
     }
+
+    /**
+     * Begin capturing query plans for subsequent reads on this adapter.
+     *
+     * Pairs with stopExplainCapture(). Called by Database::withExplain() to
+     * open the scope; not intended for direct caller use.
+     */
+    public function startExplainCapture(): void
+    {
+        $this->explainBuffer = [];
+    }
+
+    /**
+     * Stop capturing and return the buffered query plans, clearing the buffer.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function stopExplainCapture(): array
+    {
+        $captured = $this->explainBuffer ?? [];
+        $this->explainBuffer = null;
+        return $captured;
+    }
+
+    /**
+     * True while inside an active capture scope.
+     */
+    public function isExplainCapturing(): bool
+    {
+        return $this->explainBuffer !== null;
+    }
+
+    /**
+     * Adapter-internal hook: when a read is about to execute and capture is
+     * active, run vendor-native EXPLAIN against the same SQL+binds, sanitize
+     * the result (hiding internal _perms / _metadata references and renaming
+     * internal columns), and append to the buffer.
+     *
+     * Hot paths invoke this only after an inline `$this->explainBuffer !== null`
+     * check, so when capture is disabled there is no method-call cost.
+     *
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @param string $purpose 'find' | 'count' | 'sum' | adapter-defined
+     * @param array<string, mixed> $context optional metadata (collection id, relation key, etc.)
+     */
+    protected function capturePlan(string $sql, array $binds = [], string $purpose = 'find', array $context = []): void
+    {
+        try {
+            $plan = $this->explainSQL($sql, $binds);
+            $plan = $this->sanitizePlan($plan);
+        } catch (\Throwable $e) {
+            $plan = ['error' => $e->getMessage()];
+        }
+
+        $this->explainBuffer[] = [
+            'purpose' => $purpose,
+            'context' => $context,
+            'plan'    => $plan,
+        ];
+    }
+
+    /**
+     * Strip Appwrite-internal storage details from a raw vendor plan before
+     * surfacing it to callers:
+     *  - Tables ending in `_perms` are summarized as "<permissionCheck>"
+     *  - The `__metadata` system table is summarized as "<metadata>"
+     *  - Internal column names (_uid, _createdAt, ...) are renamed to their
+     *    user-facing form ($id, $createdAt, ...)
+     *
+     * Walks any nested array/object structure recursively; safe for arbitrary
+     * vendor-specific plan shapes.
+     *
+     * @param array<int|string, mixed> $plan
+     * @return array<int|string, mixed>
+     */
+    protected function sanitizePlan(array $plan): array
+    {
+        return $this->sanitizePlanNode($plan);
+    }
+
+    /**
+     * @param mixed $node
+     * @return mixed
+     */
+    private function sanitizePlanNode(mixed $node): mixed
+    {
+        if (\is_array($node)) {
+            $result = [];
+            foreach ($node as $key => $value) {
+                $newKey = \is_string($key) ? $this->renameInternalIdentifier($key) : $key;
+                $result[$newKey] = $this->sanitizePlanNode($value);
+            }
+            return $result;
+        }
+
+        if (\is_string($node)) {
+            return $this->renameInternalIdentifier($node);
+        }
+
+        return $node;
+    }
+
+    /**
+     * Apply the public-facing rename to a single identifier string.
+     * Conservatively matches table suffixes (`_perms`, `__metadata`) and exact
+     * internal column names from EXPLAIN_COLUMN_RENAMES.
+     */
+    private function renameInternalIdentifier(string $name): string
+    {
+        if (\str_ends_with($name, '__metadata')) {
+            return '<metadata>';
+        }
+        if (\str_ends_with($name, '_perms')) {
+            return '<permissionCheck>';
+        }
+        return self::EXPLAIN_COLUMN_RENAMES[$name] ?? $name;
+    }
+
+    /**
+     * Vendor-specific EXPLAIN implementation. Receives the SQL + bindings that
+     * would otherwise be executed; must return the raw (unsanitized) plan as
+     * an associative array. Sanitization is applied centrally by capturePlan().
+     *
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    abstract protected function explainSQL(string $sql, array $binds = []): array;
 
     /**
      * Set Namespace.

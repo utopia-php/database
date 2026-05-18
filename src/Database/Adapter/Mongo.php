@@ -3592,6 +3592,27 @@ class Mongo extends Adapter
         return [];
     }
 
+    /**
+     * Mongo doesn't speak SQL — its "plan" comes from `$cursor->explain()` /
+     * aggregation `executionStats` against a built command document, not a
+     * SQL string. Satisfying the abstract contract with a stub here keeps the
+     * adapter loadable; real Mongo capture will be wired in a follow-up that
+     * hooks `find()`/`count()`/`sum()` to call the driver-native explain on
+     * the cursor before executing it.
+     *
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        return [
+            'engine' => 'mongo',
+            'tree'   => null,
+            'note'   => 'Mongo explain capture is not yet implemented; use cursor->explain() at the find() level',
+        ];
+    }
+
     protected function processException(\Throwable $e): \Throwable
     {
         // Timeout

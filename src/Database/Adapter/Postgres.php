@@ -1579,6 +1579,59 @@ class Postgres extends SQL
     }
 
     /**
+     * Postgres equivalent of the MySQL EXPLAIN FORMAT=JSON override in SQL.
+     * Uses the `EXPLAIN (FORMAT JSON)` form (parenthesized options) and
+     * extracts `Plan Rows` / `Index Name` / `Total Cost` from the top-level
+     * Plan node so the headline fields line up with the MySQL adapter.
+     *
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        $explainSql = 'EXPLAIN (FORMAT JSON) ' . \ltrim($sql);
+
+        $stmt = $this->getPDO()->prepare($explainSql);
+
+        foreach ($binds as $key => $value) {
+            if (\gettype($value) === 'double') {
+                $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+            } else {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+        }
+
+        $stmt->execute();
+        $raw = $stmt->fetchColumn();
+        $stmt->closeCursor();
+
+        $decoded = \is_string($raw) ? \json_decode($raw, true) : null;
+        // Postgres wraps the plan in a one-element array.
+        $tree = (\is_array($decoded) && isset($decoded[0]) && \is_array($decoded[0]))
+            ? $decoded[0]
+            : null;
+
+        $rootPlan = (\is_array($tree) && isset($tree['Plan']) && \is_array($tree['Plan']))
+            ? $tree['Plan']
+            : null;
+
+        return [
+            'engine'        => 'sql',
+            'rowsScanned'   => (\is_array($rootPlan) && isset($rootPlan['Plan Rows']) && \is_numeric($rootPlan['Plan Rows']))
+                ? (int) $rootPlan['Plan Rows']
+                : null,
+            'indexUsed'     => (\is_array($rootPlan) && isset($rootPlan['Index Name']) && \is_string($rootPlan['Index Name']))
+                ? $rootPlan['Index Name']
+                : null,
+            'estimatedCost' => (\is_array($rootPlan) && isset($rootPlan['Total Cost']) && \is_numeric($rootPlan['Total Cost']))
+                ? (float) $rootPlan['Total Cost']
+                : null,
+            'tree'          => $tree,
+        ];
+    }
+
+    /**
      * Handle distance spatial queries
      *
      * @param Query $query

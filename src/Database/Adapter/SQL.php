@@ -394,6 +394,8 @@ abstract class SQL extends Adapter
             $sql .= " {$forUpdate}";
         }
 
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_READ, $sql);
+
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);

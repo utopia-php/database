@@ -1671,7 +1671,7 @@ trait CollectionTests
         ]));
 
         $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return "SELECT 1";
+            return "SELECT * FROM ({$query}) AS sub_q WHERE 1 = 0";
         });
 
         try {

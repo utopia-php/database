@@ -2527,21 +2527,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Run vendor-native EXPLAIN against the given SQL + bindings and return
-     * the parsed plan. Uses `EXPLAIN FORMAT=JSON` (not `EXPLAIN ANALYZE`) so
-     * the query is planned but not actually executed — bounded cost even on
-     * expensive reads. Subclasses can override (e.g. Postgres needs
-     * `EXPLAIN (FORMAT JSON) ...`).
-     *
-     * Extracts the three numbers consumers care about most up front
-     * (rowsScanned / indexUsed / estimatedCost) so callers don't have to walk
-     * the vendor JSON themselves. The full tree is preserved under `tree` for
-     * deep-dive debugging.
-     *
-     * Sanitization (hiding `_perms`/`_metadata`, renaming `_uid → $id`, ...)
-     * is applied centrally in Adapter::capturePlan(); this method returns the
-     * raw vendor output.
-     *
      * @param string $sql
      * @param array<string, mixed> $binds
      * @return array<string, mixed>
@@ -2577,11 +2562,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Sum `rows_examined_per_scan` across every table node in an EXPLAIN tree.
-     * Walks `nested_loop`, `attached_subqueries`, `materialized_from_subquery`,
-     * etc. transparently — anything with a `table.rows_examined_per_scan` adds
-     * to the total. Returns null if no table nodes are found.
-     *
      * @param array<string, mixed>|null $tree
      */
     private function extractRowsScanned(?array $tree): ?int
@@ -2599,11 +2579,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Return the `key` (index name) of the OUTER table — the one driving the
-     * query. Inner tables (permission subquery, joins) are intentionally
-     * ignored so the headline answers the customer's "did MY index get used"
-     * question, not "did some internal index get used".
-     *
      * @param array<string, mixed>|null $tree
      */
     private function extractIndexUsed(?array $tree): ?string
@@ -2612,6 +2587,7 @@ abstract class SQL extends Adapter
             return null;
         }
         $found = null;
+        // Only the outer table — inner permission subquery indexes are not user-facing.
         $this->walkExplainTables($tree, function (array $table) use (&$found) {
             if ($found === null && isset($table['key']) && \is_string($table['key'])) {
                 $found = $table['key'];
@@ -2621,10 +2597,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Pull `cost_info.query_cost` from the top of the plan. MySQL's "cost" is
-     * an opaque unit, not milliseconds — surfaced as-is for callers that want
-     * a single relative number.
-     *
      * @param array<string, mixed>|null $tree
      */
     private function extractEstimatedCost(?array $tree): ?float
@@ -2637,13 +2609,9 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Depth-first walk of an EXPLAIN JSON tree, invoking $visitor for every
-     * `table` node encountered. Handles MySQL's nested_loop arrays and the
-     * various subquery wrapper shapes generically.
-     *
      * @param array<int|string, mixed> $node
      * @param callable(array<string, mixed>): void $visitor
-     * @param int|null $depthLimit  stop descending past this depth (null = unlimited)
+     * @param int|null $depthLimit
      * @param int $depth
      */
     private function walkExplainTables(array $node, callable $visitor, ?int $depthLimit = null, int $depth = 0): void
@@ -3385,10 +3353,6 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-        // Hot-path check matches the codebase's preserveDates / validate
-        // convention: single property comparison, zero overhead when capture
-        // is disabled. capturePlan() runs vendor EXPLAIN + sanitization only
-        // when called from inside Database::withExplain().
         if ($this->explainBuffer !== null) {
             $this->capturePlan($sql, $binds, 'find', ['collection' => $collection]);
         }

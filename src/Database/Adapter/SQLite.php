@@ -89,6 +89,38 @@ class SQLite extends MariaDB
     }
 
     /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        $explainSql = 'EXPLAIN QUERY PLAN ' . \ltrim($sql);
+
+        $stmt = $this->getPDO()->prepare($explainSql);
+
+        foreach ($binds as $key => $value) {
+            if (\gettype($value) === 'double') {
+                $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+            } else {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+        }
+
+        $stmt->execute();
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+
+        return [
+            'engine'        => 'sql',
+            'rowsScanned'   => null,
+            'indexUsed'     => null,
+            'estimatedCost' => null,
+            'tree'          => ['steps' => \is_array($rows) ? $rows : []],
+        ];
+    }
+
+    /**
      * Toggle MariaDB/MySQL emulation. See $emulateMySQL for what this
      * actually changes.
      */

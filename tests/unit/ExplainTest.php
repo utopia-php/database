@@ -9,21 +9,12 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
-/**
- * Tests for the in-process query-plan capture scope (Database::withExplain)
- * and the Adapter-level sanitizer that strips internal storage details.
- *
- * Covers behavior — not specific vendor plan parsing (that lives in
- * SQL::explainSQL / Mongo::explainSQL and is exercised by the e2e adapter
- * tests against real backends).
- */
 class ExplainTest extends TestCase
 {
     public function testWithExplainTogglesCaptureAndWrapsResult(): void
     {
         $adapter = $this->createMock(Adapter::class);
 
-        // start must be called once before the callback, stop once after.
         $adapter->expects($this->once())->method('startExplainCapture');
         $adapter
             ->expects($this->once())
@@ -49,7 +40,7 @@ class ExplainTest extends TestCase
             $callbackRan = true;
         });
 
-        $this->assertTrue($callbackRan, 'callback must run inside the capture scope');
+        $this->assertTrue($callbackRan);
         $this->assertInstanceOf(Document::class, $result);
 
         $entries = $result->getAttribute('queries');
@@ -64,7 +55,6 @@ class ExplainTest extends TestCase
     {
         $adapter = $this->createMock(Adapter::class);
 
-        // The point: stop must run via finally even on exception.
         $adapter->expects($this->once())->method('startExplainCapture');
         $adapter->expects($this->once())->method('stopExplainCapture')->willReturn([]);
 
@@ -78,8 +68,6 @@ class ExplainTest extends TestCase
 
     public function testSanitizePlanHidesInternalTablesAndRenamesColumns(): void
     {
-        // The sanitizer is a protected method on Adapter; use a mock + reflection
-        // so we don't have to satisfy the (huge) abstract surface manually.
         $adapter = $this->createMock(Adapter::class);
         $sanitize = (new \ReflectionMethod(Adapter::class, 'sanitizePlan'))
             ->getClosure($adapter);
@@ -95,17 +83,14 @@ class ExplainTest extends TestCase
             ],
         ]);
 
-        // Internal companion tables redacted to opaque markers.
         $this->assertSame('<permissionCheck>', $sanitized['table_name']);
         $this->assertSame('<metadata>', $sanitized['meta_table']);
         $this->assertSame('<metadata>', $sanitized['nested']['inner_table']);
 
-        // Internal column names translated to user-facing form.
         $this->assertSame(['$id', '$createdAt', '$updatedAt', '$permissions', 'title'], $sanitized['projection']);
         $this->assertSame('$tenant', $sanitized['tenant_col']);
 
-        // _id intentionally NOT renamed — it's MySQL's auto-increment column reused
-        // throughout EXPLAIN output; translating it would muddle the plan.
+        // _id is MySQL's auto-increment column; not renamed.
         $this->assertSame(['$id', '_id'], $sanitized['nested']['cols']);
     }
 }

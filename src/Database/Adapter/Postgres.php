@@ -1579,11 +1579,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Postgres equivalent of the MySQL EXPLAIN FORMAT=JSON override in SQL.
-     * Uses the `EXPLAIN (FORMAT JSON)` form (parenthesized options) and
-     * extracts `Plan Rows` / `Index Name` / `Total Cost` from the top-level
-     * Plan node so the headline fields line up with the MySQL adapter.
-     *
      * @param string $sql
      * @param array<string, mixed> $binds
      * @return array<string, mixed>

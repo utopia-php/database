@@ -10,16 +10,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
-/**
- * Integration tests for Database::withExplain() against real backends.
- *
- * Verifies the full path: write-path hook fires inside Adapter::find(),
- * adapter runs vendor-native EXPLAIN, the parsed plan flows back through
- * the buffer, and the sanitizer strips internal storage references.
- *
- * Mongo skips itself — explain capture is stubbed there pending real
- * cursor->explain() integration.
- */
 trait ExplainTests
 {
     public function testWithExplainCapturesPlanForFind(): void
@@ -55,7 +45,6 @@ trait ExplainTests
             'status' => 'draft',
         ]));
 
-        // The actual capture: wrap a real find() in withExplain.
         $plan = $database->withExplain(fn () => $database->find($collection, [
             Query::equal('status', ['published']),
             Query::limit(10),
@@ -65,7 +54,7 @@ trait ExplainTests
 
         $entries = $plan->getAttribute('queries');
         $this->assertIsArray($entries);
-        $this->assertNotEmpty($entries, 'find() should produce at least one captured plan entry');
+        $this->assertNotEmpty($entries);
 
         $entry = $entries[0];
         $this->assertSame('find', $entry['purpose']);
@@ -76,20 +65,15 @@ trait ExplainTests
         $this->assertArrayHasKey('plan', $entry);
         $this->assertSame('sql', $entry['plan']['engine']);
         $this->assertArrayHasKey('tree', $entry['plan']);
-        $this->assertNotNull($entry['plan']['tree'], 'EXPLAIN FORMAT=JSON tree must be parsed');
+        $this->assertNotNull($entry['plan']['tree']);
 
-        // The extracted top-level fields should appear even if some are null
-        // (e.g. when there's no usable index).
         $this->assertArrayHasKey('rowsScanned', $entry['plan']);
         $this->assertArrayHasKey('indexUsed', $entry['plan']);
         $this->assertArrayHasKey('estimatedCost', $entry['plan']);
 
-        // Sanitizer must have hidden the internal permission table reference
-        // (the EXISTS subquery against the _perms shadow table).
         $rawTree = \json_encode($entry['plan']['tree']);
-        $this->assertStringNotContainsString('_perms', $rawTree, 'permission companion table must be redacted');
+        $this->assertStringNotContainsString('_perms', $rawTree);
 
-        // Cleanup.
         $database->deleteCollection($collection);
     }
 
@@ -102,15 +86,12 @@ trait ExplainTests
             $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
         }
 
-        // Outside the scope: no capture, no overhead.
         $this->assertFalse($database->getAdapter()->isExplainCapturing());
 
         $database->withExplain(function () use ($database) {
             $this->assertTrue($database->getAdapter()->isExplainCapturing());
-            // Don't even need to run a query — just verify the flag toggles.
         });
 
-        // After: cleanly reset.
         $this->assertFalse($database->getAdapter()->isExplainCapturing());
     }
 
@@ -129,12 +110,8 @@ trait ExplainTests
             });
             $this->fail('Expected RuntimeException to propagate');
         } catch (\RuntimeException) {
-            // expected
         }
 
-        $this->assertFalse(
-            $database->getAdapter()->isExplainCapturing(),
-            'capture buffer must be cleared even when callback throws',
-        );
+        $this->assertFalse($database->getAdapter()->isExplainCapturing());
     }
 }

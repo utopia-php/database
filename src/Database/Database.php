@@ -1455,32 +1455,6 @@ class Database
     }
 
     /**
-     * Capture vendor-native query plans for every read issued inside the callback.
-     *
-     * Appwrite resolves relationships by issuing additional `find()` calls per
-     * relation (not via SQL JOINs or Mongo `$lookup`), so a single user-level
-     * list-with-relationships expands into N separate reads against different
-     * collections. This method captures the plan for every one of those reads
-     * — without rebuilding any SQL — by toggling a per-adapter capture flag
-     * for the duration of the callback. Hot reads outside the callback pay a
-     * single null-check; reads inside additionally run EXPLAIN once each.
-     *
-     * Internal storage details (the `_perms` companion table, the `_metadata`
-     * system table, internal column names like `_uid`) are stripped from the
-     * plan before returning, so the output only references user-facing
-     * collection ids and `$`-prefixed attribute names.
-     *
-     * Returned Document shape:
-     *   {
-     *     queries: [
-     *       { purpose: 'find'|'count'|..., context: { collection, ... }, plan: { engine, tree, ... } },
-     *       ... one entry per executed read
-     *     ]
-     *   }
-     *
-     * Usage:
-     *   $plan = $database->withExplain(fn () => $database->find('movies', $queries));
-     *
      * @param callable $callback
      * @return Document
      * @throws \Throwable

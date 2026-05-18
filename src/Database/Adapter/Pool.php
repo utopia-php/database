@@ -71,12 +71,27 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            if ($this->skipDuplicates) {
-                return $adapter->skipDuplicates(
-                    fn () => $adapter->{$method}(...$args)
-                );
+            // Propagate withExplain scope to whichever inner adapter handles
+            // this call and aggregate its captures back into the pool buffer.
+            $capturing = $this->isExplainCapturing();
+            if ($capturing) {
+                $adapter->startExplainCapture();
             }
-            return $adapter->{$method}(...$args);
+
+            try {
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->{$method}(...$args)
+                    );
+                }
+                return $adapter->{$method}(...$args);
+            } finally {
+                if ($capturing) {
+                    foreach ($adapter->stopExplainCapture() as $entry) {
+                        $this->explainBuffer[] = $entry;
+                    }
+                }
+            }
         });
     }
 
@@ -321,6 +336,17 @@ class Pool extends Adapter
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        // Explain runs on the inner adapter via delegate(), not on the pool itself.
+        throw new DatabaseException('Pool::explainSQL must not be invoked directly');
     }
 
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int

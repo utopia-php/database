@@ -1674,9 +1674,13 @@ trait CollectionTests
             return "SELECT 1";
         });
 
-        $result = $database->getDocument('docs', 'doc1');
+        try {
+            $result = $database->getDocument('docs', 'doc1');
 
-        $this->assertTrue($result->isEmpty());
+            $this->assertTrue($result->isEmpty());
+        } finally {
+            $database->getAdapter()->before(Database::EVENT_DOCUMENT_READ, 'test', null);
+        }
     }
 
     public function testSetGlobalCollection(): void

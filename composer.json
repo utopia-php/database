@@ -40,7 +40,7 @@
         "ext-redis": "*",
         "utopia-php/validators": "0.2.*",
         "utopia-php/console": "0.1.*",
-        "utopia-php/cache": "^2.0",
+        "utopia-php/cache": "^3.0",
         "utopia-php/pools": "1.*",
         "utopia-php/mongo": "1.*"
     },

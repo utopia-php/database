@@ -2571,8 +2571,10 @@ abstract class SQL extends Adapter
         }
         $total = null;
         $this->walkExplainTables($tree, function (array $table) use (&$total) {
-            if (isset($table['rows_examined_per_scan']) && \is_numeric($table['rows_examined_per_scan'])) {
-                $total = ($total ?? 0) + (int) $table['rows_examined_per_scan'];
+            // MySQL exposes 'rows_examined_per_scan', MariaDB exposes 'rows'.
+            $rows = $table['rows_examined_per_scan'] ?? $table['rows'] ?? null;
+            if (\is_numeric($rows)) {
+                $total = ($total ?? 0) + (int) $rows;
             }
         });
         return $total;

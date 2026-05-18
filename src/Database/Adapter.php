@@ -197,7 +197,19 @@ abstract class Adapter
         if (\str_ends_with($name, '_perms')) {
             return '<permissionCheck>';
         }
-        return self::EXPLAIN_COLUMN_RENAMES[$name] ?? $name;
+        if (isset(self::EXPLAIN_COLUMN_RENAMES[$name])) {
+            return self::EXPLAIN_COLUMN_RENAMES[$name];
+        }
+        // EXPLAIN tree string-values can embed internal identifiers (e.g.
+        // index_condition: "main.`_uid` = '...'"). Substring-rewrite each.
+        if (\str_contains($name, '_')) {
+            foreach (self::EXPLAIN_COLUMN_RENAMES as $internal => $public) {
+                if (\str_contains($name, $internal)) {
+                    $name = \str_replace($internal, $public, $name);
+                }
+            }
+        }
+        return $name;
     }
 
     /**
@@ -208,8 +220,11 @@ abstract class Adapter
     protected function explainSQL(string $sql, array $binds = []): array
     {
         return [
-            'engine' => 'unsupported',
-            'note'   => 'Explain capture is not implemented for ' . static::class,
+            'engine'        => 'unsupported',
+            'rowsScanned'   => null,
+            'indexUsed'     => null,
+            'estimatedCost' => null,
+            'tree'          => null,
         ];
     }
 

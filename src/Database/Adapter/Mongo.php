@@ -3627,11 +3627,117 @@ class Mongo extends Adapter
      */
     protected function explainSQL(string $sql, array $binds = []): array
     {
+        $captured = $sql !== '' ? \json_decode($sql, true) : null;
+
+        // Without a captured command (or invalid JSON) we can't ask Mongo for a plan.
+        if (! \is_array($captured)) {
+            return [
+                'engine'        => 'mongo',
+                'rowsScanned'   => null,
+                'indexUsed'     => null,
+                'estimatedCost' => null,
+                'tree'          => $captured,
+            ];
+        }
+
+        // Capture stores find as { find, filter, options } and aggregate as
+        // { aggregate, pipeline }. Mongo's explain command wants the options
+        // hoisted to top level, and aggregate needs a cursor field.
+        $command = $captured;
+        if (isset($command['options']) && \is_array($command['options'])) {
+            $command = \array_merge($command, $command['options']);
+            unset($command['options']);
+        }
+        // Mongo's explain rejects `filter: []`; coerce to an empty object.
+        if (isset($command['filter']) && \is_array($command['filter']) && empty($command['filter'])) {
+            $command['filter'] = (object) [];
+        }
+        if (isset($command['aggregate']) && ! isset($command['cursor'])) {
+            $command['cursor'] = (object) [];
+        }
+
+        $tree = null;
+        $rowsScanned = null;
+        $indexUsed = null;
+        try {
+            $raw = $this->client->query([
+                'explain'   => (object) $command,
+                'verbosity' => 'executionStats',
+            ]);
+            $tree = \json_decode(\json_encode($raw), true);
+            $rowsScanned = $this->extractMongoRowsScanned($tree);
+            $indexUsed   = $this->extractMongoIndexUsed($tree);
+        } catch (\Throwable $e) {
+            // Fall back to the captured command on any explain failure so callers
+            // still see what was attempted.
+            $tree = ['command' => $captured, 'explainError' => $e->getMessage()];
+        }
+
         return [
-            'engine'  => 'mongo',
-            'tree'    => null,
-            'command' => $sql !== '' ? \json_decode($sql, true) : null,
+            'engine'        => 'mongo',
+            'rowsScanned'   => $rowsScanned,
+            'indexUsed'     => $indexUsed,
+            'estimatedCost' => null,
+            'tree'          => $tree,
         ];
+    }
+
+    /**
+     * Walk a Mongo explain executionStats tree and sum totalDocsExamined.
+     *
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractMongoRowsScanned(?array $tree): ?int
+    {
+        if (! \is_array($tree)) {
+            return null;
+        }
+        // find: executionStats.totalDocsExamined
+        $find = $tree['executionStats']['totalDocsExamined'] ?? null;
+        if (\is_numeric($find)) {
+            return (int) $find;
+        }
+        // aggregate: stages[].$cursor.executionStats.totalDocsExamined
+        $total = null;
+        foreach (($tree['stages'] ?? []) as $stage) {
+            $n = $stage['$cursor']['executionStats']['totalDocsExamined'] ?? null;
+            if (\is_numeric($n)) {
+                $total = ($total ?? 0) + (int) $n;
+            }
+        }
+        return $total;
+    }
+
+    /**
+     * Find the winning IXSCAN indexName from a Mongo explain tree.
+     *
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractMongoIndexUsed(?array $tree): ?string
+    {
+        if (! \is_array($tree)) {
+            return null;
+        }
+        $found = null;
+        $walk = function ($node) use (&$walk, &$found): void {
+            if ($found !== null || ! \is_array($node)) {
+                return;
+            }
+            if (($node['stage'] ?? null) === 'IXSCAN' && isset($node['indexName']) && \is_string($node['indexName'])) {
+                $found = $node['indexName'];
+                return;
+            }
+            foreach ($node as $value) {
+                if (\is_array($value)) {
+                    $walk($value);
+                    if ($found !== null) {
+                        return;
+                    }
+                }
+            }
+        };
+        $walk($tree);
+        return $found;
     }
 
     protected function processException(\Throwable $e): \Throwable

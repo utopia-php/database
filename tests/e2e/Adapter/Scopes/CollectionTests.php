@@ -1671,8 +1671,6 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $originalMetadata = $database->getMetadata();
-
         $database->setMetadata('scope', 'api.users');
 
         $capturedSql = '';
@@ -1692,9 +1690,6 @@ trait CollectionTests
 
         $database->before(Database::EVENT_DOCUMENT_READ, 'test', null);
         $database->resetMetadata();
-        foreach ($originalMetadata as $key => $value) {
-            $database->setMetadata($key, $value);
-        }
     }
 
     public function testSetGlobalCollection(): void

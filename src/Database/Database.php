@@ -732,10 +732,10 @@ class Database
      *
      * @param string $event
      * @param string $name
-     * @param callable $callback
+     * @param ?callable $callback
      * @return $this
      */
-    public function before(string $event, string $name, callable $callback): static
+    public function before(string $event, string $name, ?callable $callback): static
     {
         $this->adapter->before($event, $name, $callback);
 

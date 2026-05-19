@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -1670,13 +1671,25 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return "SELECT 1";
+        $database->setMetadata('scope', 'api.users');
+
+        $capturedSql = '';
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $sql) use (&$capturedSql) {
+            $sql .= ' AND 1=0';
+            $capturedSql = $sql;
+            return $sql;
         });
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+
+        if ($database->getAdapter() instanceof SQL) {
+            $this->assertStringContainsString('/* scope: api.users */', $capturedSql);
+        }
+
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', null);
+        $database->resetMetadata();
     }
 
     public function testSetGlobalCollection(): void

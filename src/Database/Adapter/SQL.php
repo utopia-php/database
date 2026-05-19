@@ -3486,7 +3486,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
         if ($this->explainBuffer !== null) {
-            $this->capturePlan($sql, $binds, 'count', ['collection' => $collection->getId()]);
+            // $collection was reassigned to the string id at the top of this method.
+            $this->capturePlan($sql, $binds, 'count', ['collection' => $collection]);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -3585,7 +3586,8 @@ abstract class SQL extends Adapter
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 
         if ($this->explainBuffer !== null) {
-            $this->capturePlan($sql, $binds, 'sum', ['collection' => $collection->getId(), 'attribute' => $attribute]);
+            // $collection was reassigned to the string id at the top of this method.
+            $this->capturePlan($sql, $binds, 'sum', ['collection' => $collection, 'attribute' => $attribute]);
         }
 
         $stmt = $this->getPDO()->prepare($sql);

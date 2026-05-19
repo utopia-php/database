@@ -120,8 +120,16 @@ abstract class Adapter
         return $this;
     }
 
+    /**
+     * @throws DatabaseException when called inside an already-active scope —
+     * the buffer is a single shared array, so silently clobbering the outer
+     * scope would lose every previously-captured entry.
+     */
     public function startExplainCapture(): void
     {
+        if ($this->explainBuffer !== null) {
+            throw new DatabaseException('withExplain cannot be nested — finish the outer scope first.');
+        }
         $this->explainBuffer = [];
     }
 

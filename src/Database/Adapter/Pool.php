@@ -42,16 +42,35 @@ class Pool extends Adapter
      */
     public function delegate(string $method, array $args): mixed
     {
-        if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
-                    fn () => $this->pinnedAdapter->{$method}(...$args)
-                );
+        // Wrap any inner-adapter call so withExplain scope propagates and its
+        // captures aggregate back into the pool buffer — needed for both the
+        // pinned-transaction and pooled paths.
+        $invoke = function (Adapter $adapter) use ($method, $args): mixed {
+            $capturing = $this->isExplainCapturing();
+            if ($capturing) {
+                $adapter->startExplainCapture();
             }
-            return $this->pinnedAdapter->{$method}(...$args);
+            try {
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->{$method}(...$args)
+                    );
+                }
+                return $adapter->{$method}(...$args);
+            } finally {
+                if ($capturing) {
+                    foreach ($adapter->stopExplainCapture() as $entry) {
+                        $this->explainBuffer[] = $entry;
+                    }
+                }
+            }
+        };
+
+        if ($this->pinnedAdapter !== null) {
+            return $invoke($this->pinnedAdapter);
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
+        return $this->pool->use(function (Adapter $adapter) use ($invoke) {
             // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());
@@ -71,27 +90,7 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            // Propagate withExplain scope to whichever inner adapter handles
-            // this call and aggregate its captures back into the pool buffer.
-            $capturing = $this->isExplainCapturing();
-            if ($capturing) {
-                $adapter->startExplainCapture();
-            }
-
-            try {
-                if ($this->skipDuplicates) {
-                    return $adapter->skipDuplicates(
-                        fn () => $adapter->{$method}(...$args)
-                    );
-                }
-                return $adapter->{$method}(...$args);
-            } finally {
-                if ($capturing) {
-                    foreach ($adapter->stopExplainCapture() as $entry) {
-                        $this->explainBuffer[] = $entry;
-                    }
-                }
-            }
+            return $invoke($adapter);
         });
     }
 

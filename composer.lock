@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "348c6dea029d214c59ed871b96fa1e52",
+    "content-hash": "f5fb1745555c5cd00d14474561bf0095",
     "packages": [
         {
             "name": "brick/math",
@@ -2034,23 +2034,23 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "2.0.0",
+            "version": "3.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "ef1d122a464b3469f2a11c7d751214e72b76eee0"
+                "reference": "ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/ef1d122a464b3469f2a11c7d751214e72b76eee0",
-                "reference": "ef1d122a464b3469f2a11c7d751214e72b76eee0",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176",
+                "reference": "ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
                 "ext-memcached": "*",
                 "ext-redis": "*",
-                "php": ">=8.2",
+                "php": ">=8.3",
                 "utopia-php/circuit-breaker": "0.3.*",
                 "utopia-php/pools": "1.*",
                 "utopia-php/telemetry": "*"
@@ -2059,6 +2059,7 @@
                 "laravel/pint": "1.2.*",
                 "phpstan/phpstan": "^1.12",
                 "phpunit/phpunit": "^9.3",
+                "swoole/ide-helper": "^6.0",
                 "vimeo/psalm": "4.13.1"
             },
             "type": "library",
@@ -2081,9 +2082,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/2.0.0"
+                "source": "https://github.com/utopia-php/cache/tree/3.0.0"
             },
-            "time": "2026-05-12T10:55:15+00:00"
+            "time": "2026-05-14T14:13:17+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",

@@ -316,7 +316,8 @@ class Filter extends Base
             return true;
         }
 
-        if (is_array($values[0]) && count($values[0]) === 0) {
+        $firstKey = \array_key_first($values);
+        if (\is_array($values[$firstKey]) && \count($values[$firstKey]) === 0) {
             return true;
         }
 

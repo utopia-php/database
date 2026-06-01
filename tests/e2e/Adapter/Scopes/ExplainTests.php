@@ -81,7 +81,7 @@ trait ExplainTests
         $this->assertSame(1, $entry['plan']['rowsReturned']);
         $this->assertIsFloat($entry['plan']['executionTime']);
 
-        $rawTree = \json_encode($entry['plan']['tree']);
+        $rawTree = \json_encode($entry['plan']['tree']) ?: '';
         $this->assertStringNotContainsString('_perms', $rawTree);
 
         $database->deleteCollection($collection);

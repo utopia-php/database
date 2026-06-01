@@ -3668,7 +3668,7 @@ class Mongo extends Adapter
                 'explain'   => (object) $command,
                 'verbosity' => 'executionStats',
             ]);
-            $tree = \json_decode(\json_encode($raw), true);
+            $tree = \json_decode(\json_encode($raw) ?: 'null', true);
             $rowsScanned = $this->extractMongoRowsScanned($tree);
             $indexUsed   = $this->extractMongoIndexUsed($tree);
             // executionStats actually runs the query, so the tree already holds
@@ -3778,26 +3778,22 @@ class Mongo extends Adapter
         if (! \is_array($tree)) {
             return null;
         }
-        $found = null;
-        $walk = function ($node) use (&$walk, &$found): void {
-            if ($found !== null || ! \is_array($node)) {
-                return;
-            }
-            if (($node['stage'] ?? null) === 'IXSCAN' && isset($node['indexName']) && \is_string($node['indexName'])) {
-                $found = $node['indexName'];
-                return;
-            }
-            foreach ($node as $value) {
-                if (\is_array($value)) {
-                    $walk($value);
-                    if ($found !== null) {
-                        return;
-                    }
+
+        if (($tree['stage'] ?? null) === 'IXSCAN' && isset($tree['indexName']) && \is_string($tree['indexName'])) {
+            return $tree['indexName'];
+        }
+
+        // Depth-first: first IXSCAN's indexName wins.
+        foreach ($tree as $value) {
+            if (\is_array($value)) {
+                $found = $this->extractMongoIndexUsed($value);
+                if ($found !== null) {
+                    return $found;
                 }
             }
-        };
-        $walk($tree);
-        return $found;
+        }
+
+        return null;
     }
 
     protected function processException(\Throwable $e): \Throwable

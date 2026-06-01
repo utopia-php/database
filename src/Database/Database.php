@@ -1455,9 +1455,17 @@ class Database
     }
 
     /**
+     * Run $callback with explain capture enabled and return the captured plans.
+     *
+     * Every find/count/sum the callback issues is captured as a plan entry. The
+     * callback's own return value is intentionally NOT propagated — this method
+     * always returns the plan Document (`{ queries: [...] }`), not the query
+     * results. Callers wanting the rows should run the read separately; explain
+     * is a diagnostic that mirrors the read, not a replacement for it.
+     *
      * @param callable $callback
-     * @return Document
-     * @throws \Throwable
+     * @return Document plan document with a `queries` attribute (list of captured entries)
+     * @throws \Throwable rethrown from $callback; capture is always stopped first
      */
     public function withExplain(callable $callback): Document
     {

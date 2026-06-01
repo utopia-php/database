@@ -46,8 +46,14 @@ class Pool extends Adapter
         // captures aggregate back into the pool buffer — needed for both the
         // pinned-transaction and pooled paths.
         $invoke = function (Adapter $adapter) use ($method, $args): mixed {
-            $capturing = $this->isExplainCapturing();
-            if ($capturing) {
+            // Only start (and own the stop/drain of) capture when the adapter
+            // isn't already capturing. A pinned adapter is reused across nested
+            // delegate() calls — e.g. a before()-listener firing its own query
+            // inside the read — so re-starting would wrongly throw "cannot be
+            // nested". Nested calls just let their plans accumulate into the
+            // same buffer, drained once by the outermost call.
+            $startedCapture = $this->isExplainCapturing() && ! $adapter->isExplainCapturing();
+            if ($startedCapture) {
                 $adapter->startExplainCapture();
             }
             try {
@@ -58,7 +64,7 @@ class Pool extends Adapter
                 }
                 return $adapter->{$method}(...$args);
             } finally {
-                if ($capturing) {
+                if ($startedCapture) {
                     foreach ($adapter->stopExplainCapture() as $entry) {
                         $this->explainBuffer[] = $entry;
                     }

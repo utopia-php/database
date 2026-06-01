@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -192,5 +193,33 @@ class ExplainTest extends TestCase
 
         $this->assertSame(1, $rows);
         $this->assertNull($index);
+    }
+
+    public function testPoolDoesNotRestartCaptureOnAlreadyCapturingPinnedAdapter(): void
+    {
+        // Reproduces the re-entrancy bug: while the pool is capturing, a nested
+        // delegate() on the pinned (transaction) adapter — e.g. a before(find)
+        // transformation issuing its own query — must NOT call
+        // startExplainCapture() again, which would throw "cannot be nested".
+        $inner = $this->getMockBuilder(Adapter::class)
+            ->onlyMethods(['startExplainCapture', 'isExplainCapturing', 'ping'])
+            ->getMockForAbstractClass();
+
+        // The inner adapter is already mid-capture from the outer find().
+        $inner->method('isExplainCapturing')->willReturn(true);
+        $inner->method('ping')->willReturn(true);
+        // The guard must prevent any re-start on the already-capturing adapter.
+        $inner->expects($this->never())->method('startExplainCapture');
+
+        $pool = (new \ReflectionClass(Pool::class))->newInstanceWithoutConstructor();
+
+        // Pin the inner adapter (as withTransaction does) and turn on pool-level
+        // capture so delegate() takes the capturing branch.
+        (new \ReflectionProperty(Pool::class, 'pinnedAdapter'))->setValue($pool, $inner);
+        (new \ReflectionProperty(Adapter::class, 'explainBuffer'))->setValue($pool, []);
+
+        $result = $pool->delegate('ping', []);
+
+        $this->assertTrue($result);
     }
 }

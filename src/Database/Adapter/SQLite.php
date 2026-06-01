@@ -107,9 +107,14 @@ class SQLite extends MariaDB
             }
         }
 
-        $stmt->execute();
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-        $stmt->closeCursor();
+        try {
+            $this->execute($stmt);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        } finally {
+            $stmt->closeCursor();
+        }
 
         return [
             'engine'        => $this->getExplainEngine(),

@@ -2547,9 +2547,16 @@ abstract class SQL extends Adapter
             }
         }
 
-        $stmt->execute();
-        $raw = $stmt->fetchColumn();
-        $stmt->closeCursor();
+        // Route through execute() so the EXPLAIN inherits the same timeout and
+        // PDO error handling as the real read it mirrors.
+        try {
+            $this->execute($stmt);
+            $raw = $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        } finally {
+            $stmt->closeCursor();
+        }
 
         $tree = \is_string($raw) ? \json_decode($raw, true) : null;
         $tree = \is_array($tree) ? $tree : null;

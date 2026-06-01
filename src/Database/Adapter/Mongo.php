@@ -2434,6 +2434,18 @@ class Mongo extends Adapter
 
         try {
             $result = $this->client->aggregate($name, $pipeline, $options);
+
+            // Aggregation returns stdClass with cursor property containing firstBatch
+            if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
+                $firstResult = $result->cursor->firstBatch[0];
+
+                // Handle both $count and $group response formats
+                if (isset($firstResult->total)) {
+                    return (int)$firstResult->total;
+                }
+            }
+
+            return 0;
         } catch (MongoException $e) {
             return 0;
         } finally {
@@ -2442,18 +2454,6 @@ class Mongo extends Adapter
                 $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
             }
         }
-
-        // Aggregation returns stdClass with cursor property containing firstBatch
-        if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
-            $firstResult = $result->cursor->firstBatch[0];
-
-            // Handle both $count and $group response formats
-            if (isset($firstResult->total)) {
-                return (int)$firstResult->total;
-            }
-        }
-
-        return 0;
     }
 
 

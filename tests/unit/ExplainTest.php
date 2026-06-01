@@ -36,15 +36,14 @@ class ExplainTest extends TestCase
 
         $db = new Database($adapter, new Cache(new None()));
 
-        $callbackRan = false;
-        $result = $db->withExplain(function () use (&$callbackRan) {
-            $callbackRan = true;
-        });
+        // The callback result must propagate; the plan comes via the out-param.
+        $plan = null;
+        $result = $db->withExplain(fn () => 'callback-result', $plan);
 
-        $this->assertTrue($callbackRan);
-        $this->assertInstanceOf(Document::class, $result);
+        $this->assertSame('callback-result', $result);
+        $this->assertInstanceOf(Document::class, $plan);
 
-        $entries = $result->getAttribute('queries');
+        $entries = $plan->getAttribute('queries');
         $this->assertIsArray($entries);
         $this->assertCount(1, $entries);
         $this->assertSame('find', $entries[0]['purpose']);

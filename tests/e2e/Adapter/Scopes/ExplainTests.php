@@ -47,11 +47,13 @@ trait ExplainTests
             'status' => 'draft',
         ]));
 
-        $plan = $database->withExplain(fn () => $database->find($collection, [
+        $plan = null;
+        $rows = $database->withExplain(fn () => $database->find($collection, [
             Query::equal('status', ['published']),
             Query::limit(10),
-        ]));
+        ]), $plan);
 
+        $this->assertIsArray($rows);
         $this->assertInstanceOf(Document::class, $plan);
 
         $entries = $plan->getAttribute('queries');
@@ -114,14 +116,16 @@ trait ExplainTests
             $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
         }
 
+        $propagated = false;
         try {
             $database->withExplain(function () {
                 throw new \RuntimeException('boom');
             });
-            $this->fail('Expected RuntimeException to propagate');
         } catch (\RuntimeException) {
+            $propagated = true;
         }
 
+        $this->assertTrue($propagated, 'Expected RuntimeException to propagate');
         $this->assertFalse($database->getAdapter()->isExplainCapturing());
     }
 
@@ -153,10 +157,11 @@ trait ExplainTests
 
         // Regression guard: count() used to crash inside withExplain because
         // the context array called ->getId() on a string.
-        $plan = $database->withExplain(function () use ($database, $collection): void {
+        $plan = null;
+        $database->withExplain(function () use ($database, $collection): void {
             $database->count($collection);
             $database->sum($collection, 'score');
-        });
+        }, $plan);
 
         $entries = $plan->getAttribute('queries');
         $this->assertIsArray($entries);
@@ -203,11 +208,14 @@ trait ExplainTests
         // explain on the *same* pinned connection. Regression guard: this used
         // to silently return [] because the pinned-adapter early return
         // bypassed the start/stop/drain logic.
-        $plan = $database->withExplain(function () use ($database, $collection) {
+        $plan = null;
+        $rows = $database->withExplain(function () use ($database, $collection) {
             return $database->withTransaction(fn () => $database->find($collection, [
                 Query::limit(5),
             ]));
-        });
+        }, $plan);
+
+        $this->assertIsArray($rows);
 
         $entries = $plan->getAttribute('queries');
         $this->assertIsArray($entries);

@@ -1597,9 +1597,16 @@ class Postgres extends SQL
             }
         }
 
-        $stmt->execute();
-        $raw = $stmt->fetchColumn();
-        $stmt->closeCursor();
+        // Route through execute() so the EXPLAIN inherits statement_timeout and
+        // the same PDO error handling as the real read it mirrors.
+        try {
+            $this->execute($stmt);
+            $raw = $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        } finally {
+            $stmt->closeCursor();
+        }
 
         $decoded = \is_string($raw) ? \json_decode($raw, true) : null;
         // Postgres wraps the plan in a one-element array.

@@ -1455,30 +1455,29 @@ class Database
     }
 
     /**
-     * Run $callback with explain capture enabled and return the captured plans.
+     * Run $callback with explain capture enabled.
      *
-     * Every find/count/sum the callback issues is captured as a plan entry. The
-     * callback's own return value is intentionally NOT propagated — this method
-     * always returns the plan Document (`{ queries: [...] }`), not the query
-     * results. Callers wanting the rows should run the read separately; explain
-     * is a diagnostic that mirrors the read, not a replacement for it.
+     * Returns the callback's own result (like withPreserveSequence/withTenant),
+     * so callers get their query output normally. The captured query plan is
+     * written to the by-reference $plan Document (`{ queries: [...] }`), letting
+     * one call yield both the rows and their plan.
      *
-     * @param callable $callback
-     * @return Document plan document with a `queries` attribute (list of captured entries)
+     * @template T
+     * @param callable(): T $callback
+     * @param Document|null $plan out-param: receives the captured plan document
+     * @return T the callback's return value
      * @throws \Throwable rethrown from $callback; capture is always stopped first
      */
-    public function withExplain(callable $callback): Document
+    public function withExplain(callable $callback, ?Document &$plan = null): mixed
     {
         $this->adapter->startExplainCapture();
         try {
-            $callback();
+            return $callback();
         } finally {
-            $captured = $this->adapter->stopExplainCapture();
+            $plan = new Document([
+                'queries' => $this->adapter->stopExplainCapture(),
+            ]);
         }
-
-        return new Document([
-            'queries' => $captured,
-        ]);
     }
 
     public function getPreserveSequence(): bool

@@ -2205,6 +2205,8 @@ class Mongo extends Adapter
             );
         }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         try {
             // Use proper cursor iteration with reasonable batch size
             $options['batchSize'] = self::DEFAULT_BATCH_SIZE;
@@ -2261,6 +2263,12 @@ class Mongo extends Adapter
             foreach ($found as $document) {
                 $this->ensureRelationshipDefaults($collection, $document);
             }
+        }
+
+        if ($explainStart !== null) {
+            // Real stats from the read that actually ran (queryPlanner explain
+            // above does not execute), mirroring the SQL adapter.
+            $this->recordPlanActuals(\count($found), (\microtime(true) - $explainStart) * 1000);
         }
 
         return $found;
@@ -2422,24 +2430,30 @@ class Mongo extends Adapter
             );
         }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         try {
-
             $result = $this->client->aggregate($name, $pipeline, $options);
-
-            // Aggregation returns stdClass with cursor property containing firstBatch
-            if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
-                $firstResult = $result->cursor->firstBatch[0];
-
-                // Handle both $count and $group response formats
-                if (isset($firstResult->total)) {
-                    return (int)$firstResult->total;
-                }
-            }
-
-            return 0;
         } catch (MongoException $e) {
             return 0;
+        } finally {
+            if ($explainStart !== null) {
+                // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+                $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
+            }
         }
+
+        // Aggregation returns stdClass with cursor property containing firstBatch
+        if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
+            $firstResult = $result->cursor->firstBatch[0];
+
+            // Handle both $count and $group response formats
+            if (isset($firstResult->total)) {
+                return (int)$firstResult->total;
+            }
+        }
+
+        return 0;
     }
 
 
@@ -2506,7 +2520,16 @@ class Mongo extends Adapter
             );
         }
 
-        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
+        try {
+            return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        } finally {
+            if ($explainStart !== null) {
+                // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+                $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
+            }
+        }
     }
 
     /**
@@ -3659,22 +3682,17 @@ class Mongo extends Adapter
         }
 
         $tree = null;
-        $rowsScanned = null;
         $indexUsed = null;
-        $rowsReturned = null;
-        $executionTime = null;
         try {
+            // queryPlanner, NOT executionStats: executionStats re-runs the
+            // query, double-executing every captured read. Actuals come from
+            // timing the real find/count/sum via recordPlanActuals().
             $raw = $this->client->query([
                 'explain'   => (object) $command,
-                'verbosity' => 'executionStats',
+                'verbosity' => 'queryPlanner',
             ]);
             $tree = \json_decode(\json_encode($raw) ?: 'null', true);
-            $rowsScanned = $this->extractMongoRowsScanned($tree);
-            $indexUsed   = $this->extractMongoIndexUsed($tree);
-            // executionStats actually runs the query, so the tree already holds
-            // the real actuals — no separate timing needed for Mongo.
-            $rowsReturned  = $this->extractMongoRowsReturned($tree);
-            $executionTime = $this->extractMongoExecutionTime($tree);
+            $indexUsed = $this->extractMongoIndexUsed($tree);
         } catch (\Throwable $e) {
             // Fall back to the captured command on any explain failure so callers
             // still see what was attempted.
@@ -3683,93 +3701,23 @@ class Mongo extends Adapter
 
         return [
             'engine'        => 'mongo',
-            'rowsScanned'   => $rowsScanned,
+            // rowsScanned is an execution stat Mongo only emits under
+            // executionStats; queryPlanner gives the plan shape, not counts.
+            'rowsScanned'   => null,
             'indexUsed'     => $indexUsed,
             'estimatedCost' => null,
-            'rowsReturned'  => $rowsReturned,
-            'executionTime' => $executionTime,
+            'rowsReturned'  => null,
+            'executionTime' => null,
             'tree'          => $tree,
         ];
     }
 
     /**
-     * Actual documents returned, from a Mongo executionStats explain.
+     * Find the IXSCAN indexName from the WINNING plan of a Mongo explain tree.
      *
-     * @param array<string, mixed>|null $tree
-     */
-    private function extractMongoRowsReturned(?array $tree): ?int
-    {
-        if (! \is_array($tree)) {
-            return null;
-        }
-        // find: executionStats.nReturned
-        $find = $tree['executionStats']['nReturned'] ?? null;
-        if (\is_numeric($find)) {
-            return (int) $find;
-        }
-        // aggregate: last stage's $cursor.executionStats.nReturned
-        $total = null;
-        foreach (($tree['stages'] ?? []) as $stage) {
-            $n = $stage['$cursor']['executionStats']['nReturned'] ?? null;
-            if (\is_numeric($n)) {
-                $total = (int) $n;
-            }
-        }
-        return $total;
-    }
-
-    /**
-     * Actual execution time in milliseconds, from a Mongo executionStats explain.
-     *
-     * @param array<string, mixed>|null $tree
-     */
-    private function extractMongoExecutionTime(?array $tree): ?float
-    {
-        if (! \is_array($tree)) {
-            return null;
-        }
-        $find = $tree['executionStats']['executionTimeMillis'] ?? null;
-        if (\is_numeric($find)) {
-            return (float) $find;
-        }
-        $total = null;
-        foreach (($tree['stages'] ?? []) as $stage) {
-            $n = $stage['$cursor']['executionStats']['executionTimeMillis'] ?? null;
-            if (\is_numeric($n)) {
-                $total = ($total ?? 0) + (float) $n;
-            }
-        }
-        return $total;
-    }
-
-    /**
-     * Walk a Mongo explain executionStats tree and sum totalDocsExamined.
-     *
-     * @param array<string, mixed>|null $tree
-     */
-    private function extractMongoRowsScanned(?array $tree): ?int
-    {
-        if (! \is_array($tree)) {
-            return null;
-        }
-        // find: executionStats.totalDocsExamined
-        $find = $tree['executionStats']['totalDocsExamined'] ?? null;
-        if (\is_numeric($find)) {
-            return (int) $find;
-        }
-        // aggregate: stages[].$cursor.executionStats.totalDocsExamined
-        $total = null;
-        foreach (($tree['stages'] ?? []) as $stage) {
-            $n = $stage['$cursor']['executionStats']['totalDocsExamined'] ?? null;
-            if (\is_numeric($n)) {
-                $total = ($total ?? 0) + (int) $n;
-            }
-        }
-        return $total;
-    }
-
-    /**
-     * Find the winning IXSCAN indexName from a Mongo explain tree.
+     * Only descends into `winningPlan` branches — never `rejectedPlans`, which
+     * can hold IXSCAN stages even when the winning plan is a COLLSCAN, so a
+     * blind walk would report an index that the query does not actually use.
      *
      * @param array<string, mixed>|null $tree
      */
@@ -3779,20 +3727,59 @@ class Mongo extends Adapter
             return null;
         }
 
-        if (($tree['stage'] ?? null) === 'IXSCAN' && isset($tree['indexName']) && \is_string($tree['indexName'])) {
-            return $tree['indexName'];
+        foreach ($this->findWinningPlans($tree) as $winningPlan) {
+            $found = $this->findIxscanIndex($winningPlan);
+            if ($found !== null) {
+                return $found;
+            }
         }
 
-        // Depth-first: first IXSCAN's indexName wins.
-        foreach ($tree as $value) {
+        return null;
+    }
+
+    /**
+     * Collect every `winningPlan` subtree, skipping rejectedPlans branches.
+     *
+     * @param array<string, mixed> $tree
+     * @return array<int, array<string, mixed>>
+     */
+    private function findWinningPlans(array $tree): array
+    {
+        $plans = [];
+        foreach ($tree as $key => $value) {
+            if (! \is_array($value)) {
+                continue;
+            }
+            if ($key === 'winningPlan') {
+                $plans[] = $value;
+                continue;
+            }
+            if ($key === 'rejectedPlans') {
+                continue;
+            }
+            $plans = \array_merge($plans, $this->findWinningPlans($value));
+        }
+        return $plans;
+    }
+
+    /**
+     * First IXSCAN indexName within a single (winning) plan subtree.
+     *
+     * @param array<string, mixed> $plan
+     */
+    private function findIxscanIndex(array $plan): ?string
+    {
+        if (($plan['stage'] ?? null) === 'IXSCAN' && isset($plan['indexName']) && \is_string($plan['indexName'])) {
+            return $plan['indexName'];
+        }
+        foreach ($plan as $value) {
             if (\is_array($value)) {
-                $found = $this->extractMongoIndexUsed($value);
+                $found = $this->findIxscanIndex($value);
                 if ($found !== null) {
                     return $found;
                 }
             }
         }
-
         return null;
     }
 

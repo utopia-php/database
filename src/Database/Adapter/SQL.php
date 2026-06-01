@@ -2579,6 +2579,11 @@ abstract class SQL extends Adapter
      */
     abstract protected function getExplainEngine(): string;
 
+    public function getSupportForExplain(): bool
+    {
+        return true;
+    }
+
     /**
      * @param array<string, mixed>|null $tree
      */

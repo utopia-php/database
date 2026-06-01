@@ -3983,6 +3983,11 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForExplain(): bool
+    {
+        return true;
+    }
+
     public function getSupportForTransactionRetries(): bool
     {
         return false;

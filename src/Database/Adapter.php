@@ -1780,6 +1780,16 @@ abstract class Adapter
     }
 
     /**
+     * Is query explain (plan capture via withExplain) supported?
+     *
+     * @return bool
+     */
+    public function getSupportForExplain(): bool
+    {
+        return false;
+    }
+
+    /**
      * Does the adapter support transaction retries?
      *
      * @return bool

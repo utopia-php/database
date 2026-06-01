@@ -19,8 +19,9 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        // SQL-only: asserts the precise engine label and a non-null plan tree.
         if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
+            $this->markTestSkipped('Engine label and plan tree assertions are SQL-specific.');
         }
 
         $database->getAuthorization()->addRole(Role::any()->toString());
@@ -94,8 +95,8 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
+        if (! $database->getAdapter()->getSupportForExplain()) {
+            $this->markTestSkipped('Adapter does not support explain.');
         }
 
         $this->assertFalse($database->getAdapter()->isExplainCapturing());
@@ -112,8 +113,8 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
+        if (! $database->getAdapter()->getSupportForExplain()) {
+            $this->markTestSkipped('Adapter does not support explain.');
         }
 
         $propagated = false;
@@ -134,8 +135,8 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
+        if (! $database->getAdapter()->getSupportForExplain()) {
+            $this->markTestSkipped('Adapter does not support explain.');
         }
 
         $database->getAuthorization()->addRole(Role::any()->toString());
@@ -230,8 +231,8 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Explain capture is only wired in the SQL adapter today.');
+        if (! $database->getAdapter()->getSupportForExplain()) {
+            $this->markTestSkipped('Adapter does not support explain.');
         }
 
         $this->expectException(DatabaseException::class);

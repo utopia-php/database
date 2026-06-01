@@ -171,13 +171,10 @@ abstract class Adapter
     }
 
     /**
-     * Attach the REAL execution stats to the most recently captured plan entry.
+     * Attach real execution stats to the most recently captured plan entry.
      *
-     * The explain endpoint runs the same query listRows runs, so instead of
-     * paying for a second EXPLAIN ANALYZE pass we just measure the read that
-     * already happens: callers time their actual statement and report the
-     * actual rows it produced. No-op when not capturing, so the normal read
-     * path is untouched.
+     * Avoids a second EXPLAIN ANALYZE pass by measuring the read that already
+     * runs inside the explain scope.
      *
      * @param int|null $rowsReturned actual rows the statement returned (null when not meaningful, e.g. an aggregate)
      * @param float|null $executionTime actual wall time of the statement in milliseconds
@@ -238,13 +235,10 @@ abstract class Adapter
         if (isset(self::EXPLAIN_COLUMN_RENAMES[$name])) {
             return self::EXPLAIN_COLUMN_RENAMES[$name];
         }
-        // EXPLAIN tree string-values can embed internal identifiers (e.g.
-        // index_condition: "main.`_uid` = '...'"). Substring-rewrite each.
-        // NOTE: this is a best-effort, display-only substring replace — a user
-        // column whose name happens to contain "_uid"/"_tenant"/etc. would be
-        // rewritten too. Acceptable because the output is for human reading of
-        // the plan, not for round-tripping back to a real column name; the raw
-        // `tree` is the same string pre-rename if an exact value is ever needed.
+        // Plan strings embed internal identifiers (e.g. index_condition:
+        // "main.`_uid` = '...'"). Best-effort, display-only substring rewrite:
+        // a user column containing "_uid"/"_tenant"/etc. is rewritten too, which
+        // is fine since this is for reading the plan, not round-tripping names.
         if (\str_contains($name, '_')) {
             foreach (self::EXPLAIN_COLUMN_RENAMES as $internal => $public) {
                 if (\str_contains($name, $internal)) {
@@ -258,15 +252,9 @@ abstract class Adapter
     /**
      * Produce a normalized query plan for a single statement.
      *
-     * Every adapter returns the same fixed shape so the public DTO can stay
-     * typed regardless of engine:
-     *   engine        precise backend label (mysql|mariadb|postgres|mongo|...)
-     *   rowsScanned   estimated rows the planner expects to examine (null if N/A)
-     *   indexUsed     index the chosen access path uses, user-facing name (null if none)
-     *   estimatedCost planner cost estimate (null if the engine has none)
-     *   rowsReturned  ACTUAL rows produced when the plan was run with ANALYZE (null if not analyzed)
-     *   executionTime ACTUAL wall time in milliseconds under ANALYZE (null if not analyzed)
-     *   tree          raw engine plan for maximum detail
+     * Every adapter returns the same fixed shape (engine, rowsScanned,
+     * indexUsed, estimatedCost, rowsReturned, executionTime, tree) so the
+     * public DTO stays typed regardless of engine.
      *
      * @param string $sql
      * @param array<string, mixed> $binds

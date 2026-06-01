@@ -2555,13 +2555,22 @@ abstract class SQL extends Adapter
         $tree = \is_array($tree) ? $tree : null;
 
         return [
-            'engine'        => 'sql',
+            'engine'        => $this->getExplainEngine(),
             'rowsScanned'   => $this->extractRowsScanned($tree),
             'indexUsed'     => $this->extractIndexUsed($tree),
             'estimatedCost' => $this->extractEstimatedCost($tree),
+            'rowsReturned'  => null,
+            'executionTime' => null,
             'tree'          => $tree,
         ];
     }
+
+    /**
+     * Precise engine label for the normalized plan (e.g. mysql, mariadb,
+     * postgres). Lets each surface report its real backend instead of a
+     * generic 'sql'.
+     */
+    abstract protected function getExplainEngine(): string;
 
     /**
      * @param array<string, mixed>|null $tree
@@ -3361,6 +3370,8 @@ abstract class SQL extends Adapter
             $this->capturePlan($sql, $binds, 'find', ['collection' => $collection]);
         }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         try {
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -3379,6 +3390,11 @@ abstract class SQL extends Adapter
 
         $results = $stmt->fetchAll();
         $stmt->closeCursor();
+
+        if ($explainStart !== null) {
+            // Real stats from the read that actually ran — no second pass.
+            $this->recordPlanActuals(\count($results), (\microtime(true) - $explainStart) * 1000);
+        }
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -3492,6 +3508,8 @@ abstract class SQL extends Adapter
             $this->capturePlan($sql, $binds, 'count', ['collection' => $collection]);
         }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($binds as $key => $value) {
@@ -3508,6 +3526,11 @@ abstract class SQL extends Adapter
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];
+        }
+
+        if ($explainStart !== null) {
+            // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+            $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
         }
 
         return $result['sum'] ?? 0;
@@ -3592,6 +3615,8 @@ abstract class SQL extends Adapter
             $this->capturePlan($sql, $binds, 'sum', ['collection' => $collection, 'attribute' => $attribute]);
         }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($binds as $key => $value) {
@@ -3608,6 +3633,11 @@ abstract class SQL extends Adapter
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];
+        }
+
+        if ($explainStart !== null) {
+            // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+            $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
         }
 
         return $result['sum'] ?? 0;

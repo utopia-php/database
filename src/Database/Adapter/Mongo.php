@@ -3636,6 +3636,8 @@ class Mongo extends Adapter
                 'rowsScanned'   => null,
                 'indexUsed'     => null,
                 'estimatedCost' => null,
+                'rowsReturned'  => null,
+                'executionTime' => null,
                 'tree'          => $captured,
             ];
         }
@@ -3659,6 +3661,8 @@ class Mongo extends Adapter
         $tree = null;
         $rowsScanned = null;
         $indexUsed = null;
+        $rowsReturned = null;
+        $executionTime = null;
         try {
             $raw = $this->client->query([
                 'explain'   => (object) $command,
@@ -3667,6 +3671,10 @@ class Mongo extends Adapter
             $tree = \json_decode(\json_encode($raw), true);
             $rowsScanned = $this->extractMongoRowsScanned($tree);
             $indexUsed   = $this->extractMongoIndexUsed($tree);
+            // executionStats actually runs the query, so the tree already holds
+            // the real actuals — no separate timing needed for Mongo.
+            $rowsReturned  = $this->extractMongoRowsReturned($tree);
+            $executionTime = $this->extractMongoExecutionTime($tree);
         } catch (\Throwable $e) {
             // Fall back to the captured command on any explain failure so callers
             // still see what was attempted.
@@ -3678,8 +3686,60 @@ class Mongo extends Adapter
             'rowsScanned'   => $rowsScanned,
             'indexUsed'     => $indexUsed,
             'estimatedCost' => null,
+            'rowsReturned'  => $rowsReturned,
+            'executionTime' => $executionTime,
             'tree'          => $tree,
         ];
+    }
+
+    /**
+     * Actual documents returned, from a Mongo executionStats explain.
+     *
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractMongoRowsReturned(?array $tree): ?int
+    {
+        if (! \is_array($tree)) {
+            return null;
+        }
+        // find: executionStats.nReturned
+        $find = $tree['executionStats']['nReturned'] ?? null;
+        if (\is_numeric($find)) {
+            return (int) $find;
+        }
+        // aggregate: last stage's $cursor.executionStats.nReturned
+        $total = null;
+        foreach (($tree['stages'] ?? []) as $stage) {
+            $n = $stage['$cursor']['executionStats']['nReturned'] ?? null;
+            if (\is_numeric($n)) {
+                $total = (int) $n;
+            }
+        }
+        return $total;
+    }
+
+    /**
+     * Actual execution time in milliseconds, from a Mongo executionStats explain.
+     *
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractMongoExecutionTime(?array $tree): ?float
+    {
+        if (! \is_array($tree)) {
+            return null;
+        }
+        $find = $tree['executionStats']['executionTimeMillis'] ?? null;
+        if (\is_numeric($find)) {
+            return (float) $find;
+        }
+        $total = null;
+        foreach (($tree['stages'] ?? []) as $stage) {
+            $n = $stage['$cursor']['executionStats']['executionTimeMillis'] ?? null;
+            if (\is_numeric($n)) {
+                $total = ($total ?? 0) + (float) $n;
+            }
+        }
+        return $total;
     }
 
     /**

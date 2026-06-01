@@ -65,13 +65,21 @@ trait ExplainTests
         $this->assertSame($collection, $entry['context']['collection']);
 
         $this->assertArrayHasKey('plan', $entry);
-        $this->assertSame('sql', $entry['plan']['engine']);
+        // Engine label is precise per adapter (mysql/mariadb/postgres/sqlite).
+        $this->assertContains($entry['plan']['engine'], ['mysql', 'mariadb', 'postgres', 'sqlite']);
         $this->assertArrayHasKey('tree', $entry['plan']);
         $this->assertNotNull($entry['plan']['tree']);
 
         $this->assertArrayHasKey('rowsScanned', $entry['plan']);
         $this->assertArrayHasKey('indexUsed', $entry['plan']);
         $this->assertArrayHasKey('estimatedCost', $entry['plan']);
+
+        // Actual execution stats from the real find() that ran under explain.
+        $this->assertArrayHasKey('rowsReturned', $entry['plan']);
+        $this->assertArrayHasKey('executionTime', $entry['plan']);
+        // One document matches status=published, and find() rows are measured directly.
+        $this->assertSame(1, $entry['plan']['rowsReturned']);
+        $this->assertIsFloat($entry['plan']['executionTime']);
 
         $rawTree = \json_encode($entry['plan']['tree']);
         $this->assertStringNotContainsString('_perms', $rawTree);

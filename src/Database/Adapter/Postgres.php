@@ -1611,19 +1611,95 @@ class Postgres extends SQL
             ? $tree['Plan']
             : null;
 
+        // Postgres nests the real work under the root node's `Plans`. A vector
+        // query (`ORDER BY emb <-> $1 LIMIT k`) plans as Limit → Index Scan, so
+        // the index name and scanned rows live on a CHILD, not the root. Walk
+        // the whole tree for those; cost is cumulative so the root carries it.
         return [
-            'engine'        => 'sql',
-            'rowsScanned'   => (\is_array($rootPlan) && isset($rootPlan['Plan Rows']) && \is_numeric($rootPlan['Plan Rows']))
-                ? (int) $rootPlan['Plan Rows']
-                : null,
-            'indexUsed'     => (\is_array($rootPlan) && isset($rootPlan['Index Name']) && \is_string($rootPlan['Index Name']))
-                ? $rootPlan['Index Name']
-                : null,
+            'engine'        => $this->getExplainEngine(),
+            'rowsScanned'   => $this->extractPgPlanRows($rootPlan),
+            'indexUsed'     => $this->extractPgIndexUsed($rootPlan),
             'estimatedCost' => (\is_array($rootPlan) && isset($rootPlan['Total Cost']) && \is_numeric($rootPlan['Total Cost']))
                 ? (float) $rootPlan['Total Cost']
                 : null,
+            'rowsReturned'  => null,
+            'executionTime' => null,
             'tree'          => $tree,
         ];
+    }
+
+    protected function getExplainEngine(): string
+    {
+        return 'postgres';
+    }
+
+    /**
+     * Estimated rows examined by the deepest scan node — the leaf the access
+     * path actually reads, not the root (which for a Limit reports just `k`).
+     *
+     * @param array<string, mixed>|null $plan
+     */
+    private function extractPgPlanRows(?array $plan): ?int
+    {
+        $found = null;
+        $this->walkPgPlan($plan, function (array $node) use (&$found): void {
+            // Scan nodes touch storage; their `Plan Rows` is the meaningful
+            // "rows examined" figure. Prefer the first one encountered.
+            if ($found === null
+                && isset($node['Node Type'])
+                && \is_string($node['Node Type'])
+                && \str_contains($node['Node Type'], 'Scan')
+                && isset($node['Plan Rows'])
+                && \is_numeric($node['Plan Rows'])
+            ) {
+                $found = (int) $node['Plan Rows'];
+            }
+        });
+
+        // No scan node (e.g. Result/Values plan) — fall back to the root estimate.
+        if ($found === null && isset($plan['Plan Rows']) && \is_numeric($plan['Plan Rows'])) {
+            $found = (int) $plan['Plan Rows'];
+        }
+
+        return $found;
+    }
+
+    /**
+     * First index name in the plan tree (e.g. an HNSW/IVFFlat index on a
+     * pgvector `<->` scan), searched depth-first from the root.
+     *
+     * @param array<string, mixed>|null $plan
+     */
+    private function extractPgIndexUsed(?array $plan): ?string
+    {
+        $found = null;
+        $this->walkPgPlan($plan, function (array $node) use (&$found): void {
+            if ($found === null && isset($node['Index Name']) && \is_string($node['Index Name'])) {
+                $found = $node['Index Name'];
+            }
+        });
+        return $found;
+    }
+
+    /**
+     * Depth-first walk over a Postgres plan node and its nested `Plans`.
+     *
+     * @param array<string, mixed>|null $node
+     * @param callable(array<string, mixed>): void $visitor
+     */
+    private function walkPgPlan(?array $node, callable $visitor): void
+    {
+        if (! \is_array($node)) {
+            return;
+        }
+        $visitor($node);
+        if (isset($node['Plans']) && \is_array($node['Plans'])) {
+            foreach ($node['Plans'] as $child) {
+                if (\is_array($child)) {
+                    $this->walkPgPlan($child, $visitor);
+                }
+            }
+        }
     }
 
     /**

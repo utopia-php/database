@@ -112,12 +112,19 @@ class SQLite extends MariaDB
         $stmt->closeCursor();
 
         return [
-            'engine'        => 'sql',
+            'engine'        => $this->getExplainEngine(),
             'rowsScanned'   => null,
             'indexUsed'     => null,
             'estimatedCost' => null,
+            'rowsReturned'  => null,
+            'executionTime' => null,
             'tree'          => ['steps' => \is_array($rows) ? $rows : []],
         ];
+    }
+
+    protected function getExplainEngine(): string
+    {
+        return 'sqlite';
     }
 
     /**

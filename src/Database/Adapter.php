@@ -171,6 +171,36 @@ abstract class Adapter
     }
 
     /**
+     * Attach the REAL execution stats to the most recently captured plan entry.
+     *
+     * The explain endpoint runs the same query listRows runs, so instead of
+     * paying for a second EXPLAIN ANALYZE pass we just measure the read that
+     * already happens: callers time their actual statement and report the
+     * actual rows it produced. No-op when not capturing, so the normal read
+     * path is untouched.
+     *
+     * @param int|null $rowsReturned actual rows the statement returned (null when not meaningful, e.g. an aggregate)
+     * @param float|null $executionTime actual wall time of the statement in milliseconds
+     */
+    protected function recordPlanActuals(?int $rowsReturned, ?float $executionTime): void
+    {
+        if ($this->explainBuffer === null || $this->explainBuffer === []) {
+            return;
+        }
+        $last = \array_key_last($this->explainBuffer);
+        $plan = $this->explainBuffer[$last]['plan'] ?? null;
+        // capturePlan() stores the entry just before the real statement runs;
+        // only fill actuals when the captured plan is a well-formed array. A
+        // failed EXPLAIN is stored as ['error' => ...] — leave it untouched so
+        // an error entry never masquerades as a real plan with stats.
+        if (! \is_array($plan) || isset($plan['error'])) {
+            return;
+        }
+        $this->explainBuffer[$last]['plan']['rowsReturned'] = $rowsReturned;
+        $this->explainBuffer[$last]['plan']['executionTime'] = $executionTime;
+    }
+
+    /**
      * @param array<int|string, mixed> $plan
      * @return array<int|string, mixed>
      */
@@ -210,6 +240,11 @@ abstract class Adapter
         }
         // EXPLAIN tree string-values can embed internal identifiers (e.g.
         // index_condition: "main.`_uid` = '...'"). Substring-rewrite each.
+        // NOTE: this is a best-effort, display-only substring replace — a user
+        // column whose name happens to contain "_uid"/"_tenant"/etc. would be
+        // rewritten too. Acceptable because the output is for human reading of
+        // the plan, not for round-tripping back to a real column name; the raw
+        // `tree` is the same string pre-rename if an exact value is ever needed.
         if (\str_contains($name, '_')) {
             foreach (self::EXPLAIN_COLUMN_RENAMES as $internal => $public) {
                 if (\str_contains($name, $internal)) {
@@ -221,6 +256,18 @@ abstract class Adapter
     }
 
     /**
+     * Produce a normalized query plan for a single statement.
+     *
+     * Every adapter returns the same fixed shape so the public DTO can stay
+     * typed regardless of engine:
+     *   engine        precise backend label (mysql|mariadb|postgres|mongo|...)
+     *   rowsScanned   estimated rows the planner expects to examine (null if N/A)
+     *   indexUsed     index the chosen access path uses, user-facing name (null if none)
+     *   estimatedCost planner cost estimate (null if the engine has none)
+     *   rowsReturned  ACTUAL rows produced when the plan was run with ANALYZE (null if not analyzed)
+     *   executionTime ACTUAL wall time in milliseconds under ANALYZE (null if not analyzed)
+     *   tree          raw engine plan for maximum detail
+     *
      * @param string $sql
      * @param array<string, mixed> $binds
      * @return array<string, mixed>
@@ -232,6 +279,8 @@ abstract class Adapter
             'rowsScanned'   => null,
             'indexUsed'     => null,
             'estimatedCost' => null,
+            'rowsReturned'  => null,
+            'executionTime' => null,
             'tree'          => null,
         ];
     }

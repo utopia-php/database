@@ -41,42 +41,11 @@ class Pool extends Adapter
      */
     public function delegate(string $method, array $args): mixed
     {
-        // Wrap any inner-adapter call so withExplain scope propagates and its
-        // captures aggregate back into the pool buffer — needed for both the
-        // pinned-transaction and pooled paths.
-        $invoke = function (Adapter $adapter) use ($method, $args): mixed {
-            // Only start (and own the stop/drain of) capture when the adapter
-            // isn't already capturing. A pinned adapter is reused across nested
-            // delegate() calls — e.g. a before()-listener firing its own query
-            // inside the read — so re-starting would wrongly throw "cannot be
-            // nested". Nested calls just let their plans accumulate into the
-            // same buffer, drained once by the outermost call.
-            $startedCapture = $this->isExplainCapturing() && ! $adapter->isExplainCapturing();
-            if ($startedCapture) {
-                $adapter->startExplainCapture();
-            }
-            try {
-                if ($this->skipDuplicates) {
-                    return $adapter->skipDuplicates(
-                        fn () => $adapter->{$method}(...$args)
-                    );
-                }
-
-                return $adapter->{$method}(...$args);
-            } finally {
-                if ($startedCapture) {
-                    foreach ($adapter->stopExplainCapture() as $entry) {
-                        $this->explainBuffer[] = $entry;
-                    }
-                }
-            }
-        };
-
         if ($this->pinnedAdapter !== null) {
-            return $invoke($this->pinnedAdapter);
+            return $this->invokeAdapter($this->pinnedAdapter, $method, $args);
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($invoke) {
+        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
             // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());
@@ -96,8 +65,51 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
-            return $invoke($adapter);
+            return $this->invokeAdapter($adapter, $method, $args);
         });
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     */
+    private function invokeAdapter(Adapter $adapter, string $method, array $args): mixed
+    {
+        if (! $this->isExplainCapturing()) {
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
+
+            return $adapter->{$method}(...$args);
+        }
+
+        // Only start (and own the stop/drain of) capture when the adapter
+        // isn't already capturing. A pinned adapter is reused across nested
+        // delegate() calls, e.g. a before()-listener firing its own query
+        // inside the read, so re-starting would wrongly throw "cannot be
+        // nested". Nested calls just let their plans accumulate into the
+        // same buffer, drained once by the outermost call.
+        $startedCapture = ! $adapter->isExplainCapturing();
+        if ($startedCapture) {
+            $adapter->startExplainCapture();
+        }
+
+        try {
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
+
+            return $adapter->{$method}(...$args);
+        } finally {
+            if ($startedCapture) {
+                foreach ($adapter->stopExplainCapture() as $entry) {
+                    $this->explainBuffer[] = $entry;
+                }
+            }
+        }
     }
 
     public function getDriver(): mixed

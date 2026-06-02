@@ -122,6 +122,9 @@ class Pool extends Adapter
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
+        // Record on Pool first so delegate()'s borrow logic re-applies the timeout
+        // (instead of clearing it as stale) on this and every subsequent call.
+        $this->timeout = $milliseconds;
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 

@@ -257,4 +257,30 @@ class ExplainTest extends TestCase
 
         $this->assertTrue($adapter->ping());
     }
+
+    public function testPoolReappliesTimeoutAcrossDelegatedCalls(): void
+    {
+        // Regression: after setTimeout() on the Pool, a subsequent delegated call
+        // (e.g. find) must re-apply the timeout to whatever adapter is borrowed
+        // — not clear it because the Pool itself forgot the timeout was set.
+        $inner = $this->getMockBuilder(Adapter::class)
+            ->onlyMethods(['setTimeout', 'clearTimeout', 'ping'])
+            ->getMockForAbstractClass();
+
+        // Every setTimeout invocation must carry the live timeout, never clear it.
+        $inner
+            ->method('setTimeout')
+            ->with(1000, Database::EVENT_ALL);
+        // clearTimeout must NOT be called while the Pool still has a positive timeout.
+        $inner->expects($this->never())->method('clearTimeout');
+        $inner->method('ping')->willReturn(true);
+
+        $pool = new UtopiaPool(new Stack(), 'mock', 1, fn () => $inner);
+        $adapter = new Pool($pool);
+        $adapter->setAuthorization(new Authorization());
+
+        $adapter->setTimeout(1000);
+        $this->assertSame(1000, $adapter->getTimeout());
+        $this->assertTrue($adapter->ping());
+    }
 }

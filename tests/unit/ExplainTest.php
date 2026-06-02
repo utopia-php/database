@@ -10,9 +10,6 @@ use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Pools\Adapter\Stack;
-use Utopia\Pools\Pool as UtopiaPool;
 
 class ExplainTest extends TestCase
 {
@@ -237,74 +234,5 @@ class ExplainTest extends TestCase
         $result = $pool->delegate('ping', []);
 
         $this->assertTrue($result);
-    }
-
-    public function test_pool_clears_stale_timeout_on_borrowed_adapters(): void
-    {
-        $inner = $this->getMockBuilder(Adapter::class)
-            ->onlyMethods(['clearTimeout', 'ping'])
-            ->getMockForAbstractClass();
-
-        $inner
-            ->expects($this->once())
-            ->method('clearTimeout')
-            ->with(Database::EVENT_ALL);
-        $inner->method('ping')->willReturn(true);
-
-        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
-        $adapter = new Pool($pool);
-        $adapter->setAuthorization(new Authorization);
-
-        $this->assertTrue($adapter->ping());
-    }
-
-    public function test_pool_reapplies_timeout_across_delegated_calls(): void
-    {
-        // Regression: after setTimeout() on the Pool, a subsequent delegated call
-        // (e.g. find) must re-apply the timeout to whatever adapter is borrowed
-        // — not clear it because the Pool itself forgot the timeout was set.
-        $inner = $this->getMockBuilder(Adapter::class)
-            ->onlyMethods(['setTimeout', 'clearTimeout', 'ping'])
-            ->getMockForAbstractClass();
-
-        // Every setTimeout invocation must carry the live timeout, never clear it.
-        $inner
-            ->method('setTimeout')
-            ->with(1000, Database::EVENT_ALL);
-        // clearTimeout must NOT be called while the Pool still has a positive timeout.
-        $inner->expects($this->never())->method('clearTimeout');
-        $inner->method('ping')->willReturn(true);
-
-        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
-        $adapter = new Pool($pool);
-        $adapter->setAuthorization(new Authorization);
-
-        $adapter->setTimeout(1000);
-        $this->assertSame(1000, $adapter->getTimeout());
-        $this->assertTrue($adapter->ping());
-    }
-
-    public function test_pool_reapplies_timeout_event_across_delegated_calls(): void
-    {
-        // Regression: Pool must remember the event too. Replaying a
-        // document_find timeout as EVENT_ALL makes unrelated schema/metadata
-        // operations pay the timeout on later borrowed adapters.
-        $inner = $this->getMockBuilder(Adapter::class)
-            ->onlyMethods(['setTimeout', 'clearTimeout', 'ping'])
-            ->getMockForAbstractClass();
-
-        $inner
-            ->expects($this->exactly(3))
-            ->method('setTimeout')
-            ->with(1000, Database::EVENT_DOCUMENT_FIND);
-        $inner->expects($this->never())->method('clearTimeout');
-        $inner->method('ping')->willReturn(true);
-
-        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
-        $adapter = new Pool($pool);
-        $adapter->setAuthorization(new Authorization);
-
-        $adapter->setTimeout(1000, Database::EVENT_DOCUMENT_FIND);
-        $this->assertTrue($adapter->ping());
     }
 }

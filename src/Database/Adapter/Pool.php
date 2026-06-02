@@ -22,8 +22,6 @@ class Pool extends Adapter
      */
     protected ?Adapter $pinnedAdapter = null;
 
-    protected string $timeoutEvent = Database::EVENT_ALL;
-
     /**
      * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
@@ -86,11 +84,8 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            $timeout = $this->getTimeout();
-            if ($timeout > 0) {
-                $adapter->setTimeout($timeout, $this->timeoutEvent);
-            } else {
-                $adapter->clearTimeout(Database::EVENT_ALL);
+            if ($this->getTimeout() > 0) {
+                $adapter->setTimeout($this->getTimeout());
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
@@ -124,17 +119,6 @@ class Pool extends Adapter
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        // Record on Pool first so delegate()'s borrow logic re-applies the timeout
-        // (instead of clearing it as stale) on this and every subsequent call.
-        $this->timeout = $milliseconds;
-        $this->timeoutEvent = $event;
-        $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function clearTimeout(string $event): void
-    {
-        $this->timeout = 0;
-        $this->timeoutEvent = Database::EVENT_ALL;
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -185,11 +169,8 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            $timeout = $this->getTimeout();
-            if ($timeout > 0) {
-                $adapter->setTimeout($timeout, $this->timeoutEvent);
-            } else {
-                $adapter->clearTimeout(Database::EVENT_ALL);
+            if ($this->getTimeout() > 0) {
+                $adapter->setTimeout($this->getTimeout());
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {

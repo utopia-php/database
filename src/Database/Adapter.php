@@ -525,6 +525,8 @@ abstract class Adapter
      */
     public function clearTimeout(string $event): void
     {
+        $this->timeout = 0;
+
         // Clear existing callback
         $this->before($event, 'timeout');
     }

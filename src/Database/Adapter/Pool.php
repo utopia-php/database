@@ -84,8 +84,11 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
+            $timeout = $this->getTimeout();
+            if ($timeout > 0) {
+                $adapter->setTimeout($timeout);
+            } else {
+                $adapter->clearTimeout(Database::EVENT_ALL);
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
@@ -167,8 +170,11 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
+            $timeout = $this->getTimeout();
+            if ($timeout > 0) {
+                $adapter->setTimeout($timeout);
+            } else {
+                $adapter->clearTimeout(Database::EVENT_ALL);
             }
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {

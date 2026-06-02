@@ -10,6 +10,9 @@ use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Adapter\Stack;
+use Utopia\Pools\Pool as UtopiaPool;
 
 class ExplainTest extends TestCase
 {
@@ -227,5 +230,24 @@ class ExplainTest extends TestCase
         $result = $pool->delegate('ping', []);
 
         $this->assertTrue($result);
+    }
+
+    public function testPoolClearsStaleTimeoutOnBorrowedAdapters(): void
+    {
+        $inner = $this->getMockBuilder(Adapter::class)
+            ->onlyMethods(['clearTimeout', 'ping'])
+            ->getMockForAbstractClass();
+
+        $inner
+            ->expects($this->once())
+            ->method('clearTimeout')
+            ->with(Database::EVENT_ALL);
+        $inner->method('ping')->willReturn(true);
+
+        $pool = new UtopiaPool(new Stack(), 'mock', 1, fn () => $inner);
+        $adapter = new Pool($pool);
+        $adapter->setAuthorization(new Authorization());
+
+        $this->assertTrue($adapter->ping());
     }
 }

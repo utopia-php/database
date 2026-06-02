@@ -73,6 +73,7 @@ class ExplainTest extends TestCase
     public function testSanitizePlanHidesInternalTablesAndRenamesColumns(): void
     {
         $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getDatabase')->willReturn('appwrite');
         $sanitize = (new \ReflectionMethod(Adapter::class, 'sanitizePlan'))
             ->getClosure($adapter);
 
@@ -83,6 +84,8 @@ class ExplainTest extends TestCase
             'tenant_col'   => '_tenant',
             // The perms/metadata tables also appear embedded in condition strings.
             'attached_condition' => "_45_abc123_perms._permission = 'read' and project_1__metadata._uid = '1'",
+            // SQL plans qualify columns with the schema name.
+            'index_condition' => "(`appwrite`.`main`.`status` = 'published')",
             'nested'       => [
                 'inner_table' => 'project_1__metadata',
                 'cols'        => ['_uid', '_id'],
@@ -99,6 +102,10 @@ class ExplainTest extends TestCase
         // Embedded physical table tokens inside a condition string are rewritten too.
         $this->assertStringNotContainsString('_perms', $sanitized['attached_condition']);
         $this->assertStringNotContainsString('__metadata', $sanitized['attached_condition']);
+
+        // The internal schema name is stripped from qualified column references.
+        $this->assertStringNotContainsString('`appwrite`', $sanitized['index_condition']);
+        $this->assertSame("(`main`.`status` = 'published')", $sanitized['index_condition']);
 
         // _id is MySQL's auto-increment column; not renamed.
         $this->assertSame(['$id', '_id'], $sanitized['nested']['cols']);

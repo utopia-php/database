@@ -244,6 +244,14 @@ abstract class Adapter
         $name = \preg_replace('/[`\w]*__metadata/', '<metadata>', $name) ?? $name;
         $name = \preg_replace('/[`\w]*_perms/', '<permissionCheck>', $name) ?? $name;
 
+        // SQL plans qualify columns with the schema name (e.g. a MariaDB
+        // condition "`appwrite`.`main`.`status` = '...'"). Drop the leading
+        // schema qualifier so the internal database name is not exposed.
+        $database = $this->getDatabase();
+        if ($database !== '') {
+            $name = \str_replace('`'.$database.'`.', '', $name);
+        }
+
         // Plan strings embed internal column identifiers (e.g. index_condition:
         // "main.`_uid` = '...'"). Best-effort, display-only substring rewrite:
         // a user column containing "_uid"/"_tenant"/etc. is rewritten too, which

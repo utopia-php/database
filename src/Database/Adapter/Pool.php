@@ -22,8 +22,10 @@ class Pool extends Adapter
      */
     protected ?Adapter $pinnedAdapter = null;
 
+    protected string $timeoutEvent = Database::EVENT_ALL;
+
     /**
-     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
     {
@@ -35,9 +37,8 @@ class Pool extends Adapter
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
+     *
      * @throws DatabaseException
      */
     public function delegate(string $method, array $args): mixed
@@ -62,6 +63,7 @@ class Pool extends Adapter
                         fn () => $adapter->{$method}(...$args)
                     );
                 }
+
                 return $adapter->{$method}(...$args);
             } finally {
                 if ($startedCapture) {
@@ -86,7 +88,7 @@ class Pool extends Adapter
 
             $timeout = $this->getTimeout();
             if ($timeout > 0) {
-                $adapter->setTimeout($timeout);
+                $adapter->setTimeout($timeout, $this->timeoutEvent);
             } else {
                 $adapter->clearTimeout(Database::EVENT_ALL);
             }
@@ -125,6 +127,14 @@ class Pool extends Adapter
         // Record on Pool first so delegate()'s borrow logic re-applies the timeout
         // (instead of clearing it as stale) on this and every subsequent call.
         $this->timeout = $milliseconds;
+        $this->timeoutEvent = $event;
+        $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        $this->timeout = 0;
+        $this->timeoutEvent = Database::EVENT_ALL;
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -154,8 +164,10 @@ class Pool extends Adapter
      * from running on different connections.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
+     *
      * @throws \Throwable
      */
     public function withTransaction(callable $callback): mixed
@@ -175,7 +187,7 @@ class Pool extends Adapter
 
             $timeout = $this->getTimeout();
             if ($timeout > 0) {
-                $adapter->setTimeout($timeout);
+                $adapter->setTimeout($timeout, $this->timeoutEvent);
             } else {
                 $adapter->clearTimeout(Database::EVENT_ALL);
             }
@@ -195,6 +207,7 @@ class Pool extends Adapter
                         fn () => $adapter->withTransaction($callback)
                     );
                 }
+
                 return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;
@@ -353,8 +366,7 @@ class Pool extends Adapter
     }
 
     /**
-     * @param string $sql
-     * @param array<string, mixed> $binds
+     * @param  array<string, mixed>  $binds
      * @return array<string, mixed>
      */
     protected function explainSQL(string $sql, array $binds = []): array
@@ -781,6 +793,7 @@ class Pool extends Adapter
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
+
         return $this;
     }
 

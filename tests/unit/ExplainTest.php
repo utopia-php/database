@@ -16,7 +16,7 @@ use Utopia\Pools\Pool as UtopiaPool;
 
 class ExplainTest extends TestCase
 {
-    public function testWithExplainTogglesCaptureAndWrapsResult(): void
+    public function test_with_explain_toggles_capture_and_wraps_result(): void
     {
         $adapter = $this->createMock(Adapter::class);
 
@@ -28,17 +28,17 @@ class ExplainTest extends TestCase
                 [
                     'purpose' => 'find',
                     'context' => ['collection' => 'movies'],
-                    'plan'    => [
-                        'engine'        => 'sql',
-                        'rowsScanned'   => 25,
-                        'indexUsed'     => '_idx_status',
+                    'plan' => [
+                        'engine' => 'sql',
+                        'rowsScanned' => 25,
+                        'indexUsed' => '_idx_status',
                         'estimatedCost' => 4.5,
-                        'tree'          => null,
+                        'tree' => null,
                     ],
                 ],
             ]);
 
-        $db = new Database($adapter, new Cache(new None()));
+        $db = new Database($adapter, new Cache(new None));
 
         // The callback result must propagate; the plan comes via the out-param.
         $plan = null;
@@ -55,14 +55,14 @@ class ExplainTest extends TestCase
         $this->assertSame(25, $entries[0]['plan']['rowsScanned']);
     }
 
-    public function testStopExplainCaptureIsCalledEvenWhenCallbackThrows(): void
+    public function test_stop_explain_capture_is_called_even_when_callback_throws(): void
     {
         $adapter = $this->createMock(Adapter::class);
 
         $adapter->expects($this->once())->method('startExplainCapture');
         $adapter->expects($this->once())->method('stopExplainCapture')->willReturn([]);
 
-        $db = new Database($adapter, new Cache(new None()));
+        $db = new Database($adapter, new Cache(new None));
 
         $this->expectException(\RuntimeException::class);
         $db->withExplain(function () {
@@ -70,7 +70,7 @@ class ExplainTest extends TestCase
         });
     }
 
-    public function testSanitizePlanHidesInternalTablesAndRenamesColumns(): void
+    public function test_sanitize_plan_hides_internal_tables_and_renames_columns(): void
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getDatabase')->willReturn('appwrite');
@@ -78,17 +78,17 @@ class ExplainTest extends TestCase
             ->getClosure($adapter);
 
         $sanitized = $sanitize([
-            'table_name'   => 'project_1_collection_5_perms',
-            'meta_table'   => 'appwrite__metadata',
-            'projection'   => ['_uid', '_createdAt', '_updatedAt', '_permissions', 'title'],
-            'tenant_col'   => '_tenant',
+            'table_name' => 'project_1_collection_5_perms',
+            'meta_table' => 'appwrite__metadata',
+            'projection' => ['_uid', '_createdAt', '_updatedAt', '_permissions', 'title'],
+            'tenant_col' => '_tenant',
             // The perms/metadata tables also appear embedded in condition strings.
             'attached_condition' => "_45_abc123_perms._permission = 'read' and project_1__metadata._uid = '1'",
             // SQL plans qualify columns with the schema name.
             'index_condition' => "(`appwrite`.`main`.`status` = 'published')",
-            'nested'       => [
+            'nested' => [
                 'inner_table' => 'project_1__metadata',
-                'cols'        => ['_uid', '_id'],
+                'cols' => ['_uid', '_id'],
             ],
         ]);
 
@@ -111,7 +111,7 @@ class ExplainTest extends TestCase
         $this->assertSame(['$id', '_id'], $sanitized['nested']['cols']);
     }
 
-    public function testRecordPlanActualsFillsLastEntry(): void
+    public function test_record_plan_actuals_fills_last_entry(): void
     {
         $adapter = $this->getMockBuilder(Adapter::class)
             ->onlyMethods([])
@@ -121,7 +121,7 @@ class ExplainTest extends TestCase
         $buffer->setValue($adapter, [[
             'purpose' => 'find',
             'context' => ['collection' => 'movies'],
-            'plan'    => ['engine' => 'mariadb', 'rowsScanned' => 10],
+            'plan' => ['engine' => 'mariadb', 'rowsScanned' => 10],
         ]]);
 
         (new \ReflectionMethod(Adapter::class, 'recordPlanActuals'))
@@ -132,7 +132,7 @@ class ExplainTest extends TestCase
         $this->assertSame(1.5, $captured[0]['plan']['executionTime']);
     }
 
-    public function testRecordPlanActualsIgnoresFailedPlans(): void
+    public function test_record_plan_actuals_ignores_failed_plans(): void
     {
         $adapter = $this->getMockForAbstractClass(Adapter::class);
 
@@ -142,7 +142,7 @@ class ExplainTest extends TestCase
         $buffer->setValue($adapter, [[
             'purpose' => 'find',
             'context' => [],
-            'plan'    => ['error' => 'boom'],
+            'plan' => ['error' => 'boom'],
         ]]);
 
         (new \ReflectionMethod(Adapter::class, 'recordPlanActuals'))
@@ -153,7 +153,7 @@ class ExplainTest extends TestCase
         $this->assertSame(['error' => 'boom'], $captured[0]['plan']);
     }
 
-    public function testRecordPlanActualsNoopWhenNotCapturing(): void
+    public function test_record_plan_actuals_noop_when_not_capturing(): void
     {
         $adapter = $this->getMockForAbstractClass(Adapter::class);
 
@@ -165,7 +165,7 @@ class ExplainTest extends TestCase
         $this->assertNull($buffer->getValue($adapter));
     }
 
-    public function testPostgresExtractionRecursesIntoChildPlans(): void
+    public function test_postgres_extraction_recurses_into_child_plans(): void
     {
         // Canonical pgvector plan: Limit -> Index Scan. The index name and the
         // scanned rows live on the CHILD; the root Limit only knows `k`.
@@ -196,7 +196,7 @@ class ExplainTest extends TestCase
         $this->assertSame('movies_embedding_hnsw', $index);
     }
 
-    public function testPostgresExtractionFallsBackToRootRowsWithoutScan(): void
+    public function test_postgres_extraction_falls_back_to_root_rows_without_scan(): void
     {
         $adapter = (new \ReflectionClass(Postgres::class))->newInstanceWithoutConstructor();
         $root = [
@@ -211,7 +211,7 @@ class ExplainTest extends TestCase
         $this->assertNull($index);
     }
 
-    public function testPoolDoesNotRestartCaptureOnAlreadyCapturingPinnedAdapter(): void
+    public function test_pool_does_not_restart_capture_on_already_capturing_pinned_adapter(): void
     {
         // Reproduces the re-entrancy bug: while the pool is capturing, a nested
         // delegate() on the pinned (transaction) adapter — e.g. a before(find)
@@ -239,7 +239,7 @@ class ExplainTest extends TestCase
         $this->assertTrue($result);
     }
 
-    public function testPoolClearsStaleTimeoutOnBorrowedAdapters(): void
+    public function test_pool_clears_stale_timeout_on_borrowed_adapters(): void
     {
         $inner = $this->getMockBuilder(Adapter::class)
             ->onlyMethods(['clearTimeout', 'ping'])
@@ -251,14 +251,14 @@ class ExplainTest extends TestCase
             ->with(Database::EVENT_ALL);
         $inner->method('ping')->willReturn(true);
 
-        $pool = new UtopiaPool(new Stack(), 'mock', 1, fn () => $inner);
+        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
         $adapter = new Pool($pool);
-        $adapter->setAuthorization(new Authorization());
+        $adapter->setAuthorization(new Authorization);
 
         $this->assertTrue($adapter->ping());
     }
 
-    public function testPoolReappliesTimeoutAcrossDelegatedCalls(): void
+    public function test_pool_reapplies_timeout_across_delegated_calls(): void
     {
         // Regression: after setTimeout() on the Pool, a subsequent delegated call
         // (e.g. find) must re-apply the timeout to whatever adapter is borrowed
@@ -275,12 +275,36 @@ class ExplainTest extends TestCase
         $inner->expects($this->never())->method('clearTimeout');
         $inner->method('ping')->willReturn(true);
 
-        $pool = new UtopiaPool(new Stack(), 'mock', 1, fn () => $inner);
+        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
         $adapter = new Pool($pool);
-        $adapter->setAuthorization(new Authorization());
+        $adapter->setAuthorization(new Authorization);
 
         $adapter->setTimeout(1000);
         $this->assertSame(1000, $adapter->getTimeout());
+        $this->assertTrue($adapter->ping());
+    }
+
+    public function test_pool_reapplies_timeout_event_across_delegated_calls(): void
+    {
+        // Regression: Pool must remember the event too. Replaying a
+        // document_find timeout as EVENT_ALL makes unrelated schema/metadata
+        // operations pay the timeout on later borrowed adapters.
+        $inner = $this->getMockBuilder(Adapter::class)
+            ->onlyMethods(['setTimeout', 'clearTimeout', 'ping'])
+            ->getMockForAbstractClass();
+
+        $inner
+            ->expects($this->exactly(3))
+            ->method('setTimeout')
+            ->with(1000, Database::EVENT_DOCUMENT_FIND);
+        $inner->expects($this->never())->method('clearTimeout');
+        $inner->method('ping')->willReturn(true);
+
+        $pool = new UtopiaPool(new Stack, 'mock', 1, fn () => $inner);
+        $adapter = new Pool($pool);
+        $adapter->setAuthorization(new Authorization);
+
+        $adapter->setTimeout(1000, Database::EVENT_DOCUMENT_FIND);
         $this->assertTrue($adapter->ping());
     }
 }

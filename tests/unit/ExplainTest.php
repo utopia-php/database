@@ -78,6 +78,8 @@ class ExplainTest extends TestCase
             'meta_table'   => 'appwrite__metadata',
             'projection'   => ['_uid', '_createdAt', '_updatedAt', '_permissions', 'title'],
             'tenant_col'   => '_tenant',
+            // The perms/metadata tables also appear embedded in condition strings.
+            'attached_condition' => "_45_abc123_perms._permission = 'read' and project_1__metadata._uid = '1'",
             'nested'       => [
                 'inner_table' => 'project_1__metadata',
                 'cols'        => ['_uid', '_id'],
@@ -90,6 +92,10 @@ class ExplainTest extends TestCase
 
         $this->assertSame(['$id', '$createdAt', '$updatedAt', '$permissions', 'title'], $sanitized['projection']);
         $this->assertSame('$tenant', $sanitized['tenant_col']);
+
+        // Embedded physical table tokens inside a condition string are rewritten too.
+        $this->assertStringNotContainsString('_perms', $sanitized['attached_condition']);
+        $this->assertStringNotContainsString('__metadata', $sanitized['attached_condition']);
 
         // _id is MySQL's auto-increment column; not renamed.
         $this->assertSame(['$id', '_id'], $sanitized['nested']['cols']);

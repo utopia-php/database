@@ -235,7 +235,16 @@ abstract class Adapter
         if (isset(self::EXPLAIN_COLUMN_RENAMES[$name])) {
             return self::EXPLAIN_COLUMN_RENAMES[$name];
         }
-        // Plan strings embed internal identifiers (e.g. index_condition:
+        // The permission/metadata tables also appear embedded inside plan
+        // strings — e.g. a MariaDB attached_condition like
+        // "`db_x_collection_y_perms`.`_permission` in (...)". The suffix checks
+        // above only catch standalone identifiers, so rewrite the embedded
+        // physical-table tokens here too. Match the longest run of
+        // identifier/backtick chars ending in the internal suffix.
+        $name = \preg_replace('/[`\w]*__metadata/', '<metadata>', $name) ?? $name;
+        $name = \preg_replace('/[`\w]*_perms/', '<permissionCheck>', $name) ?? $name;
+
+        // Plan strings embed internal column identifiers (e.g. index_condition:
         // "main.`_uid` = '...'"). Best-effort, display-only substring rewrite:
         // a user column containing "_uid"/"_tenant"/etc. is rewritten too, which
         // is fine since this is for reading the plan, not round-tripping names.

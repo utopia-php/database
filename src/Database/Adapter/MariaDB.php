@@ -1970,11 +1970,6 @@ class MariaDB extends SQL
         return parent::explainSQL($stripped ?? $sql, $binds);
     }
 
-    protected function getExplainEngine(): string
-    {
-        return 'mariadb';
-    }
-
     public function getInternalIndexesKeys(): array
     {
         return ['primary', '_created_at', '_updated_at', '_tenant_id'];

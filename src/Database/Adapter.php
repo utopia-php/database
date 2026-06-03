@@ -269,9 +269,9 @@ abstract class Adapter
     /**
      * Produce a normalized query plan for a single statement.
      *
-     * Every adapter returns the same fixed shape (engine, rowsScanned,
-     * indexUsed, estimatedCost, rowsReturned, executionTime, tree) so the
-     * public DTO stays typed regardless of engine.
+     * Every adapter returns the same fixed shape (rowsScanned, indexUsed,
+     * estimatedCost, rowsReturned, executionTime, tree) so the public DTO stays
+     * typed regardless of backend.
      *
      * @param string $sql
      * @param array<string, mixed> $binds
@@ -280,7 +280,6 @@ abstract class Adapter
     protected function explainSQL(string $sql, array $binds = []): array
     {
         return [
-            'engine'        => 'unsupported',
             'rowsScanned'   => null,
             'indexUsed'     => null,
             'estimatedCost' => null,

@@ -3655,7 +3655,6 @@ class Mongo extends Adapter
         // Without a captured command (or invalid JSON) we can't ask Mongo for a plan.
         if (! \is_array($captured)) {
             return [
-                'engine'        => 'mongo',
                 'rowsScanned'   => null,
                 'indexUsed'     => null,
                 'estimatedCost' => null,
@@ -3700,7 +3699,6 @@ class Mongo extends Adapter
         }
 
         return [
-            'engine'        => 'mongo',
             // rowsScanned is an execution stat Mongo only emits under
             // executionStats; queryPlanner gives the plan shape, not counts.
             'rowsScanned'   => null,

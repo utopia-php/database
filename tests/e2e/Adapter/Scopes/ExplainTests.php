@@ -19,9 +19,9 @@ trait ExplainTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        // SQL-only: asserts the precise engine label and a non-null plan tree.
+        // SQL-only: asserts the adapter can return a non-null backend plan tree.
         if (! $database->getAdapter() instanceof SQL) {
-            $this->markTestSkipped('Engine label and plan tree assertions are SQL-specific.');
+            $this->markTestSkipped('Plan tree assertions are SQL-specific.');
         }
 
         $database->getAuthorization()->addRole(Role::any()->toString());
@@ -68,8 +68,7 @@ trait ExplainTests
         $this->assertSame($collection, $entry['context']['collection']);
 
         $this->assertArrayHasKey('plan', $entry);
-        // Engine label is precise per adapter (mysql/mariadb/postgres/sqlite).
-        $this->assertContains($entry['plan']['engine'], ['mysql', 'mariadb', 'postgres', 'sqlite']);
+        $this->assertArrayNotHasKey('engine', $entry['plan']);
         $this->assertArrayHasKey('tree', $entry['plan']);
         $this->assertNotNull($entry['plan']['tree']);
 

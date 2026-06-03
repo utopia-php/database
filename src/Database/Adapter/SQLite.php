@@ -117,7 +117,6 @@ class SQLite extends MariaDB
         }
 
         return [
-            'engine'        => $this->getExplainEngine(),
             'rowsScanned'   => null,
             'indexUsed'     => null,
             'estimatedCost' => null,
@@ -125,11 +124,6 @@ class SQLite extends MariaDB
             'executionTime' => null,
             'tree'          => ['steps' => \is_array($rows) ? $rows : []],
         ];
-    }
-
-    protected function getExplainEngine(): string
-    {
-        return 'sqlite';
     }
 
     /**

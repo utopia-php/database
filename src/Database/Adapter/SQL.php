@@ -2562,7 +2562,6 @@ abstract class SQL extends Adapter
         $tree = \is_array($tree) ? $tree : null;
 
         return [
-            'engine'        => $this->getExplainEngine(),
             'rowsScanned'   => $this->extractRowsScanned($tree),
             'indexUsed'     => $this->extractIndexUsed($tree),
             'estimatedCost' => $this->extractEstimatedCost($tree),
@@ -2571,13 +2570,6 @@ abstract class SQL extends Adapter
             'tree'          => $tree,
         ];
     }
-
-    /**
-     * Precise engine label for the normalized plan (e.g. mysql, mariadb,
-     * postgres). Lets each surface report its real backend instead of a
-     * generic 'sql'.
-     */
-    abstract protected function getExplainEngine(): string;
 
     public function getSupportForExplain(): bool
     {

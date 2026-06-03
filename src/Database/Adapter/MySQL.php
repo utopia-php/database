@@ -324,9 +324,4 @@ class MySQL extends MariaDB
     {
         return false;
     }
-
-    protected function getExplainEngine(): string
-    {
-        return 'mysql';
-    }
 }

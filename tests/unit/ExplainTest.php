@@ -26,7 +26,6 @@ class ExplainTest extends TestCase
                     'purpose' => 'find',
                     'context' => ['collection' => 'movies'],
                     'plan' => [
-                        'engine' => 'sql',
                         'rowsScanned' => 25,
                         'indexUsed' => '_idx_status',
                         'estimatedCost' => 4.5,
@@ -118,7 +117,7 @@ class ExplainTest extends TestCase
         $buffer->setValue($adapter, [[
             'purpose' => 'find',
             'context' => ['collection' => 'movies'],
-            'plan' => ['engine' => 'mariadb', 'rowsScanned' => 10],
+            'plan' => ['rowsScanned' => 10],
         ]]);
 
         (new \ReflectionMethod(Adapter::class, 'recordPlanActuals'))

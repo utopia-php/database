@@ -1623,7 +1623,6 @@ class Postgres extends SQL
         // the index name and scanned rows live on a CHILD, not the root. Walk
         // the whole tree for those; cost is cumulative so the root carries it.
         return [
-            'engine'        => $this->getExplainEngine(),
             'rowsScanned'   => $this->extractPgPlanRows($rootPlan),
             'indexUsed'     => $this->extractPgIndexUsed($rootPlan),
             'estimatedCost' => (\is_array($rootPlan) && isset($rootPlan['Total Cost']) && \is_numeric($rootPlan['Total Cost']))
@@ -1633,11 +1632,6 @@ class Postgres extends SQL
             'executionTime' => null,
             'tree'          => $tree,
         ];
-    }
-
-    protected function getExplainEngine(): string
-    {
-        return 'postgres';
     }
 
     /**

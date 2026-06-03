@@ -35,7 +35,7 @@ class ExplainTest extends TestCase
                 ],
             ]);
 
-        $db = new Database($adapter, new Cache(new None));
+        $db = new Database($adapter, new Cache(new None()));
 
         // The callback result must propagate; the plan comes via the out-param.
         $plan = null;
@@ -59,7 +59,7 @@ class ExplainTest extends TestCase
         $adapter->expects($this->once())->method('startExplainCapture');
         $adapter->expects($this->once())->method('stopExplainCapture')->willReturn([]);
 
-        $db = new Database($adapter, new Cache(new None));
+        $db = new Database($adapter, new Cache(new None()));
 
         $this->expectException(\RuntimeException::class);
         $db->withExplain(function () {

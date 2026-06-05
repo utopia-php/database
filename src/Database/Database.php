@@ -6148,6 +6148,10 @@ class Database
         $isNoop = false;
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$isNoop) {
             $time = DateTime::now();
+            // Reset on every attempt: withTransaction may retry on non-domain
+            // failures, and a previous attempt's no-op flag must not bleed into
+            // a retry that ends up writing for real.
+            $isNoop = false;
             $skipAdapterUpdate = false;
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)

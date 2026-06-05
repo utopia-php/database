@@ -6353,15 +6353,22 @@ class Database
                     // flip the input to "non-bare", otherwise a read-only caller could
                     // unlock the stale-cache tolerance branch (and the event it fires)
                     // just by appending an unknown null-valued key.
-                    $schemaKeys = \array_map(
-                        fn ($attr) => $attr->getAttribute('key'),
-                        $attributes
-                    );
-                    $callerNonMetaKeys = \array_diff(
-                        \array_intersect(\array_keys($rawInput), $schemaKeys),
-                        self::internalMetaKeys()
-                    );
-                    $inputIsBareUpdatedAt = empty($callerNonMetaKeys);
+                    //
+                    // Single-pass isset lookups over $rawInput keys: prior versions
+                    // used array_map + array_intersect + array_diff, which allocated
+                    // two intermediate arrays and did O(N*M) value scans per call.
+                    $schemaKeyLookup = [];
+                    foreach ($attributes as $attr) {
+                        $schemaKeyLookup[$attr->getAttribute('key')] = true;
+                    }
+                    $metaKeyLookup = \array_fill_keys(self::internalMetaKeys(), true);
+                    $inputIsBareUpdatedAt = true;
+                    foreach ($rawInput as $key => $_) {
+                        if (isset($schemaKeyLookup[$key]) && !isset($metaKeyLookup[$key])) {
+                            $inputIsBareUpdatedAt = false;
+                            break;
+                        }
+                    }
 
                     if (!$inputIsBareUpdatedAt && \is_null($updatedAt)) {
                         // Caller nulled $updatedAt while resubmitting otherwise unchanged
@@ -6418,6 +6425,17 @@ class Database
                 }
             }
 
+            // Optimistic-concurrency check runs before the no-op short-circuit:
+            // a caller that set $this->timestamp asserted "I last saw this doc
+            // at T; reject if mutated since." Letting a no-op silently return
+            // $old when storage was concurrently modified past T would violate
+            // that contract — main's pre-PR code ran this check on every call,
+            // including no-ops, because every call still hit the adapter.
+            $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                throw new ConflictException('Document was updated after the request timestamp');
+            }
+
             if ($skipAdapterUpdate) {
                 // No-op: storage is unchanged, so re-running encode/structure-validation/
                 // casting against $old (which is already decoded + relationships-populated
@@ -6430,12 +6448,6 @@ class Database
 
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
-            }
-
-            // Check if document was updated after the request timestamp
-            $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
-            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                throw new ConflictException('Document was updated after the request timestamp');
             }
 
             $document = $this->encode($collection, $document);

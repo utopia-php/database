@@ -9,6 +9,7 @@ use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
@@ -561,5 +562,45 @@ class ForUpdateCacheTest extends TestCase
             '$updatedAt' => '2030-01-01T00:00:00.000+00:00',
             'garbageKey' => null,
         ]));
+    }
+
+    public function testNoopStillEnforcesRequestTimestampConflict(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('noop_conflict_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // No-op resubmit (null $updatedAt + UPDATE perm + no real diff) under a
+        // request-timestamp older than storage's $updatedAt must still throw
+        // ConflictException — the short-circuit return must not silently
+        // succeed when the optimistic-concurrency contract is violated.
+        $stale = $database->getDocument('projects', 'project');
+        $stale->setAttribute('$updatedAt', null);
+
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+
+        $this->expectException(ConflictException::class);
+        $database->withRequestTimestamp($oneHourAgo, function () use ($database, $stale) {
+            return $database->updateDocument('projects', 'project', $stale);
+        });
     }
 }

@@ -6475,8 +6475,10 @@ class Database
         if ($isNoop) {
             // $old was returned directly from getDocument(), which already populated
             // relationships, decoded filters, and applied the custom document type.
-            // Re-running those would corrupt the shape; skip post-processing and the
-            // EVENT_DOCUMENT_UPDATE trigger (no update actually happened).
+            // Re-running those would corrupt the shape; skip post-processing. The
+            // caller still invoked updateDocument(), so emit the event so audit
+            // listeners and change-stream consumers see the attempt.
+            $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
             return $document;
         }
 

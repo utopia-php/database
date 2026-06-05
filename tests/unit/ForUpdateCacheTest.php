@@ -91,5 +91,48 @@ class ForUpdateCacheTest extends TestCase
         $database->setPreserveDates(true);
         $updated = $database->updateDocument('projects', 'project', $stale);
         $this->assertSame('2030-01-01T00:00:00.000+00:00', $updated->getUpdatedAt());
+
+        // The no-op must not mutate stored attribute values.
+        $afterUpdate = $adapter->getDocument($collection, 'project');
+        $this->assertSame('same', $afterUpdate->getAttribute('name'));
+        $this->assertSame('2030-01-01T00:00:00.000+00:00', $afterUpdate->getUpdatedAt());
+    }
+
+    public function testNumericallyEqualFloatDoesNotTriggerSpuriousUpdate(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('float_noop_' . uniqid());
+
+        $database->create();
+        $database->createCollection('measurements', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('measurements', 'value', Database::VAR_FLOAT, 0, false);
+        $database->createDocument('measurements', new Document([
+            '$id' => 'm1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'value' => 5.0,
+        ]));
+
+        // Simulate cache returning the float as an int (JSON round-trips drop trailing zeros).
+        $stale = $database->getDocument('measurements', 'm1');
+        $stale->setAttribute('value', 5);
+
+        // Read-only caller resubmits the doc; equal-as-float should be treated as a no-op
+        // instead of failing the update permission check.
+        $updated = $database->updateDocument('measurements', 'm1', $stale);
+        $this->assertEquals(5.0, $updated->getAttribute('value'));
+
+        // Storage must still hold the original float; no spurious write should have occurred.
+        $collection = $database->getCollection('measurements');
+        $stored = $adapter->getDocument($collection, 'm1');
+        $this->assertEquals(5.0, $stored->getAttribute('value'));
     }
 }

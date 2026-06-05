@@ -6320,6 +6320,11 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
+                        // Tolerate stale-cache round-trips: a read-only caller may resubmit a
+                        // document whose only divergence from storage is a $updatedAt fetched
+                        // from cache. Treat that as a no-op instead of an auth error, but only
+                        // when the input carries more than just $updatedAt — an explicit
+                        // updatedAt-only write still requires update permission.
                         if ($onlyUpdatedAtChanged && $inputKeys !== ['$updatedAt'] && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
                             $shouldUpdate = false;
                         } else {

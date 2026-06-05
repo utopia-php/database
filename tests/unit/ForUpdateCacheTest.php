@@ -461,6 +461,11 @@ class ForUpdateCacheTest extends TestCase
             'name' => 'same',
         ]));
 
+        // Warm the cache with the original $updatedAt before poking the adapter,
+        // otherwise the next getDocument() reads straight from storage and there's
+        // no stale value for tolerance to engage on.
+        $database->getDocument('projects', 'project');
+
         // Force a stale cached $updatedAt so the tolerance branch will engage.
         $collection = $database->getCollection('projects');
         $stored = $adapter->getDocument($collection, 'project');

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
+use Utopia\Database\Connection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -51,33 +52,47 @@ class Pool extends Adapter
             return $this->pinnedAdapter->{$method}(...$args);
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
-            // Run setters in case config changed since this connection was last used
-            $adapter->setDatabase($this->getDatabase());
-            $adapter->setNamespace($this->getNamespace());
-            $adapter->setSharedTables($this->getSharedTables());
-            $adapter->setTenant($this->getTenant());
-            $adapter->setAuthorization($this->authorization);
+        $maxAttempts = 3;
+        $attempt = 0;
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            }
-            $adapter->resetDebug();
-            foreach ($this->getDebug() as $key => $value) {
-                $adapter->setDebug($key, $value);
-            }
-            $adapter->resetMetadata();
-            foreach ($this->getMetadata() as $key => $value) {
-                $adapter->setMetadata($key, $value);
-            }
+        while (true) {
+            $attempt++;
+            try {
+                return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
+                    // Run setters in case config changed since this connection was last used
+                    $adapter->setDatabase($this->getDatabase());
+                    $adapter->setNamespace($this->getNamespace());
+                    $adapter->setSharedTables($this->getSharedTables());
+                    $adapter->setTenant($this->getTenant());
+                    $adapter->setAuthorization($this->authorization);
 
-            if ($this->skipDuplicates) {
-                return $adapter->skipDuplicates(
-                    fn () => $adapter->{$method}(...$args)
-                );
+                    if ($this->getTimeout() > 0) {
+                        $adapter->setTimeout($this->getTimeout());
+                    }
+                    $adapter->resetDebug();
+                    foreach ($this->getDebug() as $key => $value) {
+                        $adapter->setDebug($key, $value);
+                    }
+                    $adapter->resetMetadata();
+                    foreach ($this->getMetadata() as $key => $value) {
+                        $adapter->setMetadata($key, $value);
+                    }
+
+                    if ($this->skipDuplicates) {
+                        return $adapter->skipDuplicates(
+                            fn () => $adapter->{$method}(...$args)
+                        );
+                    }
+                    return $adapter->{$method}(...$args);
+                });
+            } catch (\PDOException $e) {
+                if ($attempt < $maxAttempts && Connection::hasError($e)) {
+                    \usleep(100000 * $attempt); // Backoff: 100ms, 200ms
+                    continue;
+                }
+                throw $e;
             }
-            return $adapter->{$method}(...$args);
-        });
+        }
     }
 
     public function getDriver(): mixed

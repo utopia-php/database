@@ -6145,11 +6145,9 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $isNoop = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$isNoop) {
             $time = DateTime::now();
-            $inputKeys = \array_keys($document->getArrayCopy());
-            $onlyUpdatedAtChanged = false;
-            $canSkipUpdatedAt = false;
             $skipAdapterUpdate = false;
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6170,8 +6168,9 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
+            $rawInput = $document->getArrayCopy();
 
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document = \array_merge($old->getArrayCopy(), $rawInput);
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -6193,7 +6192,7 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
                 $updatedAtChanged = false;
-                $attributeTypes = [];
+                $floatAttributes = [];
 
                 foreach ($relationships as $relationship) {
                     $relationships[$relationship->getAttribute('key')] = $relationship;
@@ -6209,7 +6208,7 @@ class Database
                 if (!$shouldUpdate) {
                     foreach ($attributes as $attribute) {
                         if ($attribute->getAttribute('type') === self::VAR_FLOAT) {
-                            $attributeTypes[$attribute->getAttribute('key')] = self::VAR_FLOAT;
+                            $floatAttributes[$attribute->getAttribute('key')] = true;
                         }
                     }
                 }
@@ -6305,7 +6304,7 @@ class Database
 
                     // VAR_FLOAT: tolerate scalar type drift (e.g. JSON round-trip dropping
                     // trailing zeros so 5.0 comes back as int 5) by comparing as floats.
-                    $isFloatNoop = ($attributeTypes[$key] ?? null) === self::VAR_FLOAT
+                    $isFloatNoop = isset($floatAttributes[$key])
                         && \is_numeric($value)
                         && \is_numeric($oldValue)
                         && (float)$value === (float)$oldValue;
@@ -6320,23 +6319,33 @@ class Database
                     }
                 }
 
-                if (!$shouldUpdate && $updatedAtChanged) {
-                    $onlyUpdatedAtChanged = true;
-                    $updatedAt = $document->getAttribute('$updatedAt');
-                    $canSkipUpdatedAt = \is_null($updatedAt) || $updatedAt instanceof \DateTime;
+                $onlyUpdatedAtChanged = !$shouldUpdate && $updatedAtChanged;
+                $updatedAtIsValid = false;
+                $inputIsBareUpdatedAt = false;
 
-                    if (!$canSkipUpdatedAt && \is_string($updatedAt) && $updatedAt !== '') {
+                if ($onlyUpdatedAtChanged) {
+                    $updatedAt = $document->getAttribute('$updatedAt');
+                    $updatedAtIsValid = \is_null($updatedAt) || $updatedAt instanceof \DateTime;
+
+                    if (!$updatedAtIsValid && \is_string($updatedAt) && $updatedAt !== '') {
                         try {
                             new \DateTime($updatedAt);
-                            $canSkipUpdatedAt = true;
+                            $updatedAtIsValid = true;
                         } catch (\Throwable) {
                         }
                     }
 
-                    if ($inputKeys !== ['$updatedAt'] && \is_null($updatedAt)) {
+                    $inputKeys = \array_keys($rawInput);
+                    $inputIsBareUpdatedAt = ($inputKeys === ['$updatedAt']);
+
+                    if (!$inputIsBareUpdatedAt && \is_null($updatedAt)) {
+                        // Caller nulled $updatedAt while resubmitting otherwise unchanged
+                        // fields → treat as a silent no-op (don't touch storage).
                         $skipAdapterUpdate = true;
                         $document = $old;
                     } else {
+                        // Caller explicitly set $updatedAt (or supplied only that key) →
+                        // honor as a real update — requires UPDATE perm.
                         $shouldUpdate = true;
                     }
                 }
@@ -6353,7 +6362,18 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
-                        if ($onlyUpdatedAtChanged && $inputKeys !== ['$updatedAt'] && $canSkipUpdatedAt && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
+                        // Stale-cache tolerance: a caller without UPDATE perm who has READ
+                        // perm and resubmitted a stale $updatedAt (alongside otherwise
+                        // unchanged fields) likely didn't intend to write — treat as a
+                        // silent no-op instead of an authorization error. Bare
+                        // {$updatedAt: ...} is an explicit timestamp write and still
+                        // requires UPDATE perm.
+                        $canTolerateStaleCache = $onlyUpdatedAtChanged
+                            && !$inputIsBareUpdatedAt
+                            && $updatedAtIsValid
+                            && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions));
+
+                        if ($canTolerateStaleCache) {
                             $shouldUpdate = false;
                             $skipAdapterUpdate = true;
                             $document = $old;
@@ -6366,6 +6386,16 @@ class Database
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
                 }
+            }
+
+            if ($skipAdapterUpdate) {
+                // No-op: storage is unchanged, so re-running encode/structure-validation/
+                // casting against $old (which is already decoded + relationships-populated
+                // by getDocument) would re-apply filters and corrupt the return shape.
+                // The caller expects the same shape as a real update would return; $old
+                // already matches that shape.
+                $isNoop = true;
+                return $old;
             }
 
             if ($shouldUpdate) {
@@ -6395,15 +6425,13 @@ class Database
                 }
             }
 
-            if (!$skipAdapterUpdate && $this->resolveRelationships) {
+            if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            if (!$skipAdapterUpdate) {
-                $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
-            }
+            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 
@@ -6431,6 +6459,14 @@ class Database
         });
 
         if ($document->isEmpty()) {
+            return $document;
+        }
+
+        if ($isNoop) {
+            // $old was returned directly from getDocument(), which already populated
+            // relationships, decoded filters, and applied the custom document type.
+            // Re-running those would corrupt the shape; skip post-processing and the
+            // EVENT_DOCUMENT_UPDATE trigger (no update actually happened).
             return $document;
         }
 

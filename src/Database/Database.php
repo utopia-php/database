@@ -6194,14 +6194,18 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
-                foreach ($attributes as $attribute) {
-                    $attributeTypes[$attribute->getAttribute('key')] = $attribute->getAttribute('type');
-                }
-
                 foreach ($document as $key => $value) {
                     if (Operator::isOperator($value)) {
                         $shouldUpdate = true;
                         break;
+                    }
+                }
+
+                if (!$shouldUpdate) {
+                    foreach ($attributes as $attribute) {
+                        if ($attribute->getAttribute('type') === self::VAR_FLOAT) {
+                            $attributeTypes[$attribute->getAttribute('key')] = self::VAR_FLOAT;
+                        }
                     }
                 }
 
@@ -6294,7 +6298,14 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    if (($attributeTypes[$key] ?? null) === self::VAR_FLOAT && \is_numeric($value) && \is_numeric($oldValue) && (float)$value === (float)$oldValue) {
+                    // VAR_FLOAT: tolerate scalar type drift (e.g. JSON round-trip dropping
+                    // trailing zeros so 5.0 comes back as int 5) by comparing as floats.
+                    $isFloatNoop = ($attributeTypes[$key] ?? null) === self::VAR_FLOAT
+                        && \is_numeric($value)
+                        && \is_numeric($oldValue)
+                        && (float)$value === (float)$oldValue;
+
+                    if ($isFloatNoop) {
                         continue;
                     }
 

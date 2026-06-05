@@ -6146,14 +6146,14 @@ trait DocumentTests
         $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
         $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
 
-        sleep(1); // Ensure $updatedAt differs when adapter timestamp precision is seconds
-
         $doc4->setAttribute('$updatedAt', null);
         $doc4->setAttribute('$createdAt', null);
         $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);
 
+        // No content changed and dates were nulled, so the update is a no-op
+        // and both timestamps are preserved.
         $this->assertEquals($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));
-        $this->assertNotEquals($originalUpdatedAt4, $updatedDoc4->getAttribute('$updatedAt'));
+        $this->assertEquals($originalUpdatedAt4, $updatedDoc4->getAttribute('$updatedAt'));
 
         // Test 5: Update only updatedAt
         $updatedDoc4->setAttribute('$updatedAt', $updateDate);

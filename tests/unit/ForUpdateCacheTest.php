@@ -234,4 +234,120 @@ class ForUpdateCacheTest extends TestCase
 
         $this->assertNotSame($created->getUpdatedAt(), $updated->getUpdatedAt());
     }
+
+    public function testNonBareNullUpdatedAtIsSilentNoopForReadOnlyCaller(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('null_noop_readonly_' . uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // Caller has READ but not UPDATE. Resubmits the full document with
+        // $updatedAt nulled and no actual attribute diff → must be a silent
+        // no-op (no AuthorizationException, no storage write, no audit event).
+        $stale = $database->getDocument('projects', 'project');
+        $stale->setAttribute('$updatedAt', null);
+
+        $result = $database->updateDocument('projects', 'project', $stale);
+
+        $this->assertSame('same', $result->getAttribute('name'));
+
+        $collection = $database->getCollection('projects');
+        $stored = $adapter->getDocument($collection, 'project');
+        $this->assertSame('same', $stored->getAttribute('name'));
+    }
+
+    public function testUnparseableUpdatedAtRejectsReadOnlyCaller(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('unparseable_updated_at_' . uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        $stale = $database->getDocument('projects', 'project');
+        $stale->setAttribute('$updatedAt', 'not-a-date');
+
+        // An unparseable $updatedAt is not a recognizable stale-cache value, so the
+        // tolerance branch must NOT apply; a caller without UPDATE perm must be
+        // rejected, not silently treated as a no-op.
+        $database->setPreserveDates(true);
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', $stale);
+    }
+
+    public function testFloatNoopDoesNotAdvanceUpdatedAt(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('float_noop_storage_' . uniqid('', true));
+
+        $database->create();
+        $database->createCollection('measurements', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+        $database->createAttribute('measurements', 'value', Database::VAR_FLOAT, 0, false);
+        $created = $database->createDocument('measurements', new Document([
+            '$id' => 'm1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'value' => 5.0,
+        ]));
+
+        \usleep(2000);
+
+        // 5 vs 5.0 is a float-drift no-op. Without the no-op detection, the
+        // adapter would still be called and $updatedAt would advance to now().
+        $stale = $database->getDocument('measurements', 'm1');
+        $stale->setAttribute('value', 5);
+
+        $updated = $database->updateDocument('measurements', 'm1', $stale);
+
+        // No write happened → $updatedAt must be byte-for-byte identical, proving
+        // the adapter->updateDocument call was skipped (otherwise it would have
+        // advanced to DateTime::now()).
+        $this->assertSame($created->getUpdatedAt(), $updated->getUpdatedAt());
+
+        // Storage should also hold the original value untouched.
+        $reread = $database->getDocument('measurements', 'm1', forUpdate: true);
+        $this->assertSame($created->getUpdatedAt(), $reread->getUpdatedAt());
+        $this->assertEquals(5.0, $reread->getAttribute('value'));
+    }
 }

@@ -6339,10 +6339,12 @@ class Database
                     // metadata (any subset of INTERNAL_ATTRIBUTES). A client echoing
                     // back a fetched document carries $id, $collection, $createdAt,
                     // etc. — without this strip, a strict array_keys equality test
-                    // would fail open for any of those shapes.
+                    // would fail open for any of those shapes. Deriving from the
+                    // constant keeps this branch in lockstep when new internal
+                    // attributes are added.
                     $callerNonMetaKeys = \array_diff(
                         \array_keys($rawInput),
-                        ['$id', '$sequence', '$collection', '$tenant', '$createdAt', '$updatedAt', '$permissions']
+                        \array_column(self::INTERNAL_ATTRIBUTES, '$id')
                     );
                     $inputIsBareUpdatedAt = empty($callerNonMetaKeys);
 

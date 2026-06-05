@@ -6142,6 +6142,7 @@ class Database
         $newUpdatedAt = $document->getUpdatedAt();
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
+            $inputKeys = \array_keys($document->getArrayCopy());
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -6165,6 +6166,7 @@ class Database
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            $document['$updatedAt'] = ($newUpdatedAt === null || !$this->preserveDates) ? $old->getUpdatedAt() : $newUpdatedAt;
 
             if ($this->adapter->getSharedTables()) {
                 $tenant = $old->getTenant();
@@ -6183,9 +6185,16 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                $updatedAtChanged = false;
+                $onlyUpdatedAtChanged = false;
+                $attributeTypes = [];
 
                 foreach ($relationships as $relationship) {
                     $relationships[$relationship->getAttribute('key')] = $relationship;
+                }
+
+                foreach ($attributes as $attribute) {
+                    $attributeTypes[$attribute->getAttribute('key')] = $attribute->getAttribute('type');
                 }
 
                 foreach ($document as $key => $value) {
@@ -6274,12 +6283,29 @@ class Database
                         continue;
                     }
 
+                    if ($key === '$updatedAt') {
+                        if ($value !== $old->getAttribute($key)) {
+                            $updatedAtChanged = true;
+                        }
+
+                        continue;
+                    }
+
                     $oldValue = $old->getAttribute($key);
+
+                    if (($attributeTypes[$key] ?? null) === self::VAR_FLOAT && \is_numeric($value) && \is_numeric($oldValue) && (float)$value === (float)$oldValue) {
+                        continue;
+                    }
 
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
                     }
+                }
+
+                if (!$shouldUpdate && $updatedAtChanged) {
+                    $onlyUpdatedAtChanged = true;
+                    $shouldUpdate = true;
                 }
 
                 $updatePermissions = [
@@ -6294,7 +6320,11 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
-                        throw new AuthorizationException($this->authorization->getDescription());
+                        if ($onlyUpdatedAtChanged && $inputKeys !== ['$updatedAt'] && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
+                            $shouldUpdate = false;
+                        } else {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
                     }
                 } else {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
@@ -6328,6 +6358,10 @@ class Database
                 if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
                 }
+            }
+
+            if (!$shouldUpdate) {
+                $document->setAttribute('$updatedAt', $old->getUpdatedAt());
             }
 
             if ($this->resolveRelationships) {

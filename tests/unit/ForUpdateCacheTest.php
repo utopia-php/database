@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
@@ -96,6 +97,70 @@ class ForUpdateCacheTest extends TestCase
         $afterUpdate = $adapter->getDocument($collection, 'project');
         $this->assertSame('same', $afterUpdate->getAttribute('name'));
         $this->assertSame('2030-01-01T00:00:00.000+00:00', $afterUpdate->getUpdatedAt());
+    }
+
+    public function testBareUpdatedAtInputStillRequiresUpdatePermission(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('bare_updated_at_' . uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // A read-only caller submitting *only* $updatedAt is an explicit timestamp
+        // write — the stale-cache tolerance must not apply, and UPDATE perm is required.
+        $database->setPreserveDates(true);
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', new Document([
+            '$updatedAt' => '2030-01-01T00:00:00.000+00:00',
+        ]));
+    }
+
+    public function testStaleCacheResubmitWithRealChangeStillRequiresUpdatePermission(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('stale_real_change_' . uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'original',
+        ]));
+
+        $stale = $database->getDocument('projects', 'project');
+        $stale->setAttribute('name', 'mutated');
+
+        // The tolerance branch must reject any input with a real attribute diff,
+        // even if the caller also has a stale $updatedAt.
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', $stale);
     }
 
     public function testNumericallyEqualFloatDoesNotTriggerSpuriousUpdate(): void

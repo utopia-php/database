@@ -437,4 +437,124 @@ class ForUpdateCacheTest extends TestCase
         $this->expectException(AuthorizationException::class);
         $database->updateDocument('projects', 'project', $stale);
     }
+
+    public function testStaleCacheToleranceDoesNotEmitUpdateEvent(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('tolerance_event_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // Force a stale cached $updatedAt so the tolerance branch will engage.
+        $collection = $database->getCollection('projects');
+        $stored = $adapter->getDocument($collection, 'project');
+        $stored->setAttribute('$updatedAt', '2030-01-01T00:00:00.000+00:00');
+        $adapter->updateDocument($collection, 'project', $stored, true);
+
+        $stale = $database->getDocument('projects', 'project');
+
+        // Subscribe before triggering the no-op resubmit.
+        $eventHits = 0;
+        $database->on(Database::EVENT_DOCUMENT_UPDATE, 'tolerance-probe', function () use (&$eventHits) {
+            $eventHits++;
+        });
+
+        // Caller has READ but not UPDATE. Tolerance triggers a silent no-op.
+        // The event must NOT fire: it would let a read-only caller forge audit
+        // entries and probe document existence via downstream listeners.
+        $result = $database->updateDocument('projects', 'project', $stale);
+
+        $this->assertSame('same', $result->getAttribute('name'));
+        $this->assertSame(0, $eventHits);
+    }
+
+    public function testLegitimateNoopStillEmitsUpdateEvent(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('legit_noop_event_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        $stale = $database->getDocument('projects', 'project');
+        $stale->setAttribute('$updatedAt', null);
+
+        $eventHits = 0;
+        $database->on(Database::EVENT_DOCUMENT_UPDATE, 'legit-noop', function () use (&$eventHits) {
+            $eventHits++;
+        });
+
+        // Caller HAS UPDATE perm; the no-op (null-$updatedAt) path is a legitimate
+        // invocation, so the event must still fire for audit / change-stream consumers.
+        $database->updateDocument('projects', 'project', $stale);
+        $this->assertSame(1, $eventHits);
+    }
+
+    public function testJunkKeyDoesNotUnlockStaleCacheTolerance(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('junk_key_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // A read-only caller submitting only a stale $updatedAt + a junk null-valued
+        // key (not in the schema, not an internal meta key) must NOT engage the
+        // tolerance branch — junk keys can't count as "real attribute keys" or a
+        // caller could trivially unlock the tolerance path by appending any unknown
+        // null key.
+        $database->setPreserveDates(true);
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', new Document([
+            '$updatedAt' => '2030-01-01T00:00:00.000+00:00',
+            'garbageKey' => null,
+        ]));
+    }
 }

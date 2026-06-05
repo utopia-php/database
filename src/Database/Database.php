@@ -378,6 +378,15 @@ class Database
     protected static array $filters = [];
 
     /**
+     * Lazy-derived list of caller-facing meta keys (`$id`, `$updatedAt`, …)
+     * sourced from INTERNAL_ATTRIBUTES. Cached because rebuilding it on every
+     * updateDocument() call is wasted work — the constant doesn't change.
+     *
+     * @var list<string>|null
+     */
+    private static ?array $internalMetaKeys = null;
+
+    /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
@@ -6141,12 +6150,14 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
         $isNoop = false;
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$isNoop) {
+        $silentNoop = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$isNoop, &$silentNoop) {
             $time = DateTime::now();
             // Reset on every attempt: withTransaction may retry on non-domain
-            // failures, and a previous attempt's no-op flag must not bleed into
-            // a retry that ends up writing for real.
+            // failures, and a previous attempt's flags must not bleed into a
+            // retry that ends up writing for real.
             $isNoop = false;
+            $silentNoop = false;
             $skipAdapterUpdate = false;
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6191,7 +6202,7 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
                 $updatedAtChanged = false;
-                $floatAttributes = [];
+                $floatAttributes = null;
 
                 foreach ($relationships as $relationship) {
                     $relationships[$relationship->getAttribute('key')] = $relationship;
@@ -6201,14 +6212,6 @@ class Database
                     if (Operator::isOperator($value)) {
                         $shouldUpdate = true;
                         break;
-                    }
-                }
-
-                if (!$shouldUpdate) {
-                    foreach ($attributes as $attribute) {
-                        if ($attribute->getAttribute('type') === self::VAR_FLOAT) {
-                            $floatAttributes[$attribute->getAttribute('key')] = true;
-                        }
                     }
                 }
 
@@ -6301,18 +6304,26 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    // VAR_FLOAT: tolerate scalar type drift (e.g. JSON round-trip dropping
-                    // trailing zeros so 5.0 comes back as int 5) by comparing as floats.
-                    $isFloatNoop = isset($floatAttributes[$key])
-                        && \is_numeric($value)
-                        && \is_numeric($oldValue)
-                        && (float)$value === (float)$oldValue;
-
-                    if ($isFloatNoop) {
-                        continue;
-                    }
-
                     if ($value !== $oldValue) {
+                        // VAR_FLOAT: tolerate scalar type drift (e.g. JSON round-trip
+                        // dropping trailing zeros so 5.0 comes back as int 5) by comparing
+                        // as floats. Build the float-attribute map lazily — only on the
+                        // first numeric-mismatch we encounter — so collections with no
+                        // VAR_FLOAT attributes never pay the up-front scan cost.
+                        if (\is_numeric($value) && \is_numeric($oldValue) && (float)$value === (float)$oldValue) {
+                            if ($floatAttributes === null) {
+                                $floatAttributes = [];
+                                foreach ($attributes as $attribute) {
+                                    if ($attribute->getAttribute('type') === self::VAR_FLOAT) {
+                                        $floatAttributes[$attribute->getAttribute('key')] = true;
+                                    }
+                                }
+                            }
+                            if (isset($floatAttributes[$key])) {
+                                continue;
+                            }
+                        }
+
                         $shouldUpdate = true;
                         break;
                     }
@@ -6336,15 +6347,19 @@ class Database
                     }
 
                     // "Bare" = caller supplied no real attribute keys, only system
-                    // metadata (any subset of INTERNAL_ATTRIBUTES). A client echoing
-                    // back a fetched document carries $id, $collection, $createdAt,
-                    // etc. — without this strip, a strict array_keys equality test
-                    // would fail open for any of those shapes. Deriving from the
-                    // constant keeps this branch in lockstep when new internal
-                    // attributes are added.
+                    // metadata. A "real" key here must be both (a) not an internal
+                    // meta key AND (b) actually defined on the collection schema —
+                    // a junk/typo key like {garbageKey: null} must not be enough to
+                    // flip the input to "non-bare", otherwise a read-only caller could
+                    // unlock the stale-cache tolerance branch (and the event it fires)
+                    // just by appending an unknown null-valued key.
+                    $schemaKeys = \array_map(
+                        fn ($attr) => $attr->getAttribute('key'),
+                        $attributes
+                    );
                     $callerNonMetaKeys = \array_diff(
-                        \array_keys($rawInput),
-                        \array_column(self::INTERNAL_ATTRIBUTES, '$id')
+                        \array_intersect(\array_keys($rawInput), $schemaKeys),
+                        self::internalMetaKeys()
                     );
                     $inputIsBareUpdatedAt = empty($callerNonMetaKeys);
 
@@ -6386,6 +6401,11 @@ class Database
                         if ($canTolerateStaleCache) {
                             $shouldUpdate = false;
                             $skipAdapterUpdate = true;
+                            // Auth-rejected → tolerated: the caller lacked UPDATE,
+                            // so don't emit EVENT_DOCUMENT_UPDATE downstream. Firing
+                            // the event here would let a read-only caller probe doc
+                            // existence and inject spurious audit-log entries.
+                            $silentNoop = true;
                             $document = $old;
                         } else {
                             throw new AuthorizationException($this->authorization->getDescription());
@@ -6476,9 +6496,13 @@ class Database
             // $old was returned directly from getDocument(), which already populated
             // relationships, decoded filters, and applied the custom document type.
             // Re-running those would corrupt the shape; skip post-processing. The
-            // caller still invoked updateDocument(), so emit the event so audit
-            // listeners and change-stream consumers see the attempt.
-            $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+            // caller still invoked updateDocument(), so by default emit the event so
+            // audit listeners and change-stream consumers see the attempt — except
+            // on the stale-cache tolerance path, where the caller lacked UPDATE perm
+            // and the event would leak doc existence / forge audit entries.
+            if (!$silentNoop) {
+                $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+            }
             return $document;
         }
 
@@ -9575,6 +9599,14 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function internalMetaKeys(): array
+    {
+        return self::$internalMetaKeys ??= \array_column(self::INTERNAL_ATTRIBUTES, '$id');
     }
 
     private static function computeCallableSignature(callable $callable): string

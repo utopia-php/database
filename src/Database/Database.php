@@ -4862,6 +4862,11 @@ class Database
                 }
             }
 
+            // JSON serialization in cache backends collapses floats with zero
+            // fractions to ints. Re-cast so cached and freshly-loaded documents
+            // compare equal under strict equality (e.g. in updateDocument).
+            $document = $this->casting($collection, $document);
+
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
             if ($this->isTtlExpired($collection, $document)) {

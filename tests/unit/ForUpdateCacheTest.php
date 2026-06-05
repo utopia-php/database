@@ -350,4 +350,76 @@ class ForUpdateCacheTest extends TestCase
         $this->assertSame($created->getUpdatedAt(), $reread->getUpdatedAt());
         $this->assertEquals(5.0, $reread->getAttribute('value'));
     }
+
+    public function testMetaOnlyInputStillRequiresUpdatePermission(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('meta_only_updated_at_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        // Caller submits only system meta keys ($id + $updatedAt) — no real attribute
+        // keys. This is an explicit timestamp write, not a stale-cache resubmit, so it
+        // must require UPDATE perm regardless of how many meta keys are echoed back.
+        // Without the meta-aware "bare" check, a strict array_keys === ['$updatedAt']
+        // comparison would fail open for this shape.
+        $database->setPreserveDates(true);
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', new Document([
+            '$id' => 'project',
+            '$updatedAt' => '2030-01-01T00:00:00.000+00:00',
+        ]));
+    }
+
+    public function testRelativeTimestampStringStillRequiresUpdatePermission(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('relative_updated_at_' . \uniqid('', true));
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        $stale = $database->getDocument('projects', 'project');
+        // \DateTime("now") and \DateTime("yesterday") both parse without throwing,
+        // but no real cached timestamp would carry these values. The tolerance branch
+        // must reject relative/symbolic time expressions via a strict ISO-shape check;
+        // otherwise an attacker who knows neither the real $updatedAt nor any prior
+        // doc state can engage tolerance just by submitting "now".
+        $stale->setAttribute('$updatedAt', 'now');
+
+        $database->setPreserveDates(true);
+        $this->expectException(AuthorizationException::class);
+        $database->updateDocument('projects', 'project', $stale);
+    }
 }

@@ -6327,16 +6327,25 @@ class Database
                     $updatedAt = $document->getAttribute('$updatedAt');
                     $updatedAtIsValid = \is_null($updatedAt) || $updatedAt instanceof \DateTime;
 
+                    // Strict ISO-shape check: \DateTime() accepts "now", "yesterday",
+                    // "+1 year", "@0" etc. — none of which a real cached timestamp
+                    // would carry. Constrain to formatDb ("Y-m-d H:i:s.v") and
+                    // formatTz ("Y-m-d\TH:i:s.vP") prefixes so the tolerance branch
+                    // can't be triggered by relative or symbolic time expressions.
                     if (!$updatedAtIsValid && \is_string($updatedAt) && $updatedAt !== '') {
-                        try {
-                            new \DateTime($updatedAt);
-                            $updatedAtIsValid = true;
-                        } catch (\Throwable) {
-                        }
+                        $updatedAtIsValid = \preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/', $updatedAt) === 1;
                     }
 
-                    $inputKeys = \array_keys($rawInput);
-                    $inputIsBareUpdatedAt = ($inputKeys === ['$updatedAt']);
+                    // "Bare" = caller supplied no real attribute keys, only system
+                    // metadata (any subset of INTERNAL_ATTRIBUTES). A client echoing
+                    // back a fetched document carries $id, $collection, $createdAt,
+                    // etc. — without this strip, a strict array_keys equality test
+                    // would fail open for any of those shapes.
+                    $callerNonMetaKeys = \array_diff(
+                        \array_keys($rawInput),
+                        ['$id', '$sequence', '$collection', '$tenant', '$createdAt', '$updatedAt', '$permissions']
+                    );
+                    $inputIsBareUpdatedAt = empty($callerNonMetaKeys);
 
                     if (!$inputIsBareUpdatedAt && \is_null($updatedAt)) {
                         // Caller nulled $updatedAt while resubmitting otherwise unchanged

@@ -47,5 +47,10 @@ class ForUpdateCacheTest extends TestCase
 
         $fresh = $database->getDocument('projects', 'project', forUpdate: true);
         $this->assertSame('fresh', $fresh->getAttribute('name'));
+
+        // A locking read must not repopulate the cache, otherwise subsequent
+        // non-locking reads would see transactionally-scoped data.
+        $afterForUpdate = $database->getDocument('projects', 'project');
+        $this->assertSame('stale', $afterForUpdate->getAttribute('name'));
     }
 }

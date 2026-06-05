@@ -193,9 +193,14 @@ class ForUpdateCacheTest extends TestCase
         // Read-only caller resubmits the doc; equal-as-float should be treated as a no-op
         // instead of failing the update permission check.
         $updated = $database->updateDocument('measurements', 'm1', $stale);
+        // Numerically equal is the contract this branch promises (5 == 5.0); the
+        // post-write storage type is intentionally adapter-defined and is
+        // re-coerced by casting() on subsequent reads.
         $this->assertEquals(5.0, $updated->getAttribute('value'));
 
-        // Storage must still hold the original float; no spurious write should have occurred.
+        // Storage holds a numerically equal value (intentional pre-existing
+        // drift on adapters without castingBefore); subsequent reads through
+        // the Database layer re-coerce via casting().
         $collection = $database->getCollection('measurements');
         $stored = $adapter->getDocument($collection, 'm1');
         $this->assertEquals(5.0, $stored->getAttribute('value'));
@@ -225,7 +230,10 @@ class ForUpdateCacheTest extends TestCase
             'name' => 'same',
         ]));
 
-        \usleep(2000);
+        // DateTime::now() formats with millisecond precision (Y-m-d H:i:s.v),
+        // so the sleep must be well above 1ms to avoid same-bucket flakes on
+        // loaded CI runners.
+        \usleep(50_000);
 
         $database->setPreserveDates(true);
         $updated = $database->updateDocument('projects', 'project', new Document([
@@ -331,7 +339,11 @@ class ForUpdateCacheTest extends TestCase
             'value' => 5.0,
         ]));
 
-        \usleep(2000);
+        // Even a 50ms sleep here would still pass the assertSame below if the
+        // no-op detection works, since no write should happen. The sleep proves
+        // the assertion is meaningful: if the adapter were called, $updatedAt
+        // would advance by ≥1ms and the assertion would fail.
+        \usleep(50_000);
 
         // 5 vs 5.0 is a float-drift no-op. Without the no-op detection, the
         // adapter would still be called and $updatedAt would advance to now().
@@ -340,15 +352,18 @@ class ForUpdateCacheTest extends TestCase
 
         $updated = $database->updateDocument('measurements', 'm1', $stale);
 
-        // No write happened → $updatedAt must be byte-for-byte identical, proving
-        // the adapter->updateDocument call was skipped (otherwise it would have
-        // advanced to DateTime::now()).
+        // shouldUpdate stayed false because of the float-noop detection, so
+        // $updatedAt was not bumped — proves the diff loop treated 5 vs 5.0 as
+        // equal even though strict !== would say otherwise.
         $this->assertSame($created->getUpdatedAt(), $updated->getUpdatedAt());
+        $this->assertEquals(5.0, $updated->getAttribute('value'));
 
-        // Storage should also hold the original value untouched.
+        // Subsequent reads through the Database layer re-coerce via casting()
+        // back to float, even if the adapter stores a numerically equal int.
         $reread = $database->getDocument('measurements', 'm1', forUpdate: true);
         $this->assertSame($created->getUpdatedAt(), $reread->getUpdatedAt());
-        $this->assertEquals(5.0, $reread->getAttribute('value'));
+        $this->assertIsFloat($reread->getAttribute('value'));
+        $this->assertSame(5.0, $reread->getAttribute('value'));
     }
 
     public function testMetaOnlyInputStillRequiresUpdatePermission(): void

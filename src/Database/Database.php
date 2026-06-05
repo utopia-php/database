@@ -6143,6 +6143,9 @@ class Database
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $inputKeys = \array_keys($document->getArrayCopy());
+            $onlyUpdatedAtChanged = false;
+            $canSkipUpdatedAt = false;
+            $skipAdapterUpdate = false;
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -6166,7 +6169,6 @@ class Database
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
-            $document['$updatedAt'] = ($newUpdatedAt === null || !$this->preserveDates) ? $old->getUpdatedAt() : $newUpdatedAt;
 
             if ($this->adapter->getSharedTables()) {
                 $tenant = $old->getTenant();
@@ -6186,7 +6188,6 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
                 $updatedAtChanged = false;
-                $onlyUpdatedAtChanged = false;
                 $attributeTypes = [];
 
                 foreach ($relationships as $relationship) {
@@ -6305,7 +6306,23 @@ class Database
 
                 if (!$shouldUpdate && $updatedAtChanged) {
                     $onlyUpdatedAtChanged = true;
-                    $shouldUpdate = true;
+                    $updatedAt = $document->getAttribute('$updatedAt');
+                    $canSkipUpdatedAt = \is_null($updatedAt) || $updatedAt instanceof \DateTime;
+
+                    if (!$canSkipUpdatedAt && \is_string($updatedAt) && $updatedAt !== '') {
+                        try {
+                            new \DateTime($updatedAt);
+                            $canSkipUpdatedAt = true;
+                        } catch (\Throwable) {
+                        }
+                    }
+
+                    if ($inputKeys !== ['$updatedAt'] && \is_null($updatedAt)) {
+                        $skipAdapterUpdate = true;
+                        $document = $old;
+                    } else {
+                        $shouldUpdate = true;
+                    }
                 }
 
                 $updatePermissions = [
@@ -6320,13 +6337,10 @@ class Database
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
-                        // Tolerate stale-cache round-trips: a read-only caller may resubmit a
-                        // document whose only divergence from storage is a $updatedAt fetched
-                        // from cache. Treat that as a no-op instead of an auth error, but only
-                        // when the input carries more than just $updatedAt — an explicit
-                        // updatedAt-only write still requires update permission.
-                        if ($onlyUpdatedAtChanged && $inputKeys !== ['$updatedAt'] && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
+                        if ($onlyUpdatedAtChanged && $inputKeys !== ['$updatedAt'] && $canSkipUpdatedAt && $this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
                             $shouldUpdate = false;
+                            $skipAdapterUpdate = true;
+                            $document = $old;
                         } else {
                             throw new AuthorizationException($this->authorization->getDescription());
                         }
@@ -6365,17 +6379,15 @@ class Database
                 }
             }
 
-            if (!$shouldUpdate) {
-                $document->setAttribute('$updatedAt', $old->getUpdatedAt());
-            }
-
-            if ($this->resolveRelationships) {
+            if (!$skipAdapterUpdate && $this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            if (!$skipAdapterUpdate) {
+                $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            }
 
             $document = $this->adapter->castingAfter($collection, $document);
 

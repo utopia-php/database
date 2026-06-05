@@ -135,4 +135,38 @@ class ForUpdateCacheTest extends TestCase
         $stored = $adapter->getDocument($collection, 'm1');
         $this->assertEquals(5.0, $stored->getAttribute('value'));
     }
+
+    public function testExplicitNullUpdatedAtStillUpdatesTimestamp(): void
+    {
+        $cache = new Cache(new CacheMemory());
+        $adapter = new DatabaseMemory();
+        $database = new Database($adapter, $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('null_updated_at_' . uniqid());
+
+        $database->create();
+        $database->createCollection('projects', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $created = $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'same',
+        ]));
+
+        \usleep(2000);
+
+        $database->setPreserveDates(true);
+        $updated = $database->updateDocument('projects', 'project', new Document([
+            '$updatedAt' => null,
+        ]));
+
+        $this->assertNotSame($created->getUpdatedAt(), $updated->getUpdatedAt());
+    }
 }

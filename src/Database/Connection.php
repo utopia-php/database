@@ -10,7 +10,8 @@ class Connection
      * @var array<string>
      */
     protected static array $errors = [
-        'Max connect timeout reached'
+        'Max connect timeout reached',
+        'Access denied',
     ];
 
     /**

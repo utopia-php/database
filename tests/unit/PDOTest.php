@@ -150,4 +150,51 @@ class PDOTest extends TestCase
 
         $this->assertSame($pdoStatementMock, $result);
     }
+
+    public function testCreateConnectionRetriesOnTransientError(): void
+    {
+        $pdoWrapper = new class('mysql:host=localhost', null, null) extends PDO {
+            public int $newPDOCalls = 0;
+
+            protected function newPDO(): \PDO
+            {
+                $this->newPDOCalls++;
+                if ($this->newPDOCalls < 3) {
+                    throw new \PDOException('SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user \'appwrite\'@\'10.0.2.101\' (using password: YES)');
+                }
+                return (new \ReflectionClass(\PDO::class))->newInstanceWithoutConstructor();
+            }
+        };
+
+        $this->assertEquals(3, $pdoWrapper->newPDOCalls);
+    }
+
+    public function testCreateConnectionThrowsAfterMaxRetries(): void
+    {
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Access denied');
+
+        new class('mysql:host=localhost', null, null) extends PDO {
+            protected function newPDO(): \PDO
+            {
+                throw new \PDOException('SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user \'appwrite\'@\'10.0.2.101\' (using password: YES)');
+            }
+        };
+    }
+
+    public function testCreateConnectionDoesNotRetryNonConnectionErrors(): void
+    {
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Base table or view not found');
+
+        new class('mysql:host=localhost', null, null) extends PDO {
+            public int $newPDOCalls = 0;
+
+            protected function newPDO(): \PDO
+            {
+                $this->newPDOCalls++;
+                throw new \PDOException('SQLSTATE[42S02]: Base table or view not found');
+            }
+        };
+    }
 }

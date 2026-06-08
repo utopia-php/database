@@ -14,6 +14,8 @@ class PDO
 {
     protected \PDO $pdo;
 
+    protected const MAX_CONNECTION_RETRIES = 3;
+
     /**
      * @param string $dsn
      * @param ?string $username
@@ -26,12 +28,7 @@ class PDO
         protected ?string $password,
         protected array $config = []
     ) {
-        $this->pdo = new \PDO(
-            $this->dsn,
-            $this->username,
-            $this->password,
-            $this->config
-        );
+        $this->pdo = $this->createConnection();
     }
 
     /**
@@ -66,18 +63,51 @@ class PDO
     }
 
     /**
+     * Create a new PDO connection with retry logic for transient errors.
+     *
+     * @return \PDO
+     * @throws \Throwable
+     */
+    protected function createConnection(): \PDO
+    {
+        $attempt = 0;
+
+        while (true) {
+            try {
+                return $this->newPDO();
+            } catch (\Throwable $e) {
+                $attempt++;
+                if ($attempt >= static::MAX_CONNECTION_RETRIES || !Connection::hasError($e)) {
+                    throw $e;
+                }
+                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning("[Database] Connection attempt {$attempt} failed. Retrying...");
+                \usleep($attempt * 100000); // 100ms, 200ms backoff
+            }
+        }
+    }
+
+    /**
+     * @return \PDO
+     */
+    protected function newPDO(): \PDO
+    {
+        return new \PDO(
+            $this->dsn,
+            $this->username,
+            $this->password,
+            $this->config
+        );
+    }
+
+    /**
      * Create a new connection to the database
      *
      * @return void
      */
     public function reconnect(): void
     {
-        $this->pdo = new \PDO(
-            $this->dsn,
-            $this->username,
-            $this->password,
-            $this->config
-        );
+        $this->pdo = $this->createConnection();
     }
 
     /**

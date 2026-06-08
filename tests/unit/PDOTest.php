@@ -122,6 +122,117 @@ class PDOTest extends TestCase
         $this->assertNotSame($oldPDO, $newPDO, "Reconnect should create a new PDO instance");
     }
 
+    public function testReconnectRetriesOnTransientFailure(): void
+    {
+        $attempt = 0;
+        $pdoMock = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $pdoWrapper = new class ('', null, null, [], 3) extends PDO {
+            public ?\Closure $factory = null;
+
+            public function __construct(
+                string $dsn,
+                ?string $username,
+                ?string $password,
+                array $config = [],
+                int $retries = 3
+            ) {
+                $this->retries = $retries;
+            }
+
+            protected function createPDO(): \PDO
+            {
+                if ($this->factory) {
+                    return ($this->factory)();
+                }
+                return parent::createPDO();
+            }
+        };
+
+        $pdoWrapper->factory = function () use (&$attempt, $pdoMock) {
+            $attempt++;
+            if ($attempt < 3) {
+                throw new \PDOException('SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user');
+            }
+            return $pdoMock;
+        };
+
+        $pdoWrapper->reconnect();
+
+        $reflection = new ReflectionClass($pdoWrapper);
+        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoProperty->setAccessible(true);
+
+        $this->assertSame($pdoMock, $pdoProperty->getValue($pdoWrapper));
+        $this->assertEquals(3, $attempt, 'Should have retried 3 times');
+    }
+
+    public function testReconnectThrowsAfterMaxRetries(): void
+    {
+        $pdoWrapper = new class ('', null, null, [], 3) extends PDO {
+            public function __construct(
+                string $dsn,
+                ?string $username,
+                ?string $password,
+                array $config = [],
+                int $retries = 3
+            ) {
+                $this->retries = $retries;
+            }
+
+            protected function createPDO(): \PDO
+            {
+                throw new \PDOException('SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user');
+            }
+        };
+
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Access denied');
+        $pdoWrapper->reconnect();
+    }
+
+    public function testReconnectDoesNotRetryNonTransientErrors(): void
+    {
+        $attempt = 0;
+
+        $pdoWrapper = new class ('', null, null, [], 3) extends PDO {
+            public ?\Closure $factory = null;
+
+            public function __construct(
+                string $dsn,
+                ?string $username,
+                ?string $password,
+                array $config = [],
+                int $retries = 3
+            ) {
+                $this->retries = $retries;
+            }
+
+            protected function createPDO(): \PDO
+            {
+                if ($this->factory) {
+                    return ($this->factory)();
+                }
+                return parent::createPDO();
+            }
+        };
+
+        $pdoWrapper->factory = function () use (&$attempt) {
+            $attempt++;
+            throw new \PDOException('SQLSTATE[42000] Syntax error');
+        };
+
+        try {
+            $pdoWrapper->reconnect();
+        } catch (\PDOException $e) {
+            // expected
+        }
+
+        $this->assertEquals(1, $attempt, 'Should NOT retry non-transient errors');
+    }
+
     public function testMethodCallForPrepare(): void
     {
         $dsn = 'sqlite::memory:';

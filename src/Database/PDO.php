@@ -19,19 +19,16 @@ class PDO
      * @param ?string $username
      * @param ?string $password
      * @param array<mixed> $config
+     * @param int $maxConnectAttempts
      */
     public function __construct(
         protected string $dsn,
         protected ?string $username,
         protected ?string $password,
-        protected array $config = []
+        protected array $config = [],
+        protected int $maxConnectAttempts = 3
     ) {
-        $this->pdo = new \PDO(
-            $this->dsn,
-            $this->username,
-            $this->password,
-            $this->config
-        );
+        $this->pdo = $this->connectWithRetry();
     }
 
     /**
@@ -72,7 +69,49 @@ class PDO
      */
     public function reconnect(): void
     {
-        $this->pdo = new \PDO(
+        $this->pdo = $this->connectWithRetry();
+    }
+
+    /**
+     * Attempt to connect with retry logic for transient errors.
+     *
+     * @return \PDO
+     * @throws \PDOException
+     */
+    private function connectWithRetry(): \PDO
+    {
+        $attempts = 0;
+        $lastException = null;
+
+        while ($attempts < $this->maxConnectAttempts) {
+            try {
+                $attempts++;
+                return $this->createPDO();
+            } catch (\PDOException $e) {
+                $lastException = $e;
+
+                if ($attempts >= $this->maxConnectAttempts || !Connection::isTransientConnectError($e)) {
+                    throw $e;
+                }
+
+                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning("[Database] Transient connection error, retrying ({$attempts}/{$this->maxConnectAttempts})...");
+
+                \usleep(100_000 * $attempts); // 100ms, 200ms, ...
+            }
+        }
+
+        throw $lastException;
+    }
+
+    /**
+     * Create a new PDO instance.
+     *
+     * @return \PDO
+     */
+    protected function createPDO(): \PDO
+    {
+        return new \PDO(
             $this->dsn,
             $this->username,
             $this->password,
@@ -114,7 +153,7 @@ class PDO
 
         $parsed = ['driver' => \trim($driver)];
 
-        // Handle “path only” DSNs like sqlite:/path/to.db
+        // Handle "path only" DSNs like sqlite:/path/to.db
         if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
             $parsed['path'] = \ltrim($parameterString, '/');
             return $parsed;

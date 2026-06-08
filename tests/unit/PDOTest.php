@@ -8,27 +8,44 @@ use Utopia\Database\PDO;
 
 class PDOTest extends TestCase
 {
+    /**
+     * Create a PDO wrapper that uses an in-memory mock instead of a real driver.
+     *
+     * @return PDO
+     */
+    private function createMockPDOWrapper(): PDO
+    {
+        $pdoMock = $this->createMock(\PDO::class);
+
+        return new class ($pdoMock) extends PDO {
+            public function __construct(private \PDO $mock)
+            {
+                parent::__construct('mock:host=localhost', null, null);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                return $this->mock;
+            }
+        };
+    }
+
     public function testMethodCallIsForwardedToPDO(): void
     {
-        $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
+        $pdoWrapper = $this->createMockPDOWrapper();
 
-        // Use Reflection to replace the internal PDO instance with a mock
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
         $pdoProperty->setAccessible(true);
 
-        // Create a mock for the internal \PDO object.
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
 
-        // Create a PDOStatement mock since query returns a PDOStatement
         $pdoStatementMock = $this->getMockBuilder(\PDOStatement::class)
             ->disableOriginalConstructor()
             ->getMock();
 
-        // Expect that when we call 'query', the mock returns our PDOStatement mock.
         $pdoMock->expects($this->once())
             ->method('query')
             ->with('SELECT 1')
@@ -43,12 +60,6 @@ class PDOTest extends TestCase
 
     public function testLostConnectionRetriesCall(): void
     {
-        $dsn = 'sqlite::memory:';
-        $pdoWrapper = $this->getMockBuilder(PDO::class)
-            ->setConstructorArgs([$dsn, null, null, []])
-            ->onlyMethods(['reconnect'])
-            ->getMock();
-
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -64,26 +75,35 @@ class PDOTest extends TestCase
                 $pdoStatementMock
             ));
 
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper = new class ($pdoMock) extends PDO {
+            public bool $reconnectWasCalled = false;
 
-        $pdoWrapper->expects($this->once())
-            ->method('reconnect')
-            ->willReturnCallback(function () use ($pdoWrapper, $pdoMock, $pdoProperty) {
-                $pdoProperty->setValue($pdoWrapper, $pdoMock);
-            });
+            public function __construct(private \PDO $mock)
+            {
+                parent::__construct('mock:host=localhost', null, null);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                return $this->mock;
+            }
+
+            public function reconnect(): void
+            {
+                $this->reconnectWasCalled = true;
+                // Don't actually reconnect, keep the same mock
+            }
+        };
 
         $result = $pdoWrapper->query('SELECT 1');
 
+        $this->assertTrue($pdoWrapper->reconnectWasCalled);
         $this->assertSame($pdoStatementMock, $result);
     }
 
     public function testNonLostConnectionExceptionIsRethrown(): void
     {
-        $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
+        $pdoWrapper = $this->createMockPDOWrapper();
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
@@ -108,8 +128,25 @@ class PDOTest extends TestCase
 
     public function testReconnectCreatesNewPDOInstance(): void
     {
-        $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
+        $callCount = 0;
+        $pdoWrapper = new class ($callCount) extends PDO {
+            public function __construct(private int &$callCounter)
+            {
+                parent::__construct('mock:host=localhost', null, null);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                $this->callCounter++;
+                $mock = new class () extends \PDO {
+                    public function __construct()
+                    {
+                        // No-op, no real driver needed
+                    }
+                };
+                return $mock;
+            }
+        };
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
@@ -120,12 +157,12 @@ class PDOTest extends TestCase
         $newPDO = $pdoProperty->getValue($pdoWrapper);
 
         $this->assertNotSame($oldPDO, $newPDO, "Reconnect should create a new PDO instance");
+        $this->assertEquals(2, $callCount);
     }
 
     public function testMethodCallForPrepare(): void
     {
-        $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
+        $pdoWrapper = $this->createMockPDOWrapper();
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
@@ -149,5 +186,109 @@ class PDOTest extends TestCase
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
         $this->assertSame($pdoStatementMock, $result);
+    }
+
+    public function testConstructorRetriesOnTransientError(): void
+    {
+        $pdoWrapper = new class () extends PDO {
+            public int $connectAttempts = 0;
+
+            public function __construct()
+            {
+                parent::__construct('mock:host=localhost', null, null, [], 3);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                $this->connectAttempts++;
+                if ($this->connectAttempts < 3) {
+                    throw new \PDOException(
+                        'SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user \'test\'@\'10.0.0.1\' (using password: YES)'
+                    );
+                }
+                return new class () extends \PDO {
+                    public function __construct()
+                    {
+                    }
+                };
+            }
+        };
+
+        $this->assertEquals(3, $pdoWrapper->connectAttempts);
+    }
+
+    public function testConstructorThrowsAfterMaxRetries(): void
+    {
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Access denied');
+
+        new class () extends PDO {
+            public function __construct()
+            {
+                parent::__construct('mock:host=localhost', null, null, [], 3);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                throw new \PDOException(
+                    'SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user \'test\'@\'10.0.0.1\' (using password: YES)'
+                );
+            }
+        };
+    }
+
+    public function testReconnectRetriesOnTransientError(): void
+    {
+        $pdoWrapper = new class () extends PDO {
+            public int $connectAttempts = 0;
+            private int $reconnectFailures = 0;
+
+            public function __construct()
+            {
+                parent::__construct('mock:host=localhost', null, null, [], 3);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                $this->connectAttempts++;
+                // First call succeeds (constructor), then fail twice on reconnect
+                if ($this->connectAttempts > 1 && $this->reconnectFailures < 2) {
+                    $this->reconnectFailures++;
+                    throw new \PDOException(
+                        'SQLSTATE[HY000] [1045] ProxySQL Error: Access denied for user \'test\'@\'10.0.0.1\' (using password: YES)'
+                    );
+                }
+                return new class () extends \PDO {
+                    public function __construct()
+                    {
+                    }
+                };
+            }
+        };
+
+        $this->assertEquals(1, $pdoWrapper->connectAttempts);
+
+        $pdoWrapper->reconnect();
+
+        // Constructor (1) + 2 failed reconnect attempts + 1 successful = 4
+        $this->assertEquals(4, $pdoWrapper->connectAttempts);
+    }
+
+    public function testConstructorDoesNotRetryNonTransientError(): void
+    {
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Some other error');
+
+        new class () extends PDO {
+            public function __construct()
+            {
+                parent::__construct('mock:host=localhost', null, null, [], 3);
+            }
+
+            protected function createPDO(): \PDO
+            {
+                throw new \PDOException('Some other error');
+            }
+        };
     }
 }

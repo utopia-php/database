@@ -6159,6 +6159,7 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
+            $inputKeys = \array_keys($document->getArrayCopy());
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
@@ -6334,7 +6335,11 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            $internalKeys = \array_column(self::INTERNAL_ATTRIBUTES, '$id');
+            $allowedKeys = \array_flip(\array_merge($inputKeys, $internalKeys));
+            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), $allowedKeys));
+
+            $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 

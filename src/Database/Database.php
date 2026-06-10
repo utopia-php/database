@@ -6138,6 +6138,11 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
+
+        $document->removeAttribute('$collection');
+        $document->removeAttribute('$tenant');
+        $document->removeAttribute('$sequence');
+
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
@@ -6158,19 +6163,13 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
-            $createdAt = $document->getCreatedAt();
-            $inputKeys = \array_keys($document->getArrayCopy());
-
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            if (!$this->preserveDates) {
+                $document->removeAttribute('$createdAt');
+            }
 
             if ($this->adapter->getSharedTables()) {
-                $tenant = $old->getTenant();
-                $document['$tenant'] = $tenant;
-                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
+                $old->setAttribute('$tenant', $old->getTenant()); // Normalize for strict comparison
             }
-            $document = new Document($document);
 
             $attributes = $collection->getAttribute('attributes', []);
 
@@ -6335,11 +6334,11 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $internalKeys = \array_column(self::INTERNAL_ATTRIBUTES, '$id');
-            $allowedKeys = \array_flip(\array_merge($inputKeys, $internalKeys));
-            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), $allowedKeys));
+            $document->setAttribute('$sequence', $old->getSequence());
 
-            $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
+            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+
+            $document = new Document(\array_merge($old->getArrayCopy(), $document->getArrayCopy()));
 
             $document = $this->adapter->castingAfter($collection, $document);
 

@@ -977,9 +977,16 @@ class MariaDB extends SQL
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+            if ($document->offsetExists('$id')) {
+                $attributes['_uid'] = $document->getId();
+            }
+            if ($document->offsetExists('$createdAt')) {
+                $attributes['_createdAt'] = $document->getCreatedAt();
+            }
+            if ($document->offsetExists('$permissions')) {
+                $attributes['_permissions'] = json_encode($document->getPermissions());
+            }
 
             $name = $this->filter($collection);
             $columns = '';
@@ -1168,7 +1175,7 @@ class MariaDB extends SQL
 
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_newUid
+                SET " . \rtrim($columns, ',') . "
                 WHERE _id=:_sequence
                 {$this->getTenantQuery($collection)}
 			";
@@ -1178,7 +1185,6 @@ class MariaDB extends SQL
             $stmt = $this->getPDO()->prepare($sql);
 
             $stmt->bindValue(':_sequence', $document->getSequence());
-            $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);

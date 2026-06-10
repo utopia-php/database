@@ -1272,18 +1272,9 @@ class SQLite extends MariaDB
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
-        if ($document->offsetExists('$updatedAt')) {
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-        }
-        if ($document->offsetExists('$id')) {
-            $attributes['_uid'] = $document->getId();
-        }
-        if ($document->offsetExists('$createdAt')) {
-            $attributes['_createdAt'] = $document->getCreatedAt();
-        }
-        if ($document->offsetExists('$permissions')) {
-            $attributes['_permissions'] = json_encode($document->getPermissions());
-        }
+        $attributes['_createdAt'] = $document->getCreatedAt();
+        $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
             $attributes['_tenant'] = $this->tenant;
@@ -1306,7 +1297,7 @@ class SQLite extends MariaDB
              * Get current permissions from the database
              */
             $permissionsStmt = $this->getPDO()->prepare($sql);
-            $permissionsStmt->bindValue(':_uid', $id);
+            $permissionsStmt->bindValue(':_uid', $document->getId());
 
             if ($this->sharedTables) {
                 $permissionsStmt->bindValue(':_tenant', $this->tenant);
@@ -1378,7 +1369,7 @@ class SQLite extends MariaDB
                 $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
 
                 $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                $stmtRemovePermissions->bindValue(':_uid', $id);
+                $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
                 if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
@@ -1413,8 +1404,7 @@ class SQLite extends MariaDB
 
                 $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
-                $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
-                $stmtAddPermissions->bindValue(":_uid", $newUid);
+                $stmtAddPermissions->bindValue(":_uid", $document->getId());
                 if ($this->sharedTables) {
                     $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                 }
@@ -1466,7 +1456,7 @@ class SQLite extends MariaDB
 
         $sql = "
 			UPDATE `{$this->getNamespace()}_{$name}`
-			SET {$columns}
+			SET {$columns}, _uid = :_newUid
 			WHERE _uid = :_existingUid
 			{$this->getTenantQuery($collection)}
 		";
@@ -1476,6 +1466,7 @@ class SQLite extends MariaDB
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
@@ -2256,7 +2247,7 @@ class SQLite extends MariaDB
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-                // String operators
+            // String operators
             case Operator::TYPE_STRING_CONCAT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2269,12 +2260,12 @@ class SQLite extends MariaDB
                 $bindIndex++;
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
-                // Boolean operators
+            // Boolean operators
             case Operator::TYPE_TOGGLE:
                 // SQLite: toggle boolean (0 or 1), treat NULL as 0
                 return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
 
-                // Array operators
+            // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2438,13 +2429,13 @@ class SQLite extends MariaDB
                             )";
                         }
 
-                        // no break
+                    // no break
                     default:
                         return "{$quotedColumn} = {$quotedColumn}";
                 }
 
-                // Date operators
-                // no break
+            // Date operators
+            // no break
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2947,7 +2938,7 @@ class SQLite extends MariaDB
      *     columns: array<string>,
      *     lengths: array<null>,
      * }>
-     */
+    */
     protected function getFulltextSchemaIndexes(string $collection): array
     {
         $tables = $this->findFulltextTables($collection);

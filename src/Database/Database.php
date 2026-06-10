@@ -6700,6 +6700,11 @@ class Database
             try {
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
+                        if (\is_array($value)) {
+                            $value = new Document($value);
+                            $document->setAttribute($key, $value);
+                        }
+
                         if (!$twoWay) {
                             if ($side === Database::RELATION_SIDE_CHILD) {
                                 throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
@@ -6823,6 +6828,9 @@ class Database
                             if (!\is_array($value) || !\array_is_list($value)) {
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
+
+                            $value = \array_map(fn ($item) => \is_array($item) ? new Document($item) : $item, $value);
+                            $document->setAttribute($key, $value);
 
                             $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
 

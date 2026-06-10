@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -1994,7 +1995,7 @@ class SQLite extends MariaDB
                 stripos($message, 'duplicate') !== false
             ) {
                 if (!\str_contains($message, '_uid')) {
-                    return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+                    return new UniqueException('Unique index violation', $e->getCode(), $e);
                 }
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }

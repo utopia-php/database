@@ -6700,7 +6700,7 @@ class Database
             try {
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
-                        if (\is_array($value)) {
+                        if (\is_array($value) && !\array_is_list($value)) {
                             $value = new Document($value);
                             $document->setAttribute($key, $value);
                         }
@@ -6896,6 +6896,11 @@ class Database
 
                             $document->removeAttribute($key);
                             break;
+                        }
+
+                        if (\is_array($value) && !\array_is_list($value)) {
+                            $value = new Document($value);
+                            $document->setAttribute($key, $value);
                         }
 
                         if (\is_string($value)) {

@@ -6136,6 +6136,8 @@ class Database
             throw new DatabaseException('Must define $id attribute');
         }
 
+        $document = clone $document;
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
 
@@ -6307,7 +6309,7 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $document = $this->encode($collection, $document);
+            $document = $this->encode($collection, $document, applyDefaults: false);
 
             if ($this->validate) {
                 $structureValidator = new PartialStructure(

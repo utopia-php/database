@@ -6306,7 +6306,7 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $document = $this->encode($collection, $document, applyDefaults: false);
+            $document = $this->encode($collection, clone $document, applyDefaults: false);
 
             if ($this->validate) {
                 $structureValidator = new PartialStructure(

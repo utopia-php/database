@@ -1005,7 +1005,8 @@ class MariaDB extends SQL
                  * Get current permissions from the database
                  */
                 $sqlPermissions = $this->getPDO()->prepare($sql);
-                $sqlPermissions->bindValue(':_uid', $document->getId());
+
+                $sqlPermissions->bindValue(':_uid', $id);
 
                 if ($this->sharedTables) {
                     $sqlPermissions->bindValue(':_tenant', $this->tenant);
@@ -1078,7 +1079,7 @@ class MariaDB extends SQL
                     $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
 
                     $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                    $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+                    $stmtRemovePermissions->bindValue(':_uid', $id);
 
                     if ($this->sharedTables) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
@@ -1126,7 +1127,8 @@ class MariaDB extends SQL
 
                     $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
-                    $stmtAddPermissions->bindValue(":_uid", $document->getId());
+                    $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
+                    $stmtAddPermissions->bindValue(":_uid", $newUid);
 
                     if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(":_tenant", $this->tenant);

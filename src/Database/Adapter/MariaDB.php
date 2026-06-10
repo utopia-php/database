@@ -977,7 +977,9 @@ class MariaDB extends SQL
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
+            if ($document->offsetExists('$updatedAt')) {
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+            }
             if ($document->offsetExists('$id')) {
                 $attributes['_uid'] = $document->getId();
             }

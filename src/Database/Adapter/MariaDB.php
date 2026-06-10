@@ -1281,7 +1281,7 @@ class MariaDB extends SQL
                         $updateColumns[] = $operatorSQL;
                     }
                 } else {
-                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                    if (!in_array($attr, ['_id', '_createdAt', '_tenant'])) {
                         $updateColumns[] = $getUpdateClause($filteredAttr);
                     }
                 }

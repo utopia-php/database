@@ -6139,10 +6139,6 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
 
-        $document->removeAttribute('$collection');
-        $document->removeAttribute('$tenant');
-        $document->removeAttribute('$sequence');
-
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(

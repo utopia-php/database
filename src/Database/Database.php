@@ -6159,7 +6159,7 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
-            if (!$this->preserveDates) {
+            if (!$this->preserveDates || $document->getCreatedAt() === null) {
                 $document->removeAttribute('$createdAt');
             }
 

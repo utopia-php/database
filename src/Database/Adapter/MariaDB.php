@@ -1593,12 +1593,20 @@ class MariaDB extends SQL
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+                $fulltextValue = $this->getFulltextValue($query->getValue());
+                if ($fulltextValue === '') {
+                    return '0 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_NOT_SEARCH:
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+                $fulltextValue = $this->getFulltextValue($query->getValue());
+                if ($fulltextValue === '') {
+                    return '1 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
 

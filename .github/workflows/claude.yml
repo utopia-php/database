@@ -34,7 +34,7 @@ jobs:
       # on Claude's fixes.
       push_token: ${{ secrets.CLAUDE_PUSH_TOKEN }}
     with:
-      improvement: true
-      healing: true
+      # improvement: true
+      # healing: true
       bots: true
       comments: true

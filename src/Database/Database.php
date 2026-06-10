@@ -6371,6 +6371,9 @@ class Database
             return $document;
         }
 
+        // Purge again after commit so readers cannot re-cache the pre-commit version
+        $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
             $document = $documents[0];
@@ -7757,6 +7760,8 @@ class Database
         });
 
         if ($deleted) {
+            // Purge again after commit so readers cannot re-cache the pre-commit version
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
         }
 

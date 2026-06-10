@@ -6311,6 +6311,8 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
+            $document->setAttribute('$collection', $collection->getId());
+
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {

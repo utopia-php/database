@@ -1587,7 +1587,7 @@ class Postgres extends SQL
      * @param string $alias
      * @param string $placeholder
      * @return string
-     */
+    */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
@@ -1832,7 +1832,7 @@ class Postgres extends SQL
                     $binds[":{$placeholder}_0"] = \json_encode($query->getValues());
                     return "{$alias}.{$attribute} @> :{$placeholder}_0::jsonb";
                 }
-            // no break
+                // no break
             case Query::TYPE_CONTAINS:
             case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
@@ -1840,7 +1840,7 @@ class Postgres extends SQL
                     $operator = '@>';
                 }
 
-            // no break
+                // no break
             default:
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());
@@ -2054,7 +2054,7 @@ class Postgres extends SQL
      * Size of POINT spatial type
      *
      * @return int
-     */
+    */
     protected function getMaxPointSize(): int
     {
         // https://stackoverflow.com/questions/30455025/size-of-data-type-geographypoint-4326-in-postgis
@@ -2272,7 +2272,7 @@ class Postgres extends SQL
      * Is spatial attributes supported?
      *
      * @return bool
-     */
+    */
     public function getSupportForSpatialAttributes(): bool
     {
         return true;
@@ -2282,7 +2282,7 @@ class Postgres extends SQL
      * Are object (JSONB) attributes supported?
      *
      * @return bool
-     */
+    */
     public function getSupportForObject(): bool
     {
         return true;
@@ -2302,7 +2302,7 @@ class Postgres extends SQL
      * Does the adapter support null values in spatial indexes?
      *
      * @return bool
-     */
+    */
     public function getSupportForSpatialIndexNull(): bool
     {
         return true;
@@ -2312,7 +2312,7 @@ class Postgres extends SQL
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool
-     */
+    */
     public function getSupportForBoundaryInclusiveContains(): bool
     {
         return true;
@@ -2322,7 +2322,7 @@ class Postgres extends SQL
      * Does the adapter support order attribute in spatial indexes?
      *
      * @return bool
-     */
+    */
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
@@ -2718,7 +2718,7 @@ class Postgres extends SQL
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
-            // String operators
+                // String operators
             case Operator::TYPE_STRING_CONCAT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2731,11 +2731,11 @@ class Postgres extends SQL
                 $bindIndex++;
                 return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
 
-            // Boolean operators
+                // Boolean operators
             case Operator::TYPE_TOGGLE:
                 return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
 
-            // Array operators
+                // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2820,7 +2820,7 @@ class Postgres extends SQL
                     END
                 ), '[]'::jsonb)";
 
-            // Date operators
+                // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;

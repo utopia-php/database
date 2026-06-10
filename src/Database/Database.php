@@ -6311,12 +6311,10 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $document->setAttribute('$collection', $collection->getId());
-
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
-                $structureValidator = new Structure(
+                $structureValidator = new PartialStructure(
                     $collection,
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
@@ -6325,7 +6323,7 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+                if (!$structureValidator->isValid($document)) {
                     throw new StructureException($structureValidator->getDescription());
                 }
             }

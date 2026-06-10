@@ -6136,8 +6136,6 @@ class Database
             throw new DatabaseException('Must define $id attribute');
         }
 
-        $document = clone $document;
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
 
@@ -6321,7 +6319,7 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) {
+                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
@@ -6700,11 +6698,6 @@ class Database
             try {
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
-                        if (\is_array($value) && !\array_is_list($value)) {
-                            $value = new Document($value);
-                            $document->setAttribute($key, $value);
-                        }
-
                         if (!$twoWay) {
                             if ($side === Database::RELATION_SIDE_CHILD) {
                                 throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
@@ -6829,9 +6822,6 @@ class Database
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
-                            $value = \array_map(fn ($item) => \is_array($item) ? new Document($item) : $item, $value);
-                            $document->setAttribute($key, $value);
-
                             $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
 
                             $newIds = \array_map(function ($item) {
@@ -6896,11 +6886,6 @@ class Database
 
                             $document->removeAttribute($key);
                             break;
-                        }
-
-                        if (\is_array($value) && !\array_is_list($value)) {
-                            $value = new Document($value);
-                            $document->setAttribute($key, $value);
                         }
 
                         if (\is_string($value)) {

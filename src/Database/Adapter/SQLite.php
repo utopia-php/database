@@ -1286,12 +1286,12 @@ class SQLite extends MariaDB
             $attributes['_permissions'] = json_encode($document->getPermissions());
         }
 
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
-        }
-
         if (empty($attributes)) {
             return $document;
+        }
+
+        if ($this->sharedTables) {
+            $attributes['_tenant'] = $this->tenant;
         }
 
         $name = $this->filter($collection);

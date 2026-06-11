@@ -3,9 +3,9 @@
 namespace Utopia\Database;
 
 use ArrayObject;
+use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
-use MongoDB\BSON\UTCDateTime;
 
 /**
  * @extends ArrayObject<string, mixed>

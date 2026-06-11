@@ -6149,8 +6149,10 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $inputKeys = \array_keys($document->getArrayCopy());
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $inputKeys) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6170,6 +6172,7 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
@@ -6326,7 +6329,7 @@ class Database
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
-                $structureValidator = new Structure(
+                $structureValidator = new PartialStructure(
                     $collection,
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
@@ -6335,7 +6338,10 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+
+                $partialDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+
+                if (!$structureValidator->isValid($partialDocument)) { // Validate only user-provided fields
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
@@ -6346,7 +6352,11 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+            $adapterDocument->setAttribute('$sequence', $old->getSequence());
+            $adapterDocument->setAttribute('$updatedAt', $document->getUpdatedAt());
+
+            $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 
@@ -6385,6 +6395,7 @@ class Database
             $document = $documents[0];
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         // Convert to custom document type if mapped

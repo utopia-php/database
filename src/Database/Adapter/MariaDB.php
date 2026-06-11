@@ -977,17 +977,22 @@ class MariaDB extends SQL
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
+
             if ($document->offsetExists('$updatedAt')) {
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
-            }
-            if ($document->offsetExists('$id')) {
-                $attributes['_uid'] = $document->getId();
             }
             if ($document->offsetExists('$createdAt')) {
                 $attributes['_createdAt'] = $document->getCreatedAt();
             }
+            if ($document->offsetExists('$id')) {
+                $attributes['_uid'] = $document->getId();
+            }
             if ($document->offsetExists('$permissions')) {
                 $attributes['_permissions'] = json_encode($document->getPermissions());
+            }
+
+            if (empty($attributes)) {
+                return $document;
             }
 
             $name = $this->filter($collection);

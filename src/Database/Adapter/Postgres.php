@@ -1136,9 +1136,23 @@ class Postgres extends SQL
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+
+        if ($document->offsetExists('$updatedAt')) {
+            $attributes['_updatedAt'] = $document->getUpdatedAt();
+        }
+        if ($document->offsetExists('$createdAt')) {
+            $attributes['_createdAt'] = $document->getCreatedAt();
+        }
+        if ($document->offsetExists('$id')) {
+            $attributes['_uid'] = $document->getId();
+        }
+        if ($document->offsetExists('$permissions')) {
+            $attributes['_permissions'] = json_encode($document->getPermissions());
+        }
+
+        if (empty($attributes)) {
+            return $document;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -1157,7 +1171,7 @@ class Postgres extends SQL
              * Get current permissions from the database
              */
             $permissionsStmt = $this->getPDO()->prepare($sql);
-            $permissionsStmt->bindValue(':_uid', $document->getId());
+            $permissionsStmt->bindValue(':_uid', $id);
 
             if ($this->sharedTables) {
                 $permissionsStmt->bindValue(':_tenant', $this->tenant);
@@ -1230,7 +1244,7 @@ class Postgres extends SQL
 
                 $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
                 $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+                $stmtRemovePermissions->bindValue(':_uid', $id);
 
                 if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
@@ -1264,7 +1278,8 @@ class Postgres extends SQL
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
                 $stmtAddPermissions = $this->getPDO()->prepare($sql);
-                $stmtAddPermissions->bindValue(":_uid", $document->getId());
+                $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
+                $stmtAddPermissions->bindValue(":_uid", $newUid);
                 if ($this->sharedTables) {
                     $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                 }
@@ -1312,7 +1327,7 @@ class Postgres extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_newUid 
+			SET " . \rtrim($columns, ',') . "
 			WHERE _id=:_sequence
 			{$this->getTenantQuery($collection)}
 		";
@@ -1322,7 +1337,6 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_sequence', $document->getSequence());
-        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

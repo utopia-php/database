@@ -6336,9 +6336,9 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $internalKeys = \array_column(self::INTERNAL_ATTRIBUTES, '$id');
-            $allowedKeys = \array_flip(\array_merge($inputKeys, $internalKeys));
-            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), $allowedKeys));
+            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+            $adapterDocument->setAttribute('$sequence', $old->getSequence());
+            $adapterDocument->setAttribute('$updatedAt', $document->getUpdatedAt());
 
             $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 

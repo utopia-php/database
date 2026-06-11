@@ -6147,6 +6147,8 @@ class Database
                 return new Document();
             }
 
+            $adapterDocument = new Document($document->getArrayCopy());
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -6160,6 +6162,7 @@ class Database
             }
             if (!$this->preserveDates || $document->getCreatedAt() === null) {
                 $document->removeAttribute('$createdAt');
+                $adapterDocument->removeAttribute('$createdAt');
             }
 
             if ($this->adapter->getSharedTables()) {
@@ -6298,6 +6301,7 @@ class Database
 
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
+                $adapterDocument->setAttribute('$updatedAt', $document->getUpdatedAt());
             }
 
             // Check if document was updated after the request timestamp
@@ -6306,7 +6310,8 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $document = $this->encode($collection, clone $document, applyDefaults: false);
+            $adapterDocument = new Document(\array_merge($old->getArrayCopy(), $adapterDocument->getArrayCopy()));
+            $adapterDocument = $this->encode($collection, $adapterDocument, applyDefaults: false);
 
             if ($this->validate) {
                 $structureValidator = new PartialStructure(
@@ -6318,34 +6323,34 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+                if (!$structureValidator->isValid($adapterDocument)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
 
             if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
+                $adapterDocument = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $adapterDocument));
             }
 
-            $document = $this->adapter->castingBefore($collection, $document);
+            $adapterDocument = $this->adapter->castingBefore($collection, $adapterDocument);
 
-            $document->setAttribute('$sequence', $old->getSequence());
+            $adapterDocument->setAttribute('$sequence', $old->getSequence());
 
-            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
-            $document = new Document(\array_merge($old->getArrayCopy(), $document->getArrayCopy()));
+            $adapterDocument = new Document(\array_merge($old->getArrayCopy(), $adapterDocument->getArrayCopy()));
 
-            $document = $this->adapter->castingAfter($collection, $document);
+            $adapterDocument = $this->adapter->castingAfter($collection, $adapterDocument);
 
             $this->purgeCachedDocument($collection->getId(), $id);
 
-            if ($document->getId() !== $id) {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
+            if ($adapterDocument->getId() !== $id) {
+                $this->purgeCachedDocument($collection->getId(), $adapterDocument->getId());
             }
 
             // If operators were used, refetch document to get computed values
             $hasOperators = false;
-            foreach ($document->getArrayCopy() as $value) {
+            foreach ($adapterDocument->getArrayCopy() as $value) {
                 if (Operator::isOperator($value)) {
                     $hasOperators = true;
                     break;
@@ -6353,11 +6358,11 @@ class Database
             }
 
             if ($hasOperators) {
-                $refetched = $this->refetchDocuments($collection, [$document]);
-                $document = $refetched[0];
+                $refetched = $this->refetchDocuments($collection, [$adapterDocument]);
+                $adapterDocument = $refetched[0];
             }
 
-            return $document;
+            return $adapterDocument;
         });
 
         if ($document->isEmpty()) {

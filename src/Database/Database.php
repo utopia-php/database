@@ -9132,7 +9132,7 @@ class Database
         }
 
         if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
-            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
+            return $value;
         }
 
         if (array_key_exists($filter, $this->instanceFilters)) {

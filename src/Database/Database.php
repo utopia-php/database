@@ -6161,7 +6161,6 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
 
-            var_dump($skipPermissionsUpdate);
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
@@ -6329,6 +6328,7 @@ class Database
                 );
 
                 $partialDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+
                 if (!$structureValidator->isValid($partialDocument)) { // Validate only user-provided fields
                     throw new StructureException($structureValidator->getDescription());
                 }

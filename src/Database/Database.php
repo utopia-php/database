@@ -6137,8 +6137,10 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $inputKeys = \array_keys($document->getArrayCopy());
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $inputKeys) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6146,8 +6148,6 @@ class Database
             if ($old->isEmpty()) {
                 return new Document();
             }
-
-            $adapterDocument = new Document($document->getArrayCopy());
 
             $skipPermissionsUpdate = true;
 
@@ -6160,14 +6160,18 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
-            if (!$this->preserveDates || $document->getCreatedAt() === null) {
-                $document->removeAttribute('$createdAt');
-                $adapterDocument->removeAttribute('$createdAt');
-            }
+            $createdAt = $document->getCreatedAt();
+
+            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
+            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $old->setAttribute('$tenant', $old->getTenant()); // Normalize for strict comparison
+                $tenant = $old->getTenant();
+                $document['$tenant'] = $tenant;
+                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
+            $document = new Document($document);
 
             $attributes = $collection->getAttribute('attributes', []);
 
@@ -6301,7 +6305,6 @@ class Database
 
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
-                $adapterDocument->setAttribute('$updatedAt', $document->getUpdatedAt());
             }
 
             // Check if document was updated after the request timestamp
@@ -6310,11 +6313,10 @@ class Database
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $adapterDocument = new Document(\array_merge($old->getArrayCopy(), $adapterDocument->getArrayCopy()));
-            $adapterDocument = $this->encode($collection, $adapterDocument, applyDefaults: false);
+            $document = $this->encode($collection, $document);
 
             if ($this->validate) {
-                $structureValidator = new PartialStructure(
+                $structureValidator = new Structure(
                     $collection,
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
@@ -6323,34 +6325,34 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($adapterDocument)) { // Make sure updated structure still apply collection rules (if any)
+                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
 
             if ($this->resolveRelationships) {
-                $adapterDocument = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $adapterDocument));
+                $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $adapterDocument = $this->adapter->castingBefore($collection, $adapterDocument);
+            $document = $this->adapter->castingBefore($collection, $document);
 
-            $adapterDocument->setAttribute('$sequence', $old->getSequence());
+            $internalKeys = \array_column(self::INTERNAL_ATTRIBUTES, '$id');
+            $allowedKeys = \array_flip(\array_merge($inputKeys, $internalKeys));
+            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), $allowedKeys));
 
             $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
-            $adapterDocument = new Document(\array_merge($old->getArrayCopy(), $adapterDocument->getArrayCopy()));
-
-            $adapterDocument = $this->adapter->castingAfter($collection, $adapterDocument);
+            $document = $this->adapter->castingAfter($collection, $document);
 
             $this->purgeCachedDocument($collection->getId(), $id);
 
-            if ($adapterDocument->getId() !== $id) {
-                $this->purgeCachedDocument($collection->getId(), $adapterDocument->getId());
+            if ($document->getId() !== $id) {
+                $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
             // If operators were used, refetch document to get computed values
             $hasOperators = false;
-            foreach ($adapterDocument->getArrayCopy() as $value) {
+            foreach ($document->getArrayCopy() as $value) {
                 if (Operator::isOperator($value)) {
                     $hasOperators = true;
                     break;
@@ -6358,11 +6360,11 @@ class Database
             }
 
             if ($hasOperators) {
-                $refetched = $this->refetchDocuments($collection, [$adapterDocument]);
-                $adapterDocument = $refetched[0];
+                $refetched = $this->refetchDocuments($collection, [$document]);
+                $document = $refetched[0];
             }
 
-            return $adapterDocument;
+            return $document;
         });
 
         if ($document->isEmpty()) {

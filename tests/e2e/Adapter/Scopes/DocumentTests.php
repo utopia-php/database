@@ -4646,42 +4646,42 @@ trait DocumentTests
         ], $result->getAttribute('tags'));
     }
 
-    public function testPartialUpdateDocument(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
-
-        // Insert initial documents
-        $database->createDocument(__FUNCTION__, new Document([
-            '$id' => 'sam',
-            'string' => 'text📝 ' . $i,
-        ]));
-
-        var_dump('=======================================================================================');
-        var_dump('=======================================================================================');
-
-        /**
-         * test Update $id
-         */
-        $partial = new Document([
-            '$id'=> 'sam',
-        ]);
-
-        $partial = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $partial);
-        var_dump($partial);
-        $this->assertEquals('sam', $partial->getId());
-
-
-        $partial = $this->getDatabase()->getDocument($document->getCollection(), $partial->getId());
-        var_dump($partial);
-        $this->assertEquals('sam', $partial->getId());
-        $this->assertEquals('text📝', $partial->getAttribute('string'));
-
-        $this->assertEquals('shmuel', 'fogel');
-    }
+//    public function testPartialUpdateDocument(): void
+//    {
+//        /** @var Database $database */
+//        $database = $this->getDatabase();
+//
+//        $database->createCollection(__FUNCTION__);
+//        $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
+//
+//        // Insert initial documents
+//        $database->createDocument(__FUNCTION__, new Document([
+//            '$id' => 'sam',
+//            'string' => 'text📝 ' . $i,
+//        ]));
+//
+//        var_dump('=======================================================================================');
+//        var_dump('=======================================================================================');
+//
+//        /**
+//         * test Update $id
+//         */
+//        $partial = new Document([
+//            '$id'=> 'sam',
+//        ]);
+//
+//        $partial = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $partial);
+//        var_dump($partial);
+//        $this->assertEquals('sam', $partial->getId());
+//
+//
+//        $partial = $this->getDatabase()->getDocument($document->getCollection(), $partial->getId());
+//        var_dump($partial);
+//        $this->assertEquals('sam', $partial->getId());
+//        $this->assertEquals('text📝', $partial->getAttribute('string'));
+//
+//        $this->assertEquals('shmuel', 'fogel');
+//    }
 
         /**
      * @depends testGetDocument

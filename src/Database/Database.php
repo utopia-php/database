@@ -6318,7 +6318,7 @@ class Database
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
-                $structureValidator = new Structure(
+                $structureValidator = new PartialStructure(
                     $collection,
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
@@ -6327,7 +6327,9 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+
+                $partialDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+                if (!$structureValidator->isValid($partialDocument)) { // Validate only user-provided fields
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
@@ -6381,6 +6383,7 @@ class Database
             $document = $documents[0];
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         // Convert to custom document type if mapped

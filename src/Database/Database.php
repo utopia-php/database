@@ -6160,6 +6160,8 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
+            var_dump($skipPermissionsUpdate);
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());

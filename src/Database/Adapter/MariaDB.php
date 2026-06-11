@@ -1191,6 +1191,9 @@ class MariaDB extends SQL
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
 
+            var_dump('============================================');
+            var_dump($sql);
+
             $stmt = $this->getPDO()->prepare($sql);
 
             $stmt->bindValue(':_sequence', $document->getSequence());

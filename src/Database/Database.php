@@ -4855,6 +4855,11 @@ class Database
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
 
+            // JSON serialization in cache backends collapses floats with zero
+            // fractions to ints. Re-cast so cached and freshly-loaded documents
+            // compare equal under strict equality (e.g. in updateDocument).
+            $document = $this->casting($collection, $document);
+
             if ($collection->getId() !== self::METADATA) {
 
                 if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, [

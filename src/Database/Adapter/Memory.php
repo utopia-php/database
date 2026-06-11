@@ -1246,13 +1246,28 @@ class Memory extends Adapter
             $document->setAttribute($attribute, $value);
         }
 
-        $newId = $document->getId();
+        $newId = $document->offsetExists('$id') ? $document->getId() : $id;
         $newKey = $this->documentKey($newId);
         if ($newId !== $id && isset($this->data[$key]['documents'][$newKey])) {
             throw new DuplicateException('Document already exists');
         }
 
         $update = $this->documentToRow($document);
+
+        // For partial updates, documentToRow unconditionally maps internal fields
+        // ($id → _uid, $createdAt → _createdAt, $permissions → _permissions) from
+        // the partial document, which would overwrite existing row values with
+        // empty defaults. Strip any internal field not actually present in the
+        // document so the sparse array_merge below only touches what the caller set.
+        if (!$document->offsetExists('$id')) {
+            unset($update['_uid']);
+        }
+        if (!$document->offsetExists('$createdAt')) {
+            unset($update['_createdAt']);
+        }
+        if (!$document->offsetExists('$permissions')) {
+            unset($update['_permissions']);
+        }
 
         // Sparse update — MariaDB's UPDATE only sets columns present in the
         // document; absent columns retain their previous values. The wrapper
@@ -1337,6 +1352,9 @@ class Memory extends Adapter
             $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
             if ($newId !== $id) {
                 $this->removePermissionsForDocument($key, $newId, $tenant, $this->sharedTables);
+            }
+            if (! $document->offsetExists('$id')) {
+                $document->setAttribute('$id', $newId);
             }
             $this->writePermissions($key, $document);
         } elseif ($newId !== $id) {

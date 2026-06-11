@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
+use MongoDB\BSON\UTCDateTime;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -157,17 +158,17 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return string|null
+     * @return string|null|UTCDateTime
      */
-    public function getCreatedAt(): ?string
+    public function getCreatedAt(): string|UTCDateTime|null
     {
         return $this->getAttribute('$createdAt');
     }
 
     /**
-     * @return string|null
+     * @return string|null|UTCDateTime
      */
-    public function getUpdatedAt(): ?string
+    public function getUpdatedAt(): string|UTCDateTime|null
     {
         return $this->getAttribute('$updatedAt');
     }

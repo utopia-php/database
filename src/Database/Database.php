@@ -4840,15 +4840,25 @@ class Database
             $selections
         );
 
-        try {
-            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $cached = null;
+        // A locking read must observe the current row, not a cached copy:
+        // updateDocument merges the changes into this read and writes the result
+        // back, so serving it from a stale cache would persist the staleness.
+        $cached = null;
+        if (!$forUpdate) {
+            try {
+                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            }
         }
 
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
+
+            // JSON serialization in cache backends collapses floats with zero
+            // fractions to ints. Re-cast so cached and freshly-loaded documents
+            // compare equal under strict equality (e.g. in updateDocument).
+            $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
 
@@ -4916,8 +4926,10 @@ class Database
             fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
+        // Don't save to cache if it's part of a relationship, or if this is a
+        // locking read: a forUpdate read happens inside an open transaction, and
+        // caching the pre-commit row would poison the cache for other readers.
+        if (!$forUpdate && empty($relationships)) {
             try {
                 $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);

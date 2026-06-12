@@ -12,7 +12,12 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -132,33 +137,56 @@ class Mongo extends Adapter
             return $callback();
         }
 
-        try {
-            $this->startTransaction();
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $action) {
-            try {
-                $this->rollbackTransaction();
-            } catch (\Throwable) {
-                // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail,
-                // and we want to throw the original exception.
-            } finally {
-                // Ensure state is cleaned up even if rollback fails
-                if ($this->session) {
-                    try {
-                        $this->client->endSessions([$this->session]);
-                    } catch (\Throwable $endSessionError) {
-                        // Ignore errors when ending session during error cleanup
-                    }
-                }
-                $this->inTransaction = 0;
-                $this->session = null;
-            }
+        $sleep = 50_000; // 50 milliseconds
+        $retries = 2;
 
-            throw $action;
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable) {
+                    // Throw the original exception, not the rollback one
+                    // Since if it's a duplicate key error, the rollback will fail,
+                    // and we want to throw the original exception.
+                } finally {
+                    // Ensure state is cleaned up even if rollback fails
+                    if ($this->session) {
+                        try {
+                            $this->client->endSessions([$this->session]);
+                        } catch (\Throwable $endSessionError) {
+                            // Ignore errors when ending session during error cleanup
+                        }
+                    }
+                    $this->inTransaction = 0;
+                    $this->session = null;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    throw $action;
+                }
+
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
+                    continue;
+                }
+
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     public function startTransaction(): bool

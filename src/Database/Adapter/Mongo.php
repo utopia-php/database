@@ -2196,6 +2196,17 @@ class Mongo extends Adapter
         $found = [];
         $cursorId = null;
 
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan(
+                \json_encode(['find' => $name, 'filter' => $filters, 'options' => $options]) ?: '',
+                [],
+                'find',
+                ['collection' => $collection->getId()],
+            );
+        }
+
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         try {
             // Use proper cursor iteration with reasonable batch size
             $options['batchSize'] = self::DEFAULT_BATCH_SIZE;
@@ -2252,6 +2263,12 @@ class Mongo extends Adapter
             foreach ($found as $document) {
                 $this->ensureRelationshipDefaults($collection, $document);
             }
+        }
+
+        if ($explainStart !== null) {
+            // Real stats from the read that actually ran (queryPlanner explain
+            // above does not execute), mirroring the SQL adapter.
+            $this->recordPlanActuals(\count($found), (\microtime(true) - $explainStart) * 1000);
         }
 
         return $found;
@@ -2404,8 +2421,18 @@ class Mongo extends Adapter
             ];
         }
 
-        try {
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan(
+                \json_encode(['aggregate' => $name, 'pipeline' => $pipeline]) ?: '',
+                [],
+                'count',
+                ['collection' => $collection->getId()],
+            );
+        }
 
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
+        try {
             $result = $this->client->aggregate($name, $pipeline, $options);
 
             // Aggregation returns stdClass with cursor property containing firstBatch
@@ -2421,6 +2448,11 @@ class Mongo extends Adapter
             return 0;
         } catch (MongoException $e) {
             return 0;
+        } finally {
+            if ($explainStart !== null) {
+                // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+                $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
+            }
         }
     }
 
@@ -2478,7 +2510,26 @@ class Mongo extends Adapter
         ];
 
         $options = $this->getTransactionOptions();
-        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan(
+                \json_encode(['aggregate' => $name, 'pipeline' => $pipeline]) ?: '',
+                [],
+                'sum',
+                ['collection' => $collection->getId(), 'attribute' => $attribute],
+            );
+        }
+
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
+        try {
+            return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        } finally {
+            if ($explainStart !== null) {
+                // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+                $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
+            }
+        }
     }
 
     /**
@@ -3592,6 +3643,144 @@ class Mongo extends Adapter
         return [];
     }
 
+    /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        $captured = $sql !== '' ? \json_decode($sql, true) : null;
+
+        // Without a captured command (or invalid JSON) we can't ask Mongo for a plan.
+        if (! \is_array($captured)) {
+            return [
+                'rowsScanned'   => null,
+                'indexUsed'     => null,
+                'estimatedCost' => null,
+                'rowsReturned'  => null,
+                'executionTime' => null,
+                'tree'          => $captured,
+            ];
+        }
+
+        // Capture stores find as { find, filter, options } and aggregate as
+        // { aggregate, pipeline }. Mongo's explain command wants the options
+        // hoisted to top level, and aggregate needs a cursor field.
+        $command = $captured;
+        if (isset($command['options']) && \is_array($command['options'])) {
+            $command = \array_merge($command, $command['options']);
+            unset($command['options']);
+        }
+        // Mongo's explain rejects `filter: []`; coerce to an empty object.
+        if (isset($command['filter']) && \is_array($command['filter']) && empty($command['filter'])) {
+            $command['filter'] = (object) [];
+        }
+        if (isset($command['aggregate']) && ! isset($command['cursor'])) {
+            $command['cursor'] = (object) [];
+        }
+
+        $tree = null;
+        $indexUsed = null;
+        try {
+            // queryPlanner, NOT executionStats: executionStats re-runs the
+            // query, double-executing every captured read. Actuals come from
+            // timing the real find/count/sum via recordPlanActuals().
+            $raw = $this->client->query([
+                'explain'   => (object) $command,
+                'verbosity' => 'queryPlanner',
+            ]);
+            $tree = \json_decode(\json_encode($raw) ?: 'null', true);
+            $indexUsed = $this->extractMongoIndexUsed($tree);
+        } catch (\Throwable $e) {
+            // Fall back to the captured command on any explain failure so callers
+            // still see what was attempted.
+            $tree = ['command' => $captured, 'explainError' => $e->getMessage()];
+        }
+
+        return [
+            // rowsScanned is an execution stat Mongo only emits under
+            // executionStats; queryPlanner gives the plan shape, not counts.
+            'rowsScanned'   => null,
+            'indexUsed'     => $indexUsed,
+            'estimatedCost' => null,
+            'rowsReturned'  => null,
+            'executionTime' => null,
+            'tree'          => $tree,
+        ];
+    }
+
+    /**
+     * Find the IXSCAN indexName from the WINNING plan of a Mongo explain tree.
+     *
+     * Only descends into `winningPlan` branches — never `rejectedPlans`, which
+     * can hold IXSCAN stages even when the winning plan is a COLLSCAN, so a
+     * blind walk would report an index that the query does not actually use.
+     *
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractMongoIndexUsed(?array $tree): ?string
+    {
+        if (! \is_array($tree)) {
+            return null;
+        }
+
+        foreach ($this->findWinningPlans($tree) as $winningPlan) {
+            $found = $this->findIxscanIndex($winningPlan);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Collect every `winningPlan` subtree, skipping rejectedPlans branches.
+     *
+     * @param array<string, mixed> $tree
+     * @return array<int, array<string, mixed>>
+     */
+    private function findWinningPlans(array $tree): array
+    {
+        $plans = [];
+        foreach ($tree as $key => $value) {
+            if (! \is_array($value)) {
+                continue;
+            }
+            if ($key === 'winningPlan') {
+                $plans[] = $value;
+                continue;
+            }
+            if ($key === 'rejectedPlans') {
+                continue;
+            }
+            $plans = \array_merge($plans, $this->findWinningPlans($value));
+        }
+        return $plans;
+    }
+
+    /**
+     * First IXSCAN indexName within a single (winning) plan subtree.
+     *
+     * @param array<string, mixed> $plan
+     */
+    private function findIxscanIndex(array $plan): ?string
+    {
+        if (($plan['stage'] ?? null) === 'IXSCAN' && isset($plan['indexName']) && \is_string($plan['indexName'])) {
+            return $plan['indexName'];
+        }
+        foreach ($plan as $value) {
+            if (\is_array($value)) {
+                $found = $this->findIxscanIndex($value);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+        return null;
+    }
+
     protected function processException(\Throwable $e): \Throwable
     {
         // Timeout
@@ -3788,6 +3977,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForTTLIndexes(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForExplain(): bool
     {
         return true;
     }

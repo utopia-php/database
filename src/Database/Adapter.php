@@ -41,6 +41,22 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
+     * @var ?array<int, array<string, mixed>>
+     */
+    protected ?array $explainBuffer = null;
+
+    /**
+     * @var array<string, string>
+     */
+    protected const EXPLAIN_COLUMN_RENAMES = [
+        '_uid'         => '$id',
+        '_createdAt'   => '$createdAt',
+        '_updatedAt'   => '$updatedAt',
+        '_permissions' => '$permissions',
+        '_tenant'      => '$tenant',
+    ];
+
+    /**
      * @var array<string, array<callable>>
      */
     protected array $transformations = [
@@ -102,6 +118,175 @@ abstract class Adapter
         $this->debug = [];
 
         return $this;
+    }
+
+    /**
+     * @throws DatabaseException when called inside an already-active scope —
+     * the buffer is a single shared array, so silently clobbering the outer
+     * scope would lose every previously-captured entry.
+     */
+    public function startExplainCapture(): void
+    {
+        if ($this->explainBuffer !== null) {
+            throw new DatabaseException('withExplain cannot be nested — finish the outer scope first.');
+        }
+        $this->explainBuffer = [];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function stopExplainCapture(): array
+    {
+        $captured = $this->explainBuffer ?? [];
+        $this->explainBuffer = null;
+        return $captured;
+    }
+
+    public function isExplainCapturing(): bool
+    {
+        return $this->explainBuffer !== null;
+    }
+
+    /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @param string $purpose
+     * @param array<string, mixed> $context
+     */
+    protected function capturePlan(string $sql, array $binds = [], string $purpose = 'find', array $context = []): void
+    {
+        try {
+            $plan = $this->explainSQL($sql, $binds);
+            $plan = $this->sanitizePlan($plan);
+        } catch (\Throwable $e) {
+            $plan = ['error' => $e->getMessage()];
+        }
+
+        $this->explainBuffer[] = [
+            'purpose' => $purpose,
+            'context' => $context,
+            'plan'    => $plan,
+        ];
+    }
+
+    /**
+     * Attach real execution stats to the most recently captured plan entry.
+     *
+     * Avoids a second EXPLAIN ANALYZE pass by measuring the read that already
+     * runs inside the explain scope.
+     *
+     * @param int|null $rowsReturned actual rows the statement returned (null when not meaningful, e.g. an aggregate)
+     * @param float|null $executionTime actual wall time of the statement in milliseconds
+     */
+    protected function recordPlanActuals(?int $rowsReturned, ?float $executionTime): void
+    {
+        if ($this->explainBuffer === null || $this->explainBuffer === []) {
+            return;
+        }
+        $last = \array_key_last($this->explainBuffer);
+        $plan = $this->explainBuffer[$last]['plan'] ?? null;
+        // capturePlan() stores the entry just before the real statement runs;
+        // only fill actuals when the captured plan is a well-formed array. A
+        // failed EXPLAIN is stored as ['error' => ...] — leave it untouched so
+        // an error entry never masquerades as a real plan with stats.
+        if (! \is_array($plan) || isset($plan['error'])) {
+            return;
+        }
+        $this->explainBuffer[$last]['plan']['rowsReturned'] = $rowsReturned;
+        $this->explainBuffer[$last]['plan']['executionTime'] = $executionTime;
+    }
+
+    /**
+     * @param array<int|string, mixed> $plan
+     * @return array<int|string, mixed>
+     */
+    protected function sanitizePlan(array $plan): array
+    {
+        return $this->sanitizePlanNode($plan);
+    }
+
+    private function sanitizePlanNode(mixed $node): mixed
+    {
+        if (\is_array($node)) {
+            $result = [];
+            foreach ($node as $key => $value) {
+                $newKey = \is_string($key) ? $this->renameInternalIdentifier($key) : $key;
+                $result[$newKey] = $this->sanitizePlanNode($value);
+            }
+            return $result;
+        }
+
+        if (\is_string($node)) {
+            return $this->renameInternalIdentifier($node);
+        }
+
+        return $node;
+    }
+
+    private function renameInternalIdentifier(string $name): string
+    {
+        if (\str_ends_with($name, '__metadata')) {
+            return '<metadata>';
+        }
+        if (\str_ends_with($name, '_perms')) {
+            return '<permissionCheck>';
+        }
+        if (isset(self::EXPLAIN_COLUMN_RENAMES[$name])) {
+            return self::EXPLAIN_COLUMN_RENAMES[$name];
+        }
+        // The permission/metadata tables also appear embedded inside plan
+        // strings — e.g. a MariaDB attached_condition like
+        // "`db_x_collection_y_perms`.`_permission` in (...)". The suffix checks
+        // above only catch standalone identifiers, so rewrite the embedded
+        // physical-table tokens here too. Match the longest run of
+        // identifier/backtick chars ending in the internal suffix.
+        $name = \preg_replace('/[`\w]*__metadata/', '<metadata>', $name) ?? $name;
+        $name = \preg_replace('/[`\w]*_perms/', '<permissionCheck>', $name) ?? $name;
+
+        // SQL plans qualify columns with the schema name (e.g. a MariaDB
+        // condition "`appwrite`.`main`.`status` = '...'"). Drop the leading
+        // schema qualifier so the internal database name is not exposed.
+        $database = $this->getDatabase();
+        if ($database !== '') {
+            $name = \str_replace('`'.$database.'`.', '', $name);
+        }
+
+        // Plan strings embed internal column identifiers (e.g. index_condition:
+        // "main.`_uid` = '...'"). Best-effort, display-only substring rewrite:
+        // a user column containing "_uid"/"_tenant"/etc. is rewritten too, which
+        // is fine since this is for reading the plan, not round-tripping names.
+        if (\str_contains($name, '_')) {
+            foreach (self::EXPLAIN_COLUMN_RENAMES as $internal => $public) {
+                if (\str_contains($name, $internal)) {
+                    $name = \str_replace($internal, $public, $name);
+                }
+            }
+        }
+        return $name;
+    }
+
+    /**
+     * Produce a normalized query plan for a single statement.
+     *
+     * Every adapter returns the same fixed shape (rowsScanned, indexUsed,
+     * estimatedCost, rowsReturned, executionTime, tree) so the public DTO stays
+     * typed regardless of backend.
+     *
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        return [
+            'rowsScanned'   => null,
+            'indexUsed'     => null,
+            'estimatedCost' => null,
+            'rowsReturned'  => null,
+            'executionTime' => null,
+            'tree'          => null,
+        ];
     }
 
     /**
@@ -1606,6 +1791,16 @@ abstract class Adapter
      * @return bool
      */
     public function getSupportForTTLIndexes(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is query explain (plan capture via withExplain) supported?
+     *
+     * @return bool
+     */
+    public function getSupportForExplain(): bool
     {
         return false;
     }

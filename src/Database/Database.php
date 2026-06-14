@@ -6170,6 +6170,12 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
+            // UID change
+            if ($document->offsetExists('$id') && $document->getId() !== $id) {
+                $skipPermissionsUpdate = false;
+            }
+
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());

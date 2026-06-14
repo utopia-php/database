@@ -999,7 +999,7 @@ class MariaDB extends SQL
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
                 /**
-                 * Get current permissions
+                 * Get current permissions from the database
                  */
                 $sqlPermissions = $this->getPDO()->prepare($sql);
 

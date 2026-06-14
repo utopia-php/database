@@ -986,14 +986,6 @@ class MariaDB extends SQL
             $columns = '';
 
             if (!$skipPermissions) {
-                /**
-                 * Permission rows in the _perms table are keyed by the document's
-                 * UID (the _document column). Replace the permissions with a full
-                 * rewrite: delete every existing row for the (old) UID, then
-                 * re-insert the document's current permission set under the (new)
-                 * UID. This keeps the logic simple and correctly re-keys the
-                 * permission rows when the UID changes.
-                 */
                 $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
 
                 $sql = "
@@ -1011,10 +1003,6 @@ class MariaDB extends SQL
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                /**
-                 * Insert the document's full current permission set under the
-                 * (new) UID.
-                 */
                 $values = [];
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($document->getPermissionsByType($type) as $i => $_) {

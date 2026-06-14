@@ -988,164 +988,47 @@ class MariaDB extends SQL
             if (!$skipPermissions) {
                 /**
                  * Permission rows in the _perms table are keyed by the document's
-                 * UID (the _document column). When the UID changes, the existing
-                 * rows must be re-pointed to the new UID before the diff below is
-                 * applied, otherwise the old rows are orphaned and unchanged
-                 * permissions are lost for the new UID.
+                 * UID (the _document column). Replace the permissions with a full
+                 * rewrite: delete every existing row for the (old) UID, then
+                 * re-insert the document's current permission set under the (new)
+                 * UID. This keeps the logic simple and correctly re-keys the
+                 * permission rows when the UID changes.
                  */
                 $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
-                $uidChanged = $newUid !== $id;
 
                 $sql = "
-			    SELECT _type, _permission
-			    FROM {$this->getSQLTable($name . '_perms')}
+			    DELETE FROM {$this->getSQLTable($name . '_perms')}
 			    WHERE _document = :_uid
 			    {$this->getTenantQuery($collection)}
 			";
 
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+                $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-                /**
-                 * Get current permissions from the database
-                 */
-                $sqlPermissions = $this->getPDO()->prepare($sql);
-
-                $sqlPermissions->bindValue(':_uid', $id);
+                $stmtRemovePermissions = $this->getPDO()->prepare($sql);
+                $stmtRemovePermissions->bindValue(':_uid', $id);
 
                 if ($this->sharedTables) {
-                    $sqlPermissions->bindValue(':_tenant', $this->tenant);
+                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                $sqlPermissions->execute();
-                $permissions = $sqlPermissions->fetchAll();
-                $sqlPermissions->closeCursor();
-
-                $initial = [];
+                /**
+                 * Insert the document's full current permission set under the
+                 * (new) UID.
+                 */
+                $values = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $initial[$type] = [];
-                }
-
-                $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                    $carry[$item['_type']][] = $item['_permission'];
-
-                    return $carry;
-                }, $initial);
-
-                /**
-                 * Get removed Permissions
-                 */
-                $removals = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                    if (!empty($diff)) {
-                        $removals[$type] = $diff;
+                    foreach ($document->getPermissionsByType($type) as $i => $_) {
+                        $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}{$tenantPlaceholder})";
                     }
                 }
 
-                /**
-                 * Get added Permissions
-                 */
-                $additions = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                    if (!empty($diff)) {
-                        $additions[$type] = $diff;
-                    }
-                }
-
-                /**
-                 * Query to re-point existing permissions to the new UID
-                 */
-                if ($uidChanged) {
-                    $sql = "
-				    UPDATE {$this->getSQLTable($name . '_perms')}
-                    SET _document = :_newUid
-                    WHERE _document = :_uid
-                    {$this->getTenantQuery($collection)}
-                ";
-
-                    $stmtRepointPermissions = $this->getPDO()->prepare($sql);
-                    $stmtRepointPermissions->bindValue(':_uid', $id);
-                    $stmtRepointPermissions->bindValue(':_newUid', $newUid);
-
-                    if ($this->sharedTables) {
-                        $stmtRepointPermissions->bindValue(':_tenant', $this->tenant);
-                    }
-                }
-
-                /**
-                 * Query to remove permissions
-                 */
-                $removeQuery = '';
-                if (!empty($removals)) {
-                    $removeQuery = ' AND (';
-                    foreach ($removals as $type => $permissions) {
-                        $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                        if ($type !== \array_key_last($removals)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-                }
-                if (!empty($removeQuery)) {
-                    $removeQuery .= ')';
-                    $sql = "
-				    DELETE
-                    FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document = :_uid
-                    {$this->getTenantQuery($collection)}
-                ";
-
-                    $removeQuery = $sql . $removeQuery;
-
-                    $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-
-                    $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                    $stmtRemovePermissions->bindValue(':_uid', $newUid);
-
-                    if ($this->sharedTables) {
-                        $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                    }
-
-                    foreach ($removals as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
-                            $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                        }
-                    }
-                }
-
-                /**
-                 * Query to add permissions
-                 */
-                if (!empty($additions)) {
-                    $values = [];
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $_) {
-                            $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
-
-                            if ($this->sharedTables) {
-                                $value .= ", :_tenant)";
-                            } else {
-                                $value .= ")";
-                            }
-
-                            $values[] = $value;
-                        }
-                    }
+                if (!empty($values)) {
+                    $tenantColumn = $this->sharedTables ? ', _tenant' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
-				";
-
-                    if ($this->sharedTables) {
-                        $sql .= ', _tenant)';
-                    } else {
-                        $sql .= ')';
-                    }
-
-                    $sql .= " VALUES " . \implode(', ', $values);
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$tenantColumn})
+				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
@@ -1157,8 +1040,8 @@ class MariaDB extends SQL
                         $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                     }
 
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
+                    foreach (Database::PERMISSIONS as $type) {
+                        foreach ($document->getPermissionsByType($type) as $i => $permission) {
                             $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
                         }
                     }
@@ -1240,9 +1123,6 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            if (isset($stmtRepointPermissions)) {
-                $stmtRepointPermissions->execute();
-            }
             if (isset($stmtRemovePermissions)) {
                 $stmtRemovePermissions->execute();
             }

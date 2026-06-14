@@ -6170,6 +6170,12 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
+            // UID change
+            if ($document->offsetExists('$id') && $document->getId() !== $id) {
+                $skipPermissionsUpdate = false;
+            }
+
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
@@ -6182,14 +6188,6 @@ class Database
                 $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
             $document = new Document($document);
-
-            // A UID change re-keys the permission rows (_perms._document) to the
-            // new UID, so the permission block must run even when the permission
-            // set itself is unchanged. Otherwise the old rows are orphaned and the
-            // new UID is left with no permissions.
-            if ($document->getId() !== $id) {
-                $skipPermissionsUpdate = false;
-            }
 
             $attributes = $collection->getAttribute('attributes', []);
 

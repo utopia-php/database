@@ -6183,6 +6183,14 @@ class Database
             }
             $document = new Document($document);
 
+            // A UID change re-keys the permission rows (_perms._document) to the
+            // new UID, so the permission block must run even when the permission
+            // set itself is unchanged. Otherwise the old rows are orphaned and the
+            // new UID is left with no permissions.
+            if ($document->getId() !== $id) {
+                $skipPermissionsUpdate = false;
+            }
+
             $attributes = $collection->getAttribute('attributes', []);
 
             $relationships = \array_filter($attributes, function ($attribute) {

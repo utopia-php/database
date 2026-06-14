@@ -986,13 +986,6 @@ class MariaDB extends SQL
             $columns = '';
 
             if (!$skipPermissions) {
-                /**
-                 * Permission rows in the _perms table are keyed by the document's
-                 * UID (the _document column). When the UID changes, the existing
-                 * rows must be re-pointed to the new UID before the diff below is
-                 * applied, otherwise the old rows are orphaned and unchanged
-                 * permissions are lost for the new UID.
-                 */
                 $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
                 $uidChanged = $newUid !== $id;
 
@@ -1006,7 +999,7 @@ class MariaDB extends SQL
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
                 /**
-                 * Get current permissions from the database
+                 * Get current permissions
                  */
                 $sqlPermissions = $this->getPDO()->prepare($sql);
 

@@ -80,11 +80,16 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                try {
+                    if ($this->getPDO()->inTransaction()) {
+                        $this->getPDO()->rollBack();
+                    } else {
+                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                    }
+                } catch (PDOException) {
+                    // Defensive cleanup — if there is nothing to roll back
+                    // (stale persistent connection, implicit commit, etc.)
+                    // we can safely ignore the failure and proceed.
                 }
 
                 $this->getPDO()->beginTransaction();

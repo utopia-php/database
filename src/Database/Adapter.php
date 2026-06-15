@@ -436,12 +436,13 @@ abstract class Adapter
                 try {
                     $this->rollbackTransaction();
                 } catch (\Throwable $rollback) {
+                    $this->inTransaction = 0;
+
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
                         continue;
                     }
 
-                    $this->inTransaction = 0;
                     throw $rollback;
                 }
 

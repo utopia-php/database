@@ -1645,6 +1645,7 @@ trait DocumentTests
                     '$id' => 'final_id',
                     '$permissions' => [
                         Permission::read(Role::user('bob')),
+                        Permission::read(Role::user('bob')), // Duplication check
                         Permission::update(Role::user('bob')),
                         Permission::delete(Role::user('bob')),
                     ],

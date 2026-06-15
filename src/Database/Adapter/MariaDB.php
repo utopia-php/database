@@ -992,7 +992,7 @@ class MariaDB extends SQL
 			    DELETE FROM {$this->getSQLTable($name . '_perms')}
 			    WHERE _document = :_uid
 			    {$this->getTenantQuery($collection)}
-			";
+			    ";
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
@@ -1003,10 +1003,12 @@ class MariaDB extends SQL
                 }
 
                 $values = [];
+                $binds = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    foreach ($document->getPermissionsByType($type) as $i => $_) {
+                    foreach ($document->getPermissionsByType($type) as $i => $permission) {
                         $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}{$tenantPlaceholder})";
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$tenantPlaceholder})";
+                        $binds[":_add_{$type}_{$i}"] = $permission;
                     }
                 }
 
@@ -1020,17 +1022,13 @@ class MariaDB extends SQL
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
                     $stmtAddPermissions = $this->getPDO()->prepare($sql);
-
                     $stmtAddPermissions->bindValue(":_uid", $newUid);
-
                     if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                     }
 
-                    foreach (Database::PERMISSIONS as $type) {
-                        foreach ($document->getPermissionsByType($type) as $i => $permission) {
-                            $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                        }
+                    foreach ($binds as $key => $permission) {
+                        $stmtAddPermissions->bindValue($key, $permission);
                     }
                 }
             }

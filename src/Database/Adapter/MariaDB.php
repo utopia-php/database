@@ -998,7 +998,6 @@ class MariaDB extends SQL
 
                 $stmtRemovePermissions = $this->getPDO()->prepare($sql);
                 $stmtRemovePermissions->bindValue(':_uid', $id);
-
                 if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }

@@ -1139,140 +1139,55 @@ class Postgres extends SQL
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_uid'] = $document->getId();
 
         $name = $this->filter($collection);
         $columns = '';
 
         if (!$skipPermissions) {
+            $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
+
             $sql = "
-			SELECT _type, _permission
-			FROM {$this->getSQLTable($name . '_perms')}
+			DELETE FROM {$this->getSQLTable($name . '_perms')}
 			WHERE _document = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-            /**
-             * Get current permissions from the database
-             */
-            $permissionsStmt = $this->getPDO()->prepare($sql);
-            $permissionsStmt->bindValue(':_uid', $document->getId());
-
+            $stmtRemovePermissions = $this->getPDO()->prepare($sql);
+            $stmtRemovePermissions->bindValue(':_uid', $id);
             if ($this->sharedTables) {
-                $permissionsStmt->bindValue(':_tenant', $this->tenant);
+                $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
-            $this->execute($permissionsStmt);
-            $permissions = $permissionsStmt->fetchAll();
-            $permissionsStmt->closeCursor();
-
-            $initial = [];
+            $values = [];
+            $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                $initial[$type] = [];
-            }
-
-            $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                $carry[$item['_type']][] = $item['_permission'];
-
-                return $carry;
-            }, $initial);
-
-            /**
-             * Get removed Permissions
-             */
-            $removals = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                if (!empty($diff)) {
-                    $removals[$type] = $diff;
+                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                    $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
+                    $binds[":_add_{$type}_{$i}"] = $permission;
                 }
             }
 
-            /**
-             * Get added Permissions
-             */
-            $additions = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                if (!empty($diff)) {
-                    $additions[$type] = $diff;
-                }
-            }
-
-            /**
-             * Query to remove permissions
-             */
-            $removeQuery = '';
-            if (!empty($removals)) {
-                $removeQuery = ' AND (';
-                foreach ($removals as $type => $permissions) {
-                    $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                    if ($type !== \array_key_last($removals)) {
-                        $removeQuery .= ' OR ';
-                    }
-                }
-            }
-            if (!empty($removeQuery)) {
-                $removeQuery .= ')';
-
-                $sql = "
-				DELETE
-                FROM {$this->getSQLTable($name . '_perms')}
-                WHERE _document = :_uid
-                {$this->getTenantQuery($collection)}
-			";
-
-                $removeQuery = $sql . $removeQuery;
-
-                $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-                $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                $stmtRemovePermissions->bindValue(':_uid', $document->getId());
-
-                if ($this->sharedTables) {
-                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                }
-
-                foreach ($removals as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                    }
-                }
-            }
-
-            /**
-             * Query to add permissions
-             */
-            if (!empty($additions)) {
-                $values = [];
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $_) {
-                        $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    }
-                }
-
+            if (!empty($values)) {
                 $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
                 $sql = "
 				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
-				VALUES" . \implode(', ', $values);
+				VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
                 $stmtAddPermissions = $this->getPDO()->prepare($sql);
-                $stmtAddPermissions->bindValue(":_uid", $document->getId());
+                $stmtAddPermissions->bindValue(":_uid", $newUid);
                 if ($this->sharedTables) {
                     $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                    }
+                foreach ($binds as $key => $permission) {
+                    $stmtAddPermissions->bindValue($key, $permission);
                 }
             }
         }
@@ -1312,7 +1227,7 @@ class Postgres extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_newUid 
+			SET " . \rtrim($columns, ',') . "
 			WHERE _id=:_sequence
 			{$this->getTenantQuery($collection)}
 		";
@@ -1322,7 +1237,6 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_sequence', $document->getSequence());
-        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

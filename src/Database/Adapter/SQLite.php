@@ -2844,7 +2844,15 @@ class SQLite extends MariaDB
      * Schema-index entries for FTS5 fulltext tables on `$collection`.
      * Maps each back to a metadata index id when possible.
      *
-     * @return array<array{$id: string, indexName: string, indexType: string, nonUnique: int, columns: array<string>, lengths: array<null>}>
+     * Each entry has keys:
+     * - `$id`: string
+     * - `indexName`: string
+     * - `indexType`: string
+     * - `nonUnique`: int
+     * - `columns`: array<string>
+     * - `lengths`: array<null>
+     *
+     * @return array<array<string, mixed>>
      */
     protected function getFulltextSchemaIndexes(string $collection): array
     {

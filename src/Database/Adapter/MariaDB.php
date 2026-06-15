@@ -1016,7 +1016,7 @@ class MariaDB extends SQL
                     $tenantColumn = $this->sharedTables ? ', _tenant' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$tenantColumn})
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantColumn})
 				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);

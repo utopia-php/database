@@ -24,6 +24,61 @@ use Utopia\Database\Query;
 
 trait DocumentTests
 {
+    public function testPartialUpdateDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'str_1', Database::VAR_STRING, 128, true, null);
+        $database->createAttribute(__FUNCTION__, 'str_2', Database::VAR_STRING, 128, false, 'default');
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        // Insert initial documents
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'bill',
+            'str_1' => 'Gates',
+            'str_2' => 'Clinton',
+            '$permissions' => $permissions,
+        ]));
+
+        $this->assertEquals('bill', $document->getId());
+        $this->assertEquals('Gates', $document->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $document->getAttribute('str_2'));
+        $this->assertEquals($permissions, $document->getPermissions());
+
+        /**
+         * test Update $id with no permissions!
+         */
+        $partial = new Document([
+            '$id'=> 'bill_1',
+        ]);
+
+        $partial = $this->getDatabase()->updateDocument(__FUNCTION__, $document->getId(), $partial);
+        $this->assertEquals('bill_1', $partial->getId());
+        $this->assertEquals('Gates', $partial->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $partial->getAttribute('str_2'));
+        $this->assertEquals($permissions, $partial->getPermissions());
+
+        /**
+         * Use find to check that permissions are not lost
+         */
+        $document = $database->findOne(__FUNCTION__, [
+            Query::equal('$id', ['bill_1'])
+        ]);
+
+        $this->assertEquals('bill_1', $document->getId());
+        $this->assertEquals('Gates', $document->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $document->getAttribute('str_2'));
+        $this->assertEquals($permissions, $document->getPermissions());
+
+        $this->assertEquals('shmuel', 'fogel');
+    }
+
     public function testNonUtfChars(): void
     {
         /** @var Database $database */
@@ -4646,42 +4701,10 @@ trait DocumentTests
         ], $result->getAttribute('tags'));
     }
 
-    //    public function testPartialUpdateDocument(): void
-    //    {
-    //        /** @var Database $database */
-    //        $database = $this->getDatabase();
-    //
-    //        $database->createCollection(__FUNCTION__);
-    //        $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
-    //
-    //        // Insert initial documents
-    //        $database->createDocument(__FUNCTION__, new Document([
-    //            '$id' => 'sam',
-    //            'string' => 'text📝 ' . $i,
-    //        ]));
-    //
-    //        var_dump('=======================================================================================');
-    //        var_dump('=======================================================================================');
-    //
-    //        /**
-    //         * test Update $id
-    //         */
-    //        $partial = new Document([
-    //            '$id'=> 'sam',
-    //        ]);
-    //
-    //        $partial = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $partial);
-    //        var_dump($partial);
-    //        $this->assertEquals('sam', $partial->getId());
-    //
-    //
-    //        $partial = $this->getDatabase()->getDocument($document->getCollection(), $partial->getId());
-    //        var_dump($partial);
-    //        $this->assertEquals('sam', $partial->getId());
-    //        $this->assertEquals('text📝', $partial->getAttribute('string'));
-    //
-    //        $this->assertEquals('shmuel', 'fogel');
-    //    }
+    public function testPartialUpdateDocument_place(): void
+    {
+       // $this->assertEquals('shmuel', 'fogel');
+    }
 
     /**
      * @depends testGetDocument

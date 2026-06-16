@@ -6149,7 +6149,23 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        $inputKeys = \array_keys($document->getArrayCopy());
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $document = clone $document;
+
+        $document->removeAttribute('$sequence'); // $sequence is immutable
+        $document->removeAttribute('$collection'); // $collection is immutable
+        $document->removeAttribute('$tenant'); // $tenant is immutable
+
+        $inputKeys = [
+            ...\array_keys($document->getArrayCopy()),
+            '$sequence',
+            '$collection',
+            '$updatedAt',
+        ];
+
         $newUpdatedAt = $document->getUpdatedAt();
 
         $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $inputKeys) {
@@ -6163,7 +6179,10 @@ class Database
 
             $skipPermissionsUpdate = true;
 
-            if ($document->offsetExists('$permissions')) {
+            if ($document->offsetExists('$id') && $document->getId() !== $id) { // UID change
+                $skipPermissionsUpdate = false;
+                $inputKeys[] = '$permissions';
+            } elseif ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions = $document->getPermissions();
 
@@ -6176,7 +6195,6 @@ class Database
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
@@ -6353,8 +6371,6 @@ class Database
             $document = $this->adapter->castingBefore($collection, $document);
 
             $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
-            $adapterDocument->setAttribute('$sequence', $old->getSequence());
-            $adapterDocument->setAttribute('$updatedAt', $document->getUpdatedAt());
 
             $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
@@ -7733,6 +7749,9 @@ class Database
     public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(

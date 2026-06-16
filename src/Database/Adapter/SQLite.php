@@ -1298,116 +1298,33 @@ class SQLite extends MariaDB
         $columns = '';
 
         if (!$skipPermissions) {
+            $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
+
             $sql = "
-			SELECT _type, _permission
-			FROM `{$this->getNamespace()}_{$name}_perms`
+			DELETE FROM `{$this->getNamespace()}_{$name}_perms`
 			WHERE _document = :_uid
 			{$this->getTenantQuery($collection)}
 		";
 
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-            /**
-             * Get current permissions from the database
-             */
-            $permissionsStmt = $this->getPDO()->prepare($sql);
-            $permissionsStmt->bindValue(':_uid', $id);
-
+            $stmtRemovePermissions = $this->getPDO()->prepare($sql);
+            $stmtRemovePermissions->bindValue(':_uid', $id);
             if ($this->sharedTables) {
-                $permissionsStmt->bindValue(':_tenant', $this->tenant);
+                $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
-            $permissionsStmt->execute();
-            $permissions = $permissionsStmt->fetchAll();
-            $permissionsStmt->closeCursor();
-
-            $initial = [];
+            $values = [];
+            $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                $initial[$type] = [];
-            }
-
-            $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                $carry[$item['_type']][] = $item['_permission'];
-
-                return $carry;
-            }, $initial);
-
-            /**
-             * Get removed Permissions
-             */
-            $removals = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                if (!empty($diff)) {
-                    $removals[$type] = $diff;
+                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                    $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
+                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
+                    $binds[":_add_{$type}_{$i}"] = $permission;
                 }
             }
 
-            /**
-             * Get added Permissions
-             */
-            $additions = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                if (!empty($diff)) {
-                    $additions[$type] = $diff;
-                }
-            }
-
-            /**
-             * Query to remove permissions
-             */
-            $removeQuery = '';
-            if (!empty($removals)) {
-                $removeQuery = ' AND (';
-                foreach ($removals as $type => $permissions) {
-                    $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                    if ($type !== \array_key_last($removals)) {
-                        $removeQuery .= ' OR ';
-                    }
-                }
-            }
-            if (!empty($removeQuery)) {
-                $removeQuery .= ')';
-                $sql = "
-				DELETE
-                FROM `{$this->getNamespace()}_{$name}_perms`
-                WHERE _document = :_uid
-                {$this->getTenantQuery($collection)}
-			";
-
-                $removeQuery = $sql . $removeQuery;
-                $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-
-                $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                $stmtRemovePermissions->bindValue(':_uid', $id);
-
-                if ($this->sharedTables) {
-                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                }
-
-                foreach ($removals as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                    }
-                }
-            }
-
-            /**
-             * Query to add permissions
-             */
-            if (!empty($additions)) {
-                $values = [];
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $_) {
-                        $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
-                    }
-                }
-
+            if (!empty($values)) {
                 $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
                 $sql = "
@@ -1417,17 +1334,13 @@ class SQLite extends MariaDB
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
                 $stmtAddPermissions = $this->getPDO()->prepare($sql);
-
-                $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
                 $stmtAddPermissions->bindValue(":_uid", $newUid);
                 if ($this->sharedTables) {
                     $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                 }
 
-                foreach ($additions as $type => $permissions) {
-                    foreach ($permissions as $i => $permission) {
-                        $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                    }
+                foreach ($binds as $key => $permission) {
+                    $stmtAddPermissions->bindValue($key, $permission);
                 }
             }
         }

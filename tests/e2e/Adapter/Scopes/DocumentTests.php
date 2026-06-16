@@ -103,61 +103,62 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        // Snapshot the current roles so we can restore them after switching
-        // roles to assert permission scoping
-        $roles = $database->getAuthorization()->getRoles();
+        $auth = $database->getAuthorization();
+        $roles = $auth->getRoles();
 
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true, null);
+        $collection = 'updatePerms';
 
-        $document = $database->createDocument(__FUNCTION__, new Document([
-            '$id' => 'doc1',
-            'name' => 'initial',
-            '$permissions' => [
-                Permission::read(Role::user('user_a')),
-                Permission::update(Role::user('user_a')),
-            ],
-        ]));
+        try {
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true, null);
 
-        $sequence = $document->getSequence();
+            $document = $auth->skip(fn () => $database->createDocument($collection, new Document([
+                '$id' => 'doc1',
+                'name' => 'initial',
+                '$permissions' => [
+                    Permission::read(Role::user('user_a')),
+                    Permission::update(Role::user('user_a')),
+                ],
+            ])));
 
-        /**
-         * Replace the permission set entirely
-         */
-        $newPermissions = [
-            Permission::read(Role::user('user_b')),
-            Permission::update(Role::user('user_b')),
-        ];
+            $sequence = $document->getSequence();
 
-        $database->getAuthorization()->skip(fn () => $database->updateDocument(__FUNCTION__, 'doc1', new Document([
-            '$id' => 'doc1',
-            '$permissions' => $newPermissions,
-        ])));
+            /**
+             * Replace the permission set entirely
+             */
+            $newPermissions = [
+                Permission::read(Role::user('user_b')),
+                Permission::update(Role::user('user_b')),
+            ];
 
-        $updated = $database->getAuthorization()->skip(fn () => $database->getDocument(__FUNCTION__, 'doc1'));
-        $this->assertEquals($sequence, $updated->getSequence());
-        $this->assertEquals('dsds', $updated->getAttribute('name'));
-        $this->assertEquals($newPermissions, $updated->getPermissions());
+            $auth->skip(fn () => $database->updateDocument($collection, 'doc1', new Document([
+                '$id' => 'doc1',
+                '$permissions' => $newPermissions,
+            ])));
 
-        /**
-         * The newly granted role can read the document
-         */
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('user_b')->toString());
-        $this->assertFalse($database->getDocument(__FUNCTION__, 'doc1')->isEmpty());
+            $updated = $auth->skip(fn () => $database->getDocument($collection, 'doc1'));
+            $this->assertEquals($sequence, $updated->getSequence());
+            $this->assertEquals('initial', $updated->getAttribute('name')); // unchanged attributes are preserved
+            $this->assertEqualsCanonicalizing($newPermissions, $updated->getPermissions());
 
-        /**
-         * The revoked role can no longer read it — the old permission rows
-         * were deleted, not left behind alongside the new ones
-         */
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::user('user_a')->toString());
-        $this->assertTrue($database->getDocument(__FUNCTION__, 'doc1')->isEmpty());
+            /**
+             * The newly granted role can read the document
+             */
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('user_b')->toString());
+            $this->assertFalse($database->getDocument($collection, 'doc1')->isEmpty());
 
-        // Restore the original roles
-        $database->getAuthorization()->cleanRoles();
-        foreach ($roles as $role) {
-            $database->getAuthorization()->addRole($role);
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('user_a')->toString());
+            $this->assertTrue($database->getDocument($collection, 'doc1')->isEmpty());
+        } finally {
+            // Restore the original roles
+            $auth->cleanRoles();
+            foreach ($roles as $role) {
+                $auth->addRole($role);
+            }
+
+            $auth->skip(fn () => $database->deleteCollection($collection));
         }
     }
 

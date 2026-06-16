@@ -6168,7 +6168,7 @@ class Database
 
         $newUpdatedAt = $document->getUpdatedAt();
 
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $inputKeys) {
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)

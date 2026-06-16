@@ -1572,6 +1572,113 @@ trait DocumentTests
         $database->deleteCollection('defaults');
     }
 
+    /**
+     * When a document's UID changes on update, its permission rows in the
+     * collection's _perms table must follow the new UID. Otherwise the old
+     * rows are orphaned and the renamed document is left with no permissions,
+     * even when the permission set itself was not changed.
+     */
+    public function testUpdateDocumentChangeIdMigratesPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $auth = $database->getAuthorization();
+
+        $collection = 'update_change_id_perms';
+
+        try {
+            // documentSecurity with no collection-level permissions: reads are
+            // governed purely by the document's rows in the _perms table.
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+            // Create a document whose read permission is scoped to a single role,
+            // so that find() must consult the _perms table to return it.
+            $document = $auth->skip(fn () => $database->createDocument($collection, new Document([
+                '$id' => 'old_id',
+                'name' => 'test',
+                '$permissions' => [
+                    Permission::read(Role::user('alice')),
+                    Permission::update(Role::user('alice')),
+                    Permission::delete(Role::user('alice')),
+                ],
+            ])));
+            $this->assertEquals('old_id', $document->getId());
+
+            // Sanity: as alice the document is visible via the _perms table.
+            $auth->addRole(Role::user('alice')->toString());
+            $this->assertCount(1, $database->find($collection));
+
+            // Rename the document WITHOUT changing its permission set.
+            $renamed = $auth->skip(fn () => $database->updateDocument($collection, 'old_id', new Document(\array_merge(
+                $document->getArrayCopy(),
+                ['$id' => 'new_id'],
+            ))));
+            $this->assertEquals('new_id', $renamed->getId());
+
+            // The old UID must no longer resolve to a document.
+            $this->assertTrue($auth->skip(fn () => $database->getDocument($collection, 'old_id'))->isEmpty());
+
+            // The new UID must exist and keep its permissions on the main row.
+            $newDoc = $auth->skip(fn () => $database->getDocument($collection, 'new_id'));
+            $this->assertFalse($newDoc->isEmpty());
+            $this->assertContains(Permission::read(Role::user('alice')), $newDoc->getPermissions());
+
+            // The crucial check: the permission rows must have migrated to the new
+            // UID in the _perms table. As alice, find() (which joins _perms) must
+            // still return exactly the renamed document. With orphaned rows under
+            // the old UID this returns 0.
+            $found = $database->find($collection);
+            $this->assertCount(1, $found);
+            $this->assertEquals('new_id', $found[0]->getId());
+
+            /**
+             * Second scenario: change the UID AND the permission set in the same
+             * update. Drop alice's access and grant bob instead. The removed rows
+             * must be gone, the added rows must land under the new UID, and nothing
+             * may be left orphaned under the old UID.
+             */
+            $rekeyed = $auth->skip(fn () => $database->updateDocument($collection, 'new_id', new Document(\array_merge(
+                $newDoc->getArrayCopy(),
+                [
+                    '$id' => 'final_id',
+                    '$permissions' => [
+                        Permission::read(Role::user('bob')),
+                        Permission::read(Role::user('bob')), // Duplication check
+                        Permission::update(Role::user('bob')),
+                        Permission::delete(Role::user('bob')),
+                    ],
+                ],
+            ))));
+            $this->assertEquals('final_id', $rekeyed->getId());
+
+            // The old UID must no longer resolve to a document.
+            $this->assertTrue($auth->skip(fn () => $database->getDocument($collection, 'new_id'))->isEmpty());
+
+            // The main row must reflect the new permission set.
+            $finalDoc = $auth->skip(fn () => $database->getDocument($collection, 'final_id'));
+            $this->assertFalse($finalDoc->isEmpty());
+            $this->assertContains(Permission::read(Role::user('bob')), $finalDoc->getPermissions());
+            $this->assertNotContains(Permission::read(Role::user('alice')), $finalDoc->getPermissions());
+
+            // alice's permission rows were removed: as alice nothing is returned.
+            $this->assertCount(0, $database->find($collection));
+
+            // bob's permission rows landed under the new UID: as bob the renamed
+            // document is returned via the _perms join.
+            $auth->addRole(Role::user('bob')->toString());
+            $foundAsBob = $database->find($collection);
+            $this->assertCount(1, $foundAsBob);
+            $this->assertEquals('final_id', $foundAsBob[0]->getId());
+        } finally {
+            $auth->removeRole(Role::user('alice')->toString());
+            $auth->removeRole(Role::user('bob')->toString());
+
+            $auth->skip(fn () => $database->deleteCollection($collection));
+        }
+    }
+
     public function testIncreaseDecrease(): Document
     {
         /** @var Database $database */

@@ -6170,10 +6170,17 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
+            // UID change
+            if ($document->offsetExists('$id') && $document->getId() !== $id) {
+                $skipPermissionsUpdate = false;
+            }
+
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
+            $document['$sequence'] = $old->getSequence(); // Sequence is immutable
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {

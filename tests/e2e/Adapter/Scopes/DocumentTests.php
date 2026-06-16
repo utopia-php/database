@@ -51,6 +51,9 @@ trait DocumentTests
         $this->assertEquals('Clinton', $document->getAttribute('str_2'));
         $this->assertEquals($permissions, $document->getPermissions());
 
+        // Capture the internal sequence (_id) — it must survive a uid rename
+        $sequence = $document->getSequence();
+
         /**
          * test Update $id with no permissions!
          */
@@ -63,6 +66,7 @@ trait DocumentTests
         $this->assertEquals('Gates', $partial->getAttribute('str_1'));
         $this->assertEquals('Clinton', $partial->getAttribute('str_2'));
         $this->assertEquals($permissions, $partial->getPermissions());
+        $this->assertEquals($sequence, $partial->getSequence());
 
         /**
          * Use find to check that permissions are not lost
@@ -75,8 +79,138 @@ trait DocumentTests
         $this->assertEquals('Gates', $document->getAttribute('str_1'));
         $this->assertEquals('Clinton', $document->getAttribute('str_2'));
         $this->assertEquals($permissions, $document->getPermissions());
+        $this->assertEquals($sequence, $document->getSequence());
 
-        $this->assertEquals('shmuel', 'fogel');
+        /**
+         * The old $id must no longer exist
+         */
+        $old = $database->getDocument(__FUNCTION__, 'bill');
+        $this->assertTrue($old->isEmpty());
+
+        $old = $database->findOne(__FUNCTION__, [
+            Query::equal('$id', ['bill'])
+        ]);
+        $this->assertTrue($old->isEmpty());
+
+        /**
+         * The collection holds exactly one document after the rename
+         */
+        $this->assertCount(1, $database->find(__FUNCTION__));
+    }
+
+    public function testUpdateDocumentChangePermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true, null);
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'doc1',
+            'name' => 'initial',
+            '$permissions' => [
+                Permission::read(Role::user('user_a')),
+                Permission::update(Role::user('user_a')),
+            ],
+        ]));
+
+        $sequence = $document->getSequence();
+
+        /**
+         * Replace the permission set entirely: revoke user_a, grant user_b
+         */
+        $newPermissions = [
+            Permission::read(Role::user('user_b')),
+            Permission::update(Role::user('user_b')),
+        ];
+
+        $database->getAuthorization()->skip(fn () => $database->updateDocument(__FUNCTION__, 'doc1', new Document([
+            '$id' => 'doc1',
+            '$permissions' => $newPermissions,
+        ])));
+
+        $updated = $database->getAuthorization()->skip(fn () => $database->getDocument(__FUNCTION__, 'doc1'));
+        $this->assertEquals($sequence, $updated->getSequence());
+        $this->assertEqualsCanonicalizing($newPermissions, $updated->getPermissions());
+
+        /**
+         * The newly granted role can read the document
+         */
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('user_b')->toString());
+        $this->assertFalse($database->getDocument(__FUNCTION__, 'doc1')->isEmpty());
+
+        /**
+         * The revoked role can no longer read it — the old permission rows
+         * were deleted, not left behind alongside the new ones
+         */
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('user_a')->toString());
+        $this->assertTrue($database->getDocument(__FUNCTION__, 'doc1')->isEmpty());
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+    }
+
+    public function testUpdateDocumentUidChangeMigratesPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true, null);
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'old_uid',
+            'name' => 'data',
+            '$permissions' => [
+                Permission::read(Role::user('owner')),
+                Permission::update(Role::user('owner')),
+            ],
+        ]));
+
+        $sequence = $document->getSequence();
+
+        /**
+         * Rename the uid only — permissions are unchanged in the payload but
+         * must be re-keyed from old_uid to new_uid in storage
+         */
+        $database->getAuthorization()->skip(fn () => $database->updateDocument(__FUNCTION__, 'old_uid', new Document([
+            '$id' => 'new_uid',
+        ])));
+
+        /**
+         * Old uid is gone; new uid carries the same sequence and permissions
+         */
+        $old = $database->getAuthorization()->skip(fn () => $database->getDocument(__FUNCTION__, 'old_uid'));
+        $this->assertTrue($old->isEmpty());
+
+        $new = $database->getAuthorization()->skip(fn () => $database->getDocument(__FUNCTION__, 'new_uid'));
+        $this->assertFalse($new->isEmpty());
+        $this->assertEquals($sequence, $new->getSequence());
+        $this->assertEqualsCanonicalizing([
+            Permission::read(Role::user('owner')),
+            Permission::update(Role::user('owner')),
+        ], $new->getPermissions());
+
+        /**
+         * The owner can read the renamed document via its permissions
+         */
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('owner')->toString());
+        $this->assertFalse($database->getDocument(__FUNCTION__, 'new_uid')->isEmpty());
+
+        /**
+         * No orphaned permission under the old uid grants unintended access,
+         * and the permission did not silently widen to other roles
+         */
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('intruder')->toString());
+        $this->assertTrue($database->getDocument(__FUNCTION__, 'new_uid')->isEmpty());
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
     }
 
     public function testNonUtfChars(): void

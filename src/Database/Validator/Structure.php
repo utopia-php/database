@@ -354,15 +354,18 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_TEXT:
-                case Database::VAR_MEDIUMTEXT:
-                case Database::VAR_LONGTEXT:
-                    $maxBytes = match ($type) {
-                        Database::VAR_MEDIUMTEXT => Database::MAX_MEDIUMTEXT_BYTES,
-                        Database::VAR_LONGTEXT => Database::MAX_LONGTEXT_BYTES,
-                        default => Database::MAX_TEXT_BYTES,
-                    };
                     $validators[] = new Text($size, min: 0);
-                    $validators[] = new Text(\intdiv($maxBytes, 4), min: 0);
+                    $validators[] = new Text(\intdiv(Database::MAX_TEXT_BYTES, 4), min: 0);
+                    break;
+
+                case Database::VAR_MEDIUMTEXT:
+                    $validators[] = new Text($size, min: 0);
+                    $validators[] = new Text(\intdiv(Database::MAX_MEDIUMTEXT_BYTES, 4), min: 0);
+                    break;
+
+                case Database::VAR_LONGTEXT:
+                    $validators[] = new Text($size, min: 0);
+                    $validators[] = new Text(\intdiv(Database::MAX_LONGTEXT_BYTES, 4), min: 0);
                     break;
 
                 case Database::VAR_VARCHAR:

@@ -114,6 +114,11 @@ class RedisTest extends Base
         return true;
     }
 
+    protected function supportsFindCache(): bool
+    {
+        return false;
+    }
+
     /**
      * Inherited test exercises the case where an INTEGER column is altered
      * to VARCHAR. Redis stores documents as JSON; type changes do not

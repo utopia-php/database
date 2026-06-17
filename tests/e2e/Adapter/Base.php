@@ -65,6 +65,11 @@ abstract class Base extends TestCase
      */
     abstract protected function deleteIndex(string $collection, string $index): bool;
 
+    protected function supportsFindCache(): bool
+    {
+        return true;
+    }
+
     public function setUp(): void
     {
         if (is_null(self::$authorization)) {

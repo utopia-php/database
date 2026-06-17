@@ -105,35 +105,40 @@ trait DocumentTests
 
     public function testFindCachedReturnsStaleResultUntilPurged(): void
     {
+        if (!$this->supportsFindCache()) {
+            $this->markTestSkipped('Adapter test disables the cache layer.');
+        }
+
         /** @var Database $database */
         $database = $this->getDatabase();
+        $collection = 'findCached';
 
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 255, true);
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 255, true);
 
-        $database->createDocument(__FUNCTION__, new Document([
+        $database->createDocument($collection, new Document([
             '$id' => 'first',
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'First',
         ]));
 
-        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
-        $database->createDocument(__FUNCTION__, new Document([
+        $database->createDocument($collection, new Document([
             '$id' => 'second',
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'Second',
         ]));
 
-        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
-        $database->purgeCachedFindCollection(__FUNCTION__);
+        $database->purgeCachedFindCollection($collection);
 
-        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(2, $documents);
         $this->assertSame('first', $documents[0]->getId());
         $this->assertSame('second', $documents[1]->getId());

@@ -980,7 +980,7 @@ trait DocumentTests
 
         // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
         // maps to a TEXT column, which is limited to 65,535 *bytes*.
-        $database->createAttribute(__FUNCTION__, 'blocks_json', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
         // The Structure validator caps a TEXT column at 65,535 / 4 = 16,383
         // characters (a utf8mb4 char is at most 4 bytes), guaranteeing the value
@@ -992,7 +992,7 @@ trait DocumentTests
 
         $document = new Document([
             '$id' => 'first',
-            'blocks_json' => $value,
+            'text' => $value,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1015,14 +1015,14 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'blocks_json', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
         // A value within the byte-safe character limit is stored and round-trips intact.
         $okValue = \str_repeat('a', 16383);
 
         $document = new Document([
             '$id' => 'first',
-            'blocks_json' => $okValue,
+            'text' => $okValue,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1033,7 +1033,7 @@ trait DocumentTests
 
         $created = $database->createDocument(__FUNCTION__, $document);
         $fetched = $database->getDocument(__FUNCTION__, $created->getId());
-        $this->assertEquals($okValue, $fetched->getAttribute('blocks_json'));
+        $this->assertEquals($okValue, $fetched->getAttribute('text'));
     }
 
     public function testTextByteTruncationUpdate(): void
@@ -1042,11 +1042,11 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'blocks_json', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
         $document = new Document([
             '$id' => 'first',
-            'blocks_json' => \str_repeat('a', 16383),
+            'text' => \str_repeat('a', 16383),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1062,7 +1062,7 @@ trait DocumentTests
         $this->assertGreaterThan(16383, \mb_strlen($value)); // exceeds the byte-safe char limit
 
         try {
-            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('blocks_json', $value));
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('text', $value));
             $this->fail('Expected StructureException for over-capacity text value on update');
         } catch (StructureException $e) {
             $this->assertStringContainsString('16383 chars', $e->getMessage());

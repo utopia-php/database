@@ -382,7 +382,7 @@ class StructureTest extends TestCase
             'name' => 'posts',
             'attributes' => [
                 [
-                    '$id' => 'blocks_json',
+                    '$id' => 'text',
                     'type' => Database::VAR_TEXT,
                     'format' => '',
                     'size' => 1048576,
@@ -419,8 +419,8 @@ class StructureTest extends TestCase
         // (a utf8mb4 char is at most 4 bytes). Values longer than that are
         // rejected even though the declared $size (1MB) would allow them.
         $tooBig = \str_repeat('a', 16384);
-        $this->assertEquals(false, $validator->isValid(new Document($base + ['blocks_json' => $tooBig])));
-        $this->assertEquals('Invalid document structure: Attribute "blocks_json" has invalid type. Value must be a valid string and no longer than 16383 chars', $validator->getDescription());
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $tooBig])));
+        $this->assertEquals('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string and no longer than 16383 chars', $validator->getDescription());
     }
 
     public function testTextByteSafeValidationMultibyte(): void
@@ -430,7 +430,7 @@ class StructureTest extends TestCase
 
         // Multi-byte content over the limit is rejected the same way.
         $multibyte = \str_repeat('📝', 20000);
-        $this->assertEquals(false, $validator->isValid(new Document($base + ['blocks_json' => $multibyte])));
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $multibyte])));
     }
 
     public function testTextByteSafeValidationValid(): void
@@ -440,7 +440,7 @@ class StructureTest extends TestCase
 
         // A value within the byte-safe character limit is accepted.
         $ok = \str_repeat('a', 16383);
-        $this->assertEquals(true, $validator->isValid(new Document($base + ['blocks_json' => $ok])));
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['text' => $ok])));
     }
 
     public function testArrayOfStringsValidation(): void

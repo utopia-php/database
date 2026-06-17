@@ -115,7 +115,7 @@ class Database
     public const MAX_ARRAY_INDEX_LENGTH = 255;
     public const MAX_UID_DEFAULT_LENGTH = 36;
 
-    // Maximum byte capacity of TEXT-family columns (MySQL/MariaDB)
+    // Maximum byte capacity for TEXT
     public const MAX_TEXT_BYTES = 65535;
     public const MAX_MEDIUMTEXT_BYTES = 16777215;
     public const MAX_LONGTEXT_BYTES = 4294967295;

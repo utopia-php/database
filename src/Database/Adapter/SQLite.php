@@ -41,9 +41,9 @@ class SQLite extends MariaDB
      * introspection produces the same characterMaximumLength values that
      * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
      */
-    private const MARIADB_TEXT_BYTES = '65535';
-    private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
-    private const MARIADB_LONGTEXT_BYTES = '4294967295';
+    private const MARIADB_TEXT_BYTES = '' . Database::MAX_TEXT_BYTES;
+    private const MARIADB_MEDIUMTEXT_BYTES = '' . Database::MAX_MEDIUMTEXT_BYTES;
+    private const MARIADB_LONGTEXT_BYTES = '' . Database::MAX_LONGTEXT_BYTES;
 
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';

@@ -368,6 +368,55 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
+    public function testTextByteSafeValidation(): void
+    {
+        // A legacy `text` attribute whose declared size (1MB) exceeds the real
+        // 65,535-byte capacity of a TEXT column. Such attributes exist in older
+        // databases created before VAR_TEXT was capped, so the limit must come
+        // from the column type, not from the (untrustworthy) declared size.
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'blocks_json',
+                    'type' => Database::VAR_TEXT,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // The byte-safe character limit for a TEXT column is 65,535 / 4 = 16,383
+        // (a utf8mb4 char is at most 4 bytes). Values longer than that are
+        // rejected even though the declared $size (1MB) would allow them.
+        $tooBig = \str_repeat('a', 16384);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['blocks_json' => $tooBig])));
+        $this->assertEquals('Invalid document structure: Attribute "blocks_json" has invalid type. Value must be a valid string and no longer than 16383 chars', $validator->getDescription());
+
+        // Multi-byte content over the limit is rejected the same way.
+        $multibyte = \str_repeat('📝', 20000);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['blocks_json' => $multibyte])));
+
+        // A value within the byte-safe character limit is accepted.
+        $ok = \str_repeat('a', 16383);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['blocks_json' => $ok])));
+    }
+
     public function testArrayOfStringsValidation(): void
     {
         $validator = new Structure(
@@ -959,7 +1008,7 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
-            'text_field' => \str_repeat('a', 65535),
+            'text_field' => \str_repeat('a', intdiv(65535, 4)), // byte-safe char cap for a TEXT column
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));

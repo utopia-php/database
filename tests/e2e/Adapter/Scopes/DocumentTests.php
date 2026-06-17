@@ -971,6 +971,59 @@ trait DocumentTests
         }
     }
 
+    public function testTextByteTruncation(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
+        // maps to a TEXT column, which is limited to 65,535 *bytes*.
+        $database->createAttribute(__FUNCTION__, 'blocks_json', Database::VAR_TEXT, 65535, false);
+
+        // The Structure validator caps a TEXT column at 65,535 / 4 = 16,383
+        // characters (a utf8mb4 char is at most 4 bytes), guaranteeing the value
+        // fits the column's byte capacity. A 20,000-char value exceeds that and
+        // must be rejected up front with a clean StructureException, rather than
+        // letting the database raise error 1406 (data truncation). This applies
+        // to every write path; createDocument is the most basic.
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(16383, \mb_strlen($value)); // exceeds the byte-safe char limit
+
+        $document = new Document([
+            '$id' => 'first',
+            'blocks_json' => $value,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        try {
+            $database->createDocument(__FUNCTION__, $document);
+            $this->fail('Expected StructureException for over-capacity text value');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('16383 chars', $e->getMessage());
+        }
+
+        // A value within the byte-safe character limit is stored and round-trips intact.
+        $okValue = \str_repeat('a', 16383);
+        $created = $database->createDocument(__FUNCTION__, $document->setAttribute('blocks_json', $okValue));
+        $fetched = $database->getDocument(__FUNCTION__, $created->getId());
+        $this->assertEquals($okValue, $fetched->getAttribute('blocks_json'));
+
+        // The same oversized value is also rejected on update.
+        try {
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('blocks_json', $value));
+            $this->fail('Expected StructureException for over-capacity text value on update');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('16383 chars', $e->getMessage());
+        }
+    }
+
     public function testUpsertDocumentsInc(): void
     {
         /** @var Database $database */

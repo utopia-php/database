@@ -8353,12 +8353,12 @@ class Database
         }
 
         $this->cache->purge($collectionKey);
-        $this->purgeCachedFindCollection($collectionId);
+        $this->purgeCachedFinds($collectionId);
 
         return true;
     }
 
-    public function purgeCachedFindCollection(string $collectionId): bool
+    public function purgeCachedFinds(string $collectionId): bool
     {
         [$findKey] = $this->getFindCacheKeys($collectionId);
 
@@ -8595,13 +8595,14 @@ class Database
      * @param int $ttl
      * @param string|null $key Optional caller-owned cache variation key
      * @param string $forPermission
+     * @param bool $touchOnHit Refresh the cached entry timestamp on cache hit
      * @return array<Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ): array
+    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
     {
         if ($ttl <= 0) {
             return $this->find($collection, $queries, $forPermission);
@@ -8623,10 +8624,15 @@ class Database
         }
 
         if ($cached !== null && $cached !== false && \is_array($cached)) {
-            $documents = \array_map(
-                fn (array $document): Document => $this->createDocumentInstance($collectionDocument->getId(), $document),
-                $cached
-            );
+            [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
+
+            if ($touchOnHit && !$hasExpiredDocuments) {
+                try {
+                    $this->cache->touch($findKey, $findField);
+                } catch (Exception $e) {
+                    Console::warning('Warning: Failed to touch find result cache: ' . $e->getMessage());
+                }
+            }
 
             $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
 
@@ -8645,6 +8651,33 @@ class Database
         }
 
         return $documents;
+    }
+
+    /**
+     * @param array<mixed> $payload
+     * @return array{0: array<Document>, 1: bool}
+     */
+    private function decodeCachedFindPayload(Document $collection, array $payload): array
+    {
+        $results = [];
+        $hasExpiredDocuments = false;
+
+        foreach ($payload as $document) {
+            if (!\is_array($document)) {
+                continue;
+            }
+
+            $document = $this->createDocumentInstance($collection->getId(), $document);
+
+            if ($this->isTtlExpired($collection, $document)) {
+                $hasExpiredDocuments = true;
+                continue;
+            }
+
+            $results[] = $document;
+        }
+
+        return [$results, $hasExpiredDocuments];
     }
 
     /**
@@ -9531,7 +9564,7 @@ class Database
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
-                'filters' => $this->getFilterSignatures(),
+                'filters' => $this->getActiveFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -9561,12 +9594,12 @@ class Database
             'database' => $this->getDatabase(),
             'schema' => $this->getFindCacheSchemaHash($collection),
             'key' => $key,
-            'queries' => $key === null ? $this->serializeFindCacheQueries($queries) : null,
+            'queries' => $key === null ? $this->serializeQueriesForFindCache($queries) : null,
             'authorization' => $this->authorization->getStatus(),
             'roles' => $this->authorization->getRoles(),
             'permission' => $forPermission,
             'relationships' => $this->resolveRelationships,
-            'filters' => $this->getFilterSignatures(),
+            'filters' => $this->getActiveFilterSignatures(),
         ];
 
         return [$findKey, \md5(\json_encode($payload) ?: '')];
@@ -9588,7 +9621,7 @@ class Database
      * @param array<Query> $queries
      * @return array<mixed>
      */
-    private function serializeFindCacheQueries(array $queries): array
+    private function serializeQueriesForFindCache(array $queries): array
     {
         return \array_map(
             static fn (Query $query): array => $query->toArray(),
@@ -9599,7 +9632,7 @@ class Database
     /**
      * @return array<string, string>
      */
-    private function getFilterSignatures(): array
+    private function getActiveFilterSignatures(): array
     {
         $filterSignatures = [];
         if (!$this->filter) {

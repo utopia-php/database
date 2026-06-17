@@ -105,7 +105,7 @@ trait DocumentTests
 
     public function testFindCachedReturnsStaleResultUntilPurged(): void
     {
-        if (!$this->supportsFindCache()) {
+        if (!$this->supportsCachedFind()) {
             $this->markTestSkipped('Adapter test disables the cache layer.');
         }
 
@@ -136,7 +136,7 @@ trait DocumentTests
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
-        $database->purgeCachedFindCollection($collection);
+        $database->purgeCachedFinds($collection);
 
         $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(2, $documents);

@@ -22,9 +22,9 @@ class FindCacheTest extends TestCase
         $this->database = $this->createDatabase(new CacheMemory());
     }
 
-    private function createDatabase(Adapter $cache): Database
+    private function createDatabase(Adapter $cache, ?DatabaseMemory $adapter = null): Database
     {
-        $database = new Database(new DatabaseMemory(), new Cache($cache));
+        $database = new Database($adapter ?? new DatabaseMemory(), new Cache($cache));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('find_cache_' . \uniqid());
@@ -59,7 +59,7 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
-        $this->database->purgeCachedFindCollection('projects');
+        $this->database->purgeCachedFinds('projects');
 
         $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(2, $documents);
@@ -116,6 +116,76 @@ class FindCacheTest extends TestCase
 
         $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b');
         $this->assertCount(1, $documents);
+    }
+
+    public function testFindCachedTouchesCacheEntryOnHitWhenEnabled(): void
+    {
+        $cache = new TouchSpyCache();
+        $database = $this->createDatabase($cache);
+
+        $this->seedProject($database, 'first', 'First');
+
+        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $this->assertSame(0, $cache->touches);
+
+        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $this->assertSame(1, $cache->touches);
+    }
+
+    public function testFindCachedDoesNotTouchCacheEntryByDefault(): void
+    {
+        $cache = new TouchSpyCache();
+        $database = $this->createDatabase($cache);
+
+        $this->seedProject($database, 'first', 'First');
+
+        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+
+        $this->assertSame(0, $cache->touches);
+    }
+
+    public function testFindCachedFiltersExpiredCachedDocuments(): void
+    {
+        $database = $this->createDatabase(new HashMemoryCache(), new TtlMemoryAdapter());
+        $database->createAttribute('projects', 'expiresAt', Database::VAR_DATETIME, 0, false);
+        $database->createIndex('projects', 'expiresAtTtl', Database::INDEX_TTL, ['expiresAt'], ttl: 1);
+
+        $database->createDocument('projects', new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'First',
+            'expiresAt' => '2000-01-01T00:00:00.000+00:00',
+        ]));
+
+        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $this->assertCount(1, $documents);
+
+        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $this->assertCount(0, $documents);
+    }
+
+    public function testFindCachedDoesNotTouchCacheEntryWithExpiredDocuments(): void
+    {
+        $cache = new TouchSpyCache();
+        $database = $this->createDatabase($cache, new TtlMemoryAdapter());
+        $database->createAttribute('projects', 'expiresAt', Database::VAR_DATETIME, 0, false);
+        $database->createIndex('projects', 'expiresAtTtl', Database::INDEX_TTL, ['expiresAt'], ttl: 1);
+
+        $database->createDocument('projects', new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'First',
+            'expiresAt' => '2000-01-01T00:00:00.000+00:00',
+        ]));
+
+        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $this->assertCount(1, $documents);
+        $this->assertSame(0, $cache->touches);
+
+        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $this->assertCount(0, $documents);
+        $this->assertSame(0, $cache->touches);
     }
 }
 
@@ -204,5 +274,29 @@ class HashMemoryCache implements Adapter
     public function getName(?string $key = null): string
     {
         return 'hash-memory';
+    }
+}
+
+class TouchSpyCache extends HashMemoryCache
+{
+    public int $touches = 0;
+
+    public function touch(string $key, string $hash = ''): bool
+    {
+        $touched = parent::touch($key, $hash);
+
+        if ($touched) {
+            $this->touches++;
+        }
+
+        return $touched;
+    }
+}
+
+class TtlMemoryAdapter extends DatabaseMemory
+{
+    public function getSupportForTTLIndexes(): bool
+    {
+        return true;
     }
 }

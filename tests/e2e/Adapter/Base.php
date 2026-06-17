@@ -65,7 +65,7 @@ abstract class Base extends TestCase
      */
     abstract protected function deleteIndex(string $collection, string $index): bool;
 
-    protected function supportsFindCache(): bool
+    protected function supportsCachedFind(): bool
     {
         return true;
     }

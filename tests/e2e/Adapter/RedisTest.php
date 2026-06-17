@@ -114,7 +114,7 @@ class RedisTest extends Base
         return true;
     }
 
-    protected function supportsFindCache(): bool
+    protected function supportsCachedFind(): bool
     {
         return false;
     }

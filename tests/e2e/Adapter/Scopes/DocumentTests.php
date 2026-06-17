@@ -103,6 +103,42 @@ trait DocumentTests
         }
     }
 
+    public function testFindCachedReturnsStaleResultUntilPurged(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 255, true);
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'First',
+        ]));
+
+        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'second',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Second',
+        ]));
+
+        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $database->purgeCachedFindCollection(__FUNCTION__);
+
+        $documents = $database->findCached(__FUNCTION__, [Query::orderAsc('name')], ttl: 3600);
+        $this->assertCount(2, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+        $this->assertSame('second', $documents[1]->getId());
+    }
+
     public function testCreateDocumentWithBigIntType(): void
     {
         /** @var Database $database */

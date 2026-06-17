@@ -8353,8 +8353,27 @@ class Database
         }
 
         $this->cache->purge($collectionKey);
+        $this->purgeCachedFindCollection($collectionId);
 
         return true;
+    }
+
+    public function purgeCachedFindCollection(string $collectionId): bool
+    {
+        [$findKey] = $this->getFindCacheKeys($collectionId);
+
+        return $this->cache->purge($findKey);
+    }
+
+    /**
+     * @param array<Query> $queries
+     */
+    public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = [], string $forPermission = Database::PERMISSION_READ): bool
+    {
+        $collection = $this->silent(fn () => $this->getCollection($collectionId));
+        [$findKey, $findField] = $this->getFindCacheKeys($collectionId, $queries, $key, $forPermission, $collection);
+
+        return $this->cache->purge($findKey, $findField);
     }
 
     /**
@@ -8562,6 +8581,70 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
+    }
+
+    /**
+     * Find documents using an explicit TTL-backed cache.
+     *
+     * Results may be stale until the TTL expires or the caller purges the cached
+     * find entry. Use this only for read paths that can tolerate bounded
+     * staleness.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int $ttl
+     * @param string|null $key Optional caller-owned cache variation key
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ): array
+    {
+        if ($ttl <= 0) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collectionDocument->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        [$findKey, $findField] = $this->getFindCacheKeys($collectionDocument->getId(), $queries, $key, $forPermission, $collectionDocument);
+
+        try {
+            $cached = $this->cache->load($findKey, $ttl, $findField);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get find result from cache: ' . $e->getMessage());
+            $cached = null;
+        }
+
+        if ($cached !== null && $cached !== false && \is_array($cached)) {
+            $documents = \array_map(
+                fn (array $document): Document => $this->createDocumentInstance($collectionDocument->getId(), $document),
+                $cached
+            );
+
+            $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
+
+            return $documents;
+        }
+
+        $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
+
+        try {
+            $this->cache->save($findKey, \array_map(
+                static fn (Document $document): array => $document->getArrayCopy(),
+                $documents
+            ), $findField);
+        } catch (Exception $e) {
+            Console::warning('Failed to save find result to cache: ' . $e->getMessage());
+        }
+
+        return $documents;
     }
 
     /**
@@ -9445,34 +9528,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $filterSignatures = [];
-            if ($this->filter) {
-                $disabled = $this->disabledFilters ?? [];
-
-                foreach (self::$filters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    if (\array_key_exists($name, $this->instanceFilters)) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                foreach ($this->instanceFilters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                \ksort($filterSignatures);
-            }
-
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
-                'filters' => $filterSignatures,
+                'filters' => $this->getFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -9482,6 +9541,93 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    /**
+     * @param string $collectionId
+     * @param array<Query> $queries
+     * @param string|null $key
+     * @param string $forPermission
+     * @param Document|null $collection
+     * @return array{0: string, 1: string}
+     */
+    public function getFindCacheKeys(string $collectionId, array $queries = [], ?string $key = null, string $forPermission = self::PERMISSION_READ, ?Document $collection = null): array
+    {
+        [$collectionKey] = $this->getCacheKeys($collectionId);
+        $findKey = "{$collectionKey}:find";
+
+        $payload = [
+            'version' => 1,
+            'database' => $this->getDatabase(),
+            'schema' => $this->getFindCacheSchemaHash($collection),
+            'key' => $key,
+            'queries' => $key === null ? $this->serializeFindCacheQueries($queries) : null,
+            'authorization' => $this->authorization->getStatus(),
+            'roles' => $this->authorization->getRoles(),
+            'permission' => $forPermission,
+            'relationships' => $this->resolveRelationships,
+            'filters' => $this->getFilterSignatures(),
+        ];
+
+        return [$findKey, \md5(\json_encode($payload) ?: '')];
+    }
+
+    private function getFindCacheSchemaHash(?Document $collection): string
+    {
+        if ($collection === null || $collection->isEmpty()) {
+            return '';
+        }
+
+        return \md5(
+            \json_encode($collection->getAttribute('attributes', []))
+            . \json_encode($collection->getAttribute('indexes', []))
+        );
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<mixed>
+     */
+    private function serializeFindCacheQueries(array $queries): array
+    {
+        return \array_map(
+            static fn (Query $query): array => $query->toArray(),
+            $queries
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function getFilterSignatures(): array
+    {
+        $filterSignatures = [];
+        if (!$this->filter) {
+            return $filterSignatures;
+        }
+
+        $disabled = $this->disabledFilters ?? [];
+
+        foreach (self::$filters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            if (\array_key_exists($name, $this->instanceFilters)) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->instanceFilters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        \ksort($filterSignatures);
+
+        return $filterSignatures;
     }
 
     private static function computeCallableSignature(callable $callable): string

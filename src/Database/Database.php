@@ -173,6 +173,7 @@ class Database
 
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
+    public const CACHE_TTL_MAX = 60 * 60 * 24; // 24 hours
 
     // Events
     public const EVENT_ALL = '*';
@@ -8368,10 +8369,10 @@ class Database
     /**
      * @param array<Query> $queries
      */
-    public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = [], string $forPermission = Database::PERMISSION_READ): bool
+    public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collectionId));
-        [$findKey, $findField] = $this->getFindCacheKeys($collectionId, $queries, $key, $forPermission, $collection);
+        [$findKey, $findField] = $this->authorization->skip(fn () => $this->getFindCacheKeys($collectionId, $queries, $key, $collection));
 
         return $this->cache->purge($findKey, $findField);
     }
@@ -8590,9 +8591,19 @@ class Database
      * find entry. Use this only for read paths that can tolerate bounded
      * staleness.
      *
+     * Cache reads and writes are only used when authorization is disabled, for
+     * example inside Authorization::skip(). With active authorization this
+     * delegates to find() so cached results cannot outlive permission changes.
+     * Cached hits rebuild top-level Document instances from stored arrays and
+     * are intended for internal flat-document reads.
+     *
+     * When $key is provided, it replaces query serialization in the cache key.
+     * The caller-owned key must include every query dimension that can change
+     * the result.
+     *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $ttl
+     * @param int $ttl Cache TTL in seconds. Defaults to 0, which disables caching. Values above CACHE_TTL_MAX are clamped.
      * @param string|null $key Optional caller-owned cache variation key
      * @param string $forPermission
      * @param bool $touchOnHit Refresh the cached entry timestamp on cache hit
@@ -8602,11 +8613,17 @@ class Database
      * @throws TimeoutException
      * @throws Exception
      */
-    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
+    public function findCached(string $collection, array $queries = [], int $ttl = 0, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
     {
         if ($ttl <= 0) {
             return $this->find($collection, $queries, $forPermission);
         }
+
+        if ($this->authorization->getStatus()) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        $ttl = \min($ttl, self::CACHE_TTL_MAX);
 
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
 
@@ -8614,7 +8631,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        [$findKey, $findField] = $this->getFindCacheKeys($collectionDocument->getId(), $queries, $key, $forPermission, $collectionDocument);
+        [$findKey, $findField] = $this->getFindCacheKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
 
         try {
             $cached = $this->cache->load($findKey, $ttl, $findField);
@@ -8625,6 +8642,19 @@ class Database
 
         if ($cached !== null && $cached !== false && \is_array($cached)) {
             [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
+
+            if ($hasExpiredDocuments) {
+                try {
+                    $this->cache->purge($findKey, $findField);
+                } catch (Exception $e) {
+                    Console::warning('Warning: Failed to purge expired find result cache: ' . $e->getMessage());
+                }
+
+                $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
+                $this->saveCachedFindPayload($findKey, $findField, $documents);
+
+                return $documents;
+            }
 
             if ($touchOnHit && !$hasExpiredDocuments) {
                 try {
@@ -8641,6 +8671,16 @@ class Database
 
         $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
 
+        $this->saveCachedFindPayload($findKey, $findField, $documents);
+
+        return $documents;
+    }
+
+    /**
+     * @param array<Document> $documents
+     */
+    private function saveCachedFindPayload(string $findKey, string $findField, array $documents): void
+    {
         try {
             $this->cache->save($findKey, \array_map(
                 static fn (Document $document): array => $document->getArrayCopy(),
@@ -8649,8 +8689,6 @@ class Database
         } catch (Exception $e) {
             Console::warning('Failed to save find result to cache: ' . $e->getMessage());
         }
-
-        return $documents;
     }
 
     /**
@@ -9580,11 +9618,10 @@ class Database
      * @param string $collectionId
      * @param array<Query> $queries
      * @param string|null $key
-     * @param string $forPermission
      * @param Document|null $collection
      * @return array{0: string, 1: string}
      */
-    public function getFindCacheKeys(string $collectionId, array $queries = [], ?string $key = null, string $forPermission = self::PERMISSION_READ, ?Document $collection = null): array
+    public function getFindCacheKeys(string $collectionId, array $queries = [], ?string $key = null, ?Document $collection = null): array
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
         $findKey = "{$collectionKey}:find";
@@ -9595,9 +9632,6 @@ class Database
             'schema' => $this->getFindCacheSchemaHash($collection),
             'key' => $key,
             'queries' => $key === null ? $this->serializeQueriesForFindCache($queries) : null,
-            'authorization' => $this->authorization->getStatus(),
-            'roles' => $this->authorization->getRoles(),
-            'permission' => $forPermission,
             'relationships' => $this->resolveRelationships,
             'filters' => $this->getActiveFilterSignatures(),
         ];

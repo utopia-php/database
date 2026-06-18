@@ -122,7 +122,7 @@ trait DocumentTests
             'name' => 'First',
         ]));
 
-        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
@@ -132,13 +132,13 @@ trait DocumentTests
             'name' => 'Second',
         ]));
 
-        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
         $database->purgeCachedFinds($collection);
 
-        $documents = $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(2, $documents);
         $this->assertSame('first', $documents[0]->getId());
         $this->assertSame('second', $documents[1]->getId());

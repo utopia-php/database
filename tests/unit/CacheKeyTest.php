@@ -154,30 +154,6 @@ class CacheKeyTest extends TestCase
         $this->assertEquals($fieldA, $fieldB);
     }
 
-    public function testDifferentFindRolesProduceDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::limit(10)]);
-
-        $db->getAuthorization()->addRole('user:1');
-        [, $fieldB] = $db->getFindCacheKeys('col', [Query::limit(10)]);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
-    public function testDifferentFindAuthorizationStatusProducesDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::limit(10)]);
-
-        $db->getAuthorization()->disable();
-        [, $fieldB] = $db->getFindCacheKeys('col', [Query::limit(10)]);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
     public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
     {
         $dbPlatform = $this->createDatabase(database: 'platform');

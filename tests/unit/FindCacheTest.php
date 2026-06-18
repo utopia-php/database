@@ -49,19 +49,19 @@ class FindCacheTest extends TestCase
     {
         $this->seedProject($this->database, 'first', 'First');
 
-        $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
         $this->seedProject($this->database, 'second', 'Second');
 
-        $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
         $this->database->purgeCachedFinds('projects');
 
-        $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
         $this->assertCount(2, $documents);
         $this->assertSame('first', $documents[0]->getId());
         $this->assertSame('second', $documents[1]->getId());
@@ -71,12 +71,38 @@ class FindCacheTest extends TestCase
     {
         $this->seedProject($this->database, 'first', 'First');
 
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->assertCount(1, $documents);
+
+        $this->seedProject($this->database, 'second', 'Second');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 0));
+        $this->assertCount(2, $documents);
+    }
+
+    public function testFindCachedBypassesCacheByDefault(): void
+    {
+        $this->seedProject($this->database, 'first', 'First');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')]));
+        $this->assertCount(1, $documents);
+
+        $this->seedProject($this->database, 'second', 'Second');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')]));
+        $this->assertCount(2, $documents);
+    }
+
+    public function testFindCachedDelegatesToFindWhenAuthorizationIsEnabled(): void
+    {
+        $this->seedProject($this->database, 'first', 'First');
+
         $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(1, $documents);
 
         $this->seedProject($this->database, 'second', 'Second');
 
-        $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 0);
+        $documents = $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
         $this->assertCount(2, $documents);
     }
 
@@ -89,8 +115,8 @@ class FindCacheTest extends TestCase
 
         $this->seedProject($this->database, 'first', 'First');
 
-        $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
-        $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
 
         $this->assertSame([
             Database::EVENT_DOCUMENT_FIND,
@@ -104,17 +130,17 @@ class FindCacheTest extends TestCase
 
         $this->seedProject($database, 'first', 'First');
 
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a');
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b');
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a'));
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b'));
 
         $this->seedProject($database, 'second', 'Second');
 
         $database->purgeCachedFind('projects', key: 'a');
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a');
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a'));
         $this->assertCount(2, $documents);
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b');
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b'));
         $this->assertCount(1, $documents);
     }
 
@@ -125,10 +151,10 @@ class FindCacheTest extends TestCase
 
         $this->seedProject($database, 'first', 'First');
 
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true));
         $this->assertSame(0, $cache->touches);
 
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true));
         $this->assertSame(1, $cache->touches);
     }
 
@@ -139,15 +165,16 @@ class FindCacheTest extends TestCase
 
         $this->seedProject($database, 'first', 'First');
 
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
-        $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
 
         $this->assertSame(0, $cache->touches);
     }
 
-    public function testFindCachedFiltersExpiredCachedDocuments(): void
+    public function testFindCachedRefetchesExpiredCachedDocuments(): void
     {
-        $database = $this->createDatabase(new HashMemoryCache(), new TtlMemoryAdapter());
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache, new TtlMemoryAdapter());
         $database->createAttribute('projects', 'expiresAt', Database::VAR_DATETIME, 0, false);
         $database->createIndex('projects', 'expiresAtTtl', Database::INDEX_TTL, ['expiresAt'], ttl: 1);
 
@@ -155,14 +182,25 @@ class FindCacheTest extends TestCase
             '$id' => 'first',
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'First',
-            'expiresAt' => '2000-01-01T00:00:00.000+00:00',
+            'expiresAt' => '2999-01-01T00:00:00.000+00:00',
         ]));
+        $this->seedProject($database, 'second', 'Second');
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name'), Query::limit(1)], ttl: 3600));
         $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600);
-        $this->assertCount(0, $documents);
+        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getFindCacheKeys(
+            'projects',
+            [Query::orderAsc('name'), Query::limit(1)],
+            collection: $database->getCollection('projects')
+        ));
+        $cache->setCachedDocumentAttribute($findKey, $findField, 'first', 'expiresAt', '2000-01-01T00:00:00.000+00:00');
+        $database->getAuthorization()->skip(fn () => $database->updateDocument('projects', 'first', new Document(['name' => 'Zulu'])));
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name'), Query::limit(1)], ttl: 3600));
+        $this->assertCount(1, $documents);
+        $this->assertSame('second', $documents[0]->getId());
     }
 
     public function testFindCachedDoesNotTouchCacheEntryWithExpiredDocuments(): void
@@ -176,15 +214,22 @@ class FindCacheTest extends TestCase
             '$id' => 'first',
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'First',
-            'expiresAt' => '2000-01-01T00:00:00.000+00:00',
+            'expiresAt' => '2999-01-01T00:00:00.000+00:00',
         ]));
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true));
         $this->assertCount(1, $documents);
         $this->assertSame(0, $cache->touches);
 
-        $documents = $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true);
-        $this->assertCount(0, $documents);
+        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getFindCacheKeys(
+            'projects',
+            [Query::orderAsc('name')],
+            collection: $database->getCollection('projects')
+        ));
+        $cache->setCachedDocumentAttribute($findKey, $findField, 'first', 'expiresAt', '2000-01-01T00:00:00.000+00:00');
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true));
+        $this->assertCount(1, $documents);
         $this->assertSame(0, $cache->touches);
     }
 }
@@ -232,6 +277,24 @@ class HashMemoryCache implements Adapter
         $this->store[$key][$hash]['time'] = \time();
 
         return true;
+    }
+
+    public function setCachedDocumentAttribute(string $key, string $hash, string $documentId, string $attribute, mixed $value): void
+    {
+        $documents = $this->store[$key][$hash]['data'] ?? [];
+        if (!\is_array($documents)) {
+            return;
+        }
+
+        foreach ($documents as $index => $document) {
+            if (!\is_array($document) || ($document['$id'] ?? '') !== $documentId) {
+                continue;
+            }
+
+            $documents[$index][$attribute] = $value;
+            $this->store[$key][$hash]['data'] = $documents;
+            return;
+        }
     }
 
     /**

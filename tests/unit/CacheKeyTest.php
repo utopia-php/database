@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Query;
 
 class CacheKeyTest extends TestCase
@@ -222,18 +223,14 @@ class CacheKeyTest extends TestCase
         ];
 
         $schemaHash = \md5(
-            \json_encode($collection->getAttribute('attributes', []))
-            . \json_encode($collection->getAttribute('indexes', []))
+            (\json_encode($collection->getAttribute('attributes', [])) ?: '')
+            . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
         );
-        $queryHash = \md5(\json_encode(\array_map(
-            static fn (Query $query): array => $query->toArray(),
-            $queries,
-        )));
+        $field = $db->getListCacheField($collection, $queries, ['waf']);
 
-        $this->assertSame(
-            "{$schemaHash}:".\md5(\json_encode(['waf'])).":{$queryHash}:documents",
-            $db->getListCacheField($collection, $queries, ['waf']),
-        );
+        $this->assertStringStartsWith("{$schemaHash}:".\md5(\json_encode(['waf']) ?: '').':', $field);
+        $this->assertStringEndsWith(':documents', $field);
+        $this->assertSame(3, \substr_count($field, ':'));
     }
 
     public function testCollectionCacheFieldChangesWithInputs(): void
@@ -263,6 +260,55 @@ class CacheKeyTest extends TestCase
         $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(20)], ['role-a']));
         $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(10)], ['role-b']));
         $this->assertStringEndsWith(':total', $db->getListCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+    }
+
+    public function testCollectionCacheFieldIncludesCursorDocumentPayload(): void
+    {
+        $db = $this->createDatabase();
+
+        $fieldA = $db->getListCacheField(null, [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'alpha',
+            ])),
+        ]);
+        $fieldB = $db->getListCacheField(null, [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'beta',
+            ])),
+        ]);
+
+        $this->assertNotSame($fieldA, $fieldB);
+    }
+
+    public function testCollectionCacheFieldIncludesAmbientState(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getListCacheField(null, [Query::limit(10)]);
+
+        $this->assertNotSame(
+            $field,
+            $db->skipFilters(fn () => $db->getListCacheField(null, [Query::limit(10)]), ['json']),
+        );
+        $this->assertNotSame(
+            $field,
+            $db->skipRelationships(fn () => $db->getListCacheField(null, [Query::limit(10)])),
+        );
+    }
+
+    public function testCollectionCacheFieldValidatesQueryTypes(): void
+    {
+        $this->expectException(QueryException::class);
+
+        $db = $this->createDatabase();
+        /** @var array<Query> $queries */
+        $queries = ['invalid'];
+
+        $db->getListCacheField(null, $queries);
     }
 
     public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void

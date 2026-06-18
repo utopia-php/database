@@ -8726,6 +8726,8 @@ class Database
         string $payload = 'documents',
         string $forPermission = Database::PERMISSION_READ,
     ): array {
+        $this->checkQueryTypes($queries);
+
         if ($ttl <= 0) {
             return $this->find($collection, $queries, $forPermission);
         }
@@ -9762,16 +9764,24 @@ class Database
      */
     public function getListCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents'): string
     {
-        $serialized = \array_map(
-            static fn (Query $query): array => $query->toArray(),
-            $queries,
-        );
+        $this->checkQueryTypes($queries);
+
+        $queryPayload = [
+            'version' => 1,
+            'database' => $this->getDatabase(),
+            'queries' => \array_map(
+                fn (Query $query): array => $this->serializeCachedFindQuery($query),
+                $queries,
+            ),
+            'relationships' => $this->resolveRelationships,
+            'filters' => $this->getActiveFilterSignatures(),
+        ];
 
         return \sprintf(
             '%s:%s:%s:%s',
             $this->getCachedFindSchemaHash($collection),
             \md5(\json_encode($roles) ?: ''),
-            \md5(\json_encode($serialized) ?: ''),
+            \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );
     }

@@ -9,6 +9,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -368,6 +369,22 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame('second', $documents[0]->getId());
     }
+
+    public function testFindListCachedValidatesQueryTypesBeforeCaching(): void
+    {
+        $this->expectException(QueryException::class);
+
+        /** @var array<Query> $queries */
+        $queries = ['invalid'];
+
+        $this->database->getAuthorization()->skip(fn () => $this->database->findListCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+        ));
+    }
 }
 
 class HashMemoryCache implements Adapter
@@ -435,7 +452,12 @@ class HashMemoryCache implements Adapter
 
     public function setCachedPayloadDocumentAttribute(string $key, string $hash, string $payload, string $documentId, string $attribute, mixed $value): void
     {
-        $documents = $this->store[$key][$hash]['data'][$payload] ?? [];
+        $data = $this->store[$key][$hash]['data'] ?? [];
+        if (!\is_array($data)) {
+            return;
+        }
+
+        $documents = $data[$payload] ?? [];
         if (!\is_array($documents)) {
             return;
         }
@@ -446,7 +468,8 @@ class HashMemoryCache implements Adapter
             }
 
             $documents[$index][$attribute] = $value;
-            $this->store[$key][$hash]['data'][$payload] = $documents;
+            $data[$payload] = $documents;
+            $this->store[$key][$hash]['data'] = $data;
             return;
         }
     }

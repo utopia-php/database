@@ -365,10 +365,7 @@ class Structure extends Validator
 
                 case Database::VAR_LONGTEXT:
                     $validators[] = new Text($size, min: 0);
-                    // MAX_LONGTEXT_BYTES (4294967295) exceeds the 32-bit int max, so on
-                    // 32-bit PHP it is a float and intdiv() would raise a TypeError. The
-                    // /4 result (1073741823) fits a 32-bit int, so divide as float and cast.
-                    $validators[] = new Text((int)(Database::MAX_LONGTEXT_BYTES / 4), min: 0);
+                    $validators[] = new Text(\intdiv(Database::MAX_LONGTEXT_BYTES, 4), min: 0);
                     break;
 
                 case Database::VAR_VARCHAR:

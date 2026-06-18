@@ -190,7 +190,7 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame('first', $documents[0]->getId());
 
-        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getFindCacheKeys(
+        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getCachedFindKeys(
             'projects',
             [Query::orderAsc('name'), Query::limit(1)],
             collection: $database->getCollection('projects')
@@ -221,7 +221,7 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame(0, $cache->touches);
 
-        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getFindCacheKeys(
+        [$findKey, $findField] = $database->getAuthorization()->skip(fn () => $database->getCachedFindKeys(
             'projects',
             [Query::orderAsc('name')],
             collection: $database->getCollection('projects')

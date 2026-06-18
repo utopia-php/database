@@ -8361,7 +8361,7 @@ class Database
 
     public function purgeCachedFinds(string $collectionId): bool
     {
-        [$findKey] = $this->getFindCacheKeys($collectionId);
+        [$findKey] = $this->getCachedFindKeys($collectionId);
 
         return $this->cache->purge($findKey);
     }
@@ -8372,7 +8372,7 @@ class Database
     public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collectionId));
-        [$findKey, $findField] = $this->authorization->skip(fn () => $this->getFindCacheKeys($collectionId, $queries, $key, $collection));
+        [$findKey, $findField] = $this->authorization->skip(fn () => $this->getCachedFindKeys($collectionId, $queries, $key, $collection));
 
         return $this->cache->purge($findKey, $findField);
     }
@@ -8631,7 +8631,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        [$findKey, $findField] = $this->getFindCacheKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
+        [$findKey, $findField] = $this->getCachedFindKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
 
         try {
             $cached = $this->cache->load($findKey, $ttl, $findField);
@@ -8656,7 +8656,7 @@ class Database
                 return $documents;
             }
 
-            if ($touchOnHit && !$hasExpiredDocuments) {
+            if ($touchOnHit) {
                 try {
                     $this->cache->touch($findKey, $findField);
                 } catch (Exception $e) {
@@ -9621,7 +9621,7 @@ class Database
      * @param Document|null $collection
      * @return array{0: string, 1: string}
      */
-    public function getFindCacheKeys(string $collectionId, array $queries = [], ?string $key = null, ?Document $collection = null): array
+    public function getCachedFindKeys(string $collectionId, array $queries = [], ?string $key = null, ?Document $collection = null): array
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
         $findKey = "{$collectionKey}:find";
@@ -9629,10 +9629,10 @@ class Database
         $payload = [
             'version' => 1,
             'database' => $this->getDatabase(),
-            'schema' => $this->getFindCacheSchemaHash($collection),
+            'schema' => $this->getCachedFindSchemaHash($collection),
             'key' => $key,
             'queries' => $key === null ? \array_map(
-                static fn (Query $query): array => $query->toArray(),
+                fn (Query $query): array => $this->serializeCachedFindQuery($query),
                 $queries
             ) : null,
             'relationships' => $this->resolveRelationships,
@@ -9642,7 +9642,56 @@ class Database
         return [$findKey, \md5(\json_encode($payload) ?: '')];
     }
 
-    private function getFindCacheSchemaHash(?Document $collection): string
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeCachedFindQuery(Query $query): array
+    {
+        $serialized = [
+            'method' => $query->getMethod(),
+        ];
+
+        if ($query->getAttribute() !== '') {
+            $serialized['attribute'] = $query->getAttribute();
+        }
+
+        $values = [];
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                $values[] = $this->serializeCachedFindQuery($value);
+                continue;
+            }
+
+            if ($value instanceof Document && \in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], true)) {
+                $value = $value->getArrayCopy();
+            }
+
+            $values[] = $this->normalizeCachedFindQueryValue($value);
+        }
+
+        $serialized['values'] = $values;
+
+        return $serialized;
+    }
+
+    private function normalizeCachedFindQueryValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        if (!\is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->normalizeCachedFindQueryValue($item);
+        }
+
+        return $value;
+    }
+
+    private function getCachedFindSchemaHash(?Document $collection): string
     {
         if ($collection === null || $collection->isEmpty()) {
             return '';

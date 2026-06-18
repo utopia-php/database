@@ -138,8 +138,8 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::equal('status', ['active'])]);
-        [, $fieldB] = $db->getFindCacheKeys('col', [Query::equal('status', ['paused'])]);
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])]);
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])]);
 
         $this->assertNotEquals($fieldA, $fieldB);
     }
@@ -148,8 +148,8 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::equal('status', ['active'])], 'domain-key');
-        [, $fieldB] = $db->getFindCacheKeys('col', [Query::equal('status', ['paused'])], 'domain-key');
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])], 'domain-key');
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])], 'domain-key');
 
         $this->assertEquals($fieldA, $fieldB);
     }
@@ -159,8 +159,8 @@ class CacheKeyTest extends TestCase
         $dbPlatform = $this->createDatabase(database: 'platform');
         $dbProject = $this->createDatabase(database: 'project');
 
-        [, $fieldA] = $dbPlatform->getFindCacheKeys('col', [Query::limit(10)]);
-        [, $fieldB] = $dbProject->getFindCacheKeys('col', [Query::limit(10)]);
+        [, $fieldA] = $dbPlatform->getCachedFindKeys('col', [Query::limit(10)]);
+        [, $fieldB] = $dbProject->getCachedFindKeys('col', [Query::limit(10)]);
 
         $this->assertNotEquals($fieldA, $fieldB);
     }
@@ -185,8 +185,8 @@ class CacheKeyTest extends TestCase
             'indexes' => [],
         ]);
 
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::limit(10)], collection: $collectionA);
-        [, $fieldB] = $db->getFindCacheKeys('col', [Query::limit(10)], collection: $collectionB);
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionA);
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionB);
 
         $this->assertNotEquals($fieldA, $fieldB);
     }
@@ -195,8 +195,30 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        [, $fieldA] = $db->getFindCacheKeys('col', [Query::limit(10)]);
-        [, $fieldB] = $db->skipRelationships(fn () => $db->getFindCacheKeys('col', [Query::limit(10)]));
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)]);
+        [, $fieldB] = $db->skipRelationships(fn () => $db->getCachedFindKeys('col', [Query::limit(10)]));
+
+        $this->assertNotEquals($fieldA, $fieldB);
+    }
+
+    public function testFindCursorDocumentValuesProduceDifferentCacheKeys(): void
+    {
+        $db = $this->createDatabase();
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'alpha',
+            ])),
+        ]);
+        [, $fieldB] = $db->getCachedFindKeys('col', [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'beta',
+            ])),
+        ]);
 
         $this->assertNotEquals($fieldA, $fieldB);
     }

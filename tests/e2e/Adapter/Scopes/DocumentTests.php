@@ -976,6 +976,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database->createCollection(__FUNCTION__);
 
         // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
@@ -1015,6 +1022,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
@@ -1044,6 +1058,13 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);

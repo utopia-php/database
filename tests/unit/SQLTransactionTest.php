@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
 class SQLTransactionTest extends TestCase
@@ -56,5 +57,25 @@ class SQLTransactionTest extends TestCase
         $this->expectExceptionMessage('Failed to start transaction: Connection lost');
 
         $adapter->startTransaction();
+    }
+
+    public function testPostgresStartTransactionRecoversFromDesyncedRollback(): void
+    {
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $pdo->method('inTransaction')->willReturn(true);
+        $pdo->method('rollBack')->willThrowException(
+            new PDOException('There is no active transaction')
+        );
+        $pdo->expects($this->once())
+            ->method('beginTransaction')
+            ->willReturn(true);
+
+        $adapter = new Postgres($pdo);
+
+        $this->assertTrue($adapter->startTransaction());
+        $this->assertTrue($adapter->inTransaction());
     }
 }

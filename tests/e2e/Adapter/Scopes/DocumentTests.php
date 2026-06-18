@@ -1022,8 +1022,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        // Byte-capacity validation relies on attribute metadata, which
-        // schemaless adapters don't store, so there is nothing to enforce.
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1059,8 +1057,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        // Byte-capacity validation relies on attribute metadata, which
-        // schemaless adapters don't store, so there is nothing to enforce.
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
             return;

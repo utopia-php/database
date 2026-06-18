@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
-use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
@@ -20,7 +19,7 @@ class FindCacheTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->database = $this->createDatabase(new CacheMemory());
+        $this->database = $this->createDatabase(new HashMemoryCache());
     }
 
     private function createDatabase(Adapter $cache, ?DatabaseMemory $adapter = null): Database
@@ -189,6 +188,26 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testPurgeCachedFindsRemovesAllCallerKeys(): void
+    {
+        $database = $this->createDatabase(new HashMemoryCache());
+
+        $this->seedProject($database, 'first', 'First');
+
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a'));
+        $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b'));
+
+        $this->seedProject($database, 'second', 'Second');
+
+        $database->purgeCachedFinds('projects');
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'a'));
+        $this->assertCount(2, $documents);
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, key: 'b'));
+        $this->assertCount(2, $documents);
+    }
+
     public function testFindCachedTouchesCacheEntryOnHitWhenEnabled(): void
     {
         $cache = new TouchSpyCache();
@@ -326,7 +345,10 @@ class HashMemoryCache implements Adapter
 
     public function setCachedDocumentAttribute(string $key, string $hash, string $documentId, string $attribute, mixed $value): void
     {
-        $payload = $this->store[$key][$hash]['data'] ?? [];
+        $usesEntryKey = isset($this->store[$hash][$hash]);
+        $cacheKey = $usesEntryKey ? $hash : $key;
+        $cacheHash = $hash;
+        $payload = $this->store[$cacheKey][$cacheHash]['data'] ?? [];
         $documents = \is_array($payload) && \is_array($payload['documents'] ?? null) ? $payload['documents'] : $payload;
         if (!\is_array($documents)) {
             return;
@@ -340,9 +362,9 @@ class HashMemoryCache implements Adapter
             $documents[$index][$attribute] = $value;
             if (\is_array($payload) && \array_key_exists('documents', $payload)) {
                 $payload['documents'] = $documents;
-                $this->store[$key][$hash]['data'] = $payload;
+                $this->store[$cacheKey][$cacheHash]['data'] = $payload;
             } else {
-                $this->store[$key][$hash]['data'] = $documents;
+                $this->store[$cacheKey][$cacheHash]['data'] = $documents;
             }
             return;
         }

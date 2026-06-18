@@ -8360,9 +8360,13 @@ class Database
 
     public function purgeCachedFinds(string $collectionId): bool
     {
-        [$findKey] = $this->getCachedFindKeys($collectionId);
+        [$findIndexKey] = $this->getCachedFindKeys($collectionId);
 
-        return $this->cache->purge($findKey);
+        foreach ($this->cache->list($findIndexKey) as $findKey) {
+            $this->cache->purge($findKey);
+        }
+
+        return $this->cache->purge($findIndexKey);
     }
 
     /**
@@ -8371,9 +8375,11 @@ class Database
     public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collectionId));
-        [$findKey, $findField] = $this->authorization->skip(fn () => $this->getCachedFindKeys($collectionId, $queries, $key, $collection));
+        [$findIndexKey, $findKey] = $this->authorization->skip(fn () => $this->getCachedFindKeys($collectionId, $queries, $key, $collection));
 
-        return $this->cache->purge($findKey, $findField);
+        $this->cache->purge($findIndexKey, $findKey);
+
+        return $this->cache->purge($findKey);
     }
 
     /**
@@ -8636,23 +8642,23 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        [$findKey, $findField] = $this->getCachedFindKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
-        $cached = $this->loadCachedFind($findKey, $findField, $ttl);
+        [$findIndexKey, $findKey] = $this->getCachedFindKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
+        $cached = $this->loadCachedFind($findKey, $ttl);
 
         if (!\is_array($cached)) {
-            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findKey, $findField);
+            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findIndexKey, $findKey);
         }
 
         [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
 
         if ($hasExpiredDocuments) {
-            $this->purgeCachedFindField($findKey, $findField);
+            $this->purgeCachedFindKey($findIndexKey, $findKey);
 
-            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findKey, $findField);
+            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findIndexKey, $findKey);
         }
 
         if ($touchOnHit) {
-            $this->touchCachedFind($findKey, $findField);
+            $this->touchCachedFind($findKey);
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
@@ -8668,18 +8674,18 @@ class Database
      * @throws TimeoutException
      * @throws Exception
      */
-    private function findAndCache(Document $collection, array $queries, string $forPermission, string $findKey, string $findField): array
+    private function findAndCache(Document $collection, array $queries, string $forPermission, string $findIndexKey, string $findKey): array
     {
         $documents = $this->find($collection->getId(), $queries, $forPermission);
-        $this->saveCachedFind($findKey, $findField, $documents);
+        $this->saveCachedFind($findIndexKey, $findKey, $documents);
 
         return $documents;
     }
 
-    private function loadCachedFind(string $findKey, string $findField, int $ttl): mixed
+    private function loadCachedFind(string $findKey, int $ttl): mixed
     {
         try {
-            return $this->cache->load($findKey, $ttl, $findField);
+            return $this->cache->load($findKey, $ttl);
         } catch (Exception $e) {
             Console::warning('Failed to get find result from cache: ' . $e->getMessage());
 
@@ -8690,34 +8696,36 @@ class Database
     /**
      * @param array<Document> $documents
      */
-    private function saveCachedFind(string $findKey, string $findField, array $documents): void
+    private function saveCachedFind(string $findIndexKey, string $findKey, array $documents): void
     {
         try {
+            $this->cache->save($findIndexKey, $findKey, $findKey);
             $this->cache->save($findKey, [
                 'version' => 1,
                 'documents' => \array_map(
                     static fn (Document $document): array => $document->getArrayCopy(),
                     $documents
                 ),
-            ], $findField);
+            ]);
         } catch (Exception $e) {
             Console::warning('Failed to save find result to cache: ' . $e->getMessage());
         }
     }
 
-    private function touchCachedFind(string $findKey, string $findField): void
+    private function touchCachedFind(string $findKey): void
     {
         try {
-            $this->cache->touch($findKey, $findField);
+            $this->cache->touch($findKey);
         } catch (Exception $e) {
             Console::warning('Failed to touch find result cache: ' . $e->getMessage());
         }
     }
 
-    private function purgeCachedFindField(string $findKey, string $findField): void
+    private function purgeCachedFindKey(string $findIndexKey, string $findKey): void
     {
         try {
-            $this->cache->purge($findKey, $findField);
+            $this->cache->purge($findIndexKey, $findKey);
+            $this->cache->purge($findKey);
         } catch (Exception $e) {
             Console::warning('Failed to purge expired find result cache: ' . $e->getMessage());
         }
@@ -9657,7 +9665,7 @@ class Database
     public function getCachedFindKeys(string $collectionId, array $queries = [], ?string $key = null, ?Document $collection = null): array
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
-        $findKey = "{$collectionKey}:find";
+        $findIndexKey = "{$collectionKey}:find";
 
         $payload = [
             'version' => 1,
@@ -9672,7 +9680,7 @@ class Database
             'filters' => $this->getActiveFilterSignatures(),
         ];
 
-        return [$findKey, \md5(\json_encode($payload) ?: '')];
+        return [$findIndexKey, $findIndexKey . ':' . \md5(\json_encode($payload) ?: '')];
     }
 
     /**

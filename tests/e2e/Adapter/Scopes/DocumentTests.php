@@ -982,13 +982,14 @@ trait DocumentTests
         // maps to a TEXT column, which is limited to 65,535 *bytes*.
         $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
-        // The Structure validator caps a TEXT column at 65,535 / 4 = 16,383
-        // characters (a utf8mb4 char is at most 4 bytes), guaranteeing the value
-        // fits the column's byte capacity. A 20,000-char value exceeds that and
-        // must be rejected up front with a clean StructureException, rather than
-        // letting the database raise error 1406 (data truncation).
+        // The Structure validator caps a TEXT column at its 65,535-byte capacity,
+        // measuring the value's actual byte length. A 20,000-char emoji value is
+        // 80,000 bytes (4 bytes per char in utf8mb4), so it exceeds the column's
+        // byte capacity and must be rejected up front with a clean
+        // StructureException, rather than letting the database raise error 1406
+        // (data truncation).
         $value = \str_repeat('📝', 20000);
-        $this->assertGreaterThan(16383, \mb_strlen($value)); // exceeds the byte-safe char limit
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
 
         $document = new Document([
             '$id' => 'first',
@@ -1005,7 +1006,7 @@ trait DocumentTests
             $database->createDocument(__FUNCTION__, $document);
             $this->fail('Expected StructureException for over-capacity text value');
         } catch (StructureException $e) {
-            $this->assertStringContainsString('16383 chars', $e->getMessage());
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
         }
     }
 
@@ -1017,8 +1018,11 @@ trait DocumentTests
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
 
-        // A value within the byte-safe character limit is stored and round-trips intact.
-        $okValue = \str_repeat('a', 16383);
+        // A value that fills the column's full byte capacity is stored and
+        // round-trips intact. 65,535 ASCII chars are exactly 65,535 bytes, so
+        // byte-based validation accepts the whole column, where the previous
+        // char-based cap would have rejected anything over 16,383 chars.
+        $okValue = \str_repeat('a', 65535);
 
         $document = new Document([
             '$id' => 'first',
@@ -1059,13 +1063,13 @@ trait DocumentTests
 
         // An oversized value is rejected on update, the same as on create.
         $value = \str_repeat('📝', 20000);
-        $this->assertGreaterThan(16383, \mb_strlen($value)); // exceeds the byte-safe char limit
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
 
         try {
             $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('text', $value));
             $this->fail('Expected StructureException for over-capacity text value on update');
         } catch (StructureException $e) {
-            $this->assertStringContainsString('16383 chars', $e->getMessage());
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
         }
     }
 

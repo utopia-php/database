@@ -401,12 +401,12 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ];
 
-        // The byte-safe character limit for a TEXT column is 65,535 / 4 = 16,383
-        // (a utf8mb4 char is at most 4 bytes). Values longer than that are
-        // rejected even though the declared $size (1MB) would allow them.
-        $tooBig = \str_repeat('a', 16384);
+        // A TEXT column is limited to 65,535 bytes. Validation measures the
+        // value's actual byte length, so a value over that capacity is rejected
+        // even though the declared $size (1MB) would allow the character count.
+        $tooBig = \str_repeat('a', 65536);
         $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $tooBig])));
-        $this->assertEquals('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string and no longer than 16383 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
 
     public function testTextByteSafeValidationMultibyte(): void
@@ -438,7 +438,8 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ];
 
-        // Multi-byte content over the limit is rejected the same way.
+        // Multi-byte content over the byte capacity is rejected the same way
+        // (20,000 emoji = 80,000 bytes in utf8mb4).
         $multibyte = \str_repeat('📝', 20000);
         $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $multibyte])));
     }
@@ -472,8 +473,8 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
         ];
 
-        // A value within the byte-safe character limit is accepted.
-        $ok = \str_repeat('a', 16383);
+        // A value that fills the column's full byte capacity is accepted.
+        $ok = \str_repeat('a', 65535);
         $this->assertEquals(true, $validator->isValid(new Document($base + ['text' => $ok])));
     }
 
@@ -1068,7 +1069,7 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
-            'text_field' => \str_repeat('a', intdiv(65535, 4)), // byte-safe char cap for a TEXT column
+            'text_field' => \str_repeat('a', 65535), // fills the TEXT column's full byte capacity
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));

@@ -355,17 +355,17 @@ class Structure extends Validator
 
                 case Database::VAR_TEXT:
                     $validators[] = new Text($size, min: 0);
-                    $validators[] = new Text(\intdiv(Database::MAX_TEXT_BYTES, 4), min: 0);
+                    $validators[] = new ByteLength(Database::MAX_TEXT_BYTES);
                     break;
 
                 case Database::VAR_MEDIUMTEXT:
                     $validators[] = new Text($size, min: 0);
-                    $validators[] = new Text(\intdiv(Database::MAX_MEDIUMTEXT_BYTES, 4), min: 0);
+                    $validators[] = new ByteLength(Database::MAX_MEDIUMTEXT_BYTES);
                     break;
 
                 case Database::VAR_LONGTEXT:
                     $validators[] = new Text($size, min: 0);
-                    $validators[] = new Text(\intdiv(Database::MAX_LONGTEXT_BYTES, 4), min: 0);
+                    $validators[] = new ByteLength(Database::MAX_LONGTEXT_BYTES);
                     break;
 
                 case Database::VAR_VARCHAR:

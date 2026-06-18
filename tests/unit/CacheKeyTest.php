@@ -154,6 +154,16 @@ class CacheKeyTest extends TestCase
         $this->assertEquals($fieldA, $fieldB);
     }
 
+    public function testCallerFindCacheKeyUsesReadableEntryKey(): void
+    {
+        $db = $this->createDatabase();
+
+        [$indexKey, $entryKey] = $db->getCachedFindKeys('wafrules', key: 'rules_v1');
+
+        $this->assertEquals('default-cache-:test::collection:wafrules:find', $indexKey);
+        $this->assertEquals('default-cache-:test::collection:wafrules:rules_v1', $entryKey);
+    }
+
     public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
     {
         $dbPlatform = $this->createDatabase(database: 'platform');

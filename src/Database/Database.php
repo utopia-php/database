@@ -9680,6 +9680,10 @@ class Database
             'filters' => $this->getActiveFilterSignatures(),
         ];
 
+        if ($key !== null) {
+            return [$findIndexKey, $collectionKey . ':' . $key];
+        }
+
         return [$findIndexKey, $findIndexKey . ':' . \md5(\json_encode($payload) ?: '')];
     }
 

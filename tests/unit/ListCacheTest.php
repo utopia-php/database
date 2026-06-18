@@ -111,8 +111,8 @@ class ListCacheTest extends TestCase
         $fields = $cache->list($database->getFindCacheKey('wafrules', '_39'));
 
         $this->assertCount(1, $fields);
-        $this->assertStringEndsWith(':documents', $fields[0]);
-        $this->assertSame(3, \substr_count($fields[0], ':'));
+        $this->assertStringEndsWith(':documents:rules', $fields[0]);
+        $this->assertSame(4, \substr_count($fields[0], ':'));
     }
 
     public function testFindCachedRefetchesExpiredCachedDocuments(): void
@@ -144,7 +144,7 @@ class ListCacheTest extends TestCase
         $collection = $database->getCollection('projects');
         $cache->setCachedPayloadDocumentAttribute(
             $database->getFindCacheKey('wafrules', '_39'),
-            $database->getFindCacheField($collection, $queries, ['waf']),
+            $database->getFindCacheField($collection, $queries, ['waf'], 'documents', 'rules'),
             'rules',
             'first',
             'expiresAt',

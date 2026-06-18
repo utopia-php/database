@@ -209,8 +209,8 @@ class CacheKeyTest extends TestCase
         $field = $db->getFindCacheField($collection, $queries, ['waf']);
 
         $this->assertStringStartsWith("{$schemaHash}:".\md5(\json_encode(['waf']) ?: '').':', $field);
-        $this->assertStringEndsWith(':documents', $field);
-        $this->assertSame(3, \substr_count($field, ':'));
+        $this->assertStringEndsWith(':documents:documents', $field);
+        $this->assertSame(4, \substr_count($field, ':'));
     }
 
     public function testFindCacheFieldChangesWithInputs(): void
@@ -239,7 +239,8 @@ class CacheKeyTest extends TestCase
         );
         $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(20)], ['role-a']));
         $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-b']));
-        $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+        $this->assertStringEndsWith(':total:documents', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'documents', 'items'));
     }
 
     public function testFindCacheFieldIncludesCursorDocumentPayload(): void

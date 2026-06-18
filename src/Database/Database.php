@@ -8620,7 +8620,7 @@ class Database
         }
 
         $cacheKey = $this->getFindCacheKey($cacheCollection ?? $collectionDocument->getId(), $namespace, $tenant);
-        $cacheField = $this->getFindCacheField($collectionDocument, $queries, $roles, $field);
+        $cacheField = $this->getFindCacheField($collectionDocument, $queries, $roles, $field, $payloadKey);
 
         try {
             $cached = $this->cache->load($cacheKey, $ttl, $cacheField);
@@ -9629,9 +9629,10 @@ class Database
      * @param array<Query> $queries
      * @param array<string> $roles
      * @param string $field
+     * @param string $payloadKey
      * @return string
      */
-    public function getFindCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents'): string
+    public function getFindCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents', string $payloadKey = 'documents'): string
     {
         $this->checkQueryTypes($queries);
 
@@ -9647,11 +9648,12 @@ class Database
         ];
 
         return \sprintf(
-            '%s:%s:%s:%s',
+            '%s:%s:%s:%s:%s',
             $this->getFindCacheSchemaHash($collection),
             \md5(\json_encode($roles) ?: ''),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
+            $payloadKey,
         );
     }
 

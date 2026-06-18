@@ -31,6 +31,7 @@ class Attribute extends Validator
      * @param int $maxStringLength
      * @param int $maxVarcharLength
      * @param int $maxIntLength
+     * @param int $maxBigIntLength
      * @param bool $supportForSchemaAttributes
      * @param bool $supportForVectors
      * @param bool $supportForSpatialAttributes
@@ -49,16 +50,23 @@ class Attribute extends Validator
         protected int $maxStringLength = 0,
         protected int $maxVarcharLength = 0,
         protected int $maxIntLength = 0,
+        protected int $maxBigIntLength = 0,
         protected bool $supportForSchemaAttributes = false,
         protected bool $supportForVectors = false,
         protected bool $supportForSpatialAttributes = false,
         protected bool $supportForObject = false,
+        protected bool $supportUnsignedBigInt = false,
         protected mixed $attributeCountCallback = null,
         protected mixed $attributeWidthCallback = null,
         protected mixed $filterCallback = null,
         protected bool $isMigrating = false,
         protected bool $sharedTables = false,
     ) {
+        // Keep backwards compatibility for existing validator construction sites.
+        if ($this->maxBigIntLength === 0) {
+            $this->maxBigIntLength = $this->maxIntLength;
+        }
+
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
@@ -337,6 +345,9 @@ class Attribute extends Validator
                 }
                 break;
 
+            case Database::VAR_BIGINT:
+                break;
+
             case Database::VAR_FLOAT:
             case Database::VAR_BOOLEAN:
             case Database::VAR_DATETIME:
@@ -420,6 +431,7 @@ class Attribute extends Validator
                     Database::VAR_MEDIUMTEXT,
                     Database::VAR_LONGTEXT,
                     Database::VAR_INTEGER,
+                    Database::VAR_BIGINT,
                     Database::VAR_FLOAT,
                     Database::VAR_BOOLEAN,
                     Database::VAR_DATETIME,
@@ -454,6 +466,7 @@ class Attribute extends Validator
         $required = $attribute->getAttribute('required', false);
         $type = $attribute->getAttribute('type');
         $array = $attribute->getAttribute('array', false);
+        $signed = $attribute->getAttribute('signed', true);
 
         if (\is_null($default)) {
             return true;
@@ -470,7 +483,7 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        $this->validateDefaultTypes($type, $default);
+        $this->validateDefaultTypes($type, $default, $signed);
 
         return true;
     }
@@ -480,11 +493,12 @@ class Attribute extends Validator
      *
      * @param string $type Type of the attribute
      * @param mixed $default Default value of the attribute
+     * @param bool $signed Whether the attribute is signed (relevant for bigint)
      *
      * @return void
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(string $type, mixed $default): void
+    protected function validateDefaultTypes(string $type, mixed $default, bool $signed = true): void
     {
         $defaultType = \gettype($default);
 
@@ -497,7 +511,7 @@ class Attribute extends Validator
             // Spatial types require the array itself
             if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::VAR_OBJECT) {
                 foreach ($default as $value) {
-                    $this->validateDefaultTypes($type, $value);
+                    $this->validateDefaultTypes($type, $value, $signed);
                 }
             }
             return;
@@ -522,6 +536,16 @@ class Attribute extends Validator
                     throw new DatabaseException($this->message);
                 }
                 break;
+            case Database::VAR_BIGINT:
+                if ($defaultType !== 'integer' && $defaultType !== 'string') {
+                    $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
+                    throw new DatabaseException($this->message);
+                }
+                if ($defaultType === 'string' && !BigInt::isIntegerString($default, $signed)) {
+                    $this->message = 'Default value ' . $default . ' is not a valid integer string for type bigint';
+                    throw new DatabaseException($this->message);
+                }
+                break;
             case Database::VAR_DATETIME:
                 if ($defaultType !== Database::VAR_STRING) {
                     $this->message = 'Default value ' . $default . ' does not match given type ' . $type;
@@ -543,6 +567,7 @@ class Attribute extends Validator
                     Database::VAR_MEDIUMTEXT,
                     Database::VAR_LONGTEXT,
                     Database::VAR_INTEGER,
+                    Database::VAR_BIGINT,
                     Database::VAR_FLOAT,
                     Database::VAR_BOOLEAN,
                     Database::VAR_DATETIME,

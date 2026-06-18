@@ -43,6 +43,11 @@ class Pool extends Adapter
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
+            if ($this->skipDuplicates) {
+                return $this->pinnedAdapter->skipDuplicates(
+                    fn () => $this->pinnedAdapter->{$method}(...$args)
+                );
+            }
             return $this->pinnedAdapter->{$method}(...$args);
         }
 
@@ -66,8 +71,18 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
             return $adapter->{$method}(...$args);
         });
+    }
+
+    public function getDriver(): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function before(string $event, string $name = '', ?callable $callback = null): static
@@ -98,6 +113,11 @@ class Pool extends Adapter
     }
 
     public function rollbackTransaction(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getHostname(): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -141,6 +161,11 @@ class Pool extends Adapter
 
             $this->pinnedAdapter = $adapter;
             try {
+                if ($this->skipDuplicates) {
+                    return $adapter->skipDuplicates(
+                        fn () => $adapter->withTransaction($callback)
+                    );
+                }
                 return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;
@@ -328,6 +353,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getLimitForBigInt(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getLimitForAttributes(): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -468,6 +503,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForVectors(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -559,6 +599,16 @@ class Pool extends Adapter
     }
 
     public function getSchemaAttributes(string $collection): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSchemaIndexes(string $collection): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

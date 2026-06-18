@@ -33,6 +33,8 @@ abstract class Adapter
 
     protected bool $alterLocks = false;
 
+    protected bool $skipDuplicates = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -390,6 +392,27 @@ abstract class Adapter
     public function inTransaction(): bool
     {
         return $this->inTransaction > 0;
+    }
+
+    /**
+     * Run a callback with skipDuplicates enabled.
+     * Duplicate key errors during createDocuments() will be silently skipped
+     * instead of thrown. Nestable — saves and restores previous state.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
     }
 
     /**
@@ -881,6 +904,13 @@ abstract class Adapter
     abstract public function getLimitForInt(): int;
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    abstract public function getLimitForBigInt(): int;
+
+    /**
      * Get maximum attributes limit.
      *
      * @return int
@@ -957,6 +987,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForSchemaAttributes(): bool;
+
+    /**
+     * Are schema indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaIndexes(): bool;
 
     /**
      * Is index supported?
@@ -1058,6 +1095,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForUpserts(): bool;
+
+    /**
+     * Is upsert via arbitrary unique indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertOnUniqueIndex(): bool;
 
     /**
      * Is vector type supported?
@@ -1366,6 +1410,17 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get Schema Indexes
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
      * Get the expected column type for a given attribute type.
      *
      * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
@@ -1423,6 +1478,11 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return false;
+    }
 
     /**
         * Returns the document after casting
@@ -1563,4 +1623,9 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract public function getDriver(): mixed;
 }

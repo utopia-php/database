@@ -12,7 +12,13 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -77,6 +83,20 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function getHostname(): string
+    {
+        return $this->client->getHost();
+    }
+
+    /**
+     * Returns the current Mongo client
+     * @return mixed
+     */
+    public function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
@@ -112,33 +132,61 @@ class Mongo extends Adapter
             return $callback();
         }
 
-        try {
-            $this->startTransaction();
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $action) {
-            try {
-                $this->rollbackTransaction();
-            } catch (\Throwable) {
-                // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail,
-                // and we want to throw the original exception.
-            } finally {
-                // Ensure state is cleaned up even if rollback fails
-                if ($this->session) {
-                    try {
-                        $this->client->endSessions([$this->session]);
-                    } catch (\Throwable $endSessionError) {
-                        // Ignore errors when ending session during error cleanup
-                    }
-                }
-                $this->inTransaction = 0;
-                $this->session = null;
-            }
-
-            throw $action;
+        // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
+        if ($this->skipDuplicates) {
+            return $callback();
         }
+
+        $sleep = 50_000; // 50 milliseconds
+        $retries = 2;
+
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable) {
+                    // Throw the original exception, not the rollback one
+                    // Since if it's a duplicate key error, the rollback will fail,
+                    // and we want to throw the original exception.
+                } finally {
+                    // Ensure state is cleaned up even if rollback fails
+                    if ($this->session) {
+                        try {
+                            $this->client->endSessions([$this->session]);
+                        } catch (\Throwable $endSessionError) {
+                            // Ignore errors when ending session during error cleanup
+                        }
+                    }
+                    $this->inTransaction = 0;
+                    $this->session = null;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    throw $action;
+                }
+
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
+                    continue;
+                }
+
+                throw $action;
+            }
+        }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     public function startTransaction(): bool
@@ -414,8 +462,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // For metadata collections outside transactions, check if exists first
-        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata, the physical collection may
+        // already exist for another tenant. Return early to avoid a
+        // "Collection Exists" exception from the client.
+        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -427,6 +477,16 @@ class Mongo extends Adapter
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
                 return true;
+            }
+            // Client throws code-0 "Collection Exists" when its pre-check
+            // finds the collection. In shared-tables/metadata context this
+            // is a no-op; otherwise re-throw as DuplicateException so
+            // Database::createCollection() can run orphan reconciliation.
+            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
             }
             throw $e;
         }
@@ -1298,6 +1358,7 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_INTEGER:
+                    case Database::VAR_BIGINT:
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME:
@@ -1393,7 +1454,11 @@ class Mongo extends Adapter
                 switch ($type) {
                     case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
-                            $node = new UTCDateTime(new \DateTime($node));
+                            try {
+                                $node = new UTCDateTime(new \DateTime($node));
+                            } catch (\Throwable $e) {
+                                throw new StructureException('Invalid datetime value for attribute "' . $key . '": ' . $e->getMessage());
+                            }
                         }
                         break;
                     case Database::VAR_OBJECT:
@@ -1464,6 +1529,42 @@ class Mongo extends Adapter
             }
 
             $records[] = $record;
+        }
+
+        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
+        if ($this->skipDuplicates) {
+            if (empty($records)) {
+                return [];
+            }
+
+            $operations = [];
+            foreach ($records as $record) {
+                $filter = ['_uid' => $record['_uid'] ?? ''];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                }
+
+                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
+                $setOnInsert = $record;
+                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+
+                if (empty($setOnInsert)) {
+                    continue;
+                }
+
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => ['$setOnInsert' => $setOnInsert],
+                ];
+            }
+
+            try {
+                $this->client->upsert($name, $operations, $options);
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            return $documents;
         }
 
         try {
@@ -1983,6 +2084,7 @@ class Mongo extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };
@@ -2199,6 +2301,7 @@ class Mongo extends Adapter
             Database::VAR_MEDIUMTEXT => 'string',
             Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
+            Database::VAR_BIGINT => 'long',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',
@@ -2902,7 +3005,7 @@ class Mongo extends Adapter
      */
     protected function getOrder(string $order): int
     {
-        return match ($order) {
+        return match (\strtoupper($order)) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
             default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
@@ -2990,6 +3093,16 @@ class Mongo extends Adapter
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     /**
@@ -3224,6 +3337,11 @@ class Mongo extends Adapter
     public function getSupportForUpserts(): bool
     {
         return true;
+    }
+
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
     }
 
     public function getSupportForReconnection(): bool
@@ -3595,6 +3713,16 @@ class Mongo extends Adapter
     }
 
     public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
+    public function getSchemaIndexes(string $collection): array
     {
         return [];
     }

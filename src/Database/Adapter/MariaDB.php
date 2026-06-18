@@ -980,155 +980,55 @@ class MariaDB extends SQL
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
+            $attributes['_uid'] = $document->getId();
 
             $name = $this->filter($collection);
             $columns = '';
 
             if (!$skipPermissions) {
+                $newUid = $document->offsetExists('$id') ? $document->getId() : $id;
+
                 $sql = "
-			    SELECT _type, _permission
-			    FROM {$this->getSQLTable($name . '_perms')}
+			    DELETE FROM {$this->getSQLTable($name . '_perms')}
 			    WHERE _document = :_uid
 			    {$this->getTenantQuery($collection)}
-			";
+			    ";
 
-                $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+                $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-                /**
-                 * Get current permissions from the database
-                 */
-                $sqlPermissions = $this->getPDO()->prepare($sql);
-                $sqlPermissions->bindValue(':_uid', $document->getId());
-
+                $stmtRemovePermissions = $this->getPDO()->prepare($sql);
+                $stmtRemovePermissions->bindValue(':_uid', $id);
                 if ($this->sharedTables) {
-                    $sqlPermissions->bindValue(':_tenant', $this->tenant);
+                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }
 
-                $sqlPermissions->execute();
-                $permissions = $sqlPermissions->fetchAll();
-                $sqlPermissions->closeCursor();
-
-                $initial = [];
+                $values = [];
+                $binds = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $initial[$type] = [];
-                }
-
-                $permissions = array_reduce($permissions, function (array $carry, array $item) {
-                    $carry[$item['_type']][] = $item['_permission'];
-
-                    return $carry;
-                }, $initial);
-
-                /**
-                 * Get removed Permissions
-                 */
-                $removals = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-                    if (!empty($diff)) {
-                        $removals[$type] = $diff;
+                    foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                        $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$tenantPlaceholder})";
+                        $binds[":_add_{$type}_{$i}"] = $permission;
                     }
                 }
 
-                /**
-                 * Get added Permissions
-                 */
-                $additions = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                    if (!empty($diff)) {
-                        $additions[$type] = $diff;
-                    }
-                }
-
-                /**
-                 * Query to remove permissions
-                 */
-                $removeQuery = '';
-                if (!empty($removals)) {
-                    $removeQuery = ' AND (';
-                    foreach ($removals as $type => $permissions) {
-                        $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                        if ($type !== \array_key_last($removals)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-                }
-                if (!empty($removeQuery)) {
-                    $removeQuery .= ')';
-                    $sql = "
-				    DELETE
-                    FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document = :_uid
-                    {$this->getTenantQuery($collection)}
-                ";
-
-                    $removeQuery = $sql . $removeQuery;
-
-                    $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-
-                    $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-                    $stmtRemovePermissions->bindValue(':_uid', $document->getId());
-
-                    if ($this->sharedTables) {
-                        $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                    }
-
-                    foreach ($removals as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
-                            $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                        }
-                    }
-                }
-
-                /**
-                 * Query to add permissions
-                 */
-                if (!empty($additions)) {
-                    $values = [];
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $_) {
-                            $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
-
-                            if ($this->sharedTables) {
-                                $value .= ", :_tenant)";
-                            } else {
-                                $value .= ")";
-                            }
-
-                            $values[] = $value;
-                        }
-                    }
+                if (!empty($values)) {
+                    $tenantColumn = $this->sharedTables ? ', _tenant' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
-				";
-
-                    if ($this->sharedTables) {
-                        $sql .= ', _tenant)';
-                    } else {
-                        $sql .= ')';
-                    }
-
-                    $sql .= " VALUES " . \implode(', ', $values);
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantColumn})
+				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
                     $stmtAddPermissions = $this->getPDO()->prepare($sql);
-
-                    $stmtAddPermissions->bindValue(":_uid", $document->getId());
-
+                    $stmtAddPermissions->bindValue(":_uid", $newUid);
                     if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                     }
 
-                    foreach ($additions as $type => $permissions) {
-                        foreach ($permissions as $i => $permission) {
-                            $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                        }
+                    foreach ($binds as $key => $permission) {
+                        $stmtAddPermissions->bindValue($key, $permission);
                     }
                 }
             }
@@ -1168,7 +1068,7 @@ class MariaDB extends SQL
 
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_newUid
+                SET " . \rtrim($columns, ',') . "
                 WHERE _id=:_sequence
                 {$this->getTenantQuery($collection)}
 			";
@@ -1178,7 +1078,6 @@ class MariaDB extends SQL
             $stmt = $this->getPDO()->prepare($sql);
 
             $stmt->bindValue(':_sequence', $document->getSequence());
-            $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
@@ -1565,7 +1464,7 @@ class MariaDB extends SQL
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1585,7 +1484,7 @@ class MariaDB extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds);
+                    $conditions[] = $this->getSQLCondition($q, $binds, $forCollection);
                 }
 
                 $method = strtoupper($query->getMethod());
@@ -1627,12 +1526,30 @@ class MariaDB extends SQL
             case Query::TYPE_CONTAINS:
             case Query::TYPE_CONTAINS_ANY:
             case Query::TYPE_NOT_CONTAINS:
-                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                if ($query->onArray()) {
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                    return $isNot
-                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
-                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+
+                    if ($this->getSupportForJSONOverlaps()) {
+                        $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                        return $isNot
+                            ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                            : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+                    }
+
+                    // JSON_CONTAINS per element OR'd together — exact
+                    // element match without LIKE's substring false positives
+                    // (`%2%` matching `[12, 200]`, `%"apple"%` matching
+                    // `["pineapple"]`).
+                    $conditions = [];
+                    foreach ($query->getValues() as $key => $value) {
+                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                        $conditions[] = "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_{$key})";
+                    }
+                    if (empty($conditions)) {
+                        return '';
+                    }
+                    $expression = '(' . implode(' OR ', $conditions) . ')';
+                    return $isNot ? "NOT {$expression}" : $expression;
                 }
                 // no break
             default:
@@ -1649,8 +1566,7 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS, Query::TYPE_CONTAINS_ANY, Query::TYPE_NOT_CONTAINS => '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 
@@ -1734,6 +1650,10 @@ class MariaDB extends SQL
 
                 return 'INT' . $signed;
 
+            case Database::VAR_BIGINT:
+                $signed = ($signed) ? '' : ' UNSIGNED';
+                return 'BIGINT' . $signed;
+
             case Database::VAR_FLOAT:
                 $signed = ($signed) ? '' : ' UNSIGNED';
                 return 'DOUBLE' . $signed;
@@ -1748,7 +1668,7 @@ class MariaDB extends SQL
                 return 'DATETIME(3)';
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER . ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_VARCHAR . ', ' . Database::VAR_TEXT . ', ' . Database::VAR_MEDIUMTEXT . ', ' . Database::VAR_LONGTEXT . ', ' . Database::VAR_INTEGER . ', ' . Database::VAR_BIGINT . ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -1840,9 +1760,66 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return true;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return true;
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        try {
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                    INDEX_NAME as indexName,
+                    COLUMN_NAME as columnName,
+                    NON_UNIQUE as nonUnique,
+                    SEQ_IN_INDEX as seqInIndex,
+                    INDEX_TYPE as indexType,
+                    SUB_PART as subPart
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+                ORDER BY INDEX_NAME, SEQ_IN_INDEX
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            $grouped = [];
+            foreach ($rows as $row) {
+                $name = $row['indexName'];
+                if (!isset($grouped[$name])) {
+                    $grouped[$name] = [
+                        '$id' => $name,
+                        'indexName' => $name,
+                        'indexType' => $row['indexType'],
+                        'nonUnique' => (int)$row['nonUnique'],
+                        'columns' => [],
+                        'lengths' => [],
+                    ];
+                }
+                $grouped[$name]['columns'][] = $row['columnName'];
+                $grouped[$name]['lengths'][] = $row['subPart'] !== null ? (int)$row['subPart'] : null;
+            }
+
+            return \array_map(fn ($idx) => new Document($idx), \array_values($grouped));
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema indexes', $e->getCode(), $e);
+        }
     }
 
     /**
@@ -2197,6 +2174,11 @@ class MariaDB extends SQL
     public function getSupportForObject(): bool
     {
         return false;
+    }
+
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return true;
     }
 
     /**

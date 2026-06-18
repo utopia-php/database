@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -71,6 +72,21 @@ trait CollectionTests
         $this->assertEquals(true, $database->deleteCollection('actors'));
         $this->assertEquals(true, $database->getCollection('actors')->isEmpty());
         $this->assertEquals(false, $database->exists($this->testDatabase, 'actors'));
+    }
+
+    public function testDatabaseHostname(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+
+        if (!$database->getAdapter()->getSupportForHostname()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $host = $database->getAdapter()->getHostname();
+        $this->assertContains($host, ['mysql', 'mariadb', 'postgres', 'mongo']);
     }
 
     public function testCreateCollectionWithSchema(): void
@@ -1326,6 +1342,142 @@ trait CollectionTests
             ->setDatabase($schema);
     }
 
+    public function testSharedTablesMultiTenantCreateCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+        $createdDb = false;
+
+        if ($sharedTables) {
+            // Already in shared-tables mode (SharedTables/* test classes)
+        } elseif ($database->getAdapter()->getSupportForSchemas()) {
+            $dbName = 'stMultiTenant';
+            if ($database->exists($dbName)) {
+                $database->setDatabase($dbName)->delete();
+            }
+            $database
+                ->setDatabase($dbName)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(10)
+                ->create();
+            $createdDb = true;
+        } else {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 10 : 'tenant_10';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 20 : 'tenant_20';
+            $colName = 'multiTenantCol';
+
+            $database->setTenant($tenant1);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col1 = $database->getCollection($colName);
+            $this->assertFalse($col1->isEmpty());
+            $this->assertEquals(1, \count($col1->getAttribute('attributes')));
+
+            $database->setTenant($tenant2);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col2 = $database->getCollection($colName);
+            $this->assertFalse($col2->isEmpty());
+            $this->assertEquals(1, \count($col2->getAttribute('attributes')));
+
+            $database->setTenant($tenant1);
+            $col1Again = $database->getCollection($colName);
+            $this->assertFalse($col1Again->isEmpty());
+
+            if ($createdDb) {
+                $database->delete();
+            } else {
+                $database->setTenant($tenant1);
+                $database->deleteCollection($colName);
+                $database->setTenant($tenant2);
+                $database->deleteCollection($colName);
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
+    public function testSharedTablesMultiTenantCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 100 : 'tenant_100';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 200 : 'tenant_200';
+
+            if ($sharedTables) {
+                // Already in shared-tables mode; create() should be idempotent.
+                // No assertion on exists() since SQLite always returns false for
+                // database-level exists. The test verifies create() doesn't throw.
+                $database->setTenant($tenant1);
+                $database->create();
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue(true);
+            } elseif ($database->getAdapter()->getSupportForSchemas()) {
+                $dbName = 'stMultiCreate';
+                if ($database->exists($dbName)) {
+                    $database->setDatabase($dbName)->delete();
+                }
+                $database
+                    ->setDatabase($dbName)
+                    ->setNamespace('')
+                    ->setSharedTables(true)
+                    ->setTenant($tenant1)
+                    ->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->delete();
+            } else {
+                $this->expectNotToPerformAssertions();
+                return;
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
     public function testEvents(): void
     {
         $this->getDatabase()->getAuthorization()->skip(function () {
@@ -1519,13 +1671,25 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return "SELECT 1";
+        $database->setMetadata('scope', 'api.users');
+
+        $capturedSql = '';
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $sql) use (&$capturedSql) {
+            $sql .= ' AND 1=0';
+            $capturedSql = $sql;
+            return $sql;
         });
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+
+        if ($database->getAdapter() instanceof SQL) {
+            $this->assertStringContainsString('/* scope: api.users */', $capturedSql);
+        }
+
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', null);
+        $database->resetMetadata();
     }
 
     public function testSetGlobalCollection(): void

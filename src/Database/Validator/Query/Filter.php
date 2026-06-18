@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Sequence;
 use Utopia\Validator\Boolean;
@@ -31,7 +32,8 @@ class Filter extends Base
         private readonly int $maxValuesCount = 5000,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        private bool $supportForAttributes = true
+        private readonly bool $supportForAttributes = true,
+        private readonly bool $supportUnsignedBigInt = true
     ) {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getId())] = $attribute->getArrayCopy();
@@ -159,6 +161,11 @@ class Filter extends Base
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     $unsigned = !$signed && $bits < 64;
                     $validator = new Integer(false, $bits, $unsigned);
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $signed = $attributeSchema['signed'] ?? true;
+                    $validator = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case Database::VAR_FLOAT:

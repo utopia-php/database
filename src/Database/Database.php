@@ -173,7 +173,6 @@ class Database
 
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
-    public const CACHE_TTL_MAX = 60 * 60 * 24; // 24 hours
 
     // Events
     public const EVENT_ALL = '*';
@@ -8603,7 +8602,7 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $ttl Cache TTL in seconds. Defaults to 0, which disables caching. Values above CACHE_TTL_MAX are clamped.
+     * @param int $ttl Cache TTL in seconds. Values above TTL are clamped. Set to 0 to disable caching.
      * @param string|null $key Optional caller-owned cache variation key
      * @param string $forPermission
      * @param bool $touchOnHit Refresh the cached entry timestamp on cache hit
@@ -8613,7 +8612,7 @@ class Database
      * @throws TimeoutException
      * @throws Exception
      */
-    public function findCached(string $collection, array $queries = [], int $ttl = 0, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
+    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
     {
         if ($ttl <= 0) {
             return $this->find($collection, $queries, $forPermission);
@@ -8623,7 +8622,7 @@ class Database
             return $this->find($collection, $queries, $forPermission);
         }
 
-        $ttl = \min($ttl, self::CACHE_TTL_MAX);
+        $ttl = \min($ttl, self::TTL);
 
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
 

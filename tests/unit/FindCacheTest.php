@@ -80,7 +80,7 @@ class FindCacheTest extends TestCase
         $this->assertCount(2, $documents);
     }
 
-    public function testFindCachedBypassesCacheByDefault(): void
+    public function testFindCachedUsesDefaultTtl(): void
     {
         $this->seedProject($this->database, 'first', 'First');
 
@@ -90,7 +90,7 @@ class FindCacheTest extends TestCase
         $this->seedProject($this->database, 'second', 'Second');
 
         $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')]));
-        $this->assertCount(2, $documents);
+        $this->assertCount(1, $documents);
     }
 
     public function testFindCachedDelegatesToFindWhenAuthorizationIsEnabled(): void

@@ -8353,8 +8353,27 @@ class Database
         }
 
         $this->cache->purge($collectionKey);
+        $this->purgeCachedFinds($collectionId);
 
         return true;
+    }
+
+    public function purgeCachedFinds(string $collectionId): bool
+    {
+        [$findKey] = $this->getCachedFindKeys($collectionId);
+
+        return $this->cache->purge($findKey);
+    }
+
+    /**
+     * @param array<Query> $queries
+     */
+    public function purgeCachedFind(string $collectionId, ?string $key = null, array $queries = []): bool
+    {
+        $collection = $this->silent(fn () => $this->getCollection($collectionId));
+        [$findKey, $findField] = $this->authorization->skip(fn () => $this->getCachedFindKeys($collectionId, $queries, $key, $collection));
+
+        return $this->cache->purge($findKey, $findField);
     }
 
     /**
@@ -8562,6 +8581,174 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
+    }
+
+    /**
+     * Find documents using an explicit TTL-backed cache.
+     *
+     * Results may be stale until the TTL expires or the caller purges the cached
+     * find entry. Use this only for read paths that can tolerate bounded
+     * staleness.
+     *
+     * Cache reads and writes are only used when authorization is disabled, for
+     * example inside Authorization::skip(). With active authorization this
+     * delegates to find() so cached results cannot outlive permission changes.
+     * Cached hits rebuild top-level Document instances from stored arrays and
+     * are intended for internal flat-document reads.
+     *
+     * When $key is provided, it replaces query serialization in the cache key.
+     * The caller-owned key must include every query dimension that can change
+     * the result.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int $ttl Cache TTL in seconds. Values above TTL are clamped. Set to 0 to disable caching.
+     * @param string|null $key Optional caller-owned cache variation key
+     * @param string $forPermission
+     * @param bool $touchOnHit Refresh the cached entry timestamp on cache hit
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
+    {
+        if ($ttl <= 0) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        if ($this->authorization->getStatus()) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        foreach ($queries as $query) {
+            if (!$query instanceof Query || $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+                return $this->find($collection, $queries, $forPermission);
+            }
+        }
+
+        $ttl = \min($ttl, self::TTL);
+
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collectionDocument->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        [$findKey, $findField] = $this->getCachedFindKeys($collectionDocument->getId(), $queries, $key, $collectionDocument);
+        $cached = $this->loadCachedFind($findKey, $findField, $ttl);
+
+        if (!\is_array($cached)) {
+            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findKey, $findField);
+        }
+
+        [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
+
+        if ($hasExpiredDocuments) {
+            $this->purgeCachedFindField($findKey, $findField);
+
+            return $this->findAndCache($collectionDocument, $queries, $forPermission, $findKey, $findField);
+        }
+
+        if ($touchOnHit) {
+            $this->touchCachedFind($findKey, $findField);
+        }
+
+        $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
+
+        return $documents;
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function findAndCache(Document $collection, array $queries, string $forPermission, string $findKey, string $findField): array
+    {
+        $documents = $this->find($collection->getId(), $queries, $forPermission);
+        $this->saveCachedFind($findKey, $findField, $documents);
+
+        return $documents;
+    }
+
+    private function loadCachedFind(string $findKey, string $findField, int $ttl): mixed
+    {
+        try {
+            return $this->cache->load($findKey, $ttl, $findField);
+        } catch (Exception $e) {
+            Console::warning('Failed to get find result from cache: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<Document> $documents
+     */
+    private function saveCachedFind(string $findKey, string $findField, array $documents): void
+    {
+        try {
+            $this->cache->save($findKey, [
+                'version' => 1,
+                'documents' => \array_map(
+                    static fn (Document $document): array => $document->getArrayCopy(),
+                    $documents
+                ),
+            ], $findField);
+        } catch (Exception $e) {
+            Console::warning('Failed to save find result to cache: ' . $e->getMessage());
+        }
+    }
+
+    private function touchCachedFind(string $findKey, string $findField): void
+    {
+        try {
+            $this->cache->touch($findKey, $findField);
+        } catch (Exception $e) {
+            Console::warning('Failed to touch find result cache: ' . $e->getMessage());
+        }
+    }
+
+    private function purgeCachedFindField(string $findKey, string $findField): void
+    {
+        try {
+            $this->cache->purge($findKey, $findField);
+        } catch (Exception $e) {
+            Console::warning('Failed to purge expired find result cache: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param array<mixed> $payload
+     * @return array{0: array<Document>, 1: bool}
+     */
+    private function decodeCachedFindPayload(Document $collection, array $payload): array
+    {
+        $results = [];
+        $hasExpiredDocuments = false;
+        $documents = \is_array($payload['documents'] ?? null) ? $payload['documents'] : $payload;
+
+        foreach ($documents as $document) {
+            if (!\is_array($document)) {
+                continue;
+            }
+
+            $document = $this->createDocumentInstance($collection->getId(), $document);
+
+            if ($this->isTtlExpired($collection, $document)) {
+                $hasExpiredDocuments = true;
+                continue;
+            }
+
+            $results[] = $document;
+        }
+
+        return [$results, $hasExpiredDocuments];
     }
 
     /**
@@ -9445,34 +9632,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $filterSignatures = [];
-            if ($this->filter) {
-                $disabled = $this->disabledFilters ?? [];
-
-                foreach (self::$filters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    if (\array_key_exists($name, $this->instanceFilters)) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                foreach ($this->instanceFilters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                \ksort($filterSignatures);
-            }
-
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
-                'filters' => $filterSignatures,
+                'filters' => $this->getActiveFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -9482,6 +9645,125 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    /**
+     * @param string $collectionId
+     * @param array<Query> $queries
+     * @param string|null $key
+     * @param Document|null $collection
+     * @return array{0: string, 1: string}
+     */
+    public function getCachedFindKeys(string $collectionId, array $queries = [], ?string $key = null, ?Document $collection = null): array
+    {
+        [$collectionKey] = $this->getCacheKeys($collectionId);
+        $findKey = "{$collectionKey}:find";
+
+        $payload = [
+            'version' => 1,
+            'database' => $this->getDatabase(),
+            'schema' => $this->getCachedFindSchemaHash($collection),
+            'key' => $key,
+            'queries' => $key === null ? \array_map(
+                fn (Query $query): array => $this->serializeCachedFindQuery($query),
+                $queries
+            ) : null,
+            'relationships' => $this->resolveRelationships,
+            'filters' => $this->getActiveFilterSignatures(),
+        ];
+
+        return [$findKey, \md5(\json_encode($payload) ?: '')];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeCachedFindQuery(Query $query): array
+    {
+        $serialized = [
+            'method' => $query->getMethod(),
+        ];
+
+        if ($query->getAttribute() !== '') {
+            $serialized['attribute'] = $query->getAttribute();
+        }
+
+        $values = [];
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                $values[] = $this->serializeCachedFindQuery($value);
+                continue;
+            }
+
+            $values[] = $this->normalizeCachedFindQueryValue($value);
+        }
+
+        $serialized['values'] = $values;
+
+        return $serialized;
+    }
+
+    private function normalizeCachedFindQueryValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        if (!\is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->normalizeCachedFindQueryValue($item);
+        }
+
+        return $value;
+    }
+
+    private function getCachedFindSchemaHash(?Document $collection): string
+    {
+        if ($collection === null || $collection->isEmpty()) {
+            return '';
+        }
+
+        return \md5(
+            \json_encode($collection->getAttribute('attributes', []))
+            . \json_encode($collection->getAttribute('indexes', []))
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function getActiveFilterSignatures(): array
+    {
+        $filterSignatures = [];
+        if (!$this->filter) {
+            return $filterSignatures;
+        }
+
+        $disabled = $this->disabledFilters ?? [];
+
+        foreach (self::$filters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            if (\array_key_exists($name, $this->instanceFilters)) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->instanceFilters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        \ksort($filterSignatures);
+
+        return $filterSignatures;
     }
 
     private static function computeCallableSignature(callable $callable): string

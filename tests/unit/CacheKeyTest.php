@@ -7,18 +7,21 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Query;
 
 class CacheKeyTest extends TestCase
 {
     /**
      * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
      */
-    private function createDatabase(array $instanceFilters = []): Database
+    private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
+        $adapter->method('getDatabase')->willReturn($database);
 
         return new Database($adapter, new Cache(new None()), $instanceFilters);
     }
@@ -129,6 +132,95 @@ class CacheKeyTest extends TestCase
         $db->enableFilters();
 
         $this->assertNotEquals($hashEnabled, $hashDisabled);
+    }
+
+    public function testDifferentFindQueriesProduceDifferentCacheKeys(): void
+    {
+        $db = $this->createDatabase();
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])]);
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])]);
+
+        $this->assertNotEquals($fieldA, $fieldB);
+    }
+
+    public function testCallerFindCacheKeyIgnoresQueryVariation(): void
+    {
+        $db = $this->createDatabase();
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])], 'domain-key');
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])], 'domain-key');
+
+        $this->assertEquals($fieldA, $fieldB);
+    }
+
+    public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
+    {
+        $dbPlatform = $this->createDatabase(database: 'platform');
+        $dbProject = $this->createDatabase(database: 'project');
+
+        [, $fieldA] = $dbPlatform->getCachedFindKeys('col', [Query::limit(10)]);
+        [, $fieldB] = $dbProject->getCachedFindKeys('col', [Query::limit(10)]);
+
+        $this->assertNotEquals($fieldA, $fieldB);
+    }
+
+    public function testDifferentFindSchemasProduceDifferentCacheKeys(): void
+    {
+        $db = $this->createDatabase();
+
+        $collectionA = new Document([
+            '$id' => 'col',
+            'attributes' => [
+                new Document(['$id' => 'name', 'type' => Database::VAR_STRING]),
+            ],
+            'indexes' => [],
+        ]);
+        $collectionB = new Document([
+            '$id' => 'col',
+            'attributes' => [
+                new Document(['$id' => 'name', 'type' => Database::VAR_STRING]),
+                new Document(['$id' => 'status', 'type' => Database::VAR_STRING]),
+            ],
+            'indexes' => [],
+        ]);
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionA);
+        [, $fieldB] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionB);
+
+        $this->assertNotEquals($fieldA, $fieldB);
+    }
+
+    public function testFindRelationshipModeProducesDifferentCacheKeys(): void
+    {
+        $db = $this->createDatabase();
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)]);
+        [, $fieldB] = $db->skipRelationships(fn () => $db->getCachedFindKeys('col', [Query::limit(10)]));
+
+        $this->assertNotEquals($fieldA, $fieldB);
+    }
+
+    public function testFindCursorDocumentValuesProduceDifferentCacheKeys(): void
+    {
+        $db = $this->createDatabase();
+
+        [, $fieldA] = $db->getCachedFindKeys('col', [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'alpha',
+            ])),
+        ]);
+        [, $fieldB] = $db->getCachedFindKeys('col', [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'beta',
+            ])),
+        ]);
+
+        $this->assertNotEquals($fieldA, $fieldB);
     }
 
     public function testParseHostname(): void

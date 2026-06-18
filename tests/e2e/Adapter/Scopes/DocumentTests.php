@@ -103,6 +103,47 @@ trait DocumentTests
         }
     }
 
+    public function testFindCachedReturnsStaleResultUntilPurged(): void
+    {
+        if (!$this->supportsCachedFind()) {
+            $this->markTestSkipped('Adapter test disables the cache layer.');
+        }
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'findCached';
+
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 255, true);
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'First',
+        ]));
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'second',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Second',
+        ]));
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $database->purgeCachedFinds($collection);
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached($collection, [Query::orderAsc('name')], ttl: 3600));
+        $this->assertCount(2, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+        $this->assertSame('second', $documents[1]->getId());
+    }
+
     public function testCreateDocumentWithBigIntType(): void
     {
         /** @var Database $database */

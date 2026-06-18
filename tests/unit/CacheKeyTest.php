@@ -154,6 +154,54 @@ class CacheKeyTest extends TestCase
         $this->assertEquals($fieldA, $fieldB);
     }
 
+    public function testCollectionCacheKeyUsesListCacheShape(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getNamespace')->willReturn('_39');
+        $adapter->method('getTenant')->willReturn(null);
+
+        $db = new Database($adapter, new Cache(new None()), []);
+
+        $this->assertSame(
+            'default-cache:mysql-console:_39::collection:ttl_cache_table',
+            $db->getListCacheKey('ttl_cache_table'),
+        );
+    }
+
+    public function testCollectionCacheKeyCanOverrideNamespaceSegment(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getNamespace')->willReturn('');
+        $adapter->method('getTenant')->willReturn(null);
+
+        $db = new Database($adapter, new Cache(new None()), []);
+
+        $this->assertSame(
+            'default-cache:mysql-console:_39::collection:wafrules',
+            $db->getListCacheKey('wafrules', '_39'),
+        );
+    }
+
+    public function testCollectionCacheKeyCanOverrideTenantSegment(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getNamespace')->willReturn('_39');
+        $adapter->method('getTenant')->willReturn(null);
+
+        $db = new Database($adapter, new Cache(new None()), []);
+
+        $this->assertSame(
+            'default-cache:mysql-console:_39:tenant-a:collection:wafrules',
+            $db->getListCacheKey('wafrules', tenant: 'tenant-a'),
+        );
+    }
+
     public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
     {
         $dbPlatform = $this->createDatabase(database: 'platform');

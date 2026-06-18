@@ -9631,7 +9631,10 @@ class Database
             'database' => $this->getDatabase(),
             'schema' => $this->getFindCacheSchemaHash($collection),
             'key' => $key,
-            'queries' => $key === null ? $this->serializeQueriesForFindCache($queries) : null,
+            'queries' => $key === null ? \array_map(
+                static fn (Query $query): array => $query->toArray(),
+                $queries
+            ) : null,
             'relationships' => $this->resolveRelationships,
             'filters' => $this->getActiveFilterSignatures(),
         ];
@@ -9648,18 +9651,6 @@ class Database
         return \md5(
             \json_encode($collection->getAttribute('attributes', []))
             . \json_encode($collection->getAttribute('indexes', []))
-        );
-    }
-
-    /**
-     * @param array<Query> $queries
-     * @return array<mixed>
-     */
-    private function serializeQueriesForFindCache(array $queries): array
-    {
-        return \array_map(
-            static fn (Query $query): array => $query->toArray(),
-            $queries
         );
     }
 

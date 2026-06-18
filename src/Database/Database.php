@@ -9656,6 +9656,30 @@ class Database
     }
 
     /**
+     * Stable cache key for cached list entries on a collection.
+     *
+     * @param string $collectionId
+     * @param string|null $namespace
+     * @param int|string|null $tenant
+     * @return string
+     */
+    public function getListCacheKey(string $collectionId, ?string $namespace = null, int|string|null $tenant = null): string
+    {
+        $hostname = $this->adapter->getSupportForHostname()
+            ? $this->adapter->getHostname()
+            : '';
+
+        return \sprintf(
+            '%s-cache:%s:%s:%s:collection:%s',
+            $this->cacheName,
+            $hostname,
+            $namespace ?? $this->getNamespace(),
+            $tenant ?? $this->adapter->getTenant(),
+            $collectionId,
+        );
+    }
+
+    /**
      * @param string $collectionId
      * @param array<Query> $queries
      * @param string|null $key

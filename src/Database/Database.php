@@ -8696,6 +8696,115 @@ class Database
     }
 
     /**
+     * Find documents using an Appwrite list-cache compatible key and field.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int $ttl Cache TTL in seconds. Values above TTL are clamped. Set to 0 to disable caching.
+     * @param string|null $cacheCollection
+     * @param string|null $namespace
+     * @param int|string|null $tenant
+     * @param array<string> $roles
+     * @param string $field
+     * @param string $payload
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function findListCached(
+        string $collection,
+        array $queries = [],
+        int $ttl = self::TTL,
+        ?string $cacheCollection = null,
+        ?string $namespace = null,
+        int|string|null $tenant = null,
+        array $roles = [],
+        string $field = 'documents',
+        string $payload = 'documents',
+        string $forPermission = Database::PERMISSION_READ,
+    ): array {
+        if ($ttl <= 0) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        if ($this->authorization->getStatus()) {
+            return $this->find($collection, $queries, $forPermission);
+        }
+
+        foreach ($queries as $query) {
+            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+                return $this->find($collection, $queries, $forPermission);
+            }
+        }
+
+        $ttl = \min($ttl, self::TTL);
+
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collectionDocument->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $cacheKey = $this->getListCacheKey($cacheCollection ?? $collectionDocument->getId(), $namespace, $tenant);
+        $cacheField = $this->getListCacheField($collectionDocument, $queries, $roles, $field);
+
+        try {
+            $cached = $this->cache->load($cacheKey, $ttl, $cacheField);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get list result from cache: ' . $e->getMessage());
+            $cached = null;
+        }
+
+        if (\is_array($cached) && isset($cached[$payload]) && \is_array($cached[$payload])) {
+            [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached[$payload]);
+
+            if ($hasExpiredDocuments) {
+                try {
+                    $this->cache->purge($cacheKey, $cacheField);
+                } catch (Exception $e) {
+                    Console::warning('Warning: Failed to purge expired list result cache: ' . $e->getMessage());
+                }
+
+                $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
+                try {
+                    $this->cache->save($cacheKey, [
+                        $payload => \array_map(
+                            static fn (Document $document): array => $document->getArrayCopy(),
+                            $documents,
+                        ),
+                    ], $cacheField);
+                } catch (Exception $e) {
+                    Console::warning('Failed to save list result to cache: ' . $e->getMessage());
+                }
+
+                return $documents;
+            }
+
+            $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
+
+            return $documents;
+        }
+
+        $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
+
+        try {
+            $this->cache->save($cacheKey, [
+                $payload => \array_map(
+                    static fn (Document $document): array => $document->getArrayCopy(),
+                    $documents,
+                ),
+            ], $cacheField);
+        } catch (Exception $e) {
+            Console::warning('Failed to save list result to cache: ' . $e->getMessage());
+        }
+
+        return $documents;
+    }
+
+    /**
      * @param array<mixed> $payload
      * @return array{0: array<Document>, 1: bool}
      */

@@ -249,6 +249,125 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame(0, $cache->touches);
     }
+
+    public function testFindListCachedReturnsStaleResultUntilListKeyIsPurged(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $this->seedProject($database, 'first', 'First');
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            [Query::orderAsc('name')],
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $this->seedProject($database, 'second', 'Second');
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            [Query::orderAsc('name')],
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
+
+        $cache->purge($database->getListCacheKey('wafrules', '_39'));
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            [Query::orderAsc('name')],
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+        $this->assertCount(2, $documents);
+    }
+
+    public function testFindListCachedUsesListCacheKeyAndField(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $this->seedProject($database, 'first', 'First');
+
+        $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            [Query::orderAsc('name')],
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+
+        $fields = $cache->list($database->getListCacheKey('wafrules', '_39'));
+
+        $this->assertCount(1, $fields);
+        $this->assertStringEndsWith(':documents', $fields[0]);
+        $this->assertSame(3, \substr_count($fields[0], ':'));
+    }
+
+    public function testFindListCachedRefetchesExpiredCachedDocuments(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache, new TtlMemoryAdapter());
+        $database->createAttribute('projects', 'expiresAt', Database::VAR_DATETIME, 0, false);
+        $database->createIndex('projects', 'expiresAtTtl', Database::INDEX_TTL, ['expiresAt'], ttl: 1);
+
+        $database->createDocument('projects', new Document([
+            '$id' => 'first',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'First',
+            'expiresAt' => '2999-01-01T00:00:00.000+00:00',
+        ]));
+        $this->seedProject($database, 'second', 'Second');
+
+        $queries = [Query::orderAsc('name'), Query::limit(1)];
+        $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+
+        $collection = $database->getCollection('projects');
+        $cache->setCachedPayloadDocumentAttribute(
+            $database->getListCacheKey('wafrules', '_39'),
+            $database->getListCacheField($collection, $queries, ['waf']),
+            'rules',
+            'first',
+            'expiresAt',
+            '2000-01-01T00:00:00.000+00:00',
+        );
+        $database->getAuthorization()->skip(fn () => $database->updateDocument('projects', 'first', new Document(['name' => 'Zulu'])));
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findListCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payload: 'rules',
+        ));
+        $this->assertCount(1, $documents);
+        $this->assertSame('second', $documents[0]->getId());
+    }
 }
 
 class HashMemoryCache implements Adapter
@@ -310,6 +429,24 @@ class HashMemoryCache implements Adapter
 
             $documents[$index][$attribute] = $value;
             $this->store[$key][$hash]['data'] = $documents;
+            return;
+        }
+    }
+
+    public function setCachedPayloadDocumentAttribute(string $key, string $hash, string $payload, string $documentId, string $attribute, mixed $value): void
+    {
+        $documents = $this->store[$key][$hash]['data'][$payload] ?? [];
+        if (!\is_array($documents)) {
+            return;
+        }
+
+        foreach ($documents as $index => $document) {
+            if (!\is_array($document) || ($document['$id'] ?? '') !== $documentId) {
+                continue;
+            }
+
+            $documents[$index][$attribute] = $value;
+            $this->store[$key][$hash]['data'][$payload] = $documents;
             return;
         }
     }

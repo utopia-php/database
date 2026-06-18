@@ -8645,7 +8645,7 @@ class Database
             $cached = null;
         }
 
-        if ($cached !== null && $cached !== false && \is_array($cached)) {
+        if (\is_array($cached)) {
             [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
 
             if ($hasExpiredDocuments) {
@@ -9664,10 +9664,6 @@ class Database
             if ($value instanceof Query) {
                 $values[] = $this->serializeCachedFindQuery($value);
                 continue;
-            }
-
-            if ($value instanceof Document && \in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE], true)) {
-                $value = $value->getArrayCopy();
             }
 
             $values[] = $this->normalizeCachedFindQueryValue($value);

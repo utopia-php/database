@@ -135,27 +135,7 @@ class CacheKeyTest extends TestCase
         $this->assertNotEquals($hashEnabled, $hashDisabled);
     }
 
-    public function testDifferentFindQueriesProduceDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])]);
-        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])]);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
-    public function testCallerFindCacheKeyIgnoresQueryVariation(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getCachedFindKeys('col', [Query::equal('status', ['active'])], 'domain-key');
-        [, $fieldB] = $db->getCachedFindKeys('col', [Query::equal('status', ['paused'])], 'domain-key');
-
-        $this->assertEquals($fieldA, $fieldB);
-    }
-
-    public function testCollectionCacheKeyUsesListCacheShape(): void
+    public function testFindCacheKeyUsesListCacheShapeWithFindSuffix(): void
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(true);
@@ -166,12 +146,12 @@ class CacheKeyTest extends TestCase
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache:mysql-console:_39::collection:ttl_cache_table',
-            $db->getListCacheKey('ttl_cache_table'),
+            'default-cache:mysql-console:_39::collection:ttl_cache_table:find',
+            $db->getFindCacheKey('ttl_cache_table'),
         );
     }
 
-    public function testCollectionCacheKeyCanOverrideNamespaceSegment(): void
+    public function testFindCacheKeyCanOverrideNamespaceSegment(): void
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(true);
@@ -182,12 +162,12 @@ class CacheKeyTest extends TestCase
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache:mysql-console:_39::collection:wafrules',
-            $db->getListCacheKey('wafrules', '_39'),
+            'default-cache:mysql-console:_39::collection:wafrules:find',
+            $db->getFindCacheKey('wafrules', '_39'),
         );
     }
 
-    public function testCollectionCacheKeyCanOverrideTenantSegment(): void
+    public function testFindCacheKeyCanOverrideTenantSegment(): void
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(true);
@@ -198,12 +178,12 @@ class CacheKeyTest extends TestCase
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache:mysql-console:_39:tenant-a:collection:wafrules',
-            $db->getListCacheKey('wafrules', tenant: 'tenant-a'),
+            'default-cache:mysql-console:_39:tenant-a:collection:wafrules:find',
+            $db->getFindCacheKey('wafrules', tenant: 'tenant-a'),
         );
     }
 
-    public function testCollectionCacheFieldUsesListCacheShape(): void
+    public function testFindCacheFieldUsesListCacheShape(): void
     {
         $db = $this->createDatabase();
         $collection = new Document([
@@ -226,18 +206,18 @@ class CacheKeyTest extends TestCase
             (\json_encode($collection->getAttribute('attributes', [])) ?: '')
             . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
         );
-        $field = $db->getListCacheField($collection, $queries, ['waf']);
+        $field = $db->getFindCacheField($collection, $queries, ['waf']);
 
         $this->assertStringStartsWith("{$schemaHash}:".\md5(\json_encode(['waf']) ?: '').':', $field);
         $this->assertStringEndsWith(':documents', $field);
         $this->assertSame(3, \substr_count($field, ':'));
     }
 
-    public function testCollectionCacheFieldChangesWithInputs(): void
+    public function testFindCacheFieldChangesWithInputs(): void
     {
         $db = $this->createDatabase();
 
-        $field = $db->getListCacheField(
+        $field = $db->getFindCacheField(
             new Document([
                 'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
                 'indexes' => [],
@@ -248,7 +228,7 @@ class CacheKeyTest extends TestCase
 
         $this->assertNotSame(
             $field,
-            $db->getListCacheField(
+            $db->getFindCacheField(
                 new Document([
                     'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
                     'indexes' => [],
@@ -257,23 +237,23 @@ class CacheKeyTest extends TestCase
                 ['role-a'],
             ),
         );
-        $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(20)], ['role-a']));
-        $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(10)], ['role-b']));
-        $this->assertStringEndsWith(':total', $db->getListCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(20)], ['role-a']));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-b']));
+        $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
     }
 
-    public function testCollectionCacheFieldIncludesCursorDocumentPayload(): void
+    public function testFindCacheFieldIncludesCursorDocumentPayload(): void
     {
         $db = $this->createDatabase();
 
-        $fieldA = $db->getListCacheField(null, [
+        $fieldA = $db->getFindCacheField(null, [
             Query::orderAsc('name'),
             Query::cursorAfter(new Document([
                 '$id' => 'cursor',
                 'name' => 'alpha',
             ])),
         ]);
-        $fieldB = $db->getListCacheField(null, [
+        $fieldB = $db->getFindCacheField(null, [
             Query::orderAsc('name'),
             Query::cursorAfter(new Document([
                 '$id' => 'cursor',
@@ -284,23 +264,23 @@ class CacheKeyTest extends TestCase
         $this->assertNotSame($fieldA, $fieldB);
     }
 
-    public function testCollectionCacheFieldIncludesAmbientState(): void
+    public function testFindCacheFieldIncludesAmbientState(): void
     {
         $db = $this->createDatabase();
 
-        $field = $db->getListCacheField(null, [Query::limit(10)]);
+        $field = $db->getFindCacheField(null, [Query::limit(10)]);
 
         $this->assertNotSame(
             $field,
-            $db->skipFilters(fn () => $db->getListCacheField(null, [Query::limit(10)]), ['json']),
+            $db->skipFilters(fn () => $db->getFindCacheField(null, [Query::limit(10)]), ['json']),
         );
         $this->assertNotSame(
             $field,
-            $db->skipRelationships(fn () => $db->getListCacheField(null, [Query::limit(10)])),
+            $db->skipRelationships(fn () => $db->getFindCacheField(null, [Query::limit(10)])),
         );
     }
 
-    public function testCollectionCacheFieldValidatesQueryTypes(): void
+    public function testFindCacheFieldValidatesQueryTypes(): void
     {
         $this->expectException(QueryException::class);
 
@@ -308,77 +288,9 @@ class CacheKeyTest extends TestCase
         /** @var array<Query> $queries */
         $queries = ['invalid'];
 
-        $db->getListCacheField(null, $queries);
+        $db->getFindCacheField(null, $queries);
     }
 
-    public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
-    {
-        $dbPlatform = $this->createDatabase(database: 'platform');
-        $dbProject = $this->createDatabase(database: 'project');
-
-        [, $fieldA] = $dbPlatform->getCachedFindKeys('col', [Query::limit(10)]);
-        [, $fieldB] = $dbProject->getCachedFindKeys('col', [Query::limit(10)]);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
-    public function testDifferentFindSchemasProduceDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        $collectionA = new Document([
-            '$id' => 'col',
-            'attributes' => [
-                new Document(['$id' => 'name', 'type' => Database::VAR_STRING]),
-            ],
-            'indexes' => [],
-        ]);
-        $collectionB = new Document([
-            '$id' => 'col',
-            'attributes' => [
-                new Document(['$id' => 'name', 'type' => Database::VAR_STRING]),
-                new Document(['$id' => 'status', 'type' => Database::VAR_STRING]),
-            ],
-            'indexes' => [],
-        ]);
-
-        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionA);
-        [, $fieldB] = $db->getCachedFindKeys('col', [Query::limit(10)], collection: $collectionB);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
-    public function testFindRelationshipModeProducesDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getCachedFindKeys('col', [Query::limit(10)]);
-        [, $fieldB] = $db->skipRelationships(fn () => $db->getCachedFindKeys('col', [Query::limit(10)]));
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
-
-    public function testFindCursorDocumentValuesProduceDifferentCacheKeys(): void
-    {
-        $db = $this->createDatabase();
-
-        [, $fieldA] = $db->getCachedFindKeys('col', [
-            Query::orderAsc('name'),
-            Query::cursorAfter(new Document([
-                '$id' => 'cursor',
-                'name' => 'alpha',
-            ])),
-        ]);
-        [, $fieldB] = $db->getCachedFindKeys('col', [
-            Query::orderAsc('name'),
-            Query::cursorAfter(new Document([
-                '$id' => 'cursor',
-                'name' => 'beta',
-            ])),
-        ]);
-
-        $this->assertNotEquals($fieldA, $fieldB);
-    }
 
     public function testParseHostname(): void
     {

@@ -26,12 +26,60 @@ class PDO
         protected ?string $password,
         protected array $config = []
     ) {
+        $this->config[\PDO::ATTR_ERRMODE] ??= \PDO::ERRMODE_EXCEPTION;
+
         $this->pdo = new \PDO(
             $this->dsn,
             $this->username,
             $this->password,
             $this->config
         );
+    }
+
+    /**
+     * Prepare a statement, returning a wrapper that transparently re-prepares
+     * itself on the underlying connection if that connection is lost before the
+     * statement is executed.
+     *
+     * @param array<mixed> $options
+     * @throws \Throwable
+     */
+    public function prepare(string $query, array $options = []): PDOStatement
+    {
+        return new PDOStatement($this, $this->prepareNative($query, $options), $query, $options);
+    }
+
+    /**
+     * Prepare a raw \PDOStatement on the underlying connection, reconnecting
+     * once if a stale connection surfaces during prepare. Used by
+     * {@see PDOStatement} to re-prepare after a reconnect without re-wrapping.
+     *
+     * Under emulated prepares this never reaches the server (so the loss
+     * surfaces at execution time instead and is recovered by {@see PDOStatement});
+     * with native prepares the server is contacted here, so a lost connection
+     * outside a transaction is reconnected and retried, matching __call().
+     *
+     * @param array<mixed> $options
+     * @throws \Throwable
+     */
+    public function prepareNative(string $query, array $options = []): \PDOStatement
+    {
+        try {
+            $statement = $this->pdo->prepare($query, $options);
+        } catch (\Throwable $e) {
+            if (!Connection::hasError($e) || $this->pdo->inTransaction()) {
+                throw $e;
+            }
+
+            $this->reconnect();
+            $statement = $this->pdo->prepare($query, $options);
+        }
+
+        if ($statement === false) {
+            throw new \PDOException("Failed to prepare statement: {$query}");
+        }
+
+        return $statement;
     }
 
     /**

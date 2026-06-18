@@ -4,7 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -16,6 +15,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
+use Utopia\Database\PDOStatement;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -80,11 +80,18 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                try {
+                    if ($this->getPDO()->inTransaction()) {
+                        $this->getPDO()->rollBack();
+                    } else {
+                        // If no active transaction, this has no effect.
+                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                    }
+                } catch (PDOException) {
+                    // A pooled connection can report a transaction it no longer
+                    // holds after a reconnect (e.g. Swoole PDOProxy keeps its own
+                    // counter), making this cleanup rollback throw. It is best
+                    // effort; swallow it and begin a fresh transaction below.
                 }
 
                 $this->getPDO()->beginTransaction();
@@ -1971,12 +1978,12 @@ abstract class SQL extends Adapter
     /**
      * Bind operator parameters to prepared statement
      *
-     * @param \PDOStatement|PDOStatementProxy $stmt
+     * @param \PDOStatement|PDOStatement $stmt
      * @param \Utopia\Database\Operator $operator
      * @param int &$bindIndex
      * @return void
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(\PDOStatement|PDOStatement $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

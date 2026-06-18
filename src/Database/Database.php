@@ -8656,7 +8656,14 @@ class Database
                 }
 
                 $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
-                $this->saveCachedFindPayload($findKey, $findField, $documents);
+                try {
+                    $this->cache->save($findKey, \array_map(
+                        static fn (Document $document): array => $document->getArrayCopy(),
+                        $documents
+                    ), $findField);
+                } catch (Exception $e) {
+                    Console::warning('Failed to save find result to cache: ' . $e->getMessage());
+                }
 
                 return $documents;
             }
@@ -8676,16 +8683,6 @@ class Database
 
         $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
 
-        $this->saveCachedFindPayload($findKey, $findField, $documents);
-
-        return $documents;
-    }
-
-    /**
-     * @param array<Document> $documents
-     */
-    private function saveCachedFindPayload(string $findKey, string $findField, array $documents): void
-    {
         try {
             $this->cache->save($findKey, \array_map(
                 static fn (Document $document): array => $document->getArrayCopy(),
@@ -8694,6 +8691,8 @@ class Database
         } catch (Exception $e) {
             Console::warning('Failed to save find result to cache: ' . $e->getMessage());
         }
+
+        return $documents;
     }
 
     /**

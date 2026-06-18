@@ -8614,6 +8614,8 @@ class Database
      */
     public function findCached(string $collection, array $queries = [], int $ttl = self::TTL, ?string $key = null, string $forPermission = Database::PERMISSION_READ, bool $touchOnHit = false): array
     {
+        $this->checkQueryTypes($queries);
+
         if ($ttl <= 0) {
             return $this->find($collection, $queries, $forPermission);
         }
@@ -8646,7 +8648,9 @@ class Database
         }
 
         if (\is_array($cached)) {
-            [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $cached);
+            $payload = $cached['documents'] ?? $cached;
+            $payload = \is_array($payload) ? $payload : [];
+            [$documents, $hasExpiredDocuments] = $this->decodeCachedFindPayload($collectionDocument, $payload);
 
             if ($hasExpiredDocuments) {
                 try {
@@ -8657,10 +8661,12 @@ class Database
 
                 $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
                 try {
-                    $this->cache->save($findKey, \array_map(
-                        static fn (Document $document): array => $document->getArrayCopy(),
-                        $documents
-                    ), $findField);
+                    $this->cache->save($findKey, [
+                        'documents' => \array_map(
+                            static fn (Document $document): array => $document->getArrayCopy(),
+                            $documents
+                        ),
+                    ], $findField);
                 } catch (Exception $e) {
                     Console::warning('Failed to save find result to cache: ' . $e->getMessage());
                 }
@@ -8684,10 +8690,12 @@ class Database
         $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
 
         try {
-            $this->cache->save($findKey, \array_map(
-                static fn (Document $document): array => $document->getArrayCopy(),
-                $documents
-            ), $findField);
+            $this->cache->save($findKey, [
+                'documents' => \array_map(
+                    static fn (Document $document): array => $document->getArrayCopy(),
+                    $documents
+                ),
+            ], $findField);
         } catch (Exception $e) {
             Console::warning('Failed to save find result to cache: ' . $e->getMessage());
         }

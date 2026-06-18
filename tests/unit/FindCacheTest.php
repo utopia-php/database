@@ -94,6 +94,17 @@ class FindCacheTest extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testFindCachedCachesEmptyResults(): void
+    {
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->assertSame([], $documents);
+
+        $this->seedProject($this->database, 'first', 'First');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->assertSame([], $documents);
+    }
+
     public function testFindCachedDelegatesToFindWhenAuthorizationIsEnabled(): void
     {
         $this->seedProject($this->database, 'first', 'First');
@@ -249,6 +260,20 @@ class FindCacheTest extends TestCase
         $documents = $database->getAuthorization()->skip(fn () => $database->findCached('projects', [Query::orderAsc('name')], ttl: 3600, touchOnHit: true));
         $this->assertCount(1, $documents);
         $this->assertSame(0, $cache->touches);
+    }
+
+    public function testFindCachedValidatesQueryTypesBeforeCaching(): void
+    {
+        $this->expectException(QueryException::class);
+
+        /** @var array<Query> $queries */
+        $queries = ['invalid'];
+
+        $this->database->getAuthorization()->skip(fn () => $this->database->findCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+        ));
     }
 
     public function testFindListCachedReturnsStaleResultUntilListKeyIsPurged(): void
@@ -434,7 +459,12 @@ class HashMemoryCache implements Adapter
 
     public function setCachedDocumentAttribute(string $key, string $hash, string $documentId, string $attribute, mixed $value): void
     {
-        $documents = $this->store[$key][$hash]['data'] ?? [];
+        $data = $this->store[$key][$hash]['data'] ?? [];
+        if (!\is_array($data)) {
+            return;
+        }
+
+        $documents = $data['documents'] ?? $data;
         if (!\is_array($documents)) {
             return;
         }
@@ -445,7 +475,12 @@ class HashMemoryCache implements Adapter
             }
 
             $documents[$index][$attribute] = $value;
-            $this->store[$key][$hash]['data'] = $documents;
+            if (isset($data['documents']) && \is_array($data['documents'])) {
+                $data['documents'] = $documents;
+                $this->store[$key][$hash]['data'] = $data;
+            } else {
+                $this->store[$key][$hash]['data'] = $documents;
+            }
             return;
         }
     }

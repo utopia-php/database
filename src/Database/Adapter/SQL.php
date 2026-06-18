@@ -80,11 +80,18 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                try {
+                    if ($this->getPDO()->inTransaction()) {
+                        $this->getPDO()->rollBack();
+                    } else {
+                        // If no active transaction, this has no effect.
+                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                    }
+                } catch (PDOException) {
+                    // A pooled connection can report a transaction it no longer
+                    // holds after a reconnect (e.g. Swoole PDOProxy keeps its own
+                    // counter), making this cleanup rollback throw. It is best
+                    // effort; swallow it and begin a fresh transaction below.
                 }
 
                 $this->getPDO()->beginTransaction();

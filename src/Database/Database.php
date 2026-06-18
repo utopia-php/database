@@ -9643,6 +9643,31 @@ class Database
     }
 
     /**
+     * Stable cache field for cached list entries on a collection.
+     *
+     * @param Document|null $collection
+     * @param array<Query> $queries
+     * @param array<string> $roles
+     * @param string $field
+     * @return string
+     */
+    public function getListCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents'): string
+    {
+        $serialized = \array_map(
+            static fn (Query $query): array => $query->toArray(),
+            $queries,
+        );
+
+        return \sprintf(
+            '%s:%s:%s:%s',
+            $this->getCachedFindSchemaHash($collection),
+            \md5(\json_encode($roles) ?: ''),
+            \md5(\json_encode($serialized) ?: ''),
+            $field,
+        );
+    }
+
+    /**
      * @param string $collectionId
      * @param array<Query> $queries
      * @param string|null $key

@@ -202,6 +202,69 @@ class CacheKeyTest extends TestCase
         );
     }
 
+    public function testCollectionCacheFieldUsesListCacheShape(): void
+    {
+        $db = $this->createDatabase();
+        $collection = new Document([
+            '$id' => 'wafRules',
+            'attributes' => [
+                new Document(['$id' => 'projectId', 'type' => Database::VAR_STRING]),
+                new Document(['$id' => 'enabled', 'type' => Database::VAR_BOOLEAN]),
+            ],
+            'indexes' => [
+                new Document(['$id' => 'project_enabled', 'attributes' => ['projectId', 'enabled']]),
+            ],
+        ]);
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::equal('enabled', [true]),
+            Query::orderAsc('priority'),
+        ];
+
+        $schemaHash = \md5(
+            \json_encode($collection->getAttribute('attributes', []))
+            . \json_encode($collection->getAttribute('indexes', []))
+        );
+        $queryHash = \md5(\json_encode(\array_map(
+            static fn (Query $query): array => $query->toArray(),
+            $queries,
+        )));
+
+        $this->assertSame(
+            "{$schemaHash}:".\md5(\json_encode(['waf'])).":{$queryHash}:documents",
+            $db->getListCacheField($collection, $queries, ['waf']),
+        );
+    }
+
+    public function testCollectionCacheFieldChangesWithInputs(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getListCacheField(
+            new Document([
+                'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
+                'indexes' => [],
+            ]),
+            [Query::limit(10)],
+            ['role-a'],
+        );
+
+        $this->assertNotSame(
+            $field,
+            $db->getListCacheField(
+                new Document([
+                    'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
+                    'indexes' => [],
+                ]),
+                [Query::limit(10)],
+                ['role-a'],
+            ),
+        );
+        $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(20)], ['role-a']));
+        $this->assertNotSame($field, $db->getListCacheField(null, [Query::limit(10)], ['role-b']));
+        $this->assertStringEndsWith(':total', $db->getListCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+    }
+
     public function testDifferentFindDatabasesProduceDifferentCacheKeys(): void
     {
         $dbPlatform = $this->createDatabase(database: 'platform');

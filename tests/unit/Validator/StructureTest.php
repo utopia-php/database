@@ -1074,6 +1074,25 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
+        // 'text_field' is optional (required => false). Structure short-circuits
+        // on `$required === false && is_null($value)` and `continue`s before
+        // building or running any validators, so the null never reaches the
+        // ByteLength check (which would otherwise reject it, since
+        // is_string(null) is false). Hence a null optional text value passes.
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'text_field' => null,
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'Demo Title',

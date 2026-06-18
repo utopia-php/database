@@ -106,6 +106,19 @@ class FindCacheTest extends TestCase
         $this->assertCount(2, $documents);
     }
 
+    public function testFindCachedBypassesCacheForRandomOrder(): void
+    {
+        $this->seedProject($this->database, 'first', 'First');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderRandom()], ttl: 3600));
+        $this->assertCount(1, $documents);
+
+        $this->seedProject($this->database, 'second', 'Second');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderRandom()], ttl: 3600));
+        $this->assertCount(2, $documents);
+    }
+
     public function testFindCachedTriggersFindEventOnCacheHit(): void
     {
         $events = [];
@@ -116,7 +129,11 @@ class FindCacheTest extends TestCase
         $this->seedProject($this->database, 'first', 'First');
 
         $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
-        $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->seedProject($this->database, 'second', 'Second');
+
+        $documents = $this->database->getAuthorization()->skip(fn () => $this->database->findCached('projects', [Query::orderAsc('name')], ttl: 3600));
+        $this->assertCount(1, $documents);
+        $this->assertSame('first', $documents[0]->getId());
 
         $this->assertSame([
             Database::EVENT_DOCUMENT_FIND,

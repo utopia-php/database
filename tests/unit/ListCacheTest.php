@@ -165,15 +165,70 @@ class ListCacheTest extends TestCase
         $this->assertSame('second', $documents[0]->getId());
     }
 
+    public function testFindCachedRefetchesInvalidCachedPayload(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $this->seedProject($database, 'first', 'First');
+
+        $queries = [Query::orderAsc('name')];
+        $database->getAuthorization()->skip(fn () => $database->findCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payloadKey: 'rules',
+        ));
+
+        $this->seedProject($database, 'second', 'Second');
+        $cache->setCachedPayload(
+            $database->getFindCacheKey('wafrules', '_39'),
+            $database->getFindCacheField($database->getCollection('projects'), $queries, ['waf'], 'documents', 'rules'),
+            'rules',
+            ['invalid'],
+        );
+
+        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
+            'projects',
+            $queries,
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+            roles: ['waf'],
+            payloadKey: 'rules',
+        ));
+
+        $this->assertCount(2, $documents);
+    }
+
+    public function testFindCachedValidatesQuerySemanticsBeforeReadingCache(): void
+    {
+        $this->expectException(QueryException::class);
+
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $this->seedProject($database, 'first', 'First');
+
+        $database->getAuthorization()->skip(fn () => $database->findCached(
+            'projects',
+            [Query::equal('missing', ['value'])],
+            ttl: 3600,
+            cacheCollection: 'wafrules',
+            namespace: '_39',
+        ));
+    }
+
     public function testFindCachedValidatesQueryTypesBeforeCaching(): void
     {
         $this->expectException(QueryException::class);
 
-        /** @var array<Query> $queries */
         $queries = ['invalid'];
 
         $this->database->getAuthorization()->skip(fn () => $this->database->findCached(
             'projects',
+            /** @phpstan-ignore-next-line intentionally passing invalid query type */
             $queries,
             ttl: 3600,
             cacheCollection: 'wafrules',
@@ -249,6 +304,20 @@ class HashMemoryCache implements Adapter
             $this->store[$key][$hash]['data'] = $data;
             return;
         }
+    }
+
+    /**
+     * @param array<mixed> $documents
+     */
+    public function setCachedPayload(string $key, string $hash, string $payload, array $documents): void
+    {
+        $data = $this->store[$key][$hash]['data'] ?? [];
+        if (!\is_array($data)) {
+            return;
+        }
+
+        $data[$payload] = $documents;
+        $this->store[$key][$hash]['data'] = $data;
     }
 
     /**

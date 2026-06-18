@@ -8619,6 +8619,23 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $collectionDocument->getAttribute('attributes', []),
+                $collectionDocument->getAttribute('indexes', []),
+                $this->adapter->getIdAttributeType(),
+                $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
+            );
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
         $cacheKey = $this->getFindCacheKey($cacheCollection ?? $collectionDocument->getId(), $namespace, $tenant);
         $cacheField = $this->getFindCacheField($collectionDocument, $queries, $roles, $field, $payloadKey);
 
@@ -8630,9 +8647,9 @@ class Database
         }
 
         if (\is_array($cached) && isset($cached[$payloadKey]) && \is_array($cached[$payloadKey])) {
-            [$documents, $hasExpiredDocuments] = $this->decodeFindCachePayload($collectionDocument, $cached[$payloadKey]);
+            [$documents, $shouldRefreshCache] = $this->decodeFindCachePayload($collectionDocument, $cached[$payloadKey]);
 
-            if ($hasExpiredDocuments) {
+            if ($shouldRefreshCache) {
                 try {
                     $this->cache->purge($cacheKey, $cacheField);
                 } catch (Exception $e) {
@@ -8682,24 +8699,25 @@ class Database
     private function decodeFindCachePayload(Document $collection, array $payload): array
     {
         $results = [];
-        $hasExpiredDocuments = false;
+        $shouldRefreshCache = false;
 
         foreach ($payload as $document) {
             if (!\is_array($document)) {
+                $shouldRefreshCache = true;
                 continue;
             }
 
             $document = $this->createDocumentInstance($collection->getId(), $document);
 
             if ($this->isTtlExpired($collection, $document)) {
-                $hasExpiredDocuments = true;
+                $shouldRefreshCache = true;
                 continue;
             }
 
             $results[] = $document;
         }
 
-        return [$results, $hasExpiredDocuments];
+        return [$results, $shouldRefreshCache];
     }
 
     /**

@@ -286,9 +286,9 @@ class CacheKeyTest extends TestCase
         $this->expectException(QueryException::class);
 
         $db = $this->createDatabase();
-        /** @var array<Query> $queries */
         $queries = ['invalid'];
 
+        /** @phpstan-ignore-next-line intentionally passing invalid query type */
         $db->getFindCacheField(null, $queries);
     }
 

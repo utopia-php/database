@@ -8623,7 +8623,7 @@ class Database
         }
 
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
                 return $this->find($collection, $queries, $forPermission);
             }
         }

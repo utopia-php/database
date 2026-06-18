@@ -31,44 +31,6 @@ use Utopia\Database\Query;
 class Postgres extends SQL
 {
     public const MAX_IDENTIFIER_NAME = 63;
-    /**
-     * @inheritDoc
-     */
-    public function startTransaction(): bool
-    {
-        try {
-            if ($this->inTransaction === 0) {
-                try {
-                    if ($this->getPDO()->inTransaction()) {
-                        $this->getPDO()->rollBack();
-                    } else {
-                        // If no active transaction, this has no effect.
-                        $this->getPDO()->prepare('ROLLBACK')->execute();
-                    }
-                } catch (PDOException) {
-                    // A pooled connection can report a transaction it no longer
-                    // holds after a reconnect (e.g. Swoole PDOProxy keeps its own
-                    // counter), making this cleanup rollback throw. It is best
-                    // effort; swallow it and begin a fresh transaction below.
-                }
-
-                $result = $this->getPDO()->beginTransaction();
-            } else {
-                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
-                $result = true;
-            }
-        } catch (PDOException $e) {
-            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        }
-
-        if (!$result) {
-            throw new TransactionException('Failed to start transaction');
-        }
-
-        $this->inTransaction++;
-
-        return $result;
-    }
 
     /**
      * @inheritDoc

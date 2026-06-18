@@ -4,11 +4,13 @@ namespace Tests\Unit;
 
 use PDOException;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
-class SQLTransactionTest extends TestCase
+final class SQLTransactionTest extends TestCase
 {
     /**
      * A pooled connection (e.g. Swoole PDOProxy) can keep its own transaction
@@ -61,6 +63,9 @@ class SQLTransactionTest extends TestCase
 
     public function testPostgresStartTransactionRecoversFromDesyncedRollback(): void
     {
+        $method = new ReflectionMethod(Postgres::class, 'startTransaction');
+        $this->assertSame(SQL::class, $method->getDeclaringClass()->getName());
+
         $pdo = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();

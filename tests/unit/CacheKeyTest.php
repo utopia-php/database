@@ -167,22 +167,6 @@ class CacheKeyTest extends TestCase
         );
     }
 
-    public function testFindCacheKeyCanOverrideTenantSegment(): void
-    {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn('mysql-console');
-        $adapter->method('getNamespace')->willReturn('_39');
-        $adapter->method('getTenant')->willReturn(null);
-
-        $db = new Database($adapter, new Cache(new None()), []);
-
-        $this->assertSame(
-            'default-cache:mysql-console:_39:tenant-a:collection:wafrules:find',
-            $db->getFindCacheKey('wafrules', tenant: 'tenant-a'),
-        );
-    }
-
     public function testFindCacheFieldUsesListCacheShape(): void
     {
         $db = $this->createDatabase();

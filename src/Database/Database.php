@@ -8581,69 +8581,19 @@ class Database
         callable $callback,
         string $hash = '',
     ): mixed {
-        return $this->withCachedPayload(
-            key: $key,
-            callback: $callback,
-            hash: $hash,
-            fromCache: fn (mixed $cached): mixed => \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false,
-            toCache: fn (mixed $value): array => ['value' => $value],
-        );
-    }
-
-    /**
-     * Execute a callback behind a cache-aside lookup with cache payload hooks.
-     *
-     * @template T
-     * @param string $key
-     * @param callable(): T $callback
-     * @param int $ttl
-     * @param string $hash
-     * @param (callable(mixed): (T|false))|null $fromCache
-     * @param (callable(T): (array<int|string, mixed>|string))|null $toCache
-     * @param (callable(T, mixed): void)|null $onCacheHit
-     * @param bool $touchOnHit
-     * @return T
-     */
-    private function withCachedPayload(
-        string $key,
-        callable $callback,
-        int $ttl = self::TTL,
-        string $hash = '',
-        ?callable $fromCache = null,
-        ?callable $toCache = null,
-        ?callable $onCacheHit = null,
-        bool $touchOnHit = false,
-    ): mixed {
-        if ($ttl <= 0) {
-            return $callback();
-        }
-
-        $ttl = \min($ttl, self::TTL);
         $shouldRefreshCache = false;
 
         try {
-            $cached = $this->cache->load($key, $ttl, $hash);
+            $cached = $this->cache->load($key, self::TTL, $hash);
         } catch (Throwable $e) {
             Console::warning('Warning: Failed to load cache value: ' . $e->getMessage());
             $cached = false;
         }
 
         if ($cached !== false && $cached !== null) {
-            $value = $fromCache === null ? $cached : $fromCache($cached);
+            $value = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
 
             if ($value !== false) {
-                if ($touchOnHit) {
-                    try {
-                        $this->cache->touch($key, $hash);
-                    } catch (Throwable $e) {
-                        Console::warning('Warning: Failed to touch cache value: ' . $e->getMessage());
-                    }
-                }
-
-                if ($onCacheHit !== null) {
-                    $onCacheHit($value, $cached);
-                }
-
                 return $value;
             }
 
@@ -8659,11 +8609,10 @@ class Database
         }
 
         $value = $callback();
-        $payload = $toCache === null ? $value : $toCache($value);
 
-        if ($value !== false && (\is_array($payload) || \is_string($payload))) {
+        if ($value !== false) {
             try {
-                $this->cache->save($key, $payload, $hash);
+                $this->cache->save($key, ['value' => $value], $hash);
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
             }
@@ -9573,10 +9522,9 @@ class Database
      *
      * @param string $collectionId
      * @param string|null $namespace
-     * @param int|string|null $tenant
      * @return string
      */
-    public function getFindCacheKey(string $collectionId, ?string $namespace = null, int|string|null $tenant = null): string
+    public function getFindCacheKey(string $collectionId, ?string $namespace = null): string
     {
         $hostname = $this->adapter->getSupportForHostname()
             ? $this->adapter->getHostname()
@@ -9587,7 +9535,7 @@ class Database
             $this->cacheName,
             $hostname,
             $namespace ?? $this->getNamespace(),
-            $tenant ?? $this->adapter->getTenant(),
+            $this->adapter->getTenant(),
             $collectionId,
         );
     }

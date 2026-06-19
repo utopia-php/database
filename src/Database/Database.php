@@ -8565,159 +8565,111 @@ class Database
     }
 
     /**
-     * Find documents using an Appwrite list-cache compatible key and field.
+     * Execute a callback behind a cache-aside lookup.
      *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int $ttl Cache TTL in seconds. Values above TTL are clamped. Set to 0 to disable caching.
-     * @param string|null $cacheCollection
-     * @param string|null $namespace
-     * @param int|string|null $tenant
-     * @param array<string> $roles
-     * @param string $field
-     * @param string $payloadKey
-     * @param string $forPermission
-     * @return array<Document>
-     * @throws DatabaseException
-     * @throws QueryException
-     * @throws TimeoutException
-     * @throws Exception
+     * The callback runs on cache miss and its value is returned to the caller.
+     * A literal false value is treated as a cache miss and is not cacheable.
+     *
+     * @template T
+     * @param string $key
+     * @param callable(): T $callback
+     * @param string $hash
+     * @return T
      */
-    public function findCached(
-        string $collection,
-        array $queries = [],
-        int $ttl = self::TTL,
-        ?string $cacheCollection = null,
-        ?string $namespace = null,
-        int|string|null $tenant = null,
-        array $roles = [],
-        string $field = 'documents',
-        string $payloadKey = 'documents',
-        string $forPermission = Database::PERMISSION_READ,
-    ): array {
-        $this->checkQueryTypes($queries);
-
-        if ($ttl <= 0) {
-            return $this->find($collection, $queries, $forPermission);
-        }
-
-        if ($this->authorization->getStatus()) {
-            return $this->find($collection, $queries, $forPermission);
-        }
-
-        foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
-                return $this->find($collection, $queries, $forPermission);
-            }
-        }
-
-        $ttl = \min($ttl, self::TTL);
-
-        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collectionDocument->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $collectionDocument->getAttribute('attributes', []),
-                $collectionDocument->getAttribute('indexes', []),
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt()
-            );
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
-        }
-
-        $cacheKey = $this->getFindCacheKey($cacheCollection ?? $collectionDocument->getId(), $namespace, $tenant);
-        $cacheField = $this->getFindCacheField($collectionDocument, $queries, $roles, $field, $payloadKey);
-
-        try {
-            $cached = $this->cache->load($cacheKey, $ttl, $cacheField);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get list result from cache: ' . $e->getMessage());
-            $cached = null;
-        }
-
-        if (\is_array($cached) && isset($cached[$payloadKey]) && \is_array($cached[$payloadKey])) {
-            [$documents, $shouldRefreshCache] = $this->decodeFindCachePayload($collectionDocument, $cached[$payloadKey]);
-
-            if ($shouldRefreshCache) {
-                try {
-                    $this->cache->purge($cacheKey, $cacheField);
-                } catch (Exception $e) {
-                    Console::warning('Warning: Failed to purge expired list result cache: ' . $e->getMessage());
-                }
-
-                $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
-                try {
-                    $this->cache->save($cacheKey, [
-                        $payloadKey => \array_map(
-                            static fn (Document $document): array => $document->getArrayCopy(),
-                            $documents,
-                        ),
-                    ], $cacheField);
-                } catch (Exception $e) {
-                    Console::warning('Failed to save list result to cache: ' . $e->getMessage());
-                }
-
-                return $documents;
-            }
-
-            $this->trigger(self::EVENT_DOCUMENT_FIND, $documents);
-
-            return $documents;
-        }
-
-        $documents = $this->find($collectionDocument->getId(), $queries, $forPermission);
-
-        try {
-            $this->cache->save($cacheKey, [
-                $payloadKey => \array_map(
-                    static fn (Document $document): array => $document->getArrayCopy(),
-                    $documents,
-                ),
-            ], $cacheField);
-        } catch (Exception $e) {
-            Console::warning('Failed to save list result to cache: ' . $e->getMessage());
-        }
-
-        return $documents;
+    public function withCache(
+        string $key,
+        callable $callback,
+        string $hash = '',
+    ): mixed {
+        return $this->withCachedPayload(
+            key: $key,
+            callback: $callback,
+            hash: $hash,
+            fromCache: fn (mixed $cached): mixed => \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false,
+            toCache: fn (mixed $value): array => ['value' => $value],
+        );
     }
 
     /**
-     * @param array<mixed> $payload
-     * @return array{0: array<Document>, 1: bool}
+     * Execute a callback behind a cache-aside lookup with cache payload hooks.
+     *
+     * @template T
+     * @param string $key
+     * @param callable(): T $callback
+     * @param int $ttl
+     * @param string $hash
+     * @param (callable(mixed): (T|false))|null $fromCache
+     * @param (callable(T): (array<int|string, mixed>|string))|null $toCache
+     * @param (callable(T, mixed): void)|null $onCacheHit
+     * @param bool $touchOnHit
+     * @return T
      */
-    private function decodeFindCachePayload(Document $collection, array $payload): array
-    {
-        $results = [];
-        $shouldRefreshCache = false;
-
-        foreach ($payload as $document) {
-            if (!\is_array($document)) {
-                $shouldRefreshCache = true;
-                continue;
-            }
-
-            $document = $this->createDocumentInstance($collection->getId(), $document);
-
-            if ($this->isTtlExpired($collection, $document)) {
-                $shouldRefreshCache = true;
-                continue;
-            }
-
-            $results[] = $document;
+    private function withCachedPayload(
+        string $key,
+        callable $callback,
+        int $ttl = self::TTL,
+        string $hash = '',
+        ?callable $fromCache = null,
+        ?callable $toCache = null,
+        ?callable $onCacheHit = null,
+        bool $touchOnHit = false,
+    ): mixed {
+        if ($ttl <= 0) {
+            return $callback();
         }
 
-        return [$results, $shouldRefreshCache];
+        $ttl = \min($ttl, self::TTL);
+        $shouldRefreshCache = false;
+
+        try {
+            $cached = $this->cache->load($key, $ttl, $hash);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to load cache value: ' . $e->getMessage());
+            $cached = false;
+        }
+
+        if ($cached !== false && $cached !== null) {
+            $value = $fromCache === null ? $cached : $fromCache($cached);
+
+            if ($value !== false) {
+                if ($touchOnHit) {
+                    try {
+                        $this->cache->touch($key, $hash);
+                    } catch (Throwable $e) {
+                        Console::warning('Warning: Failed to touch cache value: ' . $e->getMessage());
+                    }
+                }
+
+                if ($onCacheHit !== null) {
+                    $onCacheHit($value, $cached);
+                }
+
+                return $value;
+            }
+
+            $shouldRefreshCache = true;
+        }
+
+        if ($shouldRefreshCache) {
+            try {
+                $this->cache->purge($key, $hash);
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to purge rejected cache value: ' . $e->getMessage());
+            }
+        }
+
+        $value = $callback();
+        $payload = $toCache === null ? $value : $toCache($value);
+
+        if ($value !== false && (\is_array($payload) || \is_string($payload))) {
+            try {
+                $this->cache->save($key, $payload, $hash);
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
+            }
+        }
+
+        return $value;
     }
 
     /**

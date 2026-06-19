@@ -4,236 +4,183 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
-use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Exception\Query as QueryException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
-use Utopia\Database\Query;
 
 class ListCacheTest extends TestCase
 {
-    private Database $database;
-
-    protected function setUp(): void
+    private function createDatabase(Adapter $cache): Database
     {
-        $this->database = $this->createDatabase(new CacheMemory());
-    }
-
-    private function createDatabase(Adapter $cache, ?DatabaseMemory $adapter = null): Database
-    {
-        $database = new Database($adapter ?? new DatabaseMemory(), new Cache($cache));
+        $database = new Database(new DatabaseMemory(), new Cache($cache));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('list_cache_' . \uniqid());
 
         $database->create();
-        $database->createCollection('projects');
-        $database->createAttribute('projects', 'name', Database::VAR_STRING, 255, true);
 
         return $database;
     }
 
-    private function seedProject(Database $database, string $id, string $name): void
-    {
-        $database->createDocument('projects', new Document([
-            '$id' => $id,
-            '$permissions' => [Permission::read(Role::any())],
-            'name' => $name,
-        ]));
-    }
-
-    public function testFindCachedReturnsStaleResultUntilListKeyIsPurged(): void
+    public function testWithCacheUsesCallbackOnMissAndCachesResult(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $this->seedProject($database, 'first', 'First');
 
-        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            [Query::orderAsc('name')],
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-        $this->assertCount(1, $documents);
-        $this->assertSame('first', $documents[0]->getId());
+        $callbackCalls = 0;
 
-        $this->seedProject($database, 'second', 'Second');
-
-        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            [Query::orderAsc('name')],
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-        $this->assertCount(1, $documents);
-        $this->assertSame('first', $documents[0]->getId());
-
-        $cache->purge($database->getFindCacheKey('wafrules', '_39'));
-
-        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            [Query::orderAsc('name')],
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-        $this->assertCount(2, $documents);
-    }
-
-    public function testFindCachedUsesListCacheKeyAndField(): void
-    {
-        $cache = new HashMemoryCache();
-        $database = $this->createDatabase($cache);
-        $this->seedProject($database, 'first', 'First');
-
-        $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            [Query::orderAsc('name')],
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-
-        $fields = $cache->list($database->getFindCacheKey('wafrules', '_39'));
-
-        $this->assertCount(1, $fields);
-        $this->assertStringEndsWith(':documents:rules', $fields[0]);
-        $this->assertSame(4, \substr_count($fields[0], ':'));
-    }
-
-    public function testFindCachedRefetchesExpiredCachedDocuments(): void
-    {
-        $cache = new HashMemoryCache();
-        $database = $this->createDatabase($cache, new TtlMemoryAdapter());
-        $database->createAttribute('projects', 'expiresAt', Database::VAR_DATETIME, 0, false);
-        $database->createIndex('projects', 'expiresAtTtl', Database::INDEX_TTL, ['expiresAt'], ttl: 1);
-
-        $database->createDocument('projects', new Document([
-            '$id' => 'first',
-            '$permissions' => [Permission::read(Role::any())],
-            'name' => 'First',
-            'expiresAt' => '2999-01-01T00:00:00.000+00:00',
-        ]));
-        $this->seedProject($database, 'second', 'Second');
-
-        $queries = [Query::orderAsc('name'), Query::limit(1)];
-        $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            $queries,
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-
-        $collection = $database->getCollection('projects');
-        $cache->setCachedPayloadDocumentAttribute(
-            $database->getFindCacheKey('wafrules', '_39'),
-            $database->getFindCacheField($collection, $queries, ['waf'], 'documents', 'rules'),
-            'rules',
-            'first',
-            'expiresAt',
-            '2000-01-01T00:00:00.000+00:00',
-        );
-        $database->getAuthorization()->skip(fn () => $database->updateDocument('projects', 'first', new Document(['name' => 'Zulu'])));
-
-        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            $queries,
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-        $this->assertCount(1, $documents);
-        $this->assertSame('second', $documents[0]->getId());
-    }
-
-    public function testFindCachedRefetchesInvalidCachedPayload(): void
-    {
-        $cache = new HashMemoryCache();
-        $database = $this->createDatabase($cache);
-        $this->seedProject($database, 'first', 'First');
-
-        $queries = [Query::orderAsc('name')];
-        $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            $queries,
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
-
-        $this->seedProject($database, 'second', 'Second');
-        $cache->setCachedPayload(
-            $database->getFindCacheKey('wafrules', '_39'),
-            $database->getFindCacheField($database->getCollection('projects'), $queries, ['waf'], 'documents', 'rules'),
-            'rules',
-            ['invalid'],
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['value' => 'fresh'];
+            },
         );
 
-        $documents = $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            $queries,
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-            roles: ['waf'],
-            payloadKey: 'rules',
-        ));
+        $this->assertSame(['value' => 'fresh'], $value);
+        $this->assertSame(1, $callbackCalls);
 
-        $this->assertCount(2, $documents);
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['value' => 'new'];
+            },
+        );
+
+        $this->assertSame(['value' => 'fresh'], $value);
+        $this->assertSame(1, $callbackCalls);
     }
 
-    public function testFindCachedValidatesQuerySemanticsBeforeReadingCache(): void
+    public function testWithCacheCachesEmptyValues(): void
     {
-        $this->expectException(QueryException::class);
-
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $this->seedProject($database, 'first', 'First');
 
-        $database->getAuthorization()->skip(fn () => $database->findCached(
-            'projects',
-            [Query::equal('missing', ['value'])],
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-        ));
+        $callbackCalls = 0;
+
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return [];
+            },
+        );
+
+        $this->assertSame([], $value);
+
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['value' => 'miss'];
+            },
+        );
+
+        $this->assertSame([], $value);
+        $this->assertSame(1, $callbackCalls);
     }
 
-    public function testFindCachedValidatesQueryTypesBeforeCaching(): void
+    public function testWithCacheCachesNullValues(): void
     {
-        $this->expectException(QueryException::class);
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
 
-        $queries = ['invalid'];
+        $callbackCalls = 0;
 
-        $this->database->getAuthorization()->skip(fn () => $this->database->findCached(
-            'projects',
-            /** @phpstan-ignore-next-line intentionally passing invalid query type */
-            $queries,
-            ttl: 3600,
-            cacheCollection: 'wafrules',
-            namespace: '_39',
-        ));
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): mixed {
+                $callbackCalls++;
+                return null;
+            },
+        );
+
+        $this->assertNull($value);
+
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): string {
+                $callbackCalls++;
+                return 'miss';
+            },
+        );
+
+        $this->assertNull($value);
+        $this->assertSame(1, $callbackCalls);
+    }
+
+    public function testWithCacheSeparatesPayloadsByHashField(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $firstCalls = 0;
+        $secondCalls = 0;
+
+        $first = $database->withCache(
+            'key',
+            function () use (&$firstCalls): array {
+                $firstCalls++;
+                return ['value' => 'first'];
+            },
+            'first-field',
+        );
+
+        $second = $database->withCache(
+            'key',
+            function () use (&$secondCalls): array {
+                $secondCalls++;
+                return ['value' => 'second'];
+            },
+            'second-field',
+        );
+
+        $cachedFirst = $database->withCache(
+            'key',
+            function () use (&$firstCalls): array {
+                $firstCalls++;
+                return ['value' => 'miss'];
+            },
+            'first-field',
+        );
+
+        $this->assertSame(['value' => 'first'], $first);
+        $this->assertSame(['value' => 'second'], $second);
+        $this->assertSame(['value' => 'first'], $cachedFirst);
+        $this->assertSame(1, $firstCalls);
+        $this->assertSame(1, $secondCalls);
+        $this->assertSame(['first-field', 'second-field'], $cache->list('key'));
+    }
+
+    public function testWithCacheDoesNotCacheFalseValues(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $callbackCalls = 0;
+
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): bool {
+                $callbackCalls++;
+                return false;
+            },
+        );
+
+        $this->assertFalse($value);
+        $this->assertSame([], $cache->list('key'));
+
+        $value = $database->withCache(
+            'key',
+            function () use (&$callbackCalls): string {
+                $callbackCalls++;
+                return 'fresh';
+            },
+        );
+
+        $this->assertSame('fresh', $value);
+        $this->assertSame(2, $callbackCalls);
     }
 }
 
@@ -282,44 +229,6 @@ class HashMemoryCache implements Adapter
         return true;
     }
 
-    public function setCachedPayloadDocumentAttribute(string $key, string $hash, string $payload, string $documentId, string $attribute, mixed $value): void
-    {
-        $data = $this->store[$key][$hash]['data'] ?? [];
-        if (!\is_array($data)) {
-            return;
-        }
-
-        $documents = $data[$payload] ?? [];
-        if (!\is_array($documents)) {
-            return;
-        }
-
-        foreach ($documents as $index => $document) {
-            if (!\is_array($document) || ($document['$id'] ?? '') !== $documentId) {
-                continue;
-            }
-
-            $documents[$index][$attribute] = $value;
-            $data[$payload] = $documents;
-            $this->store[$key][$hash]['data'] = $data;
-            return;
-        }
-    }
-
-    /**
-     * @param array<mixed> $documents
-     */
-    public function setCachedPayload(string $key, string $hash, string $payload, array $documents): void
-    {
-        $data = $this->store[$key][$hash]['data'] ?? [];
-        if (!\is_array($data)) {
-            return;
-        }
-
-        $data[$payload] = $documents;
-        $this->store[$key][$hash]['data'] = $data;
-    }
-
     /**
      * @return array<string>
      */
@@ -360,13 +269,5 @@ class HashMemoryCache implements Adapter
     public function getName(?string $key = null): string
     {
         return 'hash-memory';
-    }
-}
-
-class TtlMemoryAdapter extends DatabaseMemory
-{
-    public function getSupportForTTLIndexes(): bool
-    {
-        return true;
     }
 }

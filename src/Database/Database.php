@@ -9547,10 +9547,9 @@ class Database
      * @param array<Query> $queries
      * @param array<string> $roles
      * @param string $field
-     * @param string $payloadKey
      * @return string
      */
-    public function getFindCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents', string $payloadKey = 'documents'): string
+    public function getFindCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents'): string
     {
         $this->checkQueryTypes($queries);
 
@@ -9566,12 +9565,11 @@ class Database
         ];
 
         return \sprintf(
-            '%s:%s:%s:%s:%s',
+            '%s:%s:%s:%s',
             $this->getFindCacheSchemaHash($collection),
             \md5(\json_encode($roles) ?: ''),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
-            $payloadKey,
         );
     }
 

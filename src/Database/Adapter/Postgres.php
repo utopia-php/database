@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -18,6 +17,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
+use Utopia\Database\PDOStatement;
 use Utopia\Database\Query;
 
 /**
@@ -2764,12 +2764,12 @@ class Postgres extends SQL
      * Bind operator parameters to statement
      * Override to handle PostgreSQL-specific JSON binding
      *
-     * @param \PDOStatement|PDOStatementProxy $stmt
+     * @param \PDOStatement|PDOStatement $stmt
      * @param Operator $operator
      * @param int &$bindIndex
      * @return void
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(\PDOStatement|PDOStatement $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

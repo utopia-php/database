@@ -57,7 +57,9 @@
     "suggests": {
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
-        "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
+        "mongodb/mongodb": "Needed to support MongoDB Database Adapter",
+        "ext-openssl": "Needed for caching_sha2_password full authentication when using the Replication reader",
+        "ext-swoole": "Needed by the Replication reader for coroutine socket I/O"
 
     },
     "config": {

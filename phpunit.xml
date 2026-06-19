@@ -15,6 +15,7 @@
         </testsuite>
         <testsuite name="e2e">
             <directory>./tests/e2e/Adapter</directory>
+            <directory>./tests/e2e/Replication</directory>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -16,6 +16,7 @@ final class Constants
     public const int CLIENT_LONG_PASSWORD = 0x00000001;
     public const int CLIENT_LONG_FLAG = 0x00000004;
     public const int CLIENT_CONNECT_WITH_DB = 0x00000008;
+    public const int CLIENT_SSL = 0x00000800;
     public const int CLIENT_PROTOCOL_41 = 0x00000200;
     public const int CLIENT_SECURE_CONNECTION = 0x00008000;
     public const int CLIENT_PLUGIN_AUTH = 0x00080000;

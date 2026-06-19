@@ -46,6 +46,7 @@ class Replication
         private readonly string $username,
         private readonly string $password,
         private readonly int $serverId,
+        private readonly bool $ssl = false,
     ) {
         $this->parser = new EventParser();
         $this->executed = new GtidSet();
@@ -71,7 +72,7 @@ class Replication
      */
     public function start(?string $position = null): void
     {
-        $this->connection = new Connection($this->host, $this->port, $this->username, $this->password);
+        $this->connection = new Connection($this->host, $this->port, $this->username, $this->password, $this->ssl);
         $this->connection->connect();
 
         $this->connection->execute('SET @master_binlog_checksum = @@global.binlog_checksum');

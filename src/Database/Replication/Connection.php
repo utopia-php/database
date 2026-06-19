@@ -27,6 +27,7 @@ class Connection
         private readonly int $port,
         private readonly string $username,
         private readonly string $password,
+        private readonly bool $ssl = false,
         private readonly float $timeout = 30.0,
     ) {
     }
@@ -108,7 +109,11 @@ class Connection
                 throw new DatabaseException("Failed to write packet: {$this->socket->errMsg}");
             }
             $offset += $size;
-            $this->sequence++;
+            // Only advance the sequence between continuation frames; the caller
+            // owns the increment for the next logical packet.
+            if ($size === 0xFFFFFF) {
+                $this->sequence++;
+            }
         } while ($size === 0xFFFFFF);
     }
 
@@ -203,18 +208,53 @@ class Connection
 
         $nonce = \substr($authData, 0, 20);
 
+        if ($this->ssl) {
+            $this->upgradeToTls($capabilities);
+        }
+
         $this->sendHandshakeResponse($nonce, $plugin);
         $this->finishAuth($nonce, $plugin);
     }
 
-    private function sendHandshakeResponse(string $nonce, string $plugin): void
+    /**
+     * Send the abbreviated SSL request packet and upgrade the socket to TLS,
+     * before the credentials are sent. The full handshake response then travels
+     * over the encrypted channel.
+     */
+    private function upgradeToTls(int $serverCapabilities): void
     {
-        $capabilities = Constants::CLIENT_LONG_PASSWORD
+        if (!($serverCapabilities & Constants::CLIENT_SSL)) {
+            throw new DatabaseException('TLS requested but the server does not support it');
+        }
+
+        $payload = \pack('V', $this->clientCapabilities() | Constants::CLIENT_SSL)
+            . \pack('V', self::MAX_PACKET_SIZE)
+            . \chr(self::CHARSET_UTF8MB4)
+            . \str_repeat("\0", 23);
+        $this->writePacket($payload);
+
+        $this->socket->setProtocol(['open_ssl' => true, 'ssl_verify_peer' => false]);
+        if (!$this->socket->sslHandshake()) {
+            throw new DatabaseException("TLS handshake failed: {$this->socket->errMsg}");
+        }
+    }
+
+    private function clientCapabilities(): int
+    {
+        return Constants::CLIENT_LONG_PASSWORD
             | Constants::CLIENT_LONG_FLAG
             | Constants::CLIENT_PROTOCOL_41
             | Constants::CLIENT_SECURE_CONNECTION
             | Constants::CLIENT_PLUGIN_AUTH
             | Constants::CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
+    }
+
+    private function sendHandshakeResponse(string $nonce, string $plugin): void
+    {
+        $capabilities = $this->clientCapabilities();
+        if ($this->ssl) {
+            $capabilities |= Constants::CLIENT_SSL;
+        }
 
         $authResponse = $this->scramble($plugin, $nonce);
 

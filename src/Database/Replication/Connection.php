@@ -140,6 +140,7 @@ class Connection
         for ($i = 0; $i < $columns; $i++) {
             $this->readPacket(); // column definition
         }
+        $this->readPacket(); // EOF after column definitions
 
         $value = null;
         while (true) {

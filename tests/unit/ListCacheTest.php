@@ -213,6 +213,7 @@ class ListCacheTest extends TestCase
 
         $queries = [
             Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
             Query::limit(25),
         ];
 
@@ -265,6 +266,7 @@ class ListCacheTest extends TestCase
 
         $queries = [
             Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
             Query::limit(25),
         ];
 
@@ -309,6 +311,7 @@ class ListCacheTest extends TestCase
 
         $queries = [
             Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
             Query::limit(25),
         ];
 

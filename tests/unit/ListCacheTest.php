@@ -281,6 +281,50 @@ class ListCacheTest extends TestCase
         $roleSeparated = $database->cachedFind('wafRules', $queries, '_39', ['manager']);
         $this->assertCount(2, $roleSeparated);
     }
+
+    public function testCachedFindSeparatesEntriesByPermissionMode(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::limit(25),
+        ];
+
+        $database->cachedFind('wafRules', $queries, '_39', ['waf'], Database::PERMISSION_READ);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-b',
+            'projectId' => 'project-a',
+        ]));
+
+        $cached = $database->cachedFind('wafRules', $queries, '_39', ['waf'], Database::PERMISSION_READ);
+        $this->assertCount(1, $cached);
+
+        $permissionSeparated = $database->cachedFind('wafRules', $queries, '_39', ['waf'], Database::PERMISSION_UPDATE);
+        $this->assertCount(2, $permissionSeparated);
+    }
 }
 
 class HashMemoryCache implements Adapter

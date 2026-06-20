@@ -223,6 +223,7 @@ class CacheKeyTest extends TestCase
         );
         $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(20)], ['role-a']));
         $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-b']));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'documents', Database::PERMISSION_UPDATE));
         $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
     }
 

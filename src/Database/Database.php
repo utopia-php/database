@@ -8600,7 +8600,7 @@ class Database
                 static fn (Document $document): array => $document->getArrayCopy(),
                 $this->find($collection, $queries, $forPermission),
             ),
-            hash: $this->getFindCacheField($collectionDocument, $queries, $roles, 'documents'),
+            hash: $this->getFindCacheField($collectionDocument, $queries, $roles, 'documents', $forPermission),
         );
 
         if (!\is_array($payload)) {
@@ -9616,15 +9616,22 @@ class Database
      * @param array<Query> $queries
      * @param array<string> $roles
      * @param string $field
+     * @param string $forPermission
      * @return string
      */
-    public function getFindCacheField(?Document $collection = null, array $queries = [], array $roles = [], string $field = 'documents'): string
-    {
+    public function getFindCacheField(
+        ?Document $collection = null,
+        array $queries = [],
+        array $roles = [],
+        string $field = 'documents',
+        string $forPermission = self::PERMISSION_READ,
+    ): string {
         $this->checkQueryTypes($queries);
 
         $queryPayload = [
             'version' => 1,
             'database' => $this->getDatabase(),
+            'permission' => $forPermission,
             'queries' => \array_map(
                 fn (Query $query): array => $this->serializeFindCacheQuery($query),
                 $queries,

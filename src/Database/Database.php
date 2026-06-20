@@ -8600,17 +8600,26 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $selects = Query::groupByType($queries)['selections'];
-        $selections = $this->validateSelections($collectionDocument, $selects);
+        $cacheMiss = false;
+        $documents = [];
 
         $payload = $this->withCache(
             key: $this->getFindCacheKey($collection, $namespace),
-            callback: fn (): array => \array_map(
-                static fn (Document $document): array => $document->getArrayCopy(),
-                $this->find($collection, $queries, $forPermission),
-            ),
+            callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
+                $cacheMiss = true;
+                $documents = $this->find($collection, $queries, $forPermission);
+
+                return \array_map(
+                    static fn (Document $document): array => $document->getArrayCopy(),
+                    $documents,
+                );
+            },
             hash: $this->getFindCacheField($collectionDocument, $queries, $roles, 'documents', $forPermission),
         );
+
+        if ($cacheMiss) {
+            return $documents;
+        }
 
         if (!\is_array($payload)) {
             return [];
@@ -8623,9 +8632,7 @@ class Database
             }
 
             $document = $this->createDocumentInstance($collection, $document);
-            $document = $this->adapter->castingAfter($collectionDocument, $document);
             $document = $this->casting($collectionDocument, $document);
-            $document = $this->decode($collectionDocument, $document, $selections);
 
             $documents[] = $document;
         }

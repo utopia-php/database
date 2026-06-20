@@ -14,9 +14,9 @@ use Utopia\Database\Query;
 
 class ListCacheTest extends TestCase
 {
-    private function createDatabase(Adapter $cache): Database
+    private function createDatabase(Adapter $cache, array $filters = []): Database
     {
-        $database = new Database(new DatabaseMemory(), new Cache($cache));
+        $database = new Database(new DatabaseMemory(), new Cache($cache), $filters);
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('list_cache_' . \uniqid());
@@ -363,6 +363,49 @@ class ListCacheTest extends TestCase
 
         $this->assertSame(1.0, $fresh[0]->getAttribute('value'));
         $this->assertSame(1.0, $cached[0]->getAttribute('value'));
+    }
+
+    public function testCachedFindDoesNotDoubleDecodeCustomFilters(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache, [
+            'wrapped' => [
+                'encode' => static fn (mixed $value): string => 'encoded:' . $value,
+                'decode' => static fn (mixed $value): string => \str_starts_with((string) $value, 'encoded:')
+                    ? \substr((string) $value, 8)
+                    : 'double:' . $value,
+            ],
+        ]);
+        $database->createCollection('secrets', [
+            new Document([
+                '$id' => 'secret',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => ['wrapped'],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('secrets', new Document([
+            '$id' => 'secret-a',
+            'secret' => 'value',
+        ]));
+
+        $queries = [
+            Query::orderAsc('$id'),
+            Query::limit(25),
+        ];
+
+        $fresh = $database->cachedFind('secrets', $queries, '_39', ['secrets']);
+        $cached = $database->cachedFind('secrets', $queries, '_39', ['secrets']);
+
+        $this->assertSame('value', $fresh[0]->getAttribute('secret'));
+        $this->assertSame('value', $cached[0]->getAttribute('secret'));
     }
 
     public function testCachedFindBypassesCacheForRandomOrder(): void

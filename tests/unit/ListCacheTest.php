@@ -14,6 +14,9 @@ use Utopia\Database\Query;
 
 class ListCacheTest extends TestCase
 {
+    /**
+     * @param array<string, array{encode: callable, decode: callable}> $filters
+     */
     private function createDatabase(Adapter $cache, array $filters = []): Database
     {
         $database = new Database(new DatabaseMemory(), new Cache($cache), $filters);

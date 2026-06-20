@@ -17,9 +17,9 @@ class ListCacheTest extends TestCase
     /**
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
-    private function createDatabase(Adapter $cache, array $filters = []): Database
+    private function createDatabase(Adapter $cache, array $filters = [], ?DatabaseMemory $adapter = null): Database
     {
-        $database = new Database(new DatabaseMemory(), new Cache($cache), $filters);
+        $database = new Database($adapter ?? new DatabaseMemory(), new Cache($cache), $filters);
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('list_cache_' . \uniqid());
@@ -453,41 +453,108 @@ class ListCacheTest extends TestCase
         $this->assertCount(2, $second);
     }
 
-    public function testCachedFindRehydratesNestedDocumentPayloads(): void
+    public function testCachedFindRevalidatesDocumentPermissionsOnCacheHit(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('parents', permissions: [
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createCollection('secureRules', [
+                new Document([
+                    '$id' => 'projectId',
+                    'type' => Database::VAR_STRING,
+                    'size' => 255,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ], permissions: [
+                Permission::create(Role::any()),
+            ], documentSecurity: true);
+
+            $database->createDocument('secureRules', new Document([
+                '$id' => 'rule-a',
+                '$permissions' => [
+                    Permission::read(Role::user('user-1')),
+                    Permission::update(Role::any()),
+                ],
+                'projectId' => 'project-a',
+            ]));
+        });
+
+        $database->getAuthorization()->addRole(Role::user('user-1')->toString());
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
+            Query::limit(25),
+        ];
+
+        $first = $database->cachedFind('secureRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $first);
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->updateDocument('secureRules', 'rule-a', new Document([
+                '$permissions' => [
+                    Permission::read(Role::user('user-2')),
+                    Permission::update(Role::any()),
+                ],
+            ]));
+        });
+
+        $cached = $database->cachedFind('secureRules', $queries, '_39', ['waf']);
+
+        $this->assertSame([], $cached);
+    }
+
+    public function testCachedFindFiltersTtlExpiredDocumentsOnCacheHit(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache, adapter: new TtlDatabaseMemory());
+        $database->createCollection('ttlRules', [
+            new Document([
+                '$id' => 'expiresAt',
+                'type' => Database::VAR_DATETIME,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'expiresAtTtl',
+                'type' => Database::INDEX_TTL,
+                'attributes' => ['expiresAt'],
+                'lengths' => [],
+                'orders' => [],
+                'ttl' => 1,
+            ]),
+        ], permissions: [
             Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
         ]);
 
         $queries = [
             Query::limit(25),
         ];
 
-        $collection = $database->getCollection('parents');
-        $cache->save(
-            $database->getFindCacheKey('parents', '_39'),
-            [
-                'value' => [
-                    [
-                        '$id' => 'parent-a',
-                        'child' => [
-                            '$id' => 'child-a',
-                            '$collection' => 'children',
-                            'name' => 'Child A',
-                        ],
-                    ],
-                ],
-            ],
-            $database->getFindCacheField($collection, $queries, ['waf']),
-        );
+        $database->createDocument('ttlRules', new Document([
+            '$id' => 'rule-a',
+            'expiresAt' => \date('c', \time() + 3600),
+        ]));
 
-        $parents = $database->cachedFind('parents', $queries, '_39', ['waf']);
+        $first = $database->cachedFind('ttlRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $first);
 
-        $this->assertCount(1, $parents);
-        $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
-        $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
+        $database->updateDocument('ttlRules', 'rule-a', new Document([
+            'expiresAt' => \date('c', \time() - 10),
+        ]));
+
+        $cached = $database->cachedFind('ttlRules', $queries, '_39', ['waf']);
+
+        $this->assertSame([], $cached);
     }
 }
 
@@ -664,5 +731,13 @@ class JsonHashMemoryCache implements Adapter
     public function getName(?string $key = null): string
     {
         return 'json-hash-memory';
+    }
+}
+
+class TtlDatabaseMemory extends DatabaseMemory
+{
+    public function getSupportForTTLIndexes(): bool
+    {
+        return true;
     }
 }

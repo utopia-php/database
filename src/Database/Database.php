@@ -8604,7 +8604,7 @@ class Database
         $documents = [];
 
         $payload = $this->withCache(
-            key: $this->getFindCacheKey($collection, $namespace),
+            key: $this->getFindCacheKey($collectionDocument->getId(), $namespace),
             callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
                 $cacheMiss = true;
                 $documents = $this->find($collection, $queries, $forPermission);
@@ -8625,14 +8625,44 @@ class Database
             return [];
         }
 
+        $documentSecurity = $collectionDocument->getAttribute('documentSecurity', false);
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collectionDocument->getPermissionsByType($forPermission)));
+
+        if (!$skipAuth && !$documentSecurity && $collectionDocument->getId() !== self::METADATA) {
+            throw new AuthorizationException($this->authorization->getDescription());
+        }
+
+        $selects = Query::groupByType($queries)['selections'];
         $documents = [];
-        foreach ($payload as $document) {
-            if (!\is_array($document)) {
+
+        // A cached list stores candidate IDs. Refresh each candidate so TTL,
+        // deletion, and permission changes are respected; callers still own
+        // purging when writes change which documents match the original query.
+        foreach ($payload as $payloadDocument) {
+            if (!\is_array($payloadDocument)) {
                 continue;
             }
 
-            $document = $this->createDocumentInstance($collection, $document);
-            $document = $this->casting($collectionDocument, $document);
+            $cachedDocument = $this->createDocumentInstance($collection, $payloadDocument);
+            if ($cachedDocument->isEmpty()) {
+                continue;
+            }
+
+            $document = $this->silent(fn () => $this->getDocument($collection, $cachedDocument->getId(), $selects));
+            if ($document->isEmpty()) {
+                continue;
+            }
+
+            if (!$skipAuth && $collectionDocument->getId() !== self::METADATA) {
+                $permissions = [
+                    ...$collectionDocument->getPermissionsByType($forPermission),
+                    ...($documentSecurity ? $document->getPermissionsByType($forPermission) : []),
+                ];
+
+                if (!$this->authorization->isValid(new Input($forPermission, $permissions))) {
+                    continue;
+                }
+            }
 
             $documents[] = $document;
         }
@@ -8649,6 +8679,9 @@ class Database
      */
     public function purgeCachedFind(string $collection, ?string $namespace = null): bool
     {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+
         return $this->cache->purge(
             $this->getFindCacheKey($collection, $namespace)
         );

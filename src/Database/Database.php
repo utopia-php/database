@@ -8575,7 +8575,6 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param string|null $namespace
-     * @param array<string> $cacheLabels
      * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
@@ -8587,7 +8586,6 @@ class Database
         string $collection,
         array $queries = [],
         ?string $namespace = null,
-        array $cacheLabels = [],
         string $forPermission = Database::PERMISSION_READ,
     ): array {
         foreach ($queries as $query) {
@@ -8607,19 +8605,16 @@ class Database
 
         $payload = $this->withCache(
             key: $this->getFindCacheKey($collectionDocument->getId(), $namespace),
-            callback: function () use ($collection, $collectionDocument, $queries, $forPermission, &$cacheMiss, &$documents): array {
+            callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
                 $cacheMiss = true;
-                $documents = $this->filterCachedFindDocuments(
-                    $collectionDocument,
-                    $this->find($collection, $queries, $forPermission),
-                );
+                $documents = $this->find($collection, $queries, $forPermission);
 
                 return \array_map(
                     static fn (Document $document): array => $document->getArrayCopy(),
                     $documents,
                 );
             },
-            hash: $this->getFindCacheField($collectionDocument, $queries, $cacheLabels, 'documents', $forPermission),
+            hash: $this->getFindCacheField($collectionDocument, $queries, 'documents', $forPermission),
         );
 
         if ($cacheMiss) {
@@ -8649,20 +8644,7 @@ class Database
             $documents[] = $document;
         }
 
-        return $this->filterCachedFindDocuments($collectionDocument, $documents);
-    }
-
-    /**
-     * @param Document $collection
-     * @param array<Document> $documents
-     * @return array<Document>
-     */
-    private function filterCachedFindDocuments(Document $collection, array $documents): array
-    {
-        return \array_values(\array_filter(
-            $documents,
-            fn (Document $document): bool => !$this->isTtlExpired($collection, $document),
-        ));
+        return $documents;
     }
 
     /**
@@ -9663,7 +9645,6 @@ class Database
      *
      * @param Document|null $collection
      * @param array<Query> $queries
-     * @param array<string> $cacheLabels
      * @param string $field
      * @param string $forPermission
      * @return string
@@ -9671,14 +9652,10 @@ class Database
     public function getFindCacheField(
         ?Document $collection = null,
         array $queries = [],
-        array $cacheLabels = [],
         string $field = 'documents',
         string $forPermission = self::PERMISSION_READ,
     ): string {
         $this->checkQueryTypes($queries);
-
-        $cacheLabels = \array_values(\array_unique($cacheLabels));
-        \sort($cacheLabels);
 
         $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
         \sort($authorizationRoles);
@@ -9700,9 +9677,8 @@ class Database
         ];
 
         return \sprintf(
-            '%s:%s:%s:%s',
+            '%s:%s:%s',
             $this->getFindCacheSchemaHash($collection),
-            \md5(\json_encode($cacheLabels) ?: ''),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );

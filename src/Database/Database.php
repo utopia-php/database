@@ -8565,6 +8565,75 @@ class Database
     }
 
     /**
+     * Find documents through a cache-aside lookup.
+     *
+     * The caller owns authorization context. Use Authorization::skip() around
+     * this method for internal reads that should bypass request-user roles.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param string|null $namespace
+     * @param array<string> $roles
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function cachedFind(
+        string $collection,
+        array $queries = [],
+        ?string $namespace = null,
+        array $roles = [],
+        string $forPermission = Database::PERMISSION_READ,
+    ): array {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collectionDocument->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $payload = $this->withCache(
+            key: $this->getFindCacheKey($collection, $namespace),
+            callback: fn (): array => \array_map(
+                static fn (Document $document): array => $document->getArrayCopy(),
+                $this->find($collection, $queries, $forPermission),
+            ),
+            hash: $this->getFindCacheField($collectionDocument, $queries, $roles, 'documents'),
+        );
+
+        if (!\is_array($payload)) {
+            return [];
+        }
+
+        $documents = [];
+        foreach ($payload as $document) {
+            if (!\is_array($document)) {
+                continue;
+            }
+
+            $documents[] = $this->createDocumentInstance($collection, $document);
+        }
+
+        return $documents;
+    }
+
+    /**
+     * Purge all cached find entries for a collection namespace.
+     *
+     * @param string $collection
+     * @param string|null $namespace
+     * @return bool
+     */
+    public function purgeCachedFind(string $collection, ?string $namespace = null): bool
+    {
+        return $this->cache->purge(
+            $this->getFindCacheKey($collection, $namespace)
+        );
+    }
+
+    /**
      * Execute a callback behind a cache-aside lookup.
      *
      * The callback runs on cache miss and its value is returned to the caller.

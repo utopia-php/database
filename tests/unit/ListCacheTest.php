@@ -7,6 +7,10 @@ use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 
 class ListCacheTest extends TestCase
 {
@@ -181,6 +185,101 @@ class ListCacheTest extends TestCase
 
         $this->assertSame('fresh', $value);
         $this->assertSame(2, $callbackCalls);
+    }
+
+    public function testCachedFindUsesCacheUntilPurged(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::limit(25),
+        ];
+
+        $first = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $first);
+        $this->assertSame('rule-a', $first[0]->getId());
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-b',
+            'projectId' => 'project-a',
+        ]));
+
+        $cached = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $cached);
+        $this->assertSame('rule-a', $cached[0]->getId());
+
+        $this->assertTrue($database->purgeCachedFind('wafRules', '_39'));
+
+        $fresh = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(2, $fresh);
+        $this->assertSame(['rule-a', 'rule-b'], \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $fresh,
+        ));
+    }
+
+    public function testCachedFindSeparatesEntriesByRoles(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::limit(25),
+        ];
+
+        $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-b',
+            'projectId' => 'project-a',
+        ]));
+
+        $cached = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $cached);
+
+        $roleSeparated = $database->cachedFind('wafRules', $queries, '_39', ['manager']);
+        $this->assertCount(2, $roleSeparated);
     }
 }
 

@@ -406,6 +406,43 @@ class ListCacheTest extends TestCase
         $second = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
         $this->assertCount(2, $second);
     }
+
+    public function testCachedFindRehydratesNestedDocumentPayloads(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('parents', permissions: [
+            Permission::read(Role::any()),
+        ]);
+
+        $queries = [
+            Query::limit(25),
+        ];
+
+        $collection = $database->getCollection('parents');
+        $cache->save(
+            $database->getFindCacheKey('parents', '_39'),
+            [
+                'value' => [
+                    [
+                        '$id' => 'parent-a',
+                        'child' => [
+                            '$id' => 'child-a',
+                            '$collection' => 'children',
+                            'name' => 'Child A',
+                        ],
+                    ],
+                ],
+            ],
+            $database->getFindCacheField($collection, $queries, ['waf']),
+        );
+
+        $parents = $database->cachedFind('parents', $queries, '_39', ['waf']);
+
+        $this->assertCount(1, $parents);
+        $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
+        $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
+    }
 }
 
 class HashMemoryCache implements Adapter

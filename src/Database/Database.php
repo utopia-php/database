@@ -9642,8 +9642,18 @@ class Database
     ): string {
         $this->checkQueryTypes($queries);
 
+        $roles = \array_values(\array_unique($roles));
+        \sort($roles);
+
+        $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
+        \sort($authorizationRoles);
+
         $queryPayload = [
             'version' => 1,
+            'authorization' => [
+                'enabled' => $this->authorization->getStatus(),
+                'roles' => $authorizationRoles,
+            ],
             'database' => $this->getDatabase(),
             'permission' => $forPermission,
             'queries' => \array_map(

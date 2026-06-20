@@ -227,6 +227,25 @@ class CacheKeyTest extends TestCase
         $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
     }
 
+    public function testFindCacheFieldChangesWithActiveAuthorizationContext(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getFindCacheField(null, [Query::limit(10)], ['waf']);
+
+        $this->assertNotSame(
+            $field,
+            $db->getAuthorization()->skip(fn () => $db->getFindCacheField(null, [Query::limit(10)], ['waf'])),
+        );
+
+        $db->getAuthorization()->addRole('user:1');
+
+        $this->assertNotSame(
+            $field,
+            $db->getFindCacheField(null, [Query::limit(10)], ['waf']),
+        );
+    }
+
     public function testFindCacheFieldIncludesCursorDocumentPayload(): void
     {
         $db = $this->createDatabase();

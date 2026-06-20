@@ -243,7 +243,7 @@ class ListCacheTest extends TestCase
         ));
     }
 
-    public function testCachedFindSeparatesEntriesByRoles(): void
+    public function testCachedFindSeparatesEntriesByCacheLabels(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -283,8 +283,8 @@ class ListCacheTest extends TestCase
         $cached = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
         $this->assertCount(1, $cached);
 
-        $roleSeparated = $database->cachedFind('wafRules', $queries, '_39', ['manager']);
-        $this->assertCount(2, $roleSeparated);
+        $labelSeparated = $database->cachedFind('wafRules', $queries, '_39', ['manager']);
+        $this->assertCount(2, $labelSeparated);
     }
 
     public function testCachedFindSeparatesEntriesByPermissionMode(): void
@@ -453,7 +453,7 @@ class ListCacheTest extends TestCase
         $this->assertCount(2, $second);
     }
 
-    public function testCachedFindRevalidatesDocumentPermissionsOnCacheHit(): void
+    public function testCachedFindReliesOnPurgeForDocumentSecurityCollections(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -504,7 +504,12 @@ class ListCacheTest extends TestCase
 
         $cached = $database->cachedFind('secureRules', $queries, '_39', ['waf']);
 
-        $this->assertSame([], $cached);
+        $this->assertCount(1, $cached);
+
+        $this->assertTrue($database->purgeCachedFind('secureRules', '_39'));
+
+        $fresh = $database->cachedFind('secureRules', $queries, '_39', ['waf']);
+        $this->assertSame([], $fresh);
     }
 
     public function testCachedFindFiltersTtlExpiredDocumentsOnCacheHit(): void
@@ -542,19 +547,52 @@ class ListCacheTest extends TestCase
 
         $database->createDocument('ttlRules', new Document([
             '$id' => 'rule-a',
-            'expiresAt' => \date('c', \time() + 3600),
+            'expiresAt' => \date('c', \time() - 10),
         ]));
 
         $first = $database->cachedFind('ttlRules', $queries, '_39', ['waf']);
-        $this->assertCount(1, $first);
-
-        $database->updateDocument('ttlRules', 'rule-a', new Document([
-            'expiresAt' => \date('c', \time() - 10),
-        ]));
+        $this->assertSame([], $first);
 
         $cached = $database->cachedFind('ttlRules', $queries, '_39', ['waf']);
 
         $this->assertSame([], $cached);
+    }
+
+    public function testCachedFindRehydratesNestedDocumentPayloads(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('parents', permissions: [
+            Permission::read(Role::any()),
+        ]);
+
+        $queries = [
+            Query::limit(25),
+        ];
+
+        $collection = $database->getCollection('parents');
+        $cache->save(
+            $database->getFindCacheKey($collection->getId(), '_39'),
+            [
+                'value' => [
+                    [
+                        '$id' => 'parent-a',
+                        'child' => [
+                            '$id' => 'child-a',
+                            '$collection' => 'children',
+                            'name' => 'Child A',
+                        ],
+                    ],
+                ],
+            ],
+            $database->getFindCacheField($collection, $queries, ['waf']),
+        );
+
+        $parents = $database->cachedFind('parents', $queries, '_39', ['waf']);
+
+        $this->assertCount(1, $parents);
+        $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
+        $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
     }
 }
 

@@ -8569,11 +8569,13 @@ class Database
      *
      * The caller owns authorization context. Use Authorization::skip() around
      * this method for internal reads that should bypass request-user roles.
+     * The caller owns invalidation and must purge cached find entries after
+     * writes that can change matching documents or returned document payloads.
      *
      * @param string $collection
      * @param array<Query> $queries
      * @param string|null $namespace
-     * @param array<string> $roles
+     * @param array<string> $cacheLabels
      * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
@@ -8585,7 +8587,7 @@ class Database
         string $collection,
         array $queries = [],
         ?string $namespace = null,
-        array $roles = [],
+        array $cacheLabels = [],
         string $forPermission = Database::PERMISSION_READ,
     ): array {
         foreach ($queries as $query) {
@@ -8605,16 +8607,19 @@ class Database
 
         $payload = $this->withCache(
             key: $this->getFindCacheKey($collectionDocument->getId(), $namespace),
-            callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
+            callback: function () use ($collection, $collectionDocument, $queries, $forPermission, &$cacheMiss, &$documents): array {
                 $cacheMiss = true;
-                $documents = $this->find($collection, $queries, $forPermission);
+                $documents = $this->filterCachedFindDocuments(
+                    $collectionDocument,
+                    $this->find($collection, $queries, $forPermission),
+                );
 
                 return \array_map(
                     static fn (Document $document): array => $document->getArrayCopy(),
                     $documents,
                 );
             },
-            hash: $this->getFindCacheField($collectionDocument, $queries, $roles, 'documents', $forPermission),
+            hash: $this->getFindCacheField($collectionDocument, $queries, $cacheLabels, 'documents', $forPermission),
         );
 
         if ($cacheMiss) {
@@ -8632,42 +8637,32 @@ class Database
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
-        $selects = Query::groupByType($queries)['selections'];
         $documents = [];
-
-        // A cached list stores candidate IDs. Refresh each candidate so TTL,
-        // deletion, and permission changes are respected; callers still own
-        // purging when writes change which documents match the original query.
-        foreach ($payload as $payloadDocument) {
-            if (!\is_array($payloadDocument)) {
+        foreach ($payload as $document) {
+            if (!\is_array($document)) {
                 continue;
             }
 
-            $cachedDocument = $this->createDocumentInstance($collection, $payloadDocument);
-            if ($cachedDocument->isEmpty()) {
-                continue;
-            }
-
-            $document = $this->silent(fn () => $this->getDocument($collection, $cachedDocument->getId(), $selects));
-            if ($document->isEmpty()) {
-                continue;
-            }
-
-            if (!$skipAuth && $collectionDocument->getId() !== self::METADATA) {
-                $permissions = [
-                    ...$collectionDocument->getPermissionsByType($forPermission),
-                    ...($documentSecurity ? $document->getPermissionsByType($forPermission) : []),
-                ];
-
-                if (!$this->authorization->isValid(new Input($forPermission, $permissions))) {
-                    continue;
-                }
-            }
+            $document = $this->createDocumentInstance($collection, $document);
+            $document = $this->casting($collectionDocument, $document);
 
             $documents[] = $document;
         }
 
-        return $documents;
+        return $this->filterCachedFindDocuments($collectionDocument, $documents);
+    }
+
+    /**
+     * @param Document $collection
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    private function filterCachedFindDocuments(Document $collection, array $documents): array
+    {
+        return \array_values(\array_filter(
+            $documents,
+            fn (Document $document): bool => !$this->isTtlExpired($collection, $document),
+        ));
     }
 
     /**
@@ -9668,7 +9663,7 @@ class Database
      *
      * @param Document|null $collection
      * @param array<Query> $queries
-     * @param array<string> $roles
+     * @param array<string> $cacheLabels
      * @param string $field
      * @param string $forPermission
      * @return string
@@ -9676,14 +9671,14 @@ class Database
     public function getFindCacheField(
         ?Document $collection = null,
         array $queries = [],
-        array $roles = [],
+        array $cacheLabels = [],
         string $field = 'documents',
         string $forPermission = self::PERMISSION_READ,
     ): string {
         $this->checkQueryTypes($queries);
 
-        $roles = \array_values(\array_unique($roles));
-        \sort($roles);
+        $cacheLabels = \array_values(\array_unique($cacheLabels));
+        \sort($cacheLabels);
 
         $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
         \sort($authorizationRoles);
@@ -9707,7 +9702,7 @@ class Database
         return \sprintf(
             '%s:%s:%s:%s',
             $this->getFindCacheSchemaHash($collection),
-            \md5(\json_encode($roles) ?: ''),
+            \md5(\json_encode($cacheLabels) ?: ''),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );
@@ -9767,6 +9762,8 @@ class Database
         return \md5(
             \json_encode($collection->getAttribute('attributes', []))
             . \json_encode($collection->getAttribute('indexes', []))
+            . \json_encode($collection->getAttribute('$permissions', []))
+            . \json_encode($collection->getAttribute('documentSecurity', false))
         );
     }
 

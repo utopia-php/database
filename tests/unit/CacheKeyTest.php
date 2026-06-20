@@ -189,6 +189,8 @@ class CacheKeyTest extends TestCase
         $schemaHash = \md5(
             (\json_encode($collection->getAttribute('attributes', [])) ?: '')
             . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
+            . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
+            . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
         );
         $field = $db->getFindCacheField($collection, $queries, ['waf']);
 
@@ -207,7 +209,7 @@ class CacheKeyTest extends TestCase
                 'indexes' => [],
             ]),
             [Query::limit(10)],
-            ['role-a'],
+            ['cache-label-a'],
         );
 
         $this->assertNotSame(
@@ -218,13 +220,13 @@ class CacheKeyTest extends TestCase
                     'indexes' => [],
                 ]),
                 [Query::limit(10)],
-                ['role-a'],
+                ['cache-label-a'],
             ),
         );
-        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(20)], ['role-a']));
-        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-b']));
-        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'documents', Database::PERMISSION_UPDATE));
-        $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['role-a'], 'total'));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(20)], ['cache-label-a']));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['cache-label-b']));
+        $this->assertNotSame($field, $db->getFindCacheField(null, [Query::limit(10)], ['cache-label-a'], 'documents', Database::PERMISSION_UPDATE));
+        $this->assertStringEndsWith(':total', $db->getFindCacheField(null, [Query::limit(10)], ['cache-label-a'], 'total'));
     }
 
     public function testFindCacheFieldChangesWithActiveAuthorizationContext(): void

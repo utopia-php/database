@@ -8588,11 +8588,20 @@ class Database
         array $roles = [],
         string $forPermission = Database::PERMISSION_READ,
     ): array {
+        foreach ($queries as $query) {
+            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+                return $this->find($collection, $queries, $forPermission);
+            }
+        }
+
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collectionDocument->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
+
+        $selects = Query::groupByType($queries)['selections'];
+        $selections = $this->validateSelections($collectionDocument, $selects);
 
         $payload = $this->withCache(
             key: $this->getFindCacheKey($collection, $namespace),
@@ -8613,7 +8622,12 @@ class Database
                 continue;
             }
 
-            $documents[] = $this->createDocumentInstance($collection, $document);
+            $document = $this->createDocumentInstance($collection, $document);
+            $document = $this->adapter->castingAfter($collectionDocument, $document);
+            $document = $this->casting($collectionDocument, $document);
+            $document = $this->decode($collectionDocument, $document, $selections);
+
+            $documents[] = $document;
         }
 
         return $documents;

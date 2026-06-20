@@ -328,6 +328,84 @@ class ListCacheTest extends TestCase
         $permissionSeparated = $database->cachedFind('wafRules', $queries, '_39', ['waf'], Database::PERMISSION_UPDATE);
         $this->assertCount(2, $permissionSeparated);
     }
+
+    public function testCachedFindRecastsCacheHits(): void
+    {
+        $cache = new JsonHashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('metrics', [
+            new Document([
+                '$id' => 'value',
+                'type' => Database::VAR_FLOAT,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('metrics', new Document([
+            '$id' => 'metric-a',
+            'value' => 1.0,
+        ]));
+
+        $queries = [
+            Query::orderAsc('$id'),
+            Query::limit(25),
+        ];
+
+        $fresh = $database->cachedFind('metrics', $queries, '_39', ['metrics']);
+        $cached = $database->cachedFind('metrics', $queries, '_39', ['metrics']);
+
+        $this->assertSame(1.0, $fresh[0]->getAttribute('value'));
+        $this->assertSame(1.0, $cached[0]->getAttribute('value'));
+    }
+
+    public function testCachedFindBypassesCacheForRandomOrder(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::orderRandom(),
+            Query::limit(25),
+        ];
+
+        $first = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(1, $first);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-b',
+            'projectId' => 'project-a',
+        ]));
+
+        $second = $database->cachedFind('wafRules', $queries, '_39', ['waf']);
+        $this->assertCount(2, $second);
+    }
 }
 
 class HashMemoryCache implements Adapter
@@ -415,5 +493,93 @@ class HashMemoryCache implements Adapter
     public function getName(?string $key = null): string
     {
         return 'hash-memory';
+    }
+}
+
+class JsonHashMemoryCache implements Adapter
+{
+    /**
+     * @var array<string, array<string, array{time: int, data: string}>>
+     */
+    private array $store = [];
+
+    public function load(string $key, int $ttl, string $hash = ''): mixed
+    {
+        $hash = $hash === '' ? $key : $hash;
+        $saved = $this->store[$key][$hash] ?? null;
+        if ($saved === null || $saved['time'] + $ttl <= \time()) {
+            return false;
+        }
+
+        return \json_decode($saved['data'], true);
+    }
+
+    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    {
+        if ($key === '' || empty($data)) {
+            return false;
+        }
+
+        $hash = $hash === '' ? $key : $hash;
+        $this->store[$key][$hash] = [
+            'time' => \time(),
+            'data' => \json_encode($data) ?: '',
+        ];
+
+        return $data;
+    }
+
+    public function touch(string $key, string $hash = ''): bool
+    {
+        $hash = $hash === '' ? $key : $hash;
+        if (!isset($this->store[$key][$hash])) {
+            return false;
+        }
+
+        $this->store[$key][$hash]['time'] = \time();
+
+        return true;
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function list(string $key): array
+    {
+        return \array_keys($this->store[$key] ?? []);
+    }
+
+    public function purge(string $key, string $hash = ''): bool
+    {
+        if ($hash !== '') {
+            unset($this->store[$key][$hash]);
+            return true;
+        }
+
+        unset($this->store[$key]);
+
+        return true;
+    }
+
+    public function flush(): bool
+    {
+        $this->store = [];
+
+        return true;
+    }
+
+    public function ping(): bool
+    {
+        return true;
+    }
+
+    public function getSize(): int
+    {
+        return \count($this->store);
+    }
+
+    public function getName(?string $key = null): string
+    {
+        return 'json-hash-memory';
     }
 }

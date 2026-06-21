@@ -8602,9 +8602,11 @@ class Database
 
         $cacheMiss = false;
         $documents = [];
+        $cacheKey = $this->getFindCacheKey($collectionDocument->getId(), $namespace);
+        $cacheHash = $this->getFindCacheField($collectionDocument, $queries, 'documents', $forPermission);
 
         $payload = $this->withCache(
-            key: $this->getFindCacheKey($collectionDocument->getId(), $namespace),
+            key: $cacheKey,
             callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
                 $cacheMiss = true;
                 $documents = $this->find($collection, $queries, $forPermission);
@@ -8614,7 +8616,7 @@ class Database
                     $documents,
                 );
             },
-            hash: $this->getFindCacheField($collectionDocument, $queries, 'documents', $forPermission),
+            hash: $cacheHash,
         );
 
         if ($cacheMiss) {
@@ -8622,7 +8624,7 @@ class Database
         }
 
         if (!\is_array($payload)) {
-            return [];
+            return $this->refreshCachedFind($cacheKey, $cacheHash, $collection, $queries, $forPermission);
         }
 
         $documentSecurity = $collectionDocument->getAttribute('documentSecurity', false);
@@ -8635,13 +8637,60 @@ class Database
         $documents = [];
         foreach ($payload as $document) {
             if (!\is_array($document)) {
-                continue;
+                return $this->refreshCachedFind($cacheKey, $cacheHash, $collection, $queries, $forPermission);
             }
 
             $document = $this->createDocumentInstance($collection, $document);
             $document = $this->casting($collectionDocument, $document);
 
             $documents[] = $document;
+        }
+
+        return $documents;
+    }
+
+    /**
+     * Refresh a cached find field after detecting an invalid cached payload.
+     *
+     * @param string $cacheKey
+     * @param string $cacheHash
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    private function refreshCachedFind(
+        string $cacheKey,
+        string $cacheHash,
+        string $collection,
+        array $queries,
+        string $forPermission,
+    ): array {
+        try {
+            $this->cache->purge($cacheKey, $cacheHash);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to purge invalid cached find payload: ' . $e->getMessage());
+        }
+
+        $documents = $this->find($collection, $queries, $forPermission);
+
+        try {
+            $this->cache->save(
+                $cacheKey,
+                [
+                    'value' => \array_map(
+                        static fn (Document $document): array => $document->getArrayCopy(),
+                        $documents,
+                    ),
+                ],
+                $cacheHash,
+            );
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to save refreshed cached find payload: ' . $e->getMessage());
         }
 
         return $documents;

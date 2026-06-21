@@ -504,6 +504,106 @@ class ListCacheTest extends TestCase
         $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
         $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
     }
+
+    public function testCachedFindRefreshesInvalidPayload(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
+            Query::limit(25),
+        ];
+
+        $collection = $database->getCollection('wafRules');
+        $cache->save(
+            $database->getFindCacheKey($collection->getId(), '_39'),
+            ['value' => 'invalid'],
+            $database->getFindCacheField($collection, $queries),
+        );
+
+        $rules = $database->cachedFind('wafRules', $queries, '_39');
+
+        $this->assertCount(1, $rules);
+        $this->assertSame('rule-a', $rules[0]->getId());
+    }
+
+    public function testCachedFindRefreshesInvalidPayloadEntry(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', [
+            new Document([
+                '$id' => 'projectId',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+            'projectId' => 'project-a',
+        ]));
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-b',
+            'projectId' => 'project-a',
+        ]));
+
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::orderAsc('$id'),
+            Query::limit(25),
+        ];
+
+        $collection = $database->getCollection('wafRules');
+        $cache->save(
+            $database->getFindCacheKey($collection->getId(), '_39'),
+            [
+                'value' => [
+                    [
+                        '$id' => 'rule-a',
+                        'projectId' => 'project-a',
+                    ],
+                    'invalid',
+                ],
+            ],
+            $database->getFindCacheField($collection, $queries),
+        );
+
+        $rules = $database->cachedFind('wafRules', $queries, '_39');
+
+        $this->assertSame(['rule-a', 'rule-b'], \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $rules,
+        ));
+    }
 }
 
 class HashMemoryCache implements Adapter

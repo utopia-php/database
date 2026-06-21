@@ -9631,7 +9631,7 @@ class Database
             : '';
 
         return \sprintf(
-            '%s-cache:%s:%s:%s:collection:%s:find',
+            '%s-cache-%s:%s:%s:collection:%s:find',
             $this->cacheName,
             $hostname,
             $namespace ?? $this->getNamespace(),

@@ -146,7 +146,7 @@ class CacheKeyTest extends TestCase
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache:mysql-console:_39::collection:ttl_cache_table:find',
+            'default-cache-mysql-console:_39::collection:ttl_cache_table:find',
             $db->getFindCacheKey('ttl_cache_table'),
         );
     }
@@ -162,7 +162,7 @@ class CacheKeyTest extends TestCase
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache:mysql-console:_39::collection:wafrules:find',
+            'default-cache-mysql-console:_39::collection:wafrules:find',
             $db->getFindCacheKey('wafrules', '_39'),
         );
     }

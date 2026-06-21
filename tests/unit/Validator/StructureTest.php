@@ -1107,7 +1107,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -1123,7 +1123,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
 
     public function testMediumtextValidation(): void
@@ -1161,7 +1161,58 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string and no longer than 16777215 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string no longer than 16777215 bytes', $validator->getDescription());
+    }
+
+    public function testMediumtextSizedValidation(): void
+    {
+        // A mediumtext attribute with a declared size of 100. The declared size
+        // is enforced as a byte limit (ByteLength), independent of the column's
+        // physical 16MB ceiling.
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'mediumtext',
+                    'type' => Database::VAR_MEDIUMTEXT,
+                    'format' => '',
+                    'size' => 100,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // A value of exactly 100 bytes fits the declared size.
+        $exact = \str_repeat('a', 100);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['mediumtext' => $exact])));
+
+        // 101 bytes exceeds the declared size of 100 bytes and is rejected.
+        $tooBig = \str_repeat('a', 101);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['mediumtext' => $tooBig])));
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext" has invalid type. Value must be a valid string no longer than 100 bytes', $validator->getDescription());
+
+        // Each '📝' is 4 bytes in utf8mb4, so 25 chars = 100 bytes fits exactly,
+        // while 26 chars = 104 bytes exceeds the declared 100-byte size.
+        $exactMultibyte = \str_repeat('📝', 25);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['mediumtext' => $exactMultibyte])));
+
+        $tooBigMultibyte = \str_repeat('📝', 26);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['mediumtext' => $tooBigMultibyte])));
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext" has invalid type. Value must be a valid string no longer than 100 bytes', $validator->getDescription());
     }
 
     public function testLongtextValidation(): void
@@ -1199,7 +1250,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string and no longer than 4294967295 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string no longer than 4294967295 bytes', $validator->getDescription());
     }
 
     public function testStringTypeArrayValidation(): void

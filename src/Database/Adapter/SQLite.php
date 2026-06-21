@@ -41,6 +41,7 @@ class SQLite extends MariaDB
 
     /** AFTER INSERT trigger suffix on the parent collection. */
     private const FTS_TRIGGER_INSERT = 'ai';
+
     /** AFTER DELETE trigger suffix on the parent collection. */
     private const FTS_TRIGGER_DELETE = 'ad';
 

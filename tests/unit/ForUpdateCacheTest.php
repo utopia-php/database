@@ -17,10 +17,13 @@ class ForUpdateCacheTest extends TestCase
 
     private Database $database;
 
+    private Cache $cache;
+
     protected function setUp(): void
     {
         $this->adapter = new DatabaseMemory();
-        $this->database = new Database($this->adapter, new Cache(new CacheMemory()));
+        $this->cache = new Cache(new CacheMemory());
+        $this->database = new Database($this->adapter, $this->cache);
         $this->database
             ->setDatabase('utopiaTests')
             ->setNamespace('for_update_' . \uniqid());
@@ -100,5 +103,32 @@ class ForUpdateCacheTest extends TestCase
         $document = $this->database->getDocument('projects', 'project');
         $this->assertSame('fresh', $document->getAttribute('name'));
         $this->assertSame('updated', $document->getAttribute('description'));
+    }
+
+    public function testReadRejectsStaleCacheSnapshotReCachedAfterUpdate(): void
+    {
+        // Prime the cache with the original snapshot.
+        $original = $this->database->getDocument('projects', 'project');
+        $this->assertSame('stale', $original->getAttribute('name'));
+
+        // Commit a newer version through Database: this purges the cache and
+        // records the committed $updatedAt as the version marker. usleep guarantees
+        // a strictly later $updatedAt than the snapshot captured above.
+        \usleep(2000);
+        $this->database->updateDocument('projects', 'project', new Document([
+            'name' => 'fresh',
+        ]));
+
+        // Simulate a concurrent reader whose pre-commit read landed in the cache
+        // after the writer's purge — the exact race the version marker defends
+        // against. The resurrected snapshot carries the OLD $updatedAt.
+        [, $documentKey, $hashKey] = $this->database->getCacheKeys('projects', 'project');
+        $this->cache->save($documentKey, $original->getArrayCopy(), $hashKey);
+
+        // A normal (non-locking) read must not serve the resurrected stale snapshot:
+        // its $updatedAt is older than the recorded version marker, so it is rejected
+        // and the row is reloaded from the adapter.
+        $served = $this->database->getDocument('projects', 'project');
+        $this->assertSame('fresh', $served->getAttribute('name'));
     }
 }

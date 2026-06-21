@@ -174,6 +174,10 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
+    // Suffix for the per-document cache key that records the latest committed
+    // version, used to reject stale snapshots re-cached by racing readers.
+    public const CACHE_VERSION_SUFFIX = '__ver';
+
     // Events
     public const EVENT_ALL = '*';
 
@@ -4852,6 +4856,28 @@ class Database
             }
         }
 
+        // Reject a cached snapshot that predates the latest committed write. Cache
+        // invalidation is a purge, which is not atomic with the committing
+        // transaction: a concurrent reader can re-cache the pre-commit row after a
+        // writer's purge, leaving a stale entry that later reads would serve. Each
+        // write records the committed $updatedAt in a sibling marker key; discard
+        // any cached copy older than it so the stale entry cannot be served.
+        if ($cached !== null && isset($cached['$updatedAt'])) {
+            $marker = null;
+            try {
+                $marker = $this->cache->load($documentKey . ':' . self::CACHE_VERSION_SUFFIX, self::TTL);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache version marker: ' . $e->getMessage());
+            }
+
+            if (\is_string($marker) && $marker !== '') {
+                $cachedVersion = $this->cacheVersionStamp($cached['$updatedAt']);
+                if ($cachedVersion !== null && (float) $cachedVersion < (float) $marker) {
+                    $cached = null;
+                }
+            }
+        }
+
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
 
@@ -6386,6 +6412,9 @@ class Database
 
         // Purge again after commit so readers cannot re-cache the pre-commit version
         $this->purgeCachedDocumentInternal($collection->getId(), $id);
+        // Record the committed version so a stale snapshot re-cached by a racing
+        // reader is rejected on subsequent reads (see getDocument).
+        $this->recordCachedDocumentVersion($collection->getId(), $id, $document->getUpdatedAt());
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
@@ -7775,6 +7804,9 @@ class Database
         if ($deleted) {
             // Purge again after commit so readers cannot re-cache the pre-commit version
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            // Advance the version marker past any snapshot so a stale "exists" copy
+            // re-cached by a racing reader is rejected on subsequent reads.
+            $this->recordCachedDocumentVersion($collection->getId(), $id, DateTime::now());
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
         }
 
@@ -8378,6 +8410,70 @@ class Database
         $this->cache->purge($documentKey);
 
         return true;
+    }
+
+    /**
+     * Record the latest committed version of a document in the cache.
+     *
+     * Stored in a sibling key (CACHE_VERSION_SUFFIX) that purgeCachedDocument()
+     * does not delete, so it outlives the purge of the document body. getDocument()
+     * compares a cached snapshot's $updatedAt against this marker and discards any
+     * snapshot older than it — closing the window where a reader re-caches a
+     * pre-commit row after a writer's purge.
+     *
+     * @param string $collectionId
+     * @param string $id
+     * @param string|\Utopia\Database\DateTime|null $updatedAt committed $updatedAt
+     * @return void
+     */
+    protected function recordCachedDocumentVersion(string $collectionId, string $id, mixed $updatedAt): void
+    {
+        $stamp = $this->cacheVersionStamp($updatedAt);
+        if ($stamp === null) {
+            return;
+        }
+
+        [, $documentKey] = $this->getCacheKeys($collectionId, $id);
+
+        try {
+            $this->cache->save($documentKey . ':' . self::CACHE_VERSION_SUFFIX, $stamp);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to record cache version marker: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Normalise a document $updatedAt value (string, DateTime, or Mongo UTCDateTime)
+     * into a comparable microsecond-precision UNIX timestamp string, or null when
+     * it cannot be determined (in which case the version guard is skipped).
+     *
+     * @param mixed $updatedAt
+     * @return string|null
+     */
+    private function cacheVersionStamp(mixed $updatedAt): ?string
+    {
+        if (empty($updatedAt)) {
+            return null;
+        }
+
+        try {
+            if ($updatedAt instanceof \DateTimeInterface) {
+                return $updatedAt->format('U.u');
+            }
+
+            // MongoDB\BSON\UTCDateTime and similar value objects.
+            if (\is_object($updatedAt) && \method_exists($updatedAt, 'toDateTime')) {
+                return $updatedAt->toDateTime()->format('U.u');
+            }
+
+            if (\is_string($updatedAt)) {
+                return (new \DateTime($updatedAt))->format('U.u');
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
     }
 
     /**

@@ -58,7 +58,7 @@ trait DocumentTests
          * test Update $id with no permissions!
          */
         $partial = new Document([
-            '$id'=> 'bill_1',
+            '$id' => 'bill_1',
         ]);
 
         $partial = $this->getDatabase()->updateDocument(__FUNCTION__, $document->getId(), $partial);
@@ -4893,7 +4893,7 @@ trait DocumentTests
 
     public function testPartialUpdateDocument_place(): void
     {
-       // $this->assertEquals('shmuel', 'fogel');
+        // $this->assertEquals('shmuel', 'fogel');
     }
 
     /**

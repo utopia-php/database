@@ -4879,15 +4879,6 @@ class Database
             return $document;
         }
 
-        $cacheLease = false;
-        if (!$forUpdate && empty($relationships)) {
-            try {
-                $cacheLease = $this->cache->lease($documentKey, $hashKey, self::TTL);
-            } catch (Exception $e) {
-                Console::warning('Warning: Failed to lease document cache: ' . $e->getMessage());
-            }
-        }
-
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4896,26 +4887,10 @@ class Database
         );
 
         if ($document->isEmpty()) {
-            if ($cacheLease !== false) {
-                try {
-                    $this->cache->purge($documentKey, $hashKey);
-                } catch (Exception $e) {
-                    Console::warning('Failed to purge empty document cache lease: ' . $e->getMessage());
-                }
-            }
-
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
         if ($this->isTtlExpired($collection, $document)) {
-            if ($cacheLease !== false) {
-                try {
-                    $this->cache->purge($documentKey, $hashKey);
-                } catch (Exception $e) {
-                    Console::warning('Failed to purge expired document cache lease: ' . $e->getMessage());
-                }
-            }
-
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -4956,10 +4931,7 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                if ($cacheLease !== false) {
-                    $this->cache->saveLease($documentKey, $document->getArrayCopy(), $cacheLease, $hashKey);
-                }
-
+                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
                 $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());

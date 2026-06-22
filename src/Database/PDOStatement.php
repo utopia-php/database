@@ -19,7 +19,7 @@ use Utopia\Console;
  * @mixin \PDOStatement
  * @implements \IteratorAggregate<int, mixed>
  */
-class PDOStatement extends \PDOStatement implements \IteratorAggregate
+class PDOStatement implements \IteratorAggregate
 {
     /**
      * @var array<int|string, array{mixed, int}>
@@ -94,99 +94,9 @@ class PDOStatement extends \PDOStatement implements \IteratorAggregate
      * Preserve \PDOStatement's native iterability (foreach over rows), which
      * does not route through __call().
      */
-    public function getIterator(): \Iterator
+    public function getIterator(): \Traversable
     {
-        $iterator = $this->statement->getIterator();
-
-        if (!$iterator instanceof \Iterator) {
-            throw new \RuntimeException('PDOStatement iterator is invalid.');
-        }
-
-        return $iterator;
-    }
-
-    /**
-     * @param array<mixed>|null $params
-     */
-    public function execute(?array $params = null): bool
-    {
-        try {
-            return $this->statement->execute($params);
-        } catch (\Throwable $e) {
-            if ($this->pdo->inTransaction() || !Connection::hasError($e)) {
-                throw $e;
-            }
-
-            Console::warning('[Database] ' . $e->getMessage());
-            Console::warning('[Database] Lost connection detected. Re-preparing statement...');
-
-            $this->reprepare();
-
-            return $this->statement->execute($params);
-        }
-    }
-
-    public function fetch(int $mode = \PDO::FETCH_DEFAULT, int $cursorOrientation = \PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed
-    {
-        return $this->statement->fetch($mode, $cursorOrientation, $cursorOffset);
-    }
-
-    /**
-     * @return array<mixed>
-     */
-    public function fetchAll(int $mode = \PDO::FETCH_DEFAULT, mixed ...$args): array
-    {
-        return $this->statement->fetchAll($mode, ...$args);
-    }
-
-    public function fetchColumn(int $column = 0): mixed
-    {
-        return $this->statement->fetchColumn($column);
-    }
-
-    public function fetchObject(?string $class = 'stdClass', array $constructorArgs = []): object|false
-    {
-        return $this->statement->fetchObject($class, $constructorArgs);
-    }
-
-    public function rowCount(): int
-    {
-        return $this->statement->rowCount();
-    }
-
-    public function closeCursor(): bool
-    {
-        return $this->statement->closeCursor();
-    }
-
-    public function columnCount(): int
-    {
-        return $this->statement->columnCount();
-    }
-
-    public function errorCode(): ?string
-    {
-        return $this->statement->errorCode();
-    }
-
-    /**
-     * @return array<mixed>
-     */
-    public function errorInfo(): array
-    {
-        return $this->statement->errorInfo();
-    }
-
-    public function debugDumpParams(): ?bool
-    {
-        $this->statement->debugDumpParams();
-
-        return null;
-    }
-
-    public function nextRowset(): bool
-    {
-        return $this->statement->nextRowset();
+        return $this->statement;
     }
 
     /**
@@ -227,13 +137,11 @@ class PDOStatement extends \PDOStatement implements \IteratorAggregate
         return $this->statement->setAttribute($attribute, $value);
     }
 
-    public function setFetchMode(int $mode, mixed ...$args): true
+    public function setFetchMode(int $mode, mixed ...$args): bool
     {
         $this->fetchMode = [$mode, ...$args];
 
-        $this->statement->setFetchMode($mode, ...$args);
-
-        return true;
+        return $this->statement->setFetchMode($mode, ...$args);
     }
 
     public function bindValue(int|string $param, mixed $value, int $type = \PDO::PARAM_STR): bool

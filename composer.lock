@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f5fb1745555c5cd00d14474561bf0095",
+    "content-hash": "fc51d9ecd53cedaae713460b39785509",
     "packages": [
         {
             "name": "brick/math",
@@ -2034,16 +2034,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "3.0.0",
+            "version": "dev-feat/leasable-cache",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176"
+                "reference": "b30259d5d74b4dbc9721337b8d5db6b7c57d09cd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176",
-                "reference": "ece1f4d11ec2804cd7e05b9717dc7a2bc66e4176",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/b30259d5d74b4dbc9721337b8d5db6b7c57d09cd",
+                "reference": "b30259d5d74b4dbc9721337b8d5db6b7c57d09cd",
                 "shasum": ""
             },
             "require": {
@@ -2068,7 +2068,22 @@
                     "Utopia\\Cache\\": "src/Cache"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "autoload-dev": {
+                "psr-4": {
+                    "Utopia\\Tests\\": "tests/Cache"
+                }
+            },
+            "scripts": {
+                "check": [
+                    "./vendor/bin/phpstan analyse --level max src tests"
+                ],
+                "lint": [
+                    "./vendor/bin/pint --test"
+                ],
+                "format": [
+                    "./vendor/bin/pint"
+                ]
+            },
             "license": [
                 "MIT"
             ],
@@ -2081,10 +2096,10 @@
                 "utopia"
             ],
             "support": {
-                "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/3.0.0"
+                "source": "https://github.com/utopia-php/cache/tree/feat/leasable-cache",
+                "issues": "https://github.com/utopia-php/cache/issues"
             },
-            "time": "2026-05-14T14:13:17+00:00"
+            "time": "2026-06-22T16:01:56+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",
@@ -4651,9 +4666,18 @@
             "time": "2026-02-10T04:21:53+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/cache",
+            "version": "dev-feat/leasable-cache",
+            "alias": "3.1.0",
+            "alias_normalized": "3.1.0.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "utopia-php/cache": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

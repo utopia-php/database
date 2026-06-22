@@ -4879,6 +4879,12 @@ class Database
             return $document;
         }
 
+        // Capture the cache generation BEFORE reading the row. If a concurrent
+        // updateDocument purges (and so advances the generation) while we read,
+        // saveWithLease() below rejects this now-stale value instead of
+        // re-poisoning the cache. See Cache\Feature\Leasable.
+        $generation = $forUpdate ? '0' : $this->cache->getGeneration($documentKey);
+
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4931,7 +4937,7 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
+                $this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation);
                 $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());

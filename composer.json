@@ -32,6 +32,12 @@
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 2G",
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/utopia-php/cache"
+        }
+    ],
     "require": {
         "php": ">=8.4",
         "ext-pdo": "*",
@@ -40,7 +46,7 @@
         "ext-redis": "*",
         "utopia-php/validators": "0.2.*",
         "utopia-php/console": "0.1.*",
-        "utopia-php/cache": "^3.0",
+        "utopia-php/cache": "dev-feat/leasable-cache as 3.1.0",
         "utopia-php/pools": "1.*",
         "utopia-php/mongo": "1.*"
     },

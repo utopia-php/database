@@ -8565,24 +8565,24 @@ class Database
     }
 
     /**
-     * Purge all cached find entries for a collection namespace.
+     * Purge all cached list entries for a collection namespace.
      *
      * @param string $collection
      * @param string|null $namespace
      * @return bool
      */
-    public function purgeFindCache(string $collection, ?string $namespace = null): bool
+    public function purgeListCache(string $collection, ?string $namespace = null): bool
     {
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
 
         return $this->cache->purge(
-            $this->getFindCacheKey($collection, $namespace)
+            $this->getListCacheKey($collection, $namespace)
         );
     }
 
     /**
-     * Restore a cached find document payload into database documents.
+     * Restore a cached list document payload into database documents.
      *
      * Returns false when the cached payload is invalid or stale and should be
      * refreshed by the caller.
@@ -8595,7 +8595,7 @@ class Database
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function restoreFindCacheDocuments(
+    public function restoreListCacheDocuments(
         string $collection,
         Document $collectionDocument,
         mixed $payload,
@@ -9599,20 +9599,20 @@ class Database
     }
 
     /**
-     * Stable cache key for cached find entries on a collection.
+     * Stable cache key for cached list entries on a collection.
      *
      * @param string $collectionId
      * @param string|null $namespace
      * @return string
      */
-    public function getFindCacheKey(string $collectionId, ?string $namespace = null): string
+    public function getListCacheKey(string $collectionId, ?string $namespace = null): string
     {
         $hostname = $this->adapter->getSupportForHostname()
             ? $this->adapter->getHostname()
             : '';
 
         return \sprintf(
-            '%s-cache-%s:%s:%s:collection:%s:find',
+            '%s-cache-%s:%s:%s:collection:%s:list',
             $this->cacheName,
             $hostname,
             $namespace ?? $this->getNamespace(),
@@ -9622,7 +9622,7 @@ class Database
     }
 
     /**
-     * Stable cache field for cached find entries on a collection.
+     * Stable cache field for cached list entries on a collection.
      *
      * @param Document|null $collection
      * @param array<Query> $queries
@@ -9630,7 +9630,7 @@ class Database
      * @param string $forPermission
      * @return string
      */
-    public function getFindCacheField(
+    public function getListCacheField(
         ?Document $collection = null,
         array $queries = [],
         string $field = 'documents',
@@ -9650,7 +9650,7 @@ class Database
             'database' => $this->getDatabase(),
             'permission' => $forPermission,
             'queries' => \array_map(
-                fn (Query $query): array => $this->serializeFindCacheQuery($query),
+                fn (Query $query): array => $this->serializeListCacheQuery($query),
                 $queries,
             ),
             'relationships' => $this->resolveRelationships,
@@ -9659,7 +9659,7 @@ class Database
 
         return \sprintf(
             '%s:%s:%s',
-            $this->getFindCacheSchemaHash($collection),
+            $this->getListCacheSchemaHash($collection),
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );
@@ -9668,7 +9668,7 @@ class Database
     /**
      * @return array<string, mixed>
      */
-    private function serializeFindCacheQuery(Query $query): array
+    private function serializeListCacheQuery(Query $query): array
     {
         $serialized = [
             'method' => $query->getMethod(),
@@ -9681,11 +9681,11 @@ class Database
         $values = [];
         foreach ($query->getValues() as $value) {
             if ($value instanceof Query) {
-                $values[] = $this->serializeFindCacheQuery($value);
+                $values[] = $this->serializeListCacheQuery($value);
                 continue;
             }
 
-            $values[] = $this->normalizeFindCacheQueryValue($value);
+            $values[] = $this->normalizeListCacheQueryValue($value);
         }
 
         $serialized['values'] = $values;
@@ -9693,7 +9693,7 @@ class Database
         return $serialized;
     }
 
-    private function normalizeFindCacheQueryValue(mixed $value): mixed
+    private function normalizeListCacheQueryValue(mixed $value): mixed
     {
         if ($value instanceof Document) {
             $value = $value->getArrayCopy();
@@ -9704,13 +9704,13 @@ class Database
         }
 
         foreach ($value as $key => $item) {
-            $value[$key] = $this->normalizeFindCacheQueryValue($item);
+            $value[$key] = $this->normalizeListCacheQueryValue($item);
         }
 
         return $value;
     }
 
-    private function getFindCacheSchemaHash(?Document $collection): string
+    private function getListCacheSchemaHash(?Document $collection): string
     {
         if ($collection === null || $collection->isEmpty()) {
             return '';

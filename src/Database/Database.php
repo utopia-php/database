@@ -4896,10 +4896,26 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            if ($cacheLease !== false) {
+                try {
+                    $this->cache->purge($documentKey, $hashKey);
+                } catch (Exception $e) {
+                    Console::warning('Failed to purge empty document cache lease: ' . $e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
         if ($this->isTtlExpired($collection, $document)) {
+            if ($cacheLease !== false) {
+                try {
+                    $this->cache->purge($documentKey, $hashKey);
+                } catch (Exception $e) {
+                    Console::warning('Failed to purge expired document cache lease: ' . $e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 

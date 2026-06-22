@@ -29,6 +29,44 @@ class ListCacheTest extends TestCase
         return $database;
     }
 
+    /**
+     * @param array<Query> $queries
+     * @return array<Document>
+     */
+    private function findWithCache(
+        Database $database,
+        string $collection,
+        array $queries = [],
+        ?string $namespace = null,
+        string $forPermission = Database::PERMISSION_READ,
+    ): array {
+        foreach ($queries as $query) {
+            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+                return $database->find($collection, $queries, $forPermission);
+            }
+        }
+
+        $collectionDocument = $database->getCollection($collection);
+        $cacheKey = $database->getFindCacheKey($collectionDocument->getId(), $namespace);
+        $cacheHash = $database->getFindCacheField($collectionDocument, $queries, 'documents', $forPermission);
+
+        return $database->withCache(
+            key: $cacheKey,
+            callback: fn (): array => $database->find($collection, $queries, $forPermission),
+            hash: $cacheHash,
+            encode: static fn (array $documents): array => \array_map(
+                static fn (Document $document): array => $document->getArrayCopy(),
+                $documents,
+            ),
+            decode: fn (mixed $payload): array|false => $database->restoreFindCacheDocuments(
+                collection: $collection,
+                collectionDocument: $collectionDocument,
+                payload: $payload,
+                forPermission: $forPermission,
+            ),
+        );
+    }
+
     public function testWithCacheUsesCallbackOnMissAndCachesResult(): void
     {
         $cache = new HashMemoryCache();
@@ -190,7 +228,80 @@ class ListCacheTest extends TestCase
         $this->assertSame(2, $callbackCalls);
     }
 
-    public function testCachedFindUsesCacheUntilPurged(): void
+    public function testWithCacheEncodesSavedValueAndDecodesCachedValue(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $callbackCalls = 0;
+
+        $first = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['fresh'];
+            },
+            encode: static fn (array $value): array => ['encoded' => $value],
+            decode: static fn (array $value): array => $value['encoded'],
+        );
+
+        $second = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['miss'];
+            },
+            encode: static fn (array $value): array => ['encoded' => $value],
+            decode: static fn (array $value): array => $value['encoded'],
+        );
+
+        $this->assertSame(['fresh'], $first);
+        $this->assertSame(['fresh'], $second);
+        $this->assertSame(1, $callbackCalls);
+    }
+
+    public function testWithCacheRefreshesWhenDecodeRejectsCachedValue(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $callbackCalls = 0;
+
+        $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['stale'];
+            },
+            encode: static fn (array $value): array => $value,
+        );
+
+        $fresh = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['fresh'];
+            },
+            encode: static fn (array $value): array => $value,
+            decode: static fn (array $value): array|false => $value === ['stale'] ? false : $value,
+        );
+
+        $cachedFresh = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return ['miss'];
+            },
+            encode: static fn (array $value): array => $value,
+            decode: static fn (array $value): array|false => $value === ['stale'] ? false : $value,
+        );
+
+        $this->assertSame(['fresh'], $fresh);
+        $this->assertSame(['fresh'], $cachedFresh);
+        $this->assertSame(2, $callbackCalls);
+    }
+
+    public function testFindCacheUsesCacheUntilPurged(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -220,7 +331,7 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $first = $database->cachedFind('wafRules', $queries, '_39');
+        $first = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(1, $first);
         $this->assertSame('rule-a', $first[0]->getId());
 
@@ -229,13 +340,13 @@ class ListCacheTest extends TestCase
             'projectId' => 'project-a',
         ]));
 
-        $cached = $database->cachedFind('wafRules', $queries, '_39');
+        $cached = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(1, $cached);
         $this->assertSame('rule-a', $cached[0]->getId());
 
-        $this->assertTrue($database->purgeCachedFind('wafRules', '_39'));
+        $this->assertTrue($database->purgeFindCache('wafRules', '_39'));
 
-        $fresh = $database->cachedFind('wafRules', $queries, '_39');
+        $fresh = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(2, $fresh);
         $this->assertSame(['rule-a', 'rule-b'], \array_map(
             static fn (Document $document): string => $document->getId(),
@@ -243,7 +354,7 @@ class ListCacheTest extends TestCase
         ));
     }
 
-    public function testCachedFindSeparatesEntriesByPermissionMode(): void
+    public function testFindCacheSeparatesEntriesByPermissionMode(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -274,21 +385,21 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $database->cachedFind('wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
+        $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-b',
             'projectId' => 'project-a',
         ]));
 
-        $cached = $database->cachedFind('wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
+        $cached = $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
         $this->assertCount(1, $cached);
 
-        $permissionSeparated = $database->cachedFind('wafRules', $queries, '_39', forPermission: Database::PERMISSION_UPDATE);
+        $permissionSeparated = $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_UPDATE);
         $this->assertCount(2, $permissionSeparated);
     }
 
-    public function testCachedFindRecastsCacheHits(): void
+    public function testFindCacheRecastsCacheHits(): void
     {
         $cache = new JsonHashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -317,14 +428,14 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $fresh = $database->cachedFind('metrics', $queries, '_39');
-        $cached = $database->cachedFind('metrics', $queries, '_39');
+        $fresh = $this->findWithCache($database, 'metrics', $queries, '_39');
+        $cached = $this->findWithCache($database, 'metrics', $queries, '_39');
 
         $this->assertSame(1.0, $fresh[0]->getAttribute('value'));
         $this->assertSame(1.0, $cached[0]->getAttribute('value'));
     }
 
-    public function testCachedFindDoesNotDoubleDecodeCustomFilters(): void
+    public function testFindCacheDoesNotDoubleDecodeCustomFilters(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache, [
@@ -360,14 +471,14 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $fresh = $database->cachedFind('secrets', $queries, '_39');
-        $cached = $database->cachedFind('secrets', $queries, '_39');
+        $fresh = $this->findWithCache($database, 'secrets', $queries, '_39');
+        $cached = $this->findWithCache($database, 'secrets', $queries, '_39');
 
         $this->assertSame('value', $fresh[0]->getAttribute('secret'));
         $this->assertSame('value', $cached[0]->getAttribute('secret'));
     }
 
-    public function testCachedFindBypassesCacheForRandomOrder(): void
+    public function testFindCacheBypassesCacheForRandomOrder(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -397,7 +508,7 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $first = $database->cachedFind('wafRules', $queries, '_39');
+        $first = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(1, $first);
 
         $database->createDocument('wafRules', new Document([
@@ -405,11 +516,11 @@ class ListCacheTest extends TestCase
             'projectId' => 'project-a',
         ]));
 
-        $second = $database->cachedFind('wafRules', $queries, '_39');
+        $second = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(2, $second);
     }
 
-    public function testCachedFindReliesOnPurgeForDocumentSecurityCollections(): void
+    public function testFindCacheReliesOnPurgeForDocumentSecurityCollections(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -446,7 +557,7 @@ class ListCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $first = $database->cachedFind('secureRules', $queries, '_39');
+        $first = $this->findWithCache($database, 'secureRules', $queries, '_39');
         $this->assertCount(1, $first);
 
         $database->getAuthorization()->skip(function () use ($database): void {
@@ -458,17 +569,17 @@ class ListCacheTest extends TestCase
             ]));
         });
 
-        $cached = $database->cachedFind('secureRules', $queries, '_39');
+        $cached = $this->findWithCache($database, 'secureRules', $queries, '_39');
 
         $this->assertCount(1, $cached);
 
-        $this->assertTrue($database->purgeCachedFind('secureRules', '_39'));
+        $this->assertTrue($database->purgeFindCache('secureRules', '_39'));
 
-        $fresh = $database->cachedFind('secureRules', $queries, '_39');
+        $fresh = $this->findWithCache($database, 'secureRules', $queries, '_39');
         $this->assertSame([], $fresh);
     }
 
-    public function testCachedFindRehydratesNestedDocumentPayloads(): void
+    public function testFindCacheRehydratesNestedDocumentPayloads(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -498,14 +609,14 @@ class ListCacheTest extends TestCase
             $database->getFindCacheField($collection, $queries),
         );
 
-        $parents = $database->cachedFind('parents', $queries, '_39');
+        $parents = $this->findWithCache($database, 'parents', $queries, '_39');
 
         $this->assertCount(1, $parents);
         $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
         $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
     }
 
-    public function testCachedFindRefreshesInvalidPayload(): void
+    public function testFindCacheRefreshesInvalidPayload(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -542,13 +653,13 @@ class ListCacheTest extends TestCase
             $database->getFindCacheField($collection, $queries),
         );
 
-        $rules = $database->cachedFind('wafRules', $queries, '_39');
+        $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
 
         $this->assertCount(1, $rules);
         $this->assertSame('rule-a', $rules[0]->getId());
     }
 
-    public function testCachedFindRefreshesInvalidPayloadEntry(): void
+    public function testFindCacheRefreshesInvalidPayloadEntry(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -597,7 +708,7 @@ class ListCacheTest extends TestCase
             $database->getFindCacheField($collection, $queries),
         );
 
-        $rules = $database->cachedFind('wafRules', $queries, '_39');
+        $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
 
         $this->assertSame(['rule-a', 'rule-b'], \array_map(
             static fn (Document $document): string => $document->getId(),

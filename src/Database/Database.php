@@ -8565,66 +8565,44 @@ class Database
     }
 
     /**
-     * Find documents through a cache-aside lookup.
-     *
-     * The caller owns authorization context. Use Authorization::skip() around
-     * this method for internal reads that should bypass request-user roles.
-     * The caller owns invalidation and must purge cached find entries after
-     * writes that can change matching documents or returned document payloads.
+     * Purge all cached find entries for a collection namespace.
      *
      * @param string $collection
-     * @param array<Query> $queries
      * @param string|null $namespace
+     * @return bool
+     */
+    public function purgeFindCache(string $collection, ?string $namespace = null): bool
+    {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+
+        return $this->cache->purge(
+            $this->getFindCacheKey($collection, $namespace)
+        );
+    }
+
+    /**
+     * Restore a cached find document payload into database documents.
+     *
+     * Returns false when the cached payload is invalid or stale and should be
+     * refreshed by the caller.
+     *
+     * @param string $collection
+     * @param Document $collectionDocument
+     * @param mixed $payload
      * @param string $forPermission
-     * @return array<Document>
-     * @throws DatabaseException
-     * @throws QueryException
-     * @throws TimeoutException
+     * @return array<Document>|false
+     * @throws AuthorizationException
      * @throws Exception
      */
-    public function cachedFind(
+    public function restoreFindCacheDocuments(
         string $collection,
-        array $queries = [],
-        ?string $namespace = null,
+        Document $collectionDocument,
+        mixed $payload,
         string $forPermission = Database::PERMISSION_READ,
-    ): array {
-        foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
-                return $this->find($collection, $queries, $forPermission);
-            }
-        }
-
-        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collectionDocument->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        $cacheMiss = false;
-        $documents = [];
-        $cacheKey = $this->getFindCacheKey($collectionDocument->getId(), $namespace);
-        $cacheHash = $this->getFindCacheField($collectionDocument, $queries, 'documents', $forPermission);
-
-        $payload = $this->withCache(
-            key: $cacheKey,
-            callback: function () use ($collection, $queries, $forPermission, &$cacheMiss, &$documents): array {
-                $cacheMiss = true;
-                $documents = $this->find($collection, $queries, $forPermission);
-
-                return \array_map(
-                    static fn (Document $document): array => $document->getArrayCopy(),
-                    $documents,
-                );
-            },
-            hash: $cacheHash,
-        );
-
-        if ($cacheMiss) {
-            return $documents;
-        }
-
+    ): array|false {
         if (!\is_array($payload)) {
-            return $this->refreshCachedFind($cacheKey, $cacheHash, $collection, $queries, $forPermission);
+            return false;
         }
 
         $documentSecurity = $collectionDocument->getAttribute('documentSecurity', false);
@@ -8637,11 +8615,15 @@ class Database
         $documents = [];
         foreach ($payload as $document) {
             if (!\is_array($document)) {
-                return $this->refreshCachedFind($cacheKey, $cacheHash, $collection, $queries, $forPermission);
+                return false;
             }
 
             $document = $this->createDocumentInstance($collection, $document);
             $document = $this->casting($collectionDocument, $document);
+
+            if ($this->isTtlExpired($collectionDocument, $document)) {
+                return false;
+            }
 
             $documents[] = $document;
         }
@@ -8650,87 +8632,33 @@ class Database
     }
 
     /**
-     * Refresh a cached find field after detecting an invalid cached payload.
-     *
-     * @param string $cacheKey
-     * @param string $cacheHash
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param string $forPermission
-     * @return array<Document>
-     * @throws DatabaseException
-     * @throws QueryException
-     * @throws TimeoutException
-     * @throws Exception
-     */
-    private function refreshCachedFind(
-        string $cacheKey,
-        string $cacheHash,
-        string $collection,
-        array $queries,
-        string $forPermission,
-    ): array {
-        try {
-            $this->cache->purge($cacheKey, $cacheHash);
-        } catch (Throwable $e) {
-            Console::warning('Warning: Failed to purge invalid cached find payload: ' . $e->getMessage());
-        }
-
-        $documents = $this->find($collection, $queries, $forPermission);
-
-        try {
-            $this->cache->save(
-                $cacheKey,
-                [
-                    'value' => \array_map(
-                        static fn (Document $document): array => $document->getArrayCopy(),
-                        $documents,
-                    ),
-                ],
-                $cacheHash,
-            );
-        } catch (Throwable $e) {
-            Console::warning('Warning: Failed to save refreshed cached find payload: ' . $e->getMessage());
-        }
-
-        return $documents;
-    }
-
-    /**
-     * Purge all cached find entries for a collection namespace.
-     *
-     * @param string $collection
-     * @param string|null $namespace
-     * @return bool
-     */
-    public function purgeCachedFind(string $collection, ?string $namespace = null): bool
-    {
-        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
-        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
-
-        return $this->cache->purge(
-            $this->getFindCacheKey($collection, $namespace)
-        );
-    }
-
-    /**
      * Execute a callback behind a cache-aside lookup.
      *
      * The callback runs on cache miss and its value is returned to the caller.
+     * The encode callback converts fresh values into cache payloads before save.
+     * The decode callback converts cached payloads back into return values; a
+     * literal false decode result rejects the cached payload and refreshes it.
      * A literal false value is treated as a cache miss and is not cacheable.
      *
      * @template T
+     * @template C
      * @param string $key
      * @param callable(): T $callback
      * @param string $hash
+     * @param (callable(T): C)|null $encode
+     * @param (callable(C): (T|false))|null $decode
      * @return T
      */
     public function withCache(
         string $key,
         callable $callback,
         string $hash = '',
+        ?callable $encode = null,
+        ?callable $decode = null,
     ): mixed {
         $shouldRefreshCache = false;
+        $encode ??= static fn (mixed $value): mixed => $value;
+        $decode ??= static fn (mixed $value): mixed => $value;
 
         try {
             $cached = $this->cache->load($key, self::TTL, $hash);
@@ -8743,7 +8671,11 @@ class Database
             $value = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
 
             if ($value !== false) {
-                return $value;
+                $decoded = $decode($value);
+
+                if ($decoded !== false) {
+                    return $decoded;
+                }
             }
 
             $shouldRefreshCache = true;
@@ -8761,7 +8693,7 @@ class Database
 
         if ($value !== false) {
             try {
-                $this->cache->save($key, ['value' => $value], $hash);
+                $this->cache->save($key, ['value' => $encode($value)], $hash);
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
             }

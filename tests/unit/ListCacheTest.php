@@ -59,8 +59,7 @@ class ListCacheTest extends TestCase
                 $documents,
             ),
             decode: fn (mixed $payload): array|false => $database->restoreListCacheDocuments(
-                collection: $collection,
-                collectionDocument: $collectionDocument,
+                collection: $collectionDocument,
                 payload: $payload,
                 forPermission: $forPermission,
             ),

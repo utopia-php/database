@@ -8587,8 +8587,7 @@ class Database
      * Returns false when the cached payload is invalid or stale and should be
      * refreshed by the caller.
      *
-     * @param string $collection
-     * @param Document $collectionDocument
+     * @param Document $collection
      * @param mixed $payload
      * @param string $forPermission
      * @return array<Document>|false
@@ -8596,8 +8595,7 @@ class Database
      * @throws Exception
      */
     public function restoreListCacheDocuments(
-        string $collection,
-        Document $collectionDocument,
+        Document $collection,
         mixed $payload,
         string $forPermission = Database::PERMISSION_READ,
     ): array|false {
@@ -8605,10 +8603,10 @@ class Database
             return false;
         }
 
-        $documentSecurity = $collectionDocument->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collectionDocument->getPermissionsByType($forPermission)));
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-        if (!$skipAuth && !$documentSecurity && $collectionDocument->getId() !== self::METADATA) {
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -8618,10 +8616,10 @@ class Database
                 return false;
             }
 
-            $document = $this->createDocumentInstance($collection, $document);
-            $document = $this->casting($collectionDocument, $document);
+            $document = $this->createDocumentInstance($collection->getId(), $document);
+            $document = $this->casting($collection, $document);
 
-            if ($this->isTtlExpired($collectionDocument, $document)) {
+            if ($this->isTtlExpired($collection, $document)) {
                 return false;
             }
 

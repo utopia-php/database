@@ -2037,12 +2037,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "e1d2a7bc0e9add0f0611d79df7fb43b07f998be5"
+                "reference": "40abe906015f481117157e63831d30d36ec384c6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/e1d2a7bc0e9add0f0611d79df7fb43b07f998be5",
-                "reference": "e1d2a7bc0e9add0f0611d79df7fb43b07f998be5",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/40abe906015f481117157e63831d30d36ec384c6",
+                "reference": "40abe906015f481117157e63831d30d36ec384c6",
                 "shasum": ""
             },
             "require": {
@@ -2098,7 +2098,7 @@
                 "source": "https://github.com/utopia-php/cache/tree/cache-lease-fence",
                 "issues": "https://github.com/utopia-php/cache/issues"
             },
-            "time": "2026-06-22T07:37:47+00:00"
+            "time": "2026-06-22T08:27:54+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",

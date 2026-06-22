@@ -12,7 +12,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
-class ListCacheTest extends TestCase
+class QueryCacheTest extends TestCase
 {
     /**
      * @param array<string, array{encode: callable, decode: callable}> $filters
@@ -47,8 +47,8 @@ class ListCacheTest extends TestCase
         }
 
         $collectionDocument = $database->getCollection($collection);
-        $cacheKey = $database->getListCacheKey($collectionDocument->getId(), $namespace);
-        $cacheHash = $database->getListCacheField($collectionDocument, $queries, 'documents', $forPermission);
+        $cacheKey = $database->getQueryCacheKey($collectionDocument->getId(), $namespace);
+        $cacheHash = $database->getQueryCacheField($collectionDocument, $queries, 'documents', $forPermission);
 
         return $database->withCache(
             key: $cacheKey,
@@ -58,7 +58,7 @@ class ListCacheTest extends TestCase
                 static fn (Document $document): array => $document->getArrayCopy(),
                 $documents,
             ),
-            decode: fn (mixed $payload): array|false => $database->restoreListCacheDocuments(
+            decode: fn (mixed $payload): array|false => $database->restoreQueryCacheDocuments(
                 collection: $collectionDocument,
                 payload: $payload,
                 forPermission: $forPermission,
@@ -300,7 +300,7 @@ class ListCacheTest extends TestCase
         $this->assertSame(2, $callbackCalls);
     }
 
-    public function testListCacheUsesCacheUntilPurged(): void
+    public function testQueryCacheUsesCacheUntilPurged(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -343,7 +343,7 @@ class ListCacheTest extends TestCase
         $this->assertCount(1, $cached);
         $this->assertSame('rule-a', $cached[0]->getId());
 
-        $this->assertTrue($database->purgeListCache('wafRules', '_39'));
+        $this->assertTrue($database->purgeQueryCache('wafRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(2, $fresh);
@@ -353,7 +353,7 @@ class ListCacheTest extends TestCase
         ));
     }
 
-    public function testListCacheSeparatesEntriesByPermissionMode(): void
+    public function testQueryCacheSeparatesEntriesByPermissionMode(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -398,7 +398,7 @@ class ListCacheTest extends TestCase
         $this->assertCount(2, $permissionSeparated);
     }
 
-    public function testListCacheRecastsCacheHits(): void
+    public function testQueryCacheRecastsCacheHits(): void
     {
         $cache = new JsonHashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -434,7 +434,7 @@ class ListCacheTest extends TestCase
         $this->assertSame(1.0, $cached[0]->getAttribute('value'));
     }
 
-    public function testListCacheDoesNotDoubleDecodeCustomFilters(): void
+    public function testQueryCacheDoesNotDoubleDecodeCustomFilters(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache, [
@@ -477,7 +477,7 @@ class ListCacheTest extends TestCase
         $this->assertSame('value', $cached[0]->getAttribute('secret'));
     }
 
-    public function testListCacheBypassesCacheForRandomOrder(): void
+    public function testQueryCacheBypassesCacheForRandomOrder(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -519,7 +519,7 @@ class ListCacheTest extends TestCase
         $this->assertCount(2, $second);
     }
 
-    public function testListCacheReliesOnPurgeForDocumentSecurityCollections(): void
+    public function testQueryCacheReliesOnPurgeForDocumentSecurityCollections(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -572,13 +572,13 @@ class ListCacheTest extends TestCase
 
         $this->assertCount(1, $cached);
 
-        $this->assertTrue($database->purgeListCache('secureRules', '_39'));
+        $this->assertTrue($database->purgeQueryCache('secureRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'secureRules', $queries, '_39');
         $this->assertSame([], $fresh);
     }
 
-    public function testListCacheRehydratesNestedDocumentPayloads(): void
+    public function testQueryCacheRehydratesNestedDocumentPayloads(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -592,7 +592,7 @@ class ListCacheTest extends TestCase
 
         $collection = $database->getCollection('parents');
         $cache->save(
-            $database->getListCacheKey($collection->getId(), '_39'),
+            $database->getQueryCacheKey($collection->getId(), '_39'),
             [
                 'value' => [
                     [
@@ -605,7 +605,7 @@ class ListCacheTest extends TestCase
                     ],
                 ],
             ],
-            $database->getListCacheField($collection, $queries),
+            $database->getQueryCacheField($collection, $queries),
         );
 
         $parents = $this->findWithCache($database, 'parents', $queries, '_39');
@@ -615,7 +615,7 @@ class ListCacheTest extends TestCase
         $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
     }
 
-    public function testListCacheRefreshesInvalidPayload(): void
+    public function testQueryCacheRefreshesInvalidPayload(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -647,9 +647,9 @@ class ListCacheTest extends TestCase
 
         $collection = $database->getCollection('wafRules');
         $cache->save(
-            $database->getListCacheKey($collection->getId(), '_39'),
+            $database->getQueryCacheKey($collection->getId(), '_39'),
             ['value' => 'invalid'],
-            $database->getListCacheField($collection, $queries),
+            $database->getQueryCacheField($collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -658,7 +658,7 @@ class ListCacheTest extends TestCase
         $this->assertSame('rule-a', $rules[0]->getId());
     }
 
-    public function testListCacheRefreshesInvalidPayloadEntry(): void
+    public function testQueryCacheRefreshesInvalidPayloadEntry(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -694,7 +694,7 @@ class ListCacheTest extends TestCase
 
         $collection = $database->getCollection('wafRules');
         $cache->save(
-            $database->getListCacheKey($collection->getId(), '_39'),
+            $database->getQueryCacheKey($collection->getId(), '_39'),
             [
                 'value' => [
                     [
@@ -704,7 +704,7 @@ class ListCacheTest extends TestCase
                     'invalid',
                 ],
             ],
-            $database->getListCacheField($collection, $queries),
+            $database->getQueryCacheField($collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');

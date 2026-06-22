@@ -10,7 +10,8 @@ class Connection
      * @var array<string>
      */
     protected static array $errors = [
-        'Max connect timeout reached'
+        'Max connect timeout reached',
+        'server has gone away',
     ];
 
     /**
@@ -21,7 +22,7 @@ class Connection
      */
     public static function hasError(\Throwable $e): bool
     {
-        if (DetectsLostConnections::causedByLostConnection($e)) {
+        if (\class_exists(DetectsLostConnections::class) && DetectsLostConnections::causedByLostConnection($e)) {
             return true;
         }
 

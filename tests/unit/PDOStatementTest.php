@@ -126,11 +126,17 @@ class PDOStatementTest extends TestCase
     {
         $pdo = $this->pdoMock(inTransaction: false);
         $statement = $this->statementMock();
+        $iterator = new \ArrayIterator([]);
+
+        $statement->expects($this->once())
+            ->method('getIterator')
+            ->willReturn($iterator);
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
 
         $this->assertInstanceOf(\IteratorAggregate::class, $wrapper);
-        $this->assertSame($statement, $wrapper->getIterator());
+        $this->assertInstanceOf(\PDOStatement::class, $wrapper);
+        $this->assertSame($iterator, $wrapper->getIterator());
     }
 
     public function testDoesNotReconnectForNonExecuteMethods(): void

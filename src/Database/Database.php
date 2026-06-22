@@ -4879,6 +4879,15 @@ class Database
             return $document;
         }
 
+        $cacheLease = false;
+        if (!$forUpdate && empty($relationships)) {
+            try {
+                $cacheLease = $this->cache->lease($documentKey, $hashKey, self::TTL);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to lease document cache: ' . $e->getMessage());
+            }
+        }
+
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4929,10 +4938,12 @@ class Database
         // Don't save to cache if it's part of a relationship, or if this is a
         // locking read: a forUpdate read happens inside an open transaction, and
         // caching the pre-commit row would poison the cache for other readers.
-        if (!$forUpdate && empty($relationships)) {
+        if (!$forUpdate && empty($relationships) && $cacheLease !== false) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                $cached = $this->cache->saveLease($documentKey, $document->getArrayCopy(), $cacheLease, $hashKey);
+                if ($cached !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }

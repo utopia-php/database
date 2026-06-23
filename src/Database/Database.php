@@ -4879,6 +4879,17 @@ class Database
             return $document;
         }
 
+        // Capture the generation before reading: if a concurrent purge advances
+        // it, saveWithLease() below rejects this now-stale value. '0' means no lease.
+        $generation = '0';
+        if (!$forUpdate) {
+            try {
+                $generation = $this->cache->getGeneration($documentKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+            }
+        }
+
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4931,8 +4942,10 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                // Index for invalidation only when the value was actually cached.
+                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }

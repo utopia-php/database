@@ -4882,8 +4882,17 @@ class Database
         // Capture the cache generation BEFORE reading the row. If a concurrent
         // updateDocument purges (and so advances the generation) while we read,
         // saveWithLease() below rejects this now-stale value instead of
-        // re-poisoning the cache. See Cache\Feature\Leasable.
-        $generation = $forUpdate ? '0' : $this->cache->getGeneration($documentKey);
+        // re-poisoning the cache. See Cache\Feature\Leasable. A cache failure
+        // must not break the read, so degrade to '0' (no lease), mirroring the
+        // load() handling above.
+        $generation = '0';
+        if (!$forUpdate) {
+            try {
+                $generation = $this->cache->getGeneration($documentKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+            }
+        }
 
         $document = $this->adapter->getDocument(
             $collection,
@@ -4937,8 +4946,13 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                $this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                // Only register the document in the collection's invalidation
+                // index when the value was actually cached. A lease rejection
+                // (concurrent purge) returns false and caches nothing, so adding
+                // the key here would leave a phantom entry.
+                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }

@@ -4879,12 +4879,8 @@ class Database
             return $document;
         }
 
-        // Capture the cache generation BEFORE reading the row. If a concurrent
-        // updateDocument purges (and so advances the generation) while we read,
-        // saveWithLease() below rejects this now-stale value instead of
-        // re-poisoning the cache. See Cache\Feature\Leasable. A cache failure
-        // must not break the read, so degrade to '0' (no lease), mirroring the
-        // load() handling above.
+        // Capture the generation before reading: if a concurrent purge advances
+        // it, saveWithLease() below rejects this now-stale value. '0' means no lease.
         $generation = '0';
         if (!$forUpdate) {
             try {
@@ -4946,10 +4942,7 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                // Only register the document in the collection's invalidation
-                // index when the value was actually cached. A lease rejection
-                // (concurrent purge) returns false and caches nothing, so adding
-                // the key here would leave a phantom entry.
+                // Index for invalidation only when the value was actually cached.
                 if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
                     $this->cache->save($collectionKey, 'empty', $documentKey);
                 }

@@ -8633,30 +8633,25 @@ class Database
      * Execute a callback behind a cache-aside lookup.
      *
      * The callback runs on cache miss and its value is returned to the caller.
-     * The encode callback converts fresh values into cache payloads before save.
-     * The decode callback converts cached payloads back into return values; a
-     * literal false decode result rejects the cached payload and refreshes it.
+     * Query document payloads are converted to arrays before save and restored
+     * back into Documents on cache hits. A rejected document payload refreshes
+     * the cached value.
      * A literal false value is treated as a cache miss and is not cacheable.
      *
      * @template T
-     * @template C
      * @param string $key
      * @param callable(): T $callback
      * @param string $hash
-     * @param (callable(T): C)|null $encode
-     * @param (callable(C): (T|false))|null $decode
      * @return T
+     * @throws AuthorizationException
+     * @throws Exception
      */
     public function withCache(
         string $key,
         callable $callback,
         string $hash = '',
-        ?callable $encode = null,
-        ?callable $decode = null,
     ): mixed {
         $shouldRefreshCache = false;
-        $encode ??= static fn (mixed $value): mixed => $value;
-        $decode ??= static fn (mixed $value): mixed => $value;
 
         try {
             $cached = $this->cache->load($key, self::TTL, $hash);
@@ -8669,7 +8664,7 @@ class Database
             $value = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
 
             if ($value !== false) {
-                $decoded = $decode($value);
+                $decoded = $this->decodeCacheValue($cached, $value);
 
                 if ($decoded !== false) {
                     return $decoded;
@@ -8691,10 +8686,104 @@ class Database
 
         if ($value !== false) {
             try {
-                $this->cache->save($key, ['value' => $encode($value)], $hash);
+                $this->cache->save($key, $this->encodeCacheValue($value), $hash);
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
             }
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array<string, mixed> $cached
+     */
+    private function decodeCacheValue(array $cached, mixed $value): mixed
+    {
+        $collection = $cached['collection'] ?? null;
+        if (!\is_string($collection) || $collection === '') {
+            return $value;
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($collection->isEmpty()) {
+            return false;
+        }
+
+        if (($cached['type'] ?? null) === 'document') {
+            $documents = $this->restoreQueryCacheDocuments($collection, [$value]);
+            if ($documents === false) {
+                return false;
+            }
+
+            return $documents[0] ?? false;
+        }
+
+        return $this->restoreQueryCacheDocuments($collection, $value);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function encodeCacheValue(mixed $value): array
+    {
+        if ($value instanceof Document) {
+            $collection = $value->getCollection();
+            if ($collection === '') {
+                return ['value' => $value];
+            }
+
+            return [
+                'collection' => $collection,
+                'type' => 'document',
+                'value' => $value->getArrayCopy(),
+            ];
+        }
+
+        $collection = $this->getCacheValueCollection($value);
+        if ($collection === null || !\is_array($value)) {
+            return ['value' => $value];
+        }
+
+        return [
+            'collection' => $collection,
+            'type' => 'documents',
+            'value' => $this->encodeQueryCacheValue($value),
+        ];
+    }
+
+    private function getCacheValueCollection(mixed $value): ?string
+    {
+        if ($value instanceof Document) {
+            return $value->getCollection() ?: null;
+        }
+
+        if (!\is_array($value)) {
+            return null;
+        }
+
+        foreach ($value as $item) {
+            $collection = $this->getCacheValueCollection($item);
+            if ($collection !== null) {
+                return $collection;
+            }
+        }
+
+        return null;
+    }
+
+    private function encodeQueryCacheValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            return $value->getArrayCopy();
+        }
+
+        if (!\is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->encodeQueryCacheValue($item);
         }
 
         return $value;

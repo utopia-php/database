@@ -54,15 +54,6 @@ class QueryCacheTest extends TestCase
             key: $cacheKey,
             callback: fn (): array => $database->find($collection, $queries, $forPermission),
             hash: $cacheHash,
-            encode: static fn (array $documents): array => \array_map(
-                static fn (Document $document): array => $document->getArrayCopy(),
-                $documents,
-            ),
-            decode: fn (mixed $payload): array|false => $database->restoreQueryCacheDocuments(
-                collection: $collectionDocument,
-                payload: $payload,
-                forPermission: $forPermission,
-            ),
         );
     }
 
@@ -227,77 +218,79 @@ class QueryCacheTest extends TestCase
         $this->assertSame(2, $callbackCalls);
     }
 
-    public function testWithCacheEncodesSavedValueAndDecodesCachedValue(): void
+    public function testWithCacheCachesSingleDocument(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+        ]));
 
         $callbackCalls = 0;
+        $collection = $database->getCollection('wafRules');
+        $key = $database->getQueryCacheKey($collection->getId(), '_39');
+        $hash = $database->getQueryCacheField($collection, field: 'document');
 
         $first = $database->withCache(
-            key: 'key',
-            callback: function () use (&$callbackCalls): array {
+            key: $key,
+            callback: function () use ($database, &$callbackCalls): Document {
                 $callbackCalls++;
-                return ['fresh'];
+                return $database->getDocument('wafRules', 'rule-a');
             },
-            encode: static fn (array $value): array => ['encoded' => $value],
-            decode: static fn (array $value): array => $value['encoded'],
+            hash: $hash,
         );
-
         $second = $database->withCache(
-            key: 'key',
-            callback: function () use (&$callbackCalls): array {
+            key: $key,
+            callback: function () use ($database, &$callbackCalls): Document {
                 $callbackCalls++;
-                return ['miss'];
+                return $database->getDocument('wafRules', 'missing');
             },
-            encode: static fn (array $value): array => ['encoded' => $value],
-            decode: static fn (array $value): array => $value['encoded'],
+            hash: $hash,
         );
 
-        $this->assertSame(['fresh'], $first);
-        $this->assertSame(['fresh'], $second);
+        $this->assertSame('rule-a', $first->getId());
+        $this->assertSame('rule-a', $second->getId());
         $this->assertSame(1, $callbackCalls);
     }
 
-    public function testWithCacheRefreshesWhenDecodeRejectsCachedValue(): void
+    public function testWithCacheCachesStaticQueryValues(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', permissions: [
+            Permission::read(Role::any()),
+        ]);
 
         $callbackCalls = 0;
+        $collection = $database->getCollection('wafRules');
+        $key = $database->getQueryCacheKey($collection->getId(), '_39');
+        $hash = $database->getQueryCacheField($collection, field: 'count');
 
-        $database->withCache(
-            key: 'key',
-            callback: function () use (&$callbackCalls): array {
+        $first = $database->withCache(
+            key: $key,
+            callback: function () use (&$callbackCalls): int {
                 $callbackCalls++;
-                return ['stale'];
+                return 10;
             },
-            encode: static fn (array $value): array => $value,
+            hash: $hash,
+        );
+        $second = $database->withCache(
+            key: $key,
+            callback: function () use (&$callbackCalls): int {
+                $callbackCalls++;
+                return 20;
+            },
+            hash: $hash,
         );
 
-        $fresh = $database->withCache(
-            key: 'key',
-            callback: function () use (&$callbackCalls): array {
-                $callbackCalls++;
-                return ['fresh'];
-            },
-            encode: static fn (array $value): array => $value,
-            decode: static fn (array $value): array|false => $value === ['stale'] ? false : $value,
-        );
-
-        $cachedFresh = $database->withCache(
-            key: 'key',
-            callback: function () use (&$callbackCalls): array {
-                $callbackCalls++;
-                return ['miss'];
-            },
-            encode: static fn (array $value): array => $value,
-            decode: static fn (array $value): array|false => $value === ['stale'] ? false : $value,
-        );
-
-        $this->assertSame(['fresh'], $fresh);
-        $this->assertSame(['fresh'], $cachedFresh);
-        $this->assertSame(2, $callbackCalls);
+        $this->assertSame(10, $first);
+        $this->assertSame(10, $second);
+        $this->assertSame(1, $callbackCalls);
     }
 
     public function testQueryCacheUsesCacheUntilPurged(): void
@@ -594,6 +587,8 @@ class QueryCacheTest extends TestCase
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
             [
+                'collection' => $collection->getId(),
+                'type' => 'documents',
                 'value' => [
                     [
                         '$id' => 'parent-a',
@@ -648,7 +643,11 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('wafRules');
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
-            ['value' => 'invalid'],
+            [
+                'collection' => $collection->getId(),
+                'type' => 'documents',
+                'value' => 'invalid',
+            ],
             $database->getQueryCacheField($collection, $queries),
         );
 
@@ -696,6 +695,8 @@ class QueryCacheTest extends TestCase
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
             [
+                'collection' => $collection->getId(),
+                'type' => 'documents',
                 'value' => [
                     [
                         '$id' => 'rule-a',

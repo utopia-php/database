@@ -665,6 +665,52 @@ class QueryCacheTest extends TestCase
         $this->assertSame([], $fresh);
     }
 
+    public function testQueryCacheFiltersDocumentSecurityPayloadsOnHit(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createCollection('secureRules', permissions: [
+                Permission::create(Role::any()),
+            ], documentSecurity: true);
+        });
+
+        $database->getAuthorization()->addRole(Role::user('user-1')->toString());
+
+        $collection = $database->getCollection('secureRules');
+        $key = $database->getQueryCacheKey($collection->getId(), '_39');
+        $hash = $database->getQueryCacheField($collection);
+        $database->getCache()->save($key, [
+            'collection' => $collection->getId(),
+            'type' => 'documents',
+            'value' => [
+                [
+                    '$id' => 'rule-a',
+                    '$permissions' => [
+                        Permission::read(Role::user('user-2')),
+                    ],
+                ],
+            ],
+        ], $hash);
+
+        $callbackCalls = 0;
+        $documents = $database->withCache(
+            key: $key,
+            callback: function () use (&$callbackCalls): array {
+                $callbackCalls++;
+                return [
+                    new Document([
+                        '$id' => 'fresh',
+                    ]),
+                ];
+            },
+            hash: $hash,
+        );
+
+        $this->assertSame([], $documents);
+        $this->assertSame(0, $callbackCalls);
+    }
+
     public function testQueryCacheRehydratesNestedDocumentPayloads(): void
     {
         $cache = new HashMemoryCache();

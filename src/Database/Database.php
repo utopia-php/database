@@ -8659,6 +8659,17 @@ class Database
                                     break;
                                 }
 
+                                if (!$skipAuth && $documentSecurity && $collection->getId() !== self::METADATA) {
+                                    if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $document->getRead()))) {
+                                        if (($cached['type'] ?? null) === 'document') {
+                                            $decoded = false;
+                                            break;
+                                        }
+
+                                        continue;
+                                    }
+                                }
+
                                 $documents[] = $document;
                             }
 

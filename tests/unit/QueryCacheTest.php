@@ -275,6 +275,42 @@ class QueryCacheTest extends TestCase
         $this->assertSame([], $cache->list('key'));
     }
 
+    public function testWithCacheDoesNotCacheMixedDocumentArrays(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+        $database->createCollection('wafRules', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $database->createDocument('wafRules', new Document([
+            '$id' => 'rule-a',
+        ]));
+
+        $callbackCalls = 0;
+
+        $first = $database->withCache(
+            key: 'key',
+            callback: function () use ($database, &$callbackCalls): array {
+                $callbackCalls++;
+                return ['prefix', $database->getDocument('wafRules', 'rule-a')];
+            },
+        );
+        $second = $database->withCache(
+            key: 'key',
+            callback: function () use ($database, &$callbackCalls): array {
+                $callbackCalls++;
+                return ['prefix', $database->getDocument('wafRules', 'rule-a')];
+            },
+        );
+
+        $this->assertSame('rule-a', $first[1]->getId());
+        $this->assertSame('rule-a', $second[1]->getId());
+        $this->assertSame(2, $callbackCalls);
+        $this->assertSame([], $cache->list('key'));
+    }
+
     public function testWithCacheCachesSingleDocument(): void
     {
         $cache = new HashMemoryCache();

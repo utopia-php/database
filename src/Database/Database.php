@@ -8582,52 +8582,6 @@ class Database
     }
 
     /**
-     * Restore a cached query document payload into database documents.
-     *
-     * Returns false when the cached payload is invalid or stale and should be
-     * refreshed by the caller.
-     *
-     * @param Document $collection
-     * @param mixed $payload
-     * @return array<Document>|false
-     * @throws AuthorizationException
-     * @throws Exception
-     */
-    private function restoreQueryCacheDocuments(
-        Document $collection,
-        mixed $payload,
-    ): array|false {
-        if (!\is_array($payload)) {
-            return false;
-        }
-
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
-
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($this->authorization->getDescription());
-        }
-
-        $documents = [];
-        foreach ($payload as $document) {
-            if (!\is_array($document)) {
-                return false;
-            }
-
-            $document = $this->createDocumentInstance($collection->getId(), $document);
-            $document = $this->casting($collection, $document);
-
-            if ($this->isTtlExpired($collection, $document)) {
-                return false;
-            }
-
-            $documents[] = $document;
-        }
-
-        return $documents;
-    }
-
-    /**
      * Execute a callback behind a cache-aside lookup.
      *
      * The callback runs on cache miss and its value is returned to the caller.
@@ -8666,7 +8620,54 @@ class Database
             $value = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
 
             if ($value !== false) {
-                $decoded = $this->decodeCacheValue($cached, $value);
+                $decoded = $value;
+                $collection = $cached['collection'] ?? null;
+
+                if (\is_string($collection) && $collection !== '') {
+                    // Cached document payloads are stored as arrays; restore them
+                    // to the same Document shape that find()/getDocument() return.
+                    $collection = $this->silent(fn () => $this->getCollection($collection));
+
+                    if ($collection->isEmpty()) {
+                        $decoded = false;
+                    } else {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+
+                        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+
+                        $payload = ($cached['type'] ?? null) === 'document' ? [$value] : $value;
+
+                        if (!\is_array($payload)) {
+                            $decoded = false;
+                        } else {
+                            $documents = [];
+
+                            foreach ($payload as $document) {
+                                if (!\is_array($document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                $document = $this->createDocumentInstance($collection->getId(), $document);
+                                $document = $this->casting($collection, $document);
+
+                                if ($this->isTtlExpired($collection, $document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                $documents[] = $document;
+                            }
+
+                            if ($decoded !== false) {
+                                $decoded = ($cached['type'] ?? null) === 'document' ? ($documents[0] ?? false) : $documents;
+                            }
+                        }
+                    }
+                }
 
                 if ($decoded !== false) {
                     return $decoded;
@@ -8688,132 +8689,93 @@ class Database
 
         if ($value !== false) {
             try {
-                $encoded = $this->encodeCacheValue($value);
+                $encoded = false;
+
+                if ($value instanceof Document) {
+                    $collection = $value->getCollection();
+
+                    if ($collection !== '') {
+                        $encoded = [
+                            'collection' => $collection,
+                            'type' => 'document',
+                            'value' => $value->getArrayCopy(),
+                        ];
+                    }
+                } elseif (!\is_array($value)) {
+                    $encoded = ['value' => $value];
+                } else {
+                    // Only homogeneous top-level document lists are safe to restore
+                    // from cache. Mixed or nested Document payloads keep callback shape.
+                    $collection = null;
+                    $hasDocuments = false;
+                    $hasNonDocuments = false;
+                    $cacheable = true;
+                    $documents = [];
+                    $containsDocument = function (mixed $item) use (&$containsDocument): bool {
+                        if ($item instanceof Document) {
+                            return true;
+                        }
+
+                        if (!\is_array($item)) {
+                            return false;
+                        }
+
+                        foreach ($item as $child) {
+                            if ($containsDocument($child)) {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    };
+
+                    foreach ($value as $item) {
+                        if (!$item instanceof Document) {
+                            if ($hasDocuments || $containsDocument($item)) {
+                                $cacheable = false;
+                                break;
+                            }
+
+                            $hasNonDocuments = true;
+                            continue;
+                        }
+
+                        if ($hasNonDocuments) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $documentCollection = $item->getCollection();
+                        if ($documentCollection === '') {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        if ($collection !== null && $collection !== $documentCollection) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $collection = $documentCollection;
+                        $hasDocuments = true;
+                        $documents[] = $item->getArrayCopy();
+                    }
+
+                    if ($cacheable) {
+                        $encoded = $hasDocuments ? [
+                            'collection' => $collection,
+                            'type' => 'documents',
+                            'value' => $documents,
+                        ] : ['value' => $value];
+                    }
+                }
+
                 if ($encoded !== false) {
                     $this->cache->save($key, $encoded, $hash);
                 }
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
             }
-        }
-
-        return $value;
-    }
-
-    /**
-     * @param array<string, mixed> $cached
-     */
-    private function decodeCacheValue(array $cached, mixed $value): mixed
-    {
-        $collection = $cached['collection'] ?? null;
-        if (!\is_string($collection) || $collection === '') {
-            return $value;
-        }
-
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->isEmpty()) {
-            return false;
-        }
-
-        if (($cached['type'] ?? null) === 'document') {
-            return $this->restoreQueryCacheDocument($collection, $value);
-        }
-
-        return $this->restoreQueryCacheDocuments($collection, $value);
-    }
-
-    private function restoreQueryCacheDocument(Document $collection, mixed $payload): Document|false
-    {
-        $documents = $this->restoreQueryCacheDocuments($collection, [$payload]);
-
-        return $documents === false ? false : ($documents[0] ?? false);
-    }
-
-    /**
-     * @return array<string, mixed>|false
-     */
-    private function encodeCacheValue(mixed $value): array|false
-    {
-        if ($value instanceof Document) {
-            $collection = $value->getCollection();
-            if ($collection === '') {
-                return false;
-            }
-
-            return [
-                'collection' => $collection,
-                'type' => 'document',
-                'value' => $value->getArrayCopy(),
-            ];
-        }
-
-        $collection = $this->getCacheValueCollection($value);
-        if ($collection === null || !\is_array($value)) {
-            if ($this->hasCacheValueDocument($value)) {
-                return false;
-            }
-
-            return ['value' => $value];
-        }
-
-        return [
-            'collection' => $collection,
-            'type' => 'documents',
-            'value' => $this->encodeQueryCacheValue($value),
-        ];
-    }
-
-    private function getCacheValueCollection(mixed $value): ?string
-    {
-        if ($value instanceof Document) {
-            return $value->getCollection() ?: null;
-        }
-
-        if (!\is_array($value)) {
-            return null;
-        }
-
-        foreach ($value as $item) {
-            $collection = $this->getCacheValueCollection($item);
-            if ($collection !== null) {
-                return $collection;
-            }
-        }
-
-        return null;
-    }
-
-    private function hasCacheValueDocument(mixed $value): bool
-    {
-        if ($value instanceof Document) {
-            return true;
-        }
-
-        if (!\is_array($value)) {
-            return false;
-        }
-
-        foreach ($value as $item) {
-            if ($this->hasCacheValueDocument($item)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function encodeQueryCacheValue(mixed $value): mixed
-    {
-        if ($value instanceof Document) {
-            return $value->getArrayCopy();
-        }
-
-        if (!\is_array($value)) {
-            return $value;
-        }
-
-        foreach ($value as $key => $item) {
-            $value[$key] = $this->encodeQueryCacheValue($item);
         }
 
         return $value;
@@ -9777,9 +9739,20 @@ class Database
             'filters' => $this->getActiveFilterSignatures(),
         ];
 
+        $schemaHash = '';
+        if ($collection !== null && !$collection->isEmpty()) {
+            // Schema-affecting changes must move callers onto a fresh cache field.
+            $schemaHash = \md5(
+                \json_encode($collection->getAttribute('attributes', []))
+                . \json_encode($collection->getAttribute('indexes', []))
+                . \json_encode($collection->getAttribute('$permissions', []))
+                . \json_encode($collection->getAttribute('documentSecurity', false))
+            );
+        }
+
         return \sprintf(
             '%s:%s:%s',
-            $this->getQueryCacheSchemaHash($collection),
+            $schemaHash,
             \md5(\json_encode($queryPayload) ?: ''),
             $field,
         );
@@ -9828,20 +9801,6 @@ class Database
         }
 
         return $value;
-    }
-
-    private function getQueryCacheSchemaHash(?Document $collection): string
-    {
-        if ($collection === null || $collection->isEmpty()) {
-            return '';
-        }
-
-        return \md5(
-            \json_encode($collection->getAttribute('attributes', []))
-            . \json_encode($collection->getAttribute('indexes', []))
-            . \json_encode($collection->getAttribute('$permissions', []))
-            . \json_encode($collection->getAttribute('documentSecurity', false))
-        );
     }
 
     /**

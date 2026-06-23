@@ -8705,7 +8705,7 @@ class Database
                     $encoded = ['value' => $callbackValue];
                 } else {
                     // Only homogeneous top-level document lists are safe to restore
-                    // from cache. Mixed or nested Document payloads keep callback shape.
+                    // from cache. Plain arrays containing Documents are left uncached.
                     $collection = null;
                     $hasDocuments = false;
                     $hasNonDocuments = false;

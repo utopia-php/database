@@ -8617,10 +8617,10 @@ class Database
         }
 
         if ($cached !== false && $cached !== null) {
-            $value = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
+            $cachedValue = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
 
-            if ($value !== false) {
-                $decoded = $value;
+            if ($cachedValue !== false) {
+                $decoded = $cachedValue;
                 $collection = $cached['collection'] ?? null;
 
                 if (\is_string($collection) && $collection !== '') {
@@ -8638,7 +8638,7 @@ class Database
                             throw new AuthorizationException($this->authorization->getDescription());
                         }
 
-                        $payload = ($cached['type'] ?? null) === 'document' ? [$value] : $value;
+                        $payload = ($cached['type'] ?? null) === 'document' ? [$cachedValue] : $cachedValue;
 
                         if (!\is_array($payload)) {
                             $decoded = false;
@@ -8685,24 +8685,24 @@ class Database
             }
         }
 
-        $value = $callback();
+        $callbackValue = $callback();
 
-        if ($value !== false) {
+        if ($callbackValue !== false) {
             try {
                 $encoded = false;
 
-                if ($value instanceof Document) {
-                    $collection = $value->getCollection();
+                if ($callbackValue instanceof Document) {
+                    $collection = $callbackValue->getCollection();
 
                     if ($collection !== '') {
                         $encoded = [
                             'collection' => $collection,
                             'type' => 'document',
-                            'value' => $value->getArrayCopy(),
+                            'value' => $callbackValue->getArrayCopy(),
                         ];
                     }
-                } elseif (!\is_array($value)) {
-                    $encoded = ['value' => $value];
+                } elseif (!\is_array($callbackValue)) {
+                    $encoded = ['value' => $callbackValue];
                 } else {
                     // Only homogeneous top-level document lists are safe to restore
                     // from cache. Mixed or nested Document payloads keep callback shape.
@@ -8729,7 +8729,7 @@ class Database
                         return false;
                     };
 
-                    foreach ($value as $item) {
+                    foreach ($callbackValue as $item) {
                         if (!$item instanceof Document) {
                             if ($hasDocuments || $containsDocument($item)) {
                                 $cacheable = false;
@@ -8766,7 +8766,7 @@ class Database
                             'collection' => $collection,
                             'type' => 'documents',
                             'value' => $documents,
-                        ] : ['value' => $value];
+                        ] : ['value' => $callbackValue];
                     }
                 }
 
@@ -8778,7 +8778,8 @@ class Database
             }
         }
 
-        return $value;
+        /** @var T $callbackValue */
+        return $callbackValue;
     }
 
     /**

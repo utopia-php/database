@@ -38,21 +38,20 @@ class QueryCacheTest extends TestCase
         string $collection,
         array $queries = [],
         ?string $namespace = null,
-        string $forPermission = Database::PERMISSION_READ,
     ): array {
         foreach ($queries as $query) {
             if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
-                return $database->find($collection, $queries, $forPermission);
+                return $database->find($collection, $queries);
             }
         }
 
         $collectionDocument = $database->getCollection($collection);
         $cacheKey = $database->getQueryCacheKey($collectionDocument->getId(), $namespace);
-        $cacheHash = $database->getQueryCacheField($collectionDocument, $queries, 'documents', $forPermission);
+        $cacheHash = $database->getQueryCacheField($collectionDocument, $queries);
 
         return $database->withCache(
             key: $cacheKey,
-            callback: fn (): array => $database->find($collection, $queries, $forPermission),
+            callback: fn (): array => $database->find($collection, $queries),
             hash: $cacheHash,
         );
     }
@@ -346,7 +345,7 @@ class QueryCacheTest extends TestCase
         ));
     }
 
-    public function testQueryCacheSeparatesEntriesByPermissionMode(): void
+    public function testQueryCacheSeparatesEntriesByAuthorizationContext(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
@@ -363,7 +362,6 @@ class QueryCacheTest extends TestCase
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-            Permission::update(Role::any()),
         ]);
 
         $database->createDocument('wafRules', new Document([
@@ -377,18 +375,20 @@ class QueryCacheTest extends TestCase
             Query::limit(25),
         ];
 
-        $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
+        $this->findWithCache($database, 'wafRules', $queries, '_39');
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-b',
             'projectId' => 'project-a',
         ]));
 
-        $cached = $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_READ);
+        $cached = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(1, $cached);
 
-        $permissionSeparated = $this->findWithCache($database, 'wafRules', $queries, '_39', forPermission: Database::PERMISSION_UPDATE);
-        $this->assertCount(2, $permissionSeparated);
+        $database->getAuthorization()->addRole(Role::user('user-1')->toString());
+
+        $roleSeparated = $this->findWithCache($database, 'wafRules', $queries, '_39');
+        $this->assertCount(2, $roleSeparated);
     }
 
     public function testQueryCacheRecastsCacheHits(): void

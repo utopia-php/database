@@ -222,7 +222,6 @@ class CacheKeyTest extends TestCase
             ),
         );
         $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
-        $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(10)], forPermission: Database::PERMISSION_UPDATE));
         $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
     }
 

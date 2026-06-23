@@ -8589,22 +8589,20 @@ class Database
      *
      * @param Document $collection
      * @param mixed $payload
-     * @param string $forPermission
      * @return array<Document>|false
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function restoreQueryCacheDocuments(
+    private function restoreQueryCacheDocuments(
         Document $collection,
         mixed $payload,
-        string $forPermission = Database::PERMISSION_READ,
     ): array|false {
         if (!\is_array($payload)) {
             return false;
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -8711,15 +8709,17 @@ class Database
         }
 
         if (($cached['type'] ?? null) === 'document') {
-            $documents = $this->restoreQueryCacheDocuments($collection, [$value]);
-            if ($documents === false) {
-                return false;
-            }
-
-            return $documents[0] ?? false;
+            return $this->restoreQueryCacheDocument($collection, $value);
         }
 
         return $this->restoreQueryCacheDocuments($collection, $value);
+    }
+
+    private function restoreQueryCacheDocument(Document $collection, mixed $payload): Document|false
+    {
+        $documents = $this->restoreQueryCacheDocuments($collection, [$payload]);
+
+        return $documents === false ? false : ($documents[0] ?? false);
     }
 
     /**
@@ -9714,14 +9714,12 @@ class Database
      * @param Document|null $collection
      * @param array<Query> $queries
      * @param string $field
-     * @param string $forPermission
      * @return string
      */
     public function getQueryCacheField(
         ?Document $collection = null,
         array $queries = [],
         string $field = 'documents',
-        string $forPermission = self::PERMISSION_READ,
     ): string {
         $this->checkQueryTypes($queries);
 
@@ -9735,7 +9733,6 @@ class Database
                 'roles' => $authorizationRoles,
             ],
             'database' => $this->getDatabase(),
-            'permission' => $forPermission,
             'queries' => \array_map(
                 fn (Query $query): array => $this->serializeQueryCacheQuery($query),
                 $queries,

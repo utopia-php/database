@@ -244,6 +244,13 @@ class CacheKeyTest extends TestCase
         );
     }
 
+    public function testQueryCacheFieldReturnsNullForNonReadPermission(): void
+    {
+        $db = $this->createDatabase();
+
+        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+    }
+
     public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
     {
         $db = $this->createDatabase();

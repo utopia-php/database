@@ -9714,14 +9714,20 @@ class Database
      * @param Document|null $collection
      * @param array<Query> $queries
      * @param string $field
-     * @return string
+     * @param string $forPermission
+     * @return string|null
      */
     public function getQueryCacheField(
         ?Document $collection = null,
         array $queries = [],
         string $field = 'documents',
-    ): string {
+        string $forPermission = self::PERMISSION_READ,
+    ): ?string {
         $this->checkQueryTypes($queries);
+
+        if ($forPermission !== self::PERMISSION_READ) {
+            return null;
+        }
 
         $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
         \sort($authorizationRoles);

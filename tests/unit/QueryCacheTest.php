@@ -429,7 +429,7 @@ class QueryCacheTest extends TestCase
         $this->assertCount(1, $cached);
         $this->assertSame('rule-a', $cached[0]->getId());
 
-        $this->assertTrue($database->purgeQueryCache('wafRules', '_39'));
+        $this->assertTrue($database->purgeCachedQueries('wafRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(2, $fresh);
@@ -659,7 +659,7 @@ class QueryCacheTest extends TestCase
 
         $this->assertCount(1, $cached);
 
-        $this->assertTrue($database->purgeQueryCache('secureRules', '_39'));
+        $this->assertTrue($database->purgeCachedQueries('secureRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'secureRules', $queries, '_39');
         $this->assertSame([], $fresh);

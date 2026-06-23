@@ -8571,7 +8571,7 @@ class Database
      * @param string|null $namespace
      * @return bool
      */
-    public function purgeQueryCache(string $collection, ?string $namespace = null): bool
+    public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
     {
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();

@@ -217,6 +217,64 @@ class QueryCacheTest extends TestCase
         $this->assertSame(2, $callbackCalls);
     }
 
+    public function testWithCacheBypassesCacheForNullHash(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $callbackCalls = 0;
+
+        $first = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): string {
+                $callbackCalls++;
+                return 'first';
+            },
+            hash: null,
+        );
+        $second = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): string {
+                $callbackCalls++;
+                return 'second';
+            },
+            hash: null,
+        );
+
+        $this->assertSame('first', $first);
+        $this->assertSame('second', $second);
+        $this->assertSame(2, $callbackCalls);
+        $this->assertSame([], $cache->list('key'));
+    }
+
+    public function testWithCacheDoesNotCacheCollectionlessDocuments(): void
+    {
+        $cache = new HashMemoryCache();
+        $database = $this->createDatabase($cache);
+
+        $callbackCalls = 0;
+
+        $first = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): Document {
+                $callbackCalls++;
+                return new Document(['$id' => 'first']);
+            },
+        );
+        $second = $database->withCache(
+            key: 'key',
+            callback: function () use (&$callbackCalls): Document {
+                $callbackCalls++;
+                return new Document(['$id' => 'second']);
+            },
+        );
+
+        $this->assertSame('first', $first->getId());
+        $this->assertSame('second', $second->getId());
+        $this->assertSame(2, $callbackCalls);
+        $this->assertSame([], $cache->list('key'));
+    }
+
     public function testWithCacheCachesSingleDocument(): void
     {
         $cache = new HashMemoryCache();

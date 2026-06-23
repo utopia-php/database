@@ -8639,7 +8639,7 @@ class Database
      * @template T
      * @param string $key
      * @param callable(): T $callback
-     * @param string $hash
+     * @param string|null $hash
      * @return T
      * @throws AuthorizationException
      * @throws Exception
@@ -8647,8 +8647,12 @@ class Database
     public function withCache(
         string $key,
         callable $callback,
-        string $hash = '',
+        ?string $hash = '',
     ): mixed {
+        if ($hash === null) {
+            return $callback();
+        }
+
         $shouldRefreshCache = false;
 
         try {
@@ -8684,7 +8688,10 @@ class Database
 
         if ($value !== false) {
             try {
-                $this->cache->save($key, $this->encodeCacheValue($value), $hash);
+                $encoded = $this->encodeCacheValue($value);
+                if ($encoded !== false) {
+                    $this->cache->save($key, $encoded, $hash);
+                }
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
             }
@@ -8723,14 +8730,14 @@ class Database
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|false
      */
-    private function encodeCacheValue(mixed $value): array
+    private function encodeCacheValue(mixed $value): array|false
     {
         if ($value instanceof Document) {
             $collection = $value->getCollection();
             if ($collection === '') {
-                return ['value' => $value];
+                return false;
             }
 
             return [
@@ -8742,6 +8749,10 @@ class Database
 
         $collection = $this->getCacheValueCollection($value);
         if ($collection === null || !\is_array($value)) {
+            if ($this->hasCacheValueDocument($value)) {
+                return false;
+            }
+
             return ['value' => $value];
         }
 
@@ -8770,6 +8781,25 @@ class Database
         }
 
         return null;
+    }
+
+    private function hasCacheValueDocument(mixed $value): bool
+    {
+        if ($value instanceof Document) {
+            return true;
+        }
+
+        if (!\is_array($value)) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if ($this->hasCacheValueDocument($item)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function encodeQueryCacheValue(mixed $value): mixed

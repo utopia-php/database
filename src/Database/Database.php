@@ -8709,6 +8709,16 @@ class Database
             }
         }
 
+        // Capture the generation before the callback runs its read: if a
+        // concurrent write purges this query key in between, saveWithLease()
+        // below rejects the now-stale list instead of re-poisoning the cache.
+        $generation = '0';
+        try {
+            $generation = $this->cache->getGeneration($key);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+        }
+
         $callbackValue = $callback();
 
         if ($callbackValue !== false) {
@@ -8795,7 +8805,7 @@ class Database
                 }
 
                 if ($encoded !== false) {
-                    $this->cache->save($key, $encoded, $hash);
+                    $this->cache->saveWithLease($key, $encoded, $hash, $generation);
                 }
             } catch (Throwable $e) {
                 Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());

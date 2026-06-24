@@ -24,6 +24,144 @@ use Utopia\Database\Query;
 
 trait DocumentTests
 {
+    public function testPartialUpdateDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'str_1', Database::VAR_STRING, 128, true, null);
+        $database->createAttribute(__FUNCTION__, 'str_2', Database::VAR_STRING, 128, false, 'default');
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        // Insert initial documents
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'bill',
+            'str_1' => 'Gates',
+            'str_2' => 'Clinton',
+            '$permissions' => $permissions,
+        ]));
+
+        $this->assertEquals('bill', $document->getId());
+        $this->assertEquals('Gates', $document->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $document->getAttribute('str_2'));
+        $this->assertEquals($permissions, $document->getPermissions());
+
+        // Capture the internal sequence (_id) — it must survive a uid rename
+        $sequence = $document->getSequence();
+
+        /**
+         * test Update $id with no permissions!
+         */
+        $partial = new Document([
+            '$id' => 'bill_1',
+        ]);
+
+        $partial = $this->getDatabase()->updateDocument(__FUNCTION__, $document->getId(), $partial);
+        $this->assertEquals('bill_1', $partial->getId());
+        $this->assertEquals('Gates', $partial->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $partial->getAttribute('str_2'));
+        $this->assertEquals($permissions, $partial->getPermissions());
+        $this->assertEquals($sequence, $partial->getSequence());
+
+        /**
+         * Use find to check that permissions are not lost
+         */
+        $document = $database->findOne(__FUNCTION__, [
+            Query::equal('$id', ['bill_1'])
+        ]);
+
+        $this->assertEquals('bill_1', $document->getId());
+        $this->assertEquals('Gates', $document->getAttribute('str_1'));
+        $this->assertEquals('Clinton', $document->getAttribute('str_2'));
+        $this->assertEquals($permissions, $document->getPermissions());
+        $this->assertEquals($sequence, $document->getSequence());
+
+        /**
+         * The old $id must no longer exist
+         */
+        $old = $database->getDocument(__FUNCTION__, 'bill');
+        $this->assertTrue($old->isEmpty());
+
+        $old = $database->findOne(__FUNCTION__, [
+            Query::equal('$id', ['bill'])
+        ]);
+        $this->assertTrue($old->isEmpty());
+
+        /**
+         * The collection holds exactly one document after the rename
+         */
+        $this->assertCount(1, $database->find(__FUNCTION__));
+    }
+
+    public function testUpdateDocumentChangePermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $auth = $database->getAuthorization();
+        $roles = $auth->getRoles();
+
+        $collection = 'updatePerms';
+
+        try {
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true, null);
+
+            $document = $auth->skip(fn () => $database->createDocument($collection, new Document([
+                '$id' => 'doc1',
+                'name' => 'initial',
+                '$permissions' => [
+                    Permission::read(Role::user('user_a')),
+                    Permission::update(Role::user('user_a')),
+                ],
+            ])));
+
+            $sequence = $document->getSequence();
+
+            /**
+             * Replace the permission set entirely
+             */
+            $newPermissions = [
+                Permission::read(Role::user('user_b')),
+                Permission::update(Role::user('user_b')),
+            ];
+
+            $auth->skip(fn () => $database->updateDocument($collection, 'doc1', new Document([
+                '$id' => 'doc1',
+                '$permissions' => $newPermissions,
+            ])));
+
+            $updated = $auth->skip(fn () => $database->getDocument($collection, 'doc1'));
+            $this->assertEquals($sequence, $updated->getSequence());
+            $this->assertEquals('initial', $updated->getAttribute('name')); // unchanged attributes are preserved
+            $this->assertEqualsCanonicalizing($newPermissions, $updated->getPermissions());
+
+            /**
+             * The newly granted role can read the document
+             */
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('user_b')->toString());
+            $this->assertFalse($database->getDocument($collection, 'doc1')->isEmpty());
+
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('user_a')->toString());
+            $this->assertTrue($database->getDocument($collection, 'doc1')->isEmpty());
+        } finally {
+            // Restore the original roles
+            $auth->cleanRoles();
+            foreach ($roles as $role) {
+                $auth->addRole($role);
+            }
+
+            $auth->skip(fn () => $database->deleteCollection($collection));
+        }
+    }
+
     public function testNonUtfChars(): void
     {
         /** @var Database $database */
@@ -4752,6 +4890,12 @@ trait DocumentTests
             new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
+
+    public function testPartialUpdateDocument_place(): void
+    {
+        // $this->assertEquals('shmuel', 'fogel');
+    }
+
     /**
      * @depends testGetDocument
      */

@@ -6162,8 +6162,26 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $document = clone $document;
+
+        $document->removeAttribute('$sequence'); // $sequence is immutable
+        $document->removeAttribute('$collection'); // $collection is immutable
+        $document->removeAttribute('$tenant'); // $tenant is immutable
+
+        $inputKeys = [
+            ...\array_keys($document->getArrayCopy()),
+            '$sequence',
+            '$collection',
+            '$updatedAt',
+        ];
+
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $inputKeys) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6174,7 +6192,10 @@ class Database
 
             $skipPermissionsUpdate = true;
 
-            if ($document->offsetExists('$permissions')) {
+            if ($document->offsetExists('$id') && $document->getId() !== $id) { // UID change
+                $skipPermissionsUpdate = false;
+                $inputKeys[] = '$permissions';
+            } elseif ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions = $document->getPermissions();
 
@@ -6184,16 +6205,9 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
 
-            // UID change
-            if ($document->offsetExists('$id') && $document->getId() !== $id) {
-                $skipPermissionsUpdate = false;
-            }
-
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
-            $document['$sequence'] = $old->getSequence(); // Sequence is immutable
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
@@ -6346,7 +6360,7 @@ class Database
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
-                $structureValidator = new Structure(
+                $structureValidator = new PartialStructure(
                     $collection,
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
@@ -6355,7 +6369,10 @@ class Database
                     supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
                     currentDocument: $old
                 );
-                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+
+                $partialDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+
+                if (!$structureValidator->isValid($partialDocument)) { // Validate only user-provided fields
                     throw new StructureException($structureValidator->getDescription());
                 }
             }
@@ -6366,7 +6383,9 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+            $adapterDocument = new Document(\array_intersect_key($document->getArrayCopy(), \array_flip($inputKeys)));
+
+            $this->adapter->updateDocument($collection, $id, $adapterDocument, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 
@@ -6405,6 +6424,7 @@ class Database
             $document = $documents[0];
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         // Convert to custom document type if mapped
@@ -7742,6 +7762,9 @@ class Database
     public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(

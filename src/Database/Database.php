@@ -3813,6 +3813,14 @@ class Database
                 throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
             }
 
+            // updateDocument's purge ran inside this outer transaction (nested commits don't
+            // commit), so it fired pre-commit and a stale collection can stay cached. Re-purge
+            // after the real commit, else createIndex below re-reads it without the new column.
+            $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
+            $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
+            $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+            $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $relatedCollection->getId()));
+
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
             $indexesCreated = [];

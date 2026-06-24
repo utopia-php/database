@@ -317,22 +317,22 @@ class Attribute extends Validator
                 break;
 
             case Database::VAR_TEXT:
-                if ($size > 65535) {
-                    $this->message = 'Max size allowed for text is: 65535';
+                if ($size > Database::MAX_TEXT_BYTES) {
+                    $this->message = 'Max size allowed for text is: ' . Database::MAX_TEXT_BYTES;
                     throw new DatabaseException($this->message);
                 }
                 break;
 
             case Database::VAR_MEDIUMTEXT:
-                if ($size > 16777215) {
-                    $this->message = 'Max size allowed for mediumtext is: 16777215';
+                if ($size > Database::MAX_MEDIUMTEXT_BYTES) {
+                    $this->message = 'Max size allowed for mediumtext is: ' . Database::MAX_MEDIUMTEXT_BYTES;
                     throw new DatabaseException($this->message);
                 }
                 break;
 
             case Database::VAR_LONGTEXT:
-                if ($size > 4294967295) {
-                    $this->message = 'Max size allowed for longtext is: 4294967295';
+                if ($size > Database::MAX_LONGTEXT_BYTES) {
+                    $this->message = 'Max size allowed for longtext is: ' . Database::MAX_LONGTEXT_BYTES;
                     throw new DatabaseException($this->message);
                 }
                 break;

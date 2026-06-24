@@ -353,10 +353,22 @@ class Structure extends Validator
                     $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
                     break;
 
-                case Database::VAR_VARCHAR:
                 case Database::VAR_TEXT:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_TEXT_BYTES);
+                    break;
+
                 case Database::VAR_MEDIUMTEXT:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_MEDIUMTEXT_BYTES);
+                    break;
+
                 case Database::VAR_LONGTEXT:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_LONGTEXT_BYTES);
+                    break;
+
+                case Database::VAR_VARCHAR:
                 case Database::VAR_STRING:
                     $validators[] = new Text($size, min: 0);
                     break;

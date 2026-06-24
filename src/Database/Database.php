@@ -4884,6 +4884,17 @@ class Database
             return $document;
         }
 
+        // Capture the generation before reading: if a concurrent purge advances
+        // it, saveWithLease() below rejects this now-stale value. '0' means no lease.
+        $generation = '0';
+        if (!$forUpdate) {
+            try {
+                $generation = $this->cache->getGeneration($documentKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+            }
+        }
+
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4936,8 +4947,10 @@ class Database
         // caching the pre-commit row would poison the cache for other readers.
         if (!$forUpdate && empty($relationships)) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                // Index for invalidation only when the value was actually cached.
+                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }
@@ -8570,6 +8583,245 @@ class Database
     }
 
     /**
+     * Purge all cached query entries for a collection namespace.
+     *
+     * @param string $collection
+     * @param string|null $namespace
+     * @return bool
+     */
+    public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
+    {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+
+        return $this->cache->purge(
+            $this->getQueryCacheKey($collection, $namespace)
+        );
+    }
+
+    /**
+     * Execute a callback behind a cache-aside lookup.
+     *
+     * The callback runs on cache miss and its value is returned to the caller.
+     * Query document payloads are converted to arrays before save and restored
+     * back into Documents on cache hits. A rejected document payload refreshes
+     * the cached value.
+     * A literal false value is treated as a cache miss and is not cacheable.
+     *
+     * @template T
+     * @param string $key
+     * @param callable(): T $callback
+     * @param string|null $hash
+     * @return T
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function withCache(
+        string $key,
+        callable $callback,
+        ?string $hash = '',
+    ): mixed {
+        if ($hash === null) {
+            return $callback();
+        }
+
+        $shouldRefreshCache = false;
+
+        try {
+            $cached = $this->cache->load($key, self::TTL, $hash);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to load cache value: ' . $e->getMessage());
+            $cached = false;
+        }
+
+        if ($cached !== false && $cached !== null) {
+            $cachedValue = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
+
+            if ($cachedValue !== false) {
+                $decoded = $cachedValue;
+                $collection = $cached['collection'] ?? null;
+
+                if (\is_string($collection) && $collection !== '') {
+                    // Cached document payloads are stored as arrays; restore them
+                    // to the same Document shape that find()/getDocument() return.
+                    $collection = $this->silent(fn () => $this->getCollection($collection));
+
+                    if ($collection->isEmpty()) {
+                        $decoded = false;
+                    } else {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+
+                        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+
+                        $payload = ($cached['type'] ?? null) === 'document' ? [$cachedValue] : $cachedValue;
+
+                        if (!\is_array($payload)) {
+                            $decoded = false;
+                        } else {
+                            $documents = [];
+
+                            foreach ($payload as $document) {
+                                if (!\is_array($document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                $document = $this->createDocumentInstance($collection->getId(), $document);
+                                $document = $this->casting($collection, $document);
+
+                                if ($this->isTtlExpired($collection, $document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                if (!$skipAuth && $documentSecurity && $collection->getId() !== self::METADATA) {
+                                    if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $document->getRead()))) {
+                                        if (($cached['type'] ?? null) === 'document') {
+                                            $decoded = false;
+                                            break;
+                                        }
+
+                                        continue;
+                                    }
+                                }
+
+                                $documents[] = $document;
+                            }
+
+                            if ($decoded !== false) {
+                                $decoded = ($cached['type'] ?? null) === 'document' ? ($documents[0] ?? false) : $documents;
+                            }
+                        }
+                    }
+                }
+
+                if ($decoded !== false) {
+                    return $decoded;
+                }
+            }
+
+            $shouldRefreshCache = true;
+        }
+
+        if ($shouldRefreshCache) {
+            try {
+                $this->cache->purge($key, $hash);
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to purge rejected cache value: ' . $e->getMessage());
+            }
+        }
+
+        // Capture the generation before the callback runs its read: if a
+        // concurrent write purges this query key in between, saveWithLease()
+        // below rejects the now-stale list instead of re-poisoning the cache.
+        $generation = '0';
+        try {
+            $generation = $this->cache->getGeneration($key);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+        }
+
+        $callbackValue = $callback();
+
+        if ($callbackValue !== false) {
+            try {
+                $encoded = false;
+
+                if ($callbackValue instanceof Document) {
+                    $collection = $callbackValue->getCollection();
+
+                    if ($collection !== '') {
+                        $encoded = [
+                            'collection' => $collection,
+                            'type' => 'document',
+                            'value' => $callbackValue->getArrayCopy(),
+                        ];
+                    }
+                } elseif (!\is_array($callbackValue)) {
+                    $encoded = ['value' => $callbackValue];
+                } else {
+                    // Only homogeneous top-level document lists are safe to restore
+                    // from cache. Plain arrays containing Documents are left uncached.
+                    $collection = null;
+                    $hasDocuments = false;
+                    $hasNonDocuments = false;
+                    $cacheable = true;
+                    $documents = [];
+                    $containsDocument = function (mixed $item) use (&$containsDocument): bool {
+                        if ($item instanceof Document) {
+                            return true;
+                        }
+
+                        if (!\is_array($item)) {
+                            return false;
+                        }
+
+                        foreach ($item as $child) {
+                            if ($containsDocument($child)) {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    };
+
+                    foreach ($callbackValue as $item) {
+                        if (!$item instanceof Document) {
+                            if ($hasDocuments || $containsDocument($item)) {
+                                $cacheable = false;
+                                break;
+                            }
+
+                            $hasNonDocuments = true;
+                            continue;
+                        }
+
+                        if ($hasNonDocuments) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $documentCollection = $item->getCollection();
+                        if ($documentCollection === '') {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        if ($collection !== null && $collection !== $documentCollection) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $collection = $documentCollection;
+                        $hasDocuments = true;
+                        $documents[] = $item->getArrayCopy();
+                    }
+
+                    if ($cacheable) {
+                        $encoded = $hasDocuments ? [
+                            'collection' => $collection,
+                            'type' => 'documents',
+                            'value' => $documents,
+                        ] : ['value' => $callbackValue];
+                    }
+                }
+
+                if ($encoded !== false) {
+                    $this->cache->saveWithLease($key, $encoded, $hash, $generation);
+                }
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
+            }
+        }
+
+        /** @var T $callbackValue */
+        return $callbackValue;
+    }
+
+    /**
      * Helper method to iterate documents in collection using callback pattern
      * Alterative is
      *
@@ -9450,34 +9702,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $filterSignatures = [];
-            if ($this->filter) {
-                $disabled = $this->disabledFilters ?? [];
-
-                foreach (self::$filters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    if (\array_key_exists($name, $this->instanceFilters)) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                foreach ($this->instanceFilters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                \ksort($filterSignatures);
-            }
-
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->resolveRelationships,
-                'filters' => $filterSignatures,
+                'filters' => $this->getActiveFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -9487,6 +9715,166 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    /**
+     * Stable cache key for cached query entries on a collection.
+     *
+     * @param string $collectionId
+     * @param string|null $namespace
+     * @return string
+     */
+    public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
+    {
+        $hostname = $this->adapter->getSupportForHostname()
+            ? $this->adapter->getHostname()
+            : '';
+
+        return \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s:query',
+            $this->cacheName,
+            $hostname,
+            $namespace ?? $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId,
+        );
+    }
+
+    /**
+     * Stable cache field for cached query entries on a collection.
+     *
+     * @param Document|null $collection
+     * @param array<Query> $queries
+     * @param string $field
+     * @param string $forPermission
+     * @return string|null
+     */
+    public function getQueryCacheField(
+        ?Document $collection = null,
+        array $queries = [],
+        string $field = 'documents',
+        string $forPermission = self::PERMISSION_READ,
+    ): ?string {
+        $this->checkQueryTypes($queries);
+
+        if ($forPermission !== self::PERMISSION_READ) {
+            return null;
+        }
+
+        $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
+        \sort($authorizationRoles);
+
+        $queryPayload = [
+            'version' => 1,
+            'authorization' => [
+                'enabled' => $this->authorization->getStatus(),
+                'roles' => $authorizationRoles,
+            ],
+            'database' => $this->getDatabase(),
+            'queries' => \array_map(
+                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                $queries,
+            ),
+            'relationships' => $this->resolveRelationships,
+            'filters' => $this->getActiveFilterSignatures(),
+        ];
+
+        $schemaHash = '';
+        if ($collection !== null && !$collection->isEmpty()) {
+            // Schema-affecting changes must move callers onto a fresh cache field.
+            $schemaHash = \md5(
+                \json_encode($collection->getAttribute('attributes', []))
+                . \json_encode($collection->getAttribute('indexes', []))
+                . \json_encode($collection->getAttribute('$permissions', []))
+                . \json_encode($collection->getAttribute('documentSecurity', false))
+            );
+        }
+
+        return \sprintf(
+            '%s:%s:%s',
+            $schemaHash,
+            \md5(\json_encode($queryPayload) ?: ''),
+            $field,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeQueryCacheQuery(Query $query): array
+    {
+        $serialized = [
+            'method' => $query->getMethod(),
+        ];
+
+        if ($query->getAttribute() !== '') {
+            $serialized['attribute'] = $query->getAttribute();
+        }
+
+        $values = [];
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                $values[] = $this->serializeQueryCacheQuery($value);
+                continue;
+            }
+
+            $values[] = $this->normalizeQueryCacheQueryValue($value);
+        }
+
+        $serialized['values'] = $values;
+
+        return $serialized;
+    }
+
+    private function normalizeQueryCacheQueryValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        if (!\is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->normalizeQueryCacheQueryValue($item);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function getActiveFilterSignatures(): array
+    {
+        $filterSignatures = [];
+        if (!$this->filter) {
+            return $filterSignatures;
+        }
+
+        $disabled = $this->disabledFilters ?? [];
+
+        foreach (self::$filters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            if (\array_key_exists($name, $this->instanceFilters)) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->instanceFilters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        \ksort($filterSignatures);
+
+        return $filterSignatures;
     }
 
     private static function computeCallableSignature(callable $callable): string

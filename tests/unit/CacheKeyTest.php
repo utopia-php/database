@@ -7,18 +7,22 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Query;
 
 class CacheKeyTest extends TestCase
 {
     /**
      * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
      */
-    private function createDatabase(array $instanceFilters = []): Database
+    private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
+        $adapter->method('getDatabase')->willReturn($database);
 
         return new Database($adapter, new Cache(new None()), $instanceFilters);
     }
@@ -130,6 +134,172 @@ class CacheKeyTest extends TestCase
 
         $this->assertNotEquals($hashEnabled, $hashDisabled);
     }
+
+    public function testQueryCacheKeyUsesQueryCacheShape(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getNamespace')->willReturn('_39');
+        $adapter->method('getTenant')->willReturn(null);
+
+        $db = new Database($adapter, new Cache(new None()), []);
+
+        $this->assertSame(
+            'default-cache-mysql-console:_39::collection:ttl_cache_table:query',
+            $db->getQueryCacheKey('ttl_cache_table'),
+        );
+    }
+
+    public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getNamespace')->willReturn('');
+        $adapter->method('getTenant')->willReturn(null);
+
+        $db = new Database($adapter, new Cache(new None()), []);
+
+        $this->assertSame(
+            'default-cache-mysql-console:_39::collection:wafrules:query',
+            $db->getQueryCacheKey('wafrules', '_39'),
+        );
+    }
+
+    public function testQueryCacheFieldUsesQueryCacheShape(): void
+    {
+        $db = $this->createDatabase();
+        $collection = new Document([
+            '$id' => 'wafRules',
+            'attributes' => [
+                new Document(['$id' => 'projectId', 'type' => Database::VAR_STRING]),
+                new Document(['$id' => 'enabled', 'type' => Database::VAR_BOOLEAN]),
+            ],
+            'indexes' => [
+                new Document(['$id' => 'project_enabled', 'attributes' => ['projectId', 'enabled']]),
+            ],
+        ]);
+        $queries = [
+            Query::equal('projectId', ['project-a']),
+            Query::equal('enabled', [true]),
+            Query::orderAsc('priority'),
+        ];
+
+        $schemaHash = \md5(
+            (\json_encode($collection->getAttribute('attributes', [])) ?: '')
+            . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
+            . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
+            . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
+        );
+        $field = $db->getQueryCacheField($collection, $queries);
+
+        $this->assertStringStartsWith("{$schemaHash}:", $field);
+        $this->assertStringEndsWith(':documents', $field);
+        $this->assertSame(2, \substr_count($field, ':'));
+    }
+
+    public function testQueryCacheFieldChangesWithInputs(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getQueryCacheField(
+            new Document([
+                'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
+                'indexes' => [],
+            ]),
+            [Query::limit(10)],
+        );
+
+        $this->assertNotSame(
+            $field,
+            $db->getQueryCacheField(
+                new Document([
+                    'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
+                    'indexes' => [],
+                ]),
+                [Query::limit(10)],
+            ),
+        );
+        $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
+        $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
+    }
+
+    public function testQueryCacheFieldChangesWithActiveAuthorizationContext(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getQueryCacheField(null, [Query::limit(10)]);
+
+        $this->assertNotSame(
+            $field,
+            $db->getAuthorization()->skip(fn () => $db->getQueryCacheField(null, [Query::limit(10)])),
+        );
+
+        $db->getAuthorization()->addRole('user:1');
+
+        $this->assertNotSame(
+            $field,
+            $db->getQueryCacheField(null, [Query::limit(10)]),
+        );
+    }
+
+    public function testQueryCacheFieldReturnsNullForNonReadPermission(): void
+    {
+        $db = $this->createDatabase();
+
+        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+    }
+
+    public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
+    {
+        $db = $this->createDatabase();
+
+        $fieldA = $db->getQueryCacheField(null, [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'alpha',
+            ])),
+        ]);
+        $fieldB = $db->getQueryCacheField(null, [
+            Query::orderAsc('name'),
+            Query::cursorAfter(new Document([
+                '$id' => 'cursor',
+                'name' => 'beta',
+            ])),
+        ]);
+
+        $this->assertNotSame($fieldA, $fieldB);
+    }
+
+    public function testQueryCacheFieldIncludesAmbientState(): void
+    {
+        $db = $this->createDatabase();
+
+        $field = $db->getQueryCacheField(null, [Query::limit(10)]);
+
+        $this->assertNotSame(
+            $field,
+            $db->skipFilters(fn () => $db->getQueryCacheField(null, [Query::limit(10)]), ['json']),
+        );
+        $this->assertNotSame(
+            $field,
+            $db->skipRelationships(fn () => $db->getQueryCacheField(null, [Query::limit(10)])),
+        );
+    }
+
+    public function testQueryCacheFieldValidatesQueryTypes(): void
+    {
+        $this->expectException(QueryException::class);
+
+        $db = $this->createDatabase();
+        $queries = ['invalid'];
+
+        /** @phpstan-ignore-next-line intentionally passing invalid query type */
+        $db->getQueryCacheField(null, $queries);
+    }
+
 
     public function testParseHostname(): void
     {

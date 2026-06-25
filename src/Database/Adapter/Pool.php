@@ -23,7 +23,7 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
-     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
     {
@@ -35,20 +35,14 @@ class Pool extends Adapter
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
+     *
      * @throws DatabaseException
      */
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
-                    fn () => $this->pinnedAdapter->{$method}(...$args)
-                );
-            }
-            return $this->pinnedAdapter->{$method}(...$args);
+            return $this->invokeAdapter($this->pinnedAdapter, $method, $args);
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
@@ -71,13 +65,51 @@ class Pool extends Adapter
                 $adapter->setMetadata($key, $value);
             }
 
+            return $this->invokeAdapter($adapter, $method, $args);
+        });
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     */
+    private function invokeAdapter(Adapter $adapter, string $method, array $args): mixed
+    {
+        if (! $this->isExplainCapturing()) {
             if ($this->skipDuplicates) {
                 return $adapter->skipDuplicates(
                     fn () => $adapter->{$method}(...$args)
                 );
             }
+
             return $adapter->{$method}(...$args);
-        });
+        }
+
+        // Only start (and own the stop/drain of) capture when the adapter
+        // isn't already capturing. A pinned adapter is reused across nested
+        // delegate() calls, e.g. a before()-listener firing its own query
+        // inside the read, so re-starting would wrongly throw "cannot be
+        // nested". Nested calls just let their plans accumulate into the
+        // same buffer, drained once by the outermost call.
+        $startedCapture = ! $adapter->isExplainCapturing();
+        if ($startedCapture) {
+            $adapter->startExplainCapture();
+        }
+
+        try {
+            if ($this->skipDuplicates) {
+                return $adapter->skipDuplicates(
+                    fn () => $adapter->{$method}(...$args)
+                );
+            }
+
+            return $adapter->{$method}(...$args);
+        } finally {
+            if ($startedCapture) {
+                foreach ($adapter->stopExplainCapture() as $entry) {
+                    $this->explainBuffer[] = $entry;
+                }
+            }
+        }
     }
 
     public function getDriver(): mixed
@@ -128,8 +160,10 @@ class Pool extends Adapter
      * from running on different connections.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
+     *
      * @throws \Throwable
      */
     public function withTransaction(callable $callback): mixed
@@ -166,6 +200,7 @@ class Pool extends Adapter
                         fn () => $adapter->withTransaction($callback)
                     );
                 }
+
                 return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;
@@ -323,6 +358,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * @param  array<string, mixed>  $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        // Explain runs on the inner adapter via delegate(), not on the pool itself.
+        throw new DatabaseException('Pool::explainSQL must not be invoked directly');
+    }
+
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -394,6 +439,11 @@ class Pool extends Adapter
     }
 
     public function getSupportForSchemas(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForExplain(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -736,6 +786,7 @@ class Pool extends Adapter
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
+
         return $this;
     }
 

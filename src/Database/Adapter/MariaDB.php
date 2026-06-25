@@ -1856,6 +1856,19 @@ class MariaDB extends SQL
         return $stmt->fetchColumn();
     }
 
+    /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        // setTimeout() wraps statements with `SET STATEMENT ... FOR <SQL>`,
+        // which is illegal inside EXPLAIN. Strip the wrapper before delegating.
+        $stripped = \preg_replace('/^\s*SET\s+STATEMENT\s+[^;]*?\s+FOR\s+/is', '', $sql, 1);
+        return parent::explainSQL($stripped ?? $sql, $binds);
+    }
+
     public function getInternalIndexesKeys(): array
     {
         return ['primary', '_created_at', '_updated_at', '_tenant_id'];

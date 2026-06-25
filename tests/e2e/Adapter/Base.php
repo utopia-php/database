@@ -7,6 +7,7 @@ use Tests\E2E\Adapter\Scopes\AttributeTests;
 use Tests\E2E\Adapter\Scopes\CollectionTests;
 use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
+use Tests\E2E\Adapter\Scopes\ExplainTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
@@ -27,6 +28,7 @@ abstract class Base extends TestCase
     use CustomDocumentTypeTests;
     use DocumentTests;
     use AttributeTests;
+    use ExplainTests;
     use IndexTests;
     use OperatorTests;
     use PermissionTests;

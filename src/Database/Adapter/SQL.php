@@ -2536,6 +2536,136 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @param string $sql
+     * @param array<string, mixed> $binds
+     * @return array<string, mixed>
+     */
+    protected function explainSQL(string $sql, array $binds = []): array
+    {
+        $explainSql = 'EXPLAIN FORMAT=JSON ' . \ltrim($sql);
+
+        $stmt = $this->getPDO()->prepare($explainSql);
+
+        foreach ($binds as $key => $value) {
+            if (\gettype($value) === 'double') {
+                $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+            } else {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+        }
+
+        // Route through execute() so the EXPLAIN inherits the same timeout and
+        // PDO error handling as the real read it mirrors.
+        try {
+            $this->execute($stmt);
+            $raw = $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        } finally {
+            $stmt->closeCursor();
+        }
+
+        $tree = \is_string($raw) ? \json_decode($raw, true) : null;
+        $tree = \is_array($tree) ? $tree : null;
+
+        return [
+            'rowsScanned'   => $this->extractRowsScanned($tree),
+            'indexUsed'     => $this->extractIndexUsed($tree),
+            'estimatedCost' => $this->extractEstimatedCost($tree),
+            'rowsReturned'  => null,
+            'executionTime' => null,
+            'tree'          => $tree,
+        ];
+    }
+
+    public function getSupportForExplain(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractRowsScanned(?array $tree): ?int
+    {
+        if ($tree === null) {
+            return null;
+        }
+        $total = null;
+        $this->walkExplainTables($tree, function (array $table) use (&$total) {
+            // MySQL exposes 'rows_examined_per_scan', MariaDB exposes 'rows'.
+            $rows = $table['rows_examined_per_scan'] ?? $table['rows'] ?? null;
+            if (\is_numeric($rows)) {
+                $total = ($total ?? 0) + (int) $rows;
+            }
+        });
+        return $total;
+    }
+
+    /**
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractIndexUsed(?array $tree): ?string
+    {
+        if ($tree === null) {
+            return null;
+        }
+        $found = null;
+        // Only the outer table — inner permission subquery indexes are not user-facing.
+        $this->walkExplainTables($tree, function (array $table) use (&$found) {
+            if ($found === null && isset($table['key']) && \is_string($table['key'])) {
+                $found = $table['key'];
+            }
+        }, depthLimit: 1);
+        return $found;
+    }
+
+    /**
+     * @param array<string, mixed>|null $tree
+     */
+    private function extractEstimatedCost(?array $tree): ?float
+    {
+        if ($tree === null) {
+            return null;
+        }
+        $cost = $tree['query_block']['cost_info']['query_cost'] ?? null;
+        return \is_numeric($cost) ? (float) $cost : null;
+    }
+
+    /**
+     * @param array<int|string, mixed> $node
+     * @param callable(array<string, mixed>): void $visitor
+     * @param int|null $depthLimit
+     * @param int $depth
+     */
+    private function walkExplainTables(array $node, callable $visitor, ?int $depthLimit = null, int $depth = 0): void
+    {
+        if ($depthLimit !== null && $depth > $depthLimit) {
+            return;
+        }
+
+        foreach ($node as $key => $value) {
+            if ($key === 'table' && \is_array($value)) {
+                $visitor($value);
+                if (isset($value['attached_subqueries']) && \is_array($value['attached_subqueries'])) {
+                    foreach ($value['attached_subqueries'] as $sub) {
+                        if (\is_array($sub)) {
+                            $this->walkExplainTables($sub, $visitor, $depthLimit, $depth + 1);
+                        }
+                    }
+                }
+                if (isset($value['materialized_from_subquery']) && \is_array($value['materialized_from_subquery'])) {
+                    $this->walkExplainTables($value['materialized_from_subquery'], $visitor, $depthLimit, $depth + 1);
+                }
+                continue;
+            }
+            if (\is_array($value)) {
+                $this->walkExplainTables($value, $visitor, $depthLimit, $depth);
+            }
+        }
+    }
+
+    /**
      * Create Documents in batches
      *
      * @param Document $collection
@@ -3247,6 +3377,12 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan($sql, $binds, 'find', ['collection' => $collection]);
+        }
+
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         try {
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -3265,6 +3401,11 @@ abstract class SQL extends Adapter
 
         $results = $stmt->fetchAll();
         $stmt->closeCursor();
+
+        if ($explainStart !== null) {
+            // Real stats from the read that actually ran — no second pass.
+            $this->recordPlanActuals(\count($results), (\microtime(true) - $explainStart) * 1000);
+        }
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -3373,6 +3514,12 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan($sql, $binds, 'count', ['collection' => $collection]);
+        }
+
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($binds as $key => $value) {
@@ -3389,6 +3536,11 @@ abstract class SQL extends Adapter
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];
+        }
+
+        if ($explainStart !== null) {
+            // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+            $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
         }
 
         return $result['sum'] ?? 0;
@@ -3468,6 +3620,12 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 
+        if ($this->explainBuffer !== null) {
+            $this->capturePlan($sql, $binds, 'sum', ['collection' => $collection, 'attribute' => $attribute]);
+        }
+
+        $explainStart = $this->explainBuffer !== null ? \microtime(true) : null;
+
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($binds as $key => $value) {
@@ -3484,6 +3642,11 @@ abstract class SQL extends Adapter
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];
+        }
+
+        if ($explainStart !== null) {
+            // Aggregate: one row out, so rowsReturned is not meaningful — record time only.
+            $this->recordPlanActuals(null, (\microtime(true) - $explainStart) * 1000);
         }
 
         return $result['sum'] ?? 0;

@@ -1454,6 +1454,32 @@ class Database
         }
     }
 
+    /**
+     * Run $callback with explain capture enabled.
+     *
+     * Returns the callback's own result (like withPreserveSequence/withTenant),
+     * so callers get their query output normally. The captured query plan is
+     * written to the by-reference $plan Document (`{ queries: [...] }`), letting
+     * one call yield both the rows and their plan.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @param Document|null $plan out-param: receives the captured plan document
+     * @return T the callback's return value
+     * @throws \Throwable rethrown from $callback; capture is always stopped first
+     */
+    public function withExplain(callable $callback, ?Document &$plan = null): mixed
+    {
+        $this->adapter->startExplainCapture();
+        try {
+            return $callback();
+        } finally {
+            $plan = new Document([
+                'queries' => $this->adapter->stopExplainCapture(),
+            ]);
+        }
+    }
+
     public function getPreserveSequence(): bool
     {
         return $this->preserveSequence;

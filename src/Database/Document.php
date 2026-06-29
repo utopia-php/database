@@ -46,7 +46,10 @@ class Document extends ArrayObject
             }
 
             foreach ($value as $childKey => $child) {
-                if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+                // Only wrap array children that look like sub-documents. Non-array elements
+                // (e.g. MongoDB\BSON\UTCDateTime in a datetime array, scalars, other objects)
+                // are not array-accessible, so isset($child['$id']) would fatal on them.
+                if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
                     $value[$childKey] = new self($child);
                 }
             }

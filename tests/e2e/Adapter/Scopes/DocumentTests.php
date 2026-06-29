@@ -6123,6 +6123,42 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testDateTimeArrayDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'datetime_array_doc';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'dates', Database::VAR_DATETIME, 0, false, null, false, true, null, [], ['datetime']));
+
+        $d1 = '2000-01-01T10:00:00.000+00:00';
+        $d2 = '2001-02-03T05:06:07.000+00:00';
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'dates' => [$d1, $d2],
+        ]));
+
+        // Regression: reading a datetime (object) array used to throw in Mongo with
+        // "Cannot use object of type MongoDB\BSON\UTCDateTime as array" because the
+        // Document constructor tried to array-access non-array elements.
+        $doc = $database->getDocument($collection, 'doc1');
+        $dates = $doc->getAttribute('dates');
+        $this->assertIsArray($dates);
+        $this->assertCount(2, $dates);
+        $this->assertEquals($d1, $dates[0]);
+        $this->assertEquals($d2, $dates[1]);
+
+        // Same values must round-trip through find()
+        $found = $database->find($collection, [Query::equal('$id', ['doc1'])]);
+        $this->assertCount(1, $found);
+        $this->assertEquals([$d1, $d2], $found[0]->getAttribute('dates'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testInvalidCreatedAndUpdatedAtThrowStructureException(): void
     {
         /** @var Database $database */

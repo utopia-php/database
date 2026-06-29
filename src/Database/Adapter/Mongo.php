@@ -1823,7 +1823,7 @@ class Mongo extends Adapter
         $updates = [];
         foreach ($operations as $op) {
             $updates[] = [
-                'q' => $op['filter'],
+                'q' => $this->client->toObject($op['filter']),
                 'u' => $op['update'],
                 'upsert' => true,
                 'multi' => false,

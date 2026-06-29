@@ -1976,14 +1976,14 @@ class Mongo extends Adapter
                 // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
                 return ['$dateAdd' => [
-                    'startDate' => $ref,
+                    'startDate' => ['$ifNull' => [$ref, '$$NOW']],
                     'unit' => 'day',
                     'amount' => (int)($values[0] ?? 0),
                 ]];
 
             case Operator::TYPE_DATE_SUB_DAYS:
                 return ['$dateSubtract' => [
-                    'startDate' => $ref,
+                    'startDate' => ['$ifNull' => [$ref, '$$NOW']],
                     'unit' => 'day',
                     'amount' => (int)($values[0] ?? 0),
                 ]];

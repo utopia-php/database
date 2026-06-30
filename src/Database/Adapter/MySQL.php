@@ -287,23 +287,28 @@ class MySQL extends MariaDB
      *
      * @param string $column
      * @param \Utopia\Database\Operator $operator
-     * @param int &$bindIndex
+     * @param array<string, mixed> $binds
      * @return ?string
      */
-    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, array &$binds): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
             case Operator::TYPE_ARRAY_APPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                }
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                }
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
             case Operator::TYPE_ARRAY_UNIQUE:
@@ -317,7 +322,7 @@ class MySQL extends MariaDB
         }
 
         // For all other operators, use parent implementation
-        return parent::getOperatorSQL($column, $operator, $bindIndex);
+        return parent::getOperatorSQL($column, $operator, $binds);
     }
 
     public function getSupportForTTLIndexes(): bool

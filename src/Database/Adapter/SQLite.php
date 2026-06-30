@@ -2169,7 +2169,10 @@ class SQLite extends MariaDB
             case Operator::TYPE_ARRAY_REMOVE:
                 $values = $operator->getValues();
                 $removeValue = $values[0] ?? null;
-                $removeValue = is_array($removeValue) ? json_encode($removeValue) : $removeValue;
+                // Cast scalars to string so the value binds as PDO::PARAM_STR, preserving the
+                // pre-refactor behavior (it was bound with an explicit PARAM_STR). Without the
+                // cast, getPDOType() would bind a number as PARAM_INT. Do not drop it.
+                $removeValue = is_array($removeValue) ? json_encode($removeValue) : (string)$removeValue;
                 $bindKey = $this->registerOperatorBind($binds, $removeValue);
                 // SQLite: remove specific value from array
                 return "{$quotedColumn} = (

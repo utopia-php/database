@@ -46,7 +46,11 @@ class Document extends ArrayObject
             }
 
             foreach ($value as $childKey => $child) {
-                if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+                // An array value is either a list of nested sub-documents or a list of
+                // plain items (dates, numbers, strings): wrap the former, leave the latter.
+                // is_array() tells them apart and avoids array-accessing a non-array
+                // value (e.g. a UTCDateTime), which would otherwise fatal.
+                if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
                     $value[$childKey] = new self($child);
                 }
             }

@@ -2067,7 +2067,7 @@ class MariaDB extends SQL
 
             case Operator::TYPE_ARRAY_REMOVE:
                 $removeValue = $values[0] ?? null;
-                $removeValue = is_array($removeValue) ? json_encode($removeValue) : (string)($removeValue);
+                $removeValue = is_array($removeValue) ? json_encode($removeValue) : $removeValue;
                 $bindKey = $this->registerOperatorBind($binds, $removeValue);
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)

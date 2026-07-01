@@ -2127,7 +2127,6 @@ class Postgres extends SQL
             return new LimitException('Value out of range', $e->getCode(), $e);
         }
 
-
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);

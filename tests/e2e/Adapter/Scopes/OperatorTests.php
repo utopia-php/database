@@ -1691,31 +1691,27 @@ trait OperatorTests
                 'value' => $start,
             ]));
 
-
+            $caught = false;
             try {
-                $caught = false;
                 $database->updateDocument($collectionId, $id, new Document(['value' => $operator]));
             } catch (\Throwable $e) {
                 $caught = true;
-                $this->assertInstanceOf(LimitException::class, $e);
-
-                // Verify the actual stored value with a fresh read, not the returned document.
-                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
 
                 // Whatever the engine raised must surface as a LimitException — not a raw
-                // PDO/Mongo/Json error. The row must also be left exactly as it was (the failed
-                // update is rolled back, no partial write).
-                $this->assertInstanceOf(LimitException::class, $caught);
+                // PDO/Mongo/Json error.
+                $this->assertInstanceOf(LimitException::class, $e);
+
+                // The row must be left exactly as it was — the failed update is rolled back, no
+                // partial write. Verify with a fresh read, not the returned document.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
                 $this->assertEquals($start, $stored, "{$id}: value changed even though the update raised a LimitException");
             }
 
             if ($caught === false) {
-                // Verify the actual stored value with a fresh read, not the returned document.
-                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
-
                 // Engines that never raise on undefined math (SQLite, and MongoDB for a negative
                 // base) must still not store a wrong real number: the value is either untouched or
-                // an explicit "not a number" marker (NULL / NaN).
+                // an explicit "not a number" marker (NULL / NaN). Verify with a fresh read.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
                 $safe = $stored === null || $stored == $start || !\is_finite((float) $stored);
                 $this->assertTrue($safe, "{$id}: undefined power neither raised a LimitException nor left a safe value; stored " . \var_export($stored, true));
             }

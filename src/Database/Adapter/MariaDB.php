@@ -1974,7 +1974,6 @@ class MariaDB extends SQL
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
-                }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case Operator::TYPE_DECREMENT:

@@ -5,7 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
@@ -459,7 +459,7 @@ trait OperatorTests
         ]));
 
         // Test increment on non-numeric field
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply increment operator to non-numeric field 'text_field'");
 
         $database->updateDocument($collectionId, 'error_test_doc', new Document([
@@ -496,7 +496,7 @@ trait OperatorTests
         ]));
 
         // Test append on non-array field
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply arrayAppend operator to non-array field 'text_field'");
 
         $database->updateDocument($collectionId, 'array_error_test_doc', new Document([
@@ -531,7 +531,7 @@ trait OperatorTests
         ]));
 
         // Test insert with negative index
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply arrayInsert operator: index must be a non-negative integer");
 
         $database->updateDocument($collectionId, 'insert_error_test_doc', new Document([
@@ -585,7 +585,7 @@ trait OperatorTests
                 'string_field' => Operator::increment(5)
             ]));
             $this->fail('Expected exception for increment on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply increment operator to non-numeric field 'string_field'", $e->getMessage());
         }
 
@@ -595,7 +595,7 @@ trait OperatorTests
                 'int_field' => Operator::stringConcat(' suffix')
             ]));
             $this->fail('Expected exception for concat on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply stringConcat operator", $e->getMessage());
         }
 
@@ -605,7 +605,7 @@ trait OperatorTests
                 'string_field' => Operator::arrayAppend(['new'])
             ]));
             $this->fail('Expected exception for arrayAppend on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply arrayAppend operator to non-array field 'string_field'", $e->getMessage());
         }
 
@@ -615,7 +615,7 @@ trait OperatorTests
                 'int_field' => Operator::toggle()
             ]));
             $this->fail('Expected exception for toggle on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply toggle operator to non-boolean field 'int_field'", $e->getMessage());
         }
 
@@ -625,7 +625,7 @@ trait OperatorTests
                 'string_field' => Operator::dateAddDays(5)
             ]));
             $this->fail('Expected exception for dateAddDays on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             // Date operators check if string can be parsed as date
             $this->assertStringContainsString("Cannot apply dateAddDays operator to non-datetime field 'string_field'", $e->getMessage());
         }
@@ -660,7 +660,7 @@ trait OperatorTests
                 'number' => Operator::divide(0)
             ]));
             $this->fail('Expected exception for division by zero');
-        } catch (DatabaseException $e) {
+        } catch (OperatorException $e) {
             $this->assertStringContainsString("Division by zero is not allowed", $e->getMessage());
         }
 
@@ -670,7 +670,7 @@ trait OperatorTests
                 'number' => Operator::modulo(0)
             ]));
             $this->fail('Expected exception for modulo by zero');
-        } catch (DatabaseException $e) {
+        } catch (OperatorException $e) {
             $this->assertStringContainsString("Modulo by zero is not allowed", $e->getMessage());
         }
 
@@ -716,7 +716,7 @@ trait OperatorTests
                 'items' => Operator::arrayInsert(10, 'new') // Index 10 > length 3
             ]));
             $this->fail('Expected exception for out of bounds insert');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply arrayInsert operator: index 10 is out of bounds for array of length 3", $e->getMessage());
         }
 
@@ -865,7 +865,7 @@ trait OperatorTests
                 'number' => Operator::stringReplace('4', '5')
             ]));
             $this->fail('Expected exception for replace on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply stringReplace operator to non-string field 'number'", $e->getMessage());
         }
 
@@ -1687,7 +1687,7 @@ trait OperatorTests
             try {
                 $database->updateDocument($collectionId, 'doc', new Document(['tags' => $operator]));
                 $this->fail("Expected an exception for {$name} exceeding the array operator size limit");
-            } catch (DatabaseException $e) {
+            } catch (StructureException $e) {
                 $this->assertStringContainsString('exceeds maximum allowed size', $e->getMessage());
             }
         }
@@ -1723,7 +1723,7 @@ trait OperatorTests
                 'tags' => Operator::arrayFilter('bogusCondition', 'x'),
             ]));
             $this->fail('Expected an exception for an invalid array filter condition');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString('filter condition', $e->getMessage());
         }
 
@@ -3799,7 +3799,7 @@ trait OperatorTests
                 'items' => Operator::arrayInsert(10, 'z')
             ]));
             $this->fail('Expected exception for out of bounds insert');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString('out of bounds', $e->getMessage());
         }
 

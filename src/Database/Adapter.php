@@ -402,8 +402,9 @@ abstract class Adapter
     {
         $sleep = 50_000; // 50 milliseconds
         $retries = 2;
+        $deadlockRetries = 5;
 
-        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+        for ($attempts = 0; $attempts <= $deadlockRetries; $attempts++) {
             try {
                 $this->startTransaction();
                 $result = $callback();
@@ -413,8 +414,9 @@ abstract class Adapter
                 try {
                     $this->rollbackTransaction();
                 } catch (\Throwable $rollback) {
-                    if ($attempts < $retries) {
-                        \usleep($sleep * ($attempts + 1));
+                    $maxRetries = self::isDeadlock($action) ? $deadlockRetries : $retries;
+                    if ($attempts < $maxRetries) {
+                        \usleep(self::retrySleep($sleep, $attempts));
                         continue;
                     }
 
@@ -434,8 +436,9 @@ abstract class Adapter
                     throw $action;
                 }
 
-                if ($attempts < $retries) {
-                    \usleep($sleep * ($attempts + 1));
+                $maxRetries = self::isDeadlock($action) ? $deadlockRetries : $retries;
+                if ($attempts < $maxRetries) {
+                    \usleep(self::retrySleep($sleep, $attempts));
                     continue;
                 }
 
@@ -445,6 +448,27 @@ abstract class Adapter
         }
 
         throw new TransactionException('Failed to execute transaction');
+    }
+
+    /**
+     * Check if a throwable is a database deadlock error.
+     */
+    protected static function isDeadlock(\Throwable $e): bool
+    {
+        if ($e instanceof \PDOException && (string)$e->getCode() === '40001') {
+            return true;
+        }
+
+        return \str_contains($e->getMessage(), 'Deadlock found when trying to get lock');
+    }
+
+    /**
+     * Calculate retry sleep with exponential backoff and jitter.
+     */
+    protected static function retrySleep(int $baseSleep, int $attempt): int
+    {
+        $delay = $baseSleep * (2 ** $attempt);
+        return $delay + \random_int(0, $delay);
     }
 
     /**

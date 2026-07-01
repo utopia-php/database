@@ -2111,9 +2111,6 @@ class MariaDB extends SQL
 
             case Operator::TYPE_ARRAY_FILTER:
                 $condition = $values[0] ?? 'equal';
-                if (!in_array($condition, Operator::ARRAY_FILTER_CONDITIONS, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', Operator::ARRAY_FILTER_CONDITIONS));
-                }
                 $filterValue = $values[1] ?? null;
                 $conditionKey = $this->registerOperatorBind($binds, $condition);
                 $valueKey = $this->registerOperatorBind($binds, $filterValue === null ? null : json_encode($filterValue));

@@ -148,7 +148,7 @@ class Operator extends Validator
 
         // Handle both Document objects and arrays
         $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
-        $isArray = $attribute instanceof Document? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
+        $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.

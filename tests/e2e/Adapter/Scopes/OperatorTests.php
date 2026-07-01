@@ -1652,6 +1652,60 @@ trait OperatorTests
     }
 
     /**
+     * A power with no maximum is computed directly by the database. When the result is not a real
+     * number (zero raised to a negative power, or a negative base with a fractional exponent) some
+     * databases throw a hard error. Validation rejects these before they reach the database, so the
+     * update fails the same way on every adapter and the stored value is left untouched.
+     */
+    public function testOperatorUnboundedPowerOnUndefinedBase(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_power_undefined';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // 0 raised to a negative power is undefined, so the update is rejected and 0 stays 0.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'zero',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0.0,
+        ]));
+        try {
+            $database->updateDocument($collectionId, 'zero', new Document([
+                'value' => Operator::power(-1),
+            ]));
+            $this->fail('Expected the update to be rejected for zero raised to a negative power');
+        } catch (StructureException) {
+            // expected
+        }
+        $this->assertEquals(0.0, $database->getDocument($collectionId, 'zero')->getAttribute('value'));
+
+        // The square root of a negative number is not a real number, so the update is rejected and -4 stays -4.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'neg',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => -4.0,
+        ]));
+        try {
+            $database->updateDocument($collectionId, 'neg', new Document([
+                'value' => Operator::power(0.5),
+            ]));
+            $this->fail('Expected the update to be rejected for a negative base with a fractional exponent');
+        } catch (StructureException) {
+            // expected
+        }
+        $this->assertEquals(-4.0, $database->getDocument($collectionId, 'neg')->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
      * Passing more values than the allowed maximum (10000) to an array operator must be rejected
      * the same way on every adapter. Covers each operator that takes a caller-supplied value list.
      */

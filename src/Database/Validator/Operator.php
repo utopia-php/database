@@ -148,7 +148,7 @@ class Operator extends Validator
 
         // Handle both Document objects and arrays
         $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
-        $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
+        $isArray = $attribute instanceof Document? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
@@ -217,25 +217,6 @@ class Operator extends Validator
 
                     if ($predictedResult < Database::MIN_INT) {
                         $this->message = "Cannot apply {$method} operator: would underflow minimum value of " . Database::MIN_INT;
-                        return false;
-                    }
-                }
-
-                // An unbounded power is computed directly by the database. Some engines hard-error on
-                // results that are not real numbers, so reject those up-front with a clear message.
-                if ($method === DatabaseOperator::TYPE_POWER && $this->currentDocument !== null && !isset($values[1])) {
-                    $base = (float)($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
-                    $exponent = (float)$values[0];
-
-                    // Zero raised to a negative power is undefined (a division by zero).
-                    if ($base === 0.0 && $exponent < 0) {
-                        $this->message = "Cannot apply power operator: zero raised to a negative power is undefined";
-                        return false;
-                    }
-
-                    // A negative base raised to a fractional exponent is not a real number.
-                    if ($base < 0.0 && \floor($exponent) !== $exponent) {
-                        $this->message = "Cannot apply power operator: a negative base raised to a fractional exponent is undefined";
                         return false;
                     }
                 }

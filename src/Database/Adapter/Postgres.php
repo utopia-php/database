@@ -2121,6 +2121,13 @@ class Postgres extends SQL
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
         }
 
+        // Invalid argument for power function (e.g. 0 to a negative power, or a negative base to a
+        // fractional exponent) — matches MariaDB, which reports the same as a numeric range error.
+        if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
+
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);

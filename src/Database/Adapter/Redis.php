@@ -11,6 +11,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -4119,7 +4120,15 @@ class Redis extends Adapter
                     return $this->preserveNumericType($base, $result);
                 }
 
-                return $this->preserveNumericType($base, $base ** $by);
+                // 0 to a negative power, or a negative base to a fractional exponent, is not a real
+                // number. Fail loudly with a clear exception rather than storing INF/NaN (which
+                // also can't be JSON-encoded, so it would otherwise surface as a raw JsonException).
+                $result = $base ** $by;
+                if (!\is_finite($result)) {
+                    throw new LimitException('Value out of range');
+                }
+
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_STRING_CONCAT:
                 return ((string) ($current ?? '')) . (string) ($values[0] ?? '');

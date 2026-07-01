@@ -4012,6 +4012,12 @@ class Mongo extends Adapter
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
+        // Invalid $pow argument (0 raised to a negative power) — matches the SQL adapters, which
+        // report an undefined power as a numeric range error.
+        if ($e->getCode() === 28764) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

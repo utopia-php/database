@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -1652,10 +1653,17 @@ trait OperatorTests
     }
 
     /**
-     * A power with no maximum is computed directly by the database. When the result is not a real
-     * number (zero raised to a negative power, or a negative base with a fractional exponent) some
-     * databases throw a hard error. Validation rejects these before they reach the database, so the
-     * update fails the same way on every adapter and the stored value is left untouched.
+     * A power with no maximum is computed directly by the engine on the live row value, so each
+     * adapter behaves as its engine does when the result is not a real number (zero raised to a
+     * negative power, or a negative base with a fractional exponent):
+     *  - Most engines (MariaDB/MySQL/Postgres) and the in-memory adapters (Memory/Redis) reject it
+     *    with a LimitException and leave the stored value untouched.
+     *  - MongoDB rejects 0-to-a-negative-power the same way, but has no error for a negative base
+     *    with a fractional exponent, so it stores NaN.
+     *  - SQLite never raises on undefined math; it stores NULL (or leaves the value as-is).
+     *
+     * The one behaviour that must never happen on any adapter is silently storing a plausible but
+     * wrong real number, so the assertions verify the stored value via a fresh read.
      */
     public function testOperatorUnboundedPowerOnUndefinedBase(): void
     {
@@ -1670,37 +1678,57 @@ trait OperatorTests
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
 
-        // 0 raised to a negative power is undefined, so the update is rejected and 0 stays 0.
-        $database->createDocument($collectionId, new Document([
-            '$id' => 'zero',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 0.0,
-        ]));
-        try {
-            $database->updateDocument($collectionId, 'zero', new Document([
-                'value' => Operator::power(-1),
-            ]));
-            $this->fail('Expected the update to be rejected for zero raised to a negative power');
-        } catch (StructureException) {
-            // expected
-        }
-        $this->assertEquals(0.0, $database->getDocument($collectionId, 'zero')->getAttribute('value'));
+        // [id, starting value, operator]. Each result is mathematically undefined.
+        $undefined = [
+            ['zero', 0.0, Operator::power(-1)],  // 0 to a negative power
+            ['neg', -4.0, Operator::power(0.5)], // square root of a negative number
+        ];
 
-        // The square root of a negative number is not a real number, so the update is rejected and -4 stays -4.
-        $database->createDocument($collectionId, new Document([
-            '$id' => 'neg',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => -4.0,
-        ]));
-        try {
-            $database->updateDocument($collectionId, 'neg', new Document([
-                'value' => Operator::power(0.5),
+        foreach ($undefined as [$id, $start, $operator]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'value' => $start,
             ]));
-            $this->fail('Expected the update to be rejected for a negative base with a fractional exponent');
-        } catch (StructureException) {
-            // expected
+
+
+            try {
+                $caught = false;
+                $database->updateDocument($collectionId, $id, new Document(['value' => $operator]));
+            } catch (\Throwable $e) {
+                $caught = true;
+                $this->assertInstanceOf(LimitException::class, $e);
+
+                // Verify the actual stored value with a fresh read, not the returned document.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+
+                // Whatever the engine raised must surface as a LimitException — not a raw
+                // PDO/Mongo/Json error. The row must also be left exactly as it was (the failed
+                // update is rolled back, no partial write).
+                $this->assertInstanceOf(LimitException::class, $caught);
+                $this->assertEquals($start, $stored, "{$id}: value changed even though the update raised a LimitException");
+            }
+
+            if ($caught === false) {
+                // Verify the actual stored value with a fresh read, not the returned document.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+
+                // Engines that never raise on undefined math (SQLite, and MongoDB for a negative
+                // base) must still not store a wrong real number: the value is either untouched or
+                // an explicit "not a number" marker (NULL / NaN).
+                $safe = $stored === null || $stored == $start || !\is_finite((float) $stored);
+                $this->assertTrue($safe, "{$id}: undefined power neither raised a LimitException nor left a safe value; stored " . \var_export($stored, true));
+            }
         }
-        $this->assertEquals(-4.0, $database->getDocument($collectionId, 'neg')->getAttribute('value'));
+
+        // A valid unbounded power still computes normally on every adapter: 2^3 = 8.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'valid',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 2.0,
+        ]));
+        $database->updateDocument($collectionId, 'valid', new Document(['value' => Operator::power(3)]));
+        $this->assertEquals(8.0, $database->getDocument($collectionId, 'valid')->getAttribute('value'));
 
         $database->deleteCollection($collectionId);
     }

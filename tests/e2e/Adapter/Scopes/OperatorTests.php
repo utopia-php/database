@@ -1750,12 +1750,14 @@ trait OperatorTests
 
         // [id, starting value, operator, expected stored value].
         $cases = [
-            ['fraction', 0.5, Operator::power(2, 1), 0.25],    // 0.5^2 = 0.25, within max 1 → applied
-            ['negeven', -4.0, Operator::power(2, 20), 16.0],   // (-4)^2 = 16, within max 20 → applied
-            ['within', 2.0, Operator::power(3, 100), 8.0],     // 2^3 = 8, within max 100 → applied
-            ['exceeds', 5.0, Operator::power(3, 100), 5.0],    // 5^3 = 125 > 100 → left unchanged
-            ['negfrac', -4.0, Operator::power(0.5, 100), -4.0], // sqrt(-4) undefined → left unchanged
-            ['zeroneg', 0.0, Operator::power(-1, 100), 0.0],   // 0^-1 undefined → left unchanged
+            ['fraction', 0.5, Operator::power(2, 1), 0.25],      // 0.5^2 = 0.25, within max 1 → applied
+            ['negeven', -4.0, Operator::power(2, 20), 16.0],     // (-4)^2 = 16, within max 20 → applied
+            ['negodd', -2.0, Operator::power(3, 100), -8.0],     // (-2)^3 = -8, within max 100 → applied
+            ['within', 2.0, Operator::power(3, 100), 8.0],       // 2^3 = 8, within max 100 → applied
+            ['exceeds', 5.0, Operator::power(3, 100), 5.0],      // 5^3 = 125 > 100 → left unchanged
+            ['negexceeds', -10.0, Operator::power(100, 100), -10.0], // (-10)^100 far exceeds max → left unchanged (no overflow error)
+            ['negfrac', -4.0, Operator::power(0.5, 100), -4.0],  // sqrt(-4) undefined → left unchanged
+            ['zeroneg', 0.0, Operator::power(-1, 100), 0.0],     // 0^-1 undefined → left unchanged
         ];
 
         foreach ($cases as [$id, $start, $operator, $expected]) {

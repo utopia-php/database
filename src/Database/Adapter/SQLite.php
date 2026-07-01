@@ -2110,11 +2110,10 @@ class SQLite extends MariaDB
                         // A negative base to a fractional exponent is not a real number.
                         $whens[] = "WHEN {$col} < 0 THEN {$col}";
                     }
-                    // Positive base: compare with logarithms so POWER() never runs on a value that
-                    // would overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
-                    $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
-                    // Non-positive base (no overflow risk): compare the computed value directly.
-                    $whens[] = "WHEN {$col} <= 0 AND POWER({$col}, :$bindKey) > :$maxKey THEN {$col}";
+                    // Compare magnitudes with logarithms so POWER() never runs on a value that would
+                    // overflow (|base|^exp > max  <=>  exp * LN(|base|) > LN(max)). Works for both
+                    // signs; ABS() keeps LN() defined for negative bases with an integer exponent.
+                    $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
 
                     $whenSql = \implode(' ', $whens);
                     return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";

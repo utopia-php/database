@@ -2038,11 +2038,10 @@ class MariaDB extends SQL
                         // A negative base to a fractional exponent is not a real number.
                         $whens[] = "WHEN {$col} < 0 THEN {$col}";
                     }
-                    // Positive base: compare with logarithms so POWER() never runs on a value that
-                    // would overflow (base^exp > max  <=>  exp * LOG(base) > LOG(max)).
-                    $whens[] = "WHEN {$col} > 0 AND :$bindKey * LOG({$col}) > LOG(:$maxKey) THEN {$col}";
-                    // Non-positive base (no overflow risk): compare the computed value directly.
-                    $whens[] = "WHEN {$col} <= 0 AND POWER({$col}, :$bindKey) > :$maxKey THEN {$col}";
+                    // Compare magnitudes with logarithms so POWER() never runs on a value that would
+                    // overflow (|base|^exp > max  <=>  exp * LOG(|base|) > LOG(max)). Works for both
+                    // signs; ABS() keeps LOG() defined for negative bases with an integer exponent.
+                    $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LOG(ABS({$col})) > LOG(:$maxKey) THEN {$col}";
 
                     $whenSql = \implode(' ', $whens);
                     return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";

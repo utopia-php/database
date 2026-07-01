@@ -2718,10 +2718,6 @@ class Mongo extends Adapter
             $options['limit'] = $max;
         }
 
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
-        }
-
         // Build filters from queries
         $filters = $this->buildFilters($queries);
 
@@ -2745,6 +2741,11 @@ class Mongo extends Adapter
          **/
 
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2848,6 +2849,11 @@ class Mongo extends Adapter
         ];
 
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
     }
 

@@ -86,7 +86,53 @@ trait GeneralTests
         }
     }
 
+    public function testCountTimeout(): void
+    {
+        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('count-timeouts');
+
+        $this->assertEquals(
+            true,
+            $database->createAttribute(
+                collection: 'count-timeouts',
+                id: 'longtext',
+                type: Database::VAR_STRING,
+                size: 100000000,
+                required: true
+            )
+        );
+
+        for ($i = 0; $i < 20; $i++) {
+            $database->createDocument('count-timeouts', new Document([
+                'longtext' => file_get_contents(__DIR__ . '/../../../resources/longtext.txt'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ]
+            ]));
+        }
+
+        $database->setTimeout(1);
+
+        try {
+            $database->count('count-timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ]);
+            $this->fail('count() failed to throw a timeout exception');
+        } catch (\Exception $e) {
+            $database->clearTimeout();
+            $database->deleteCollection('count-timeouts');
+            $this->assertInstanceOf(TimeoutException::class, $e);
+        }
+    }
 
     public function testPreserveDatesUpdate(): void
     {

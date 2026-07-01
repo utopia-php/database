@@ -72,6 +72,15 @@ class Operator
      */
     public const MAX_ARRAY_OPERATOR_SIZE = 10000;
 
+    /**
+     * Conditions accepted by the arrayFilter operator.
+     */
+    public const ARRAY_FILTER_CONDITIONS = [
+        'equal', 'notEqual',                                            // comparison
+        'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual', // numeric
+        'isNull', 'isNotNull',                                          // null checks
+    ];
+
     protected const NUMERIC_TYPES = [
         self::TYPE_INCREMENT,
         self::TYPE_DECREMENT,

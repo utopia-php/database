@@ -2661,13 +2661,8 @@ class Postgres extends SQL
 
             case Operator::TYPE_ARRAY_FILTER:
                 $condition = $values[0] ?? 'equal';
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull'  // Null checks
-                ];
-                if (!in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
+                if (!in_array($condition, Operator::ARRAY_FILTER_CONDITIONS, true)) {
+                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', Operator::ARRAY_FILTER_CONDITIONS));
                 }
                 $filterValue = $values[1] ?? null;
                 $conditionKey = $this->registerOperatorBind($binds, $condition);

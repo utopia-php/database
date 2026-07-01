@@ -1695,6 +1695,86 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    /**
+     * An invalid array filter condition is rejected the same way on every adapter, because the
+     * operator validator checks it before any adapter runs.
+     */
+    public function testOperatorArrayFilterRejectsUnknownCondition(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_filter_unknown_cond';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'tags' => ['a', 'b', 'c'],
+        ]));
+
+        try {
+            $database->updateDocument($collectionId, 'doc', new Document([
+                'tags' => Operator::arrayFilter('bogusCondition', 'x'),
+            ]));
+            $this->fail('Expected an exception for an invalid array filter condition');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('filter condition', $e->getMessage());
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Every filter condition the validator accepts must actually work the same on all adapters.
+     * Each condition is applied to [1,2,3,4,5] and must keep exactly the matching elements —
+     * an adapter that doesn't handle a condition would keep the whole array instead.
+     */
+    public function testOperatorArrayFilterAllConditions(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_filter_all_conditions';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'numbers' => [1, 2, 3, 4, 5],
+        ]));
+
+        $cases = [
+            ['equal', 3, [3]],
+            ['notEqual', 3, [1, 2, 4, 5]],
+            ['greaterThan', 3, [4, 5]],
+            ['greaterThanEqual', 3, [3, 4, 5]],
+            ['lessThan', 3, [1, 2]],
+            ['lessThanEqual', 3, [1, 2, 3]],
+            ['isNotNull', null, [1, 2, 3, 4, 5]],
+            ['isNull', null, []],
+        ];
+
+        foreach ($cases as [$condition, $compare, $expected]) {
+            $database->updateDocument($collectionId, 'doc', new Document(['numbers' => [1, 2, 3, 4, 5]])); // reset
+            $updated = $database->updateDocument($collectionId, 'doc', new Document([
+                'numbers' => Operator::arrayFilter($condition, $compare),
+            ]));
+            $this->assertEquals($expected, \array_values($updated->getAttribute('numbers')), "arrayFilter('{$condition}') gave the wrong result");
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorStringConcatComprehensive(): void
     {
         $database = static::getDatabase();

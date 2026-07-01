@@ -184,6 +184,7 @@ abstract class SQL extends Adapter
     {
         $this->getPDO()->reconnect();
         $this->inTransaction = 0;
+        $this->purgeAfterCommit = [];
     }
 
     /**

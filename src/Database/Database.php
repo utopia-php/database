@@ -1555,7 +1555,29 @@ class Database
      */
     public function withTransaction(callable $callback): mixed
     {
-        return $this->adapter->withTransaction($callback);
+        try {
+            $result = $this->adapter->withTransaction($callback);
+        } catch (\Throwable $e) {
+            // Only the outermost frame owns the queue; nested frames leave it
+            // for the parent. On a full rollback nothing committed, so drop the
+            // queued purges rather than evicting cache for changes that reverted.
+            if (!$this->adapter->inTransaction()) {
+                $this->adapter->dequeueCachePurges();
+            }
+            throw $e;
+        }
+
+        // The rows are now committed and visible. Re-purge every key touched
+        // during the transaction so a reader that cached a pre-commit version
+        // in the meantime is invalidated. The queue lives on the (shared)
+        // adapter, so this covers writes routed through wrapper databases too.
+        if (!$this->adapter->inTransaction()) {
+            foreach ($this->adapter->dequeueCachePurges() as [$collectionId, $id]) {
+                $this->purgeCachedDocumentInternal($collectionId, $id);
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -6397,9 +6419,6 @@ class Database
             return $document;
         }
 
-        // Purge again after commit so readers cannot re-cache the pre-commit version
-        $this->purgeCachedDocumentInternal($collection->getId(), $id);
-
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
             $document = $documents[0];
@@ -7786,8 +7805,6 @@ class Database
         });
 
         if ($deleted) {
-            // Purge again after commit so readers cannot re-cache the pre-commit version
-            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
         }
 
@@ -8389,6 +8406,15 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
+
+        // A purge inside an open transaction targets rows that are not yet
+        // committed. A concurrent reader can re-populate the cache with the
+        // pre-commit version before this transaction commits, leaving stale
+        // data behind. Queue the key to purge again once the outermost
+        // transaction commits and the new rows are visible to everyone.
+        if ($this->adapter->inTransaction()) {
+            $this->adapter->queueCachePurge($collectionId, $id);
+        }
 
         return true;
     }

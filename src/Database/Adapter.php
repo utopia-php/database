@@ -31,6 +31,18 @@ abstract class Adapter
 
     protected int $inTransaction = 0;
 
+    /**
+     * Document cache keys purged while a transaction was open, keyed by
+     * "collectionId:id" for de-duplication. The Database flushes these once
+     * the outermost transaction commits so a reader that re-cached the
+     * pre-commit version in the meantime gets invalidated. Lives on the
+     * adapter because transaction depth and cache are shared here across
+     * Database wrappers (e.g. Mirror shares its source's adapter and cache).
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    protected array $purgeAfterCommit = [];
+
     protected bool $alterLocks = false;
 
     protected bool $skipDuplicates = false;
@@ -392,6 +404,32 @@ abstract class Adapter
     public function inTransaction(): bool
     {
         return $this->inTransaction > 0;
+    }
+
+    /**
+     * Queue a document cache key to be purged again once the outermost
+     * transaction commits.
+     *
+     * @param string $collectionId
+     * @param string $id
+     * @return void
+     */
+    public function queueCachePurge(string $collectionId, string $id): void
+    {
+        $this->purgeAfterCommit[$collectionId . ':' . $id] = [$collectionId, $id];
+    }
+
+    /**
+     * Return and clear the queued post-commit cache purges.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public function dequeueCachePurges(): array
+    {
+        $purges = $this->purgeAfterCommit;
+        $this->purgeAfterCommit = [];
+
+        return $purges;
     }
 
     /**

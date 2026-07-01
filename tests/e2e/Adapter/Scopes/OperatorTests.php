@@ -1753,6 +1753,7 @@ trait OperatorTests
             ['fraction', 0.5, Operator::power(2, 1), 0.25],      // 0.5^2 = 0.25, within max 1 → applied
             ['negeven', -4.0, Operator::power(2, 20), 16.0],     // (-4)^2 = 16, within max 20 → applied
             ['negodd', -2.0, Operator::power(3, 100), -8.0],     // (-2)^3 = -8, within max 100 → applied
+            ['negoddbig', -5.0, Operator::power(3, 100), -125.0], // (-5)^3 = -125, negative so within max 100 → applied
             ['within', 2.0, Operator::power(3, 100), 8.0],       // 2^3 = 8, within max 100 → applied
             ['exceeds', 5.0, Operator::power(3, 100), 5.0],      // 5^3 = 125 > 100 → left unchanged
             ['negexceeds', -10.0, Operator::power(100, 100), -10.0], // (-10)^100 far exceeds max → left unchanged (no overflow error)

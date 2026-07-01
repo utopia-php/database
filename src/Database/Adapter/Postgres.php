@@ -2589,6 +2589,8 @@ class Postgres extends SQL
                     // undefined guard its value can actually trigger is emitted. PostgreSQL throws
                     // a hard error for 0 to a negative power and a negative base to a fractional
                     // exponent, so those must never reach POWER().
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+
                     $whens = [];
                     if ($exponent < 0) {
                         $whens[] = "WHEN {$col} = 0 THEN {$col}";
@@ -2596,10 +2598,18 @@ class Postgres extends SQL
                     if (\floor($exponent) != $exponent) {
                         $whens[] = "WHEN {$col} < 0 THEN {$col}";
                     }
-                    // Compare magnitudes with logarithms so POWER() never runs on a value that would
-                    // overflow (|base|^exp > max  <=>  exp * LN(|base|) > LN(max)). Works for both
-                    // signs; ABS() keeps LN() defined for negative bases with an integer exponent.
-                    $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
+                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
+                    // overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
+                    if ($oddInteger) {
+                        // An odd exponent keeps a negative base negative, and a negative result is
+                        // always within a positive max, so only cap positive bases; negative bases
+                        // fall through to POWER() and their (negative) result is applied.
+                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                    } else {
+                        // Otherwise the result is non-negative, so its magnitude equals its value —
+                        // cap either sign. ABS() keeps LN() defined for a negative even-power base.
+                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
+                    }
 
                     $whenSql = \implode(' ', $whens);
                     return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";

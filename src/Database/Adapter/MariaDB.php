@@ -2051,15 +2051,15 @@ class MariaDB extends SQL
 
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
@@ -2094,8 +2094,8 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_INTERSECT:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((
@@ -2108,8 +2108,8 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_DIFF:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((

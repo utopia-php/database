@@ -1651,6 +1651,41 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    /**
+     * Appending more elements than the allowed maximum (10000) must be rejected the same way on
+     * every adapter. (Currently only the MySQL-family adapters enforce this; the others accept it.)
+     */
+    public function testOperatorArraySizeLimit(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_array_size_limit';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'tags' => ['a'],
+        ]));
+
+        try {
+            $database->updateDocument($collectionId, 'doc', new Document([
+                'tags' => Operator::arrayAppend(array_fill(0, Operator::MAX_ARRAY_OPERATOR_SIZE + 1, 'x')), // one over the limit
+            ]));
+            $this->fail('Expected an exception for exceeding the array operator size limit');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('exceeds maximum allowed size', $e->getMessage());
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorStringConcatComprehensive(): void
     {
         $database = static::getDatabase();

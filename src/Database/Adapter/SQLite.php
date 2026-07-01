@@ -2127,8 +2127,8 @@ class SQLite extends MariaDB
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: merge arrays by using json_group_array on extracted elements
@@ -2144,8 +2144,8 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_PREPEND:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: prepend by extracting and recombining with new elements first
@@ -2215,8 +2215,8 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_INTERSECT:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: keep only values that exist in both arrays
@@ -2228,8 +2228,8 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_DIFF:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . Operator::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
                 }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: remove values that exist in the comparison array

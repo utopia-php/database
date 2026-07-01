@@ -1652,8 +1652,8 @@ trait OperatorTests
     }
 
     /**
-     * Appending more elements than the allowed maximum (10000) must be rejected the same way on
-     * every adapter. (Currently only the MySQL-family adapters enforce this; the others accept it.)
+     * Passing more values than the allowed maximum (10000) to an array operator must be rejected
+     * the same way on every adapter. Covers each operator that takes a caller-supplied value list.
      */
     public function testOperatorArraySizeLimit(): void
     {
@@ -1674,13 +1674,22 @@ trait OperatorTests
             'tags' => ['a'],
         ]));
 
-        try {
-            $database->updateDocument($collectionId, 'doc', new Document([
-                'tags' => Operator::arrayAppend(array_fill(0, Operator::MAX_ARRAY_OPERATOR_SIZE + 1, 'x')), // one over the limit
-            ]));
-            $this->fail('Expected an exception for exceeding the array operator size limit');
-        } catch (DatabaseException $e) {
-            $this->assertStringContainsString('exceeds maximum allowed size', $e->getMessage());
+        $tooMany = array_fill(0, Operator::MAX_ARRAY_OPERATOR_SIZE + 1, 'x'); // one over the limit
+
+        $operators = [
+            'arrayAppend' => Operator::arrayAppend($tooMany),
+            'arrayPrepend' => Operator::arrayPrepend($tooMany),
+            'arrayIntersect' => Operator::arrayIntersect($tooMany),
+            'arrayDiff' => Operator::arrayDiff($tooMany),
+        ];
+
+        foreach ($operators as $name => $operator) {
+            try {
+                $database->updateDocument($collectionId, 'doc', new Document(['tags' => $operator]));
+                $this->fail("Expected an exception for {$name} exceeding the array operator size limit");
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('exceeds maximum allowed size', $e->getMessage());
+            }
         }
 
         $database->deleteCollection($collectionId);

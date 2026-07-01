@@ -1892,17 +1892,29 @@ class Mongo extends Adapter
 
             case Operator::TYPE_POWER:
                 $base = ['$ifNull' => [$ref, 0]];
-                $expr = ['$pow' => [$base, $values[0]]];
+                $exponent = $values[0];
+                $expr = ['$pow' => [$base, $exponent]];
                 if (isset($values[1])) {
-                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
-                    // This also avoids storing NaN/Infinity from undefined powers (a negative
-                    // base to a fractional power, or 0 to a negative power) — Mongo orders NaN
-                    // below all numbers, so a plain `result <= max` check would wrongly apply it.
-                    $expr = ['$cond' => [
-                        ['$lte' => [$base, 1]],
-                        $base,
-                        ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, $base]],
-                    ]];
+                    // Apply the power only if the result stays within the max; otherwise leave the
+                    // value unchanged. Overflow yields Infinity, which is greater than the max, so
+                    // it correctly stays put.
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, $base]];
+
+                    // Never compute $pow for an undefined input (0 to a negative power, or a
+                    // negative base to a fractional exponent): it yields NaN, which Mongo orders
+                    // below every number, so a plain `<= max` check would wrongly apply it. The
+                    // exponent is constant, so only guard the base condition it can actually trigger.
+                    $guards = [];
+                    if ($exponent < 0) {
+                        $guards[] = ['$eq' => [$base, 0]];
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = ['$lt' => [$base, 0]];
+                    }
+                    if (!empty($guards)) {
+                        $undefined = \count($guards) === 1 ? $guards[0] : ['$or' => $guards];
+                        $expr = ['$cond' => [$undefined, $base, $expr]];
+                    }
                 }
                 return $expr;
 

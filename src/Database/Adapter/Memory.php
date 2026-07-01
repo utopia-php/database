@@ -3533,14 +3533,14 @@ class Memory extends Adapter
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($max !== null) {
-                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
-                    // This also avoids INF/NAN from undefined powers (0 to a negative power,
-                    // or a negative base to a fractional power) being stored.
-                    if ($base <= 1) {
+                    // Leave the value unchanged for undefined inputs (0 to a negative power, or a
+                    // negative base to a fractional exponent) — they produce INF/NaN, not a number.
+                    if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) != $by)) {
                         return $this->preserveNumericType($base, $base);
                     }
                     $result = $base ** $by;
-                    if ($result > $max) {
+                    // A result that overflows (INF) or exceeds the max also leaves the value as-is.
+                    if (!\is_finite($result) || $result > $max) {
                         return $this->preserveNumericType($base, $base);
                     }
 

@@ -2091,19 +2091,33 @@ class SQLite extends MariaDB
                 }
 
                 $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
 
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    // A base of 1 or less can't exceed a positive max, so leave it unchanged —
-                    // this also avoids POWER() on 0 or a negative base (undefined for a
-                    // negative/fractional exponent). For a base above 1 compare with logarithms
-                    // so POWER() is computed at most once, and only when the result fits the max.
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 0)) > LN(:$maxKey) THEN COALESCE({$quotedColumn}, 0)
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $col = "COALESCE({$quotedColumn}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted.
+                    $whens = [];
+                    if ($exponent < 0) {
+                        // 0 to a negative power is undefined.
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        // A negative base to a fractional exponent is not a real number.
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Positive base: compare with logarithms so POWER() never runs on a value that
+                    // would overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
+                    $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                    // Non-positive base (no overflow risk): compare the computed value directly.
+                    $whens[] = "WHEN {$col} <= 0 AND POWER({$col}, :$bindKey) > :$maxKey THEN {$col}";
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 

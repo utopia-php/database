@@ -152,17 +152,22 @@ class Operator extends Validator
 
         // Array operators that carry a caller-supplied value list are capped to guard against
         // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
+        // The payload may be spread across $values or wrapped in $values[0] (the same shape the
+        // operators normalize with), so measure whichever the operator will actually process.
         if (
             \in_array($method, [
                 DatabaseOperator::TYPE_ARRAY_APPEND,
                 DatabaseOperator::TYPE_ARRAY_PREPEND,
                 DatabaseOperator::TYPE_ARRAY_INTERSECT,
                 DatabaseOperator::TYPE_ARRAY_DIFF,
+                DatabaseOperator::TYPE_ARRAY_REMOVE,
             ], true)
-            && \count($values) > DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE
         ) {
-            $this->message = "Array size " . \count($values) . " exceeds maximum allowed size of " . DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE . " for array operations";
-            return false;
+            $payload = (isset($values[0]) && \is_array($values[0])) ? $values[0] : $values;
+            if (\count($payload) > DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE) {
+                $this->message = "Array size " . \count($payload) . " exceeds maximum allowed size of " . DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE . " for array operations";
+                return false;
+            }
         }
 
         switch ($method) {

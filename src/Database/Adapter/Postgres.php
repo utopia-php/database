@@ -2578,19 +2578,32 @@ class Postgres extends SQL
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
             case Operator::TYPE_POWER:
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
-                    // This also avoids POWER() domain errors: PostgreSQL throws a hard error for
-                    // 0 to a negative power and for a negative number to a fractional power.
-                    // For a base above 1 we compare with logarithms so POWER() is computed at
-                    // most once, and only when the result is within the max.
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 0)) > LN(:$maxKey) THEN COALESCE({$columnRef}, 0)
-                        ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
-                    END";
+                    $col = "COALESCE({$columnRef}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted. PostgreSQL throws
+                    // a hard error for 0 to a negative power and a negative base to a fractional
+                    // exponent, so those must never reach POWER().
+                    $whens = [];
+                    if ($exponent < 0) {
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Positive base: compare with logarithms so POWER() never runs on a value that
+                    // would overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
+                    $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                    // Non-positive base (no overflow risk): compare the computed value directly.
+                    $whens[] = "WHEN {$col} <= 0 AND POWER({$col}, :$bindKey) > :$maxKey THEN {$col}";
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 

@@ -1730,6 +1730,50 @@ trait OperatorTests
     }
 
     /**
+     * A bounded power (with a max) must still compute the result whenever it fits within the max —
+     * it only leaves the value unchanged when the result would exceed the max, or when the input is
+     * mathematically undefined. A base of 1 or less is NOT a reason to skip: 0.5^2 = 0.25 and
+     * (-4)^2 = 16 are perfectly valid and within their bounds. Verified via a fresh read.
+     */
+    public function testOperatorBoundedPowerComputesWithinMax(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bounded_power';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // [id, starting value, operator, expected stored value].
+        $cases = [
+            ['fraction', 0.5, Operator::power(2, 1), 0.25],    // 0.5^2 = 0.25, within max 1 → applied
+            ['negeven', -4.0, Operator::power(2, 20), 16.0],   // (-4)^2 = 16, within max 20 → applied
+            ['within', 2.0, Operator::power(3, 100), 8.0],     // 2^3 = 8, within max 100 → applied
+            ['exceeds', 5.0, Operator::power(3, 100), 5.0],    // 5^3 = 125 > 100 → left unchanged
+            ['negfrac', -4.0, Operator::power(0.5, 100), -4.0], // sqrt(-4) undefined → left unchanged
+            ['zeroneg', 0.0, Operator::power(-1, 100), 0.0],   // 0^-1 undefined → left unchanged
+        ];
+
+        foreach ($cases as [$id, $start, $operator, $expected]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'value' => $start,
+            ]));
+            $database->updateDocument($collectionId, $id, new Document(['value' => $operator]));
+
+            $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+            $this->assertEqualsWithDelta($expected, $stored, 0.000001, "bounded power case '{$id}' stored the wrong value");
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
      * Passing more values than the allowed maximum (10000) to an array operator must be rejected
      * the same way on every adapter. Covers each operator that takes a caller-supplied value list.
      */
@@ -1759,6 +1803,11 @@ trait OperatorTests
             'arrayPrepend' => Operator::arrayPrepend($tooMany),
             'arrayIntersect' => Operator::arrayIntersect($tooMany),
             'arrayDiff' => Operator::arrayDiff($tooMany),
+            // arrayRemove wraps its argument, so the oversized list lands in values[0].
+            'arrayRemove' => Operator::arrayRemove($tooMany),
+            // A wrapped payload (the list nested in values[0]) must be capped too, not just the
+            // spread form — otherwise count($values) would see 1 and slip past the limit.
+            'arrayAppend (wrapped)' => Operator::arrayAppend([$tooMany]),
         ];
 
         foreach ($operators as $name => $operator) {

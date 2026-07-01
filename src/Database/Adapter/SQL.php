@@ -14,8 +14,8 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
-use Utopia\Database\PDOStatement;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -514,7 +514,7 @@ abstract class SQL extends Adapter
         }
 
         $keyIndex = 0;
-        $opIndex = 0;
+        $operatorBinds = [];
         $columns = '';
         $operators = [];
 
@@ -530,7 +530,7 @@ abstract class SQL extends Adapter
 
             // Check if this is an operator, spatial attribute, or regular attribute
             if (isset($operators[$attribute])) {
-                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
+                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
             } elseif (\in_array($attribute, $spatialAttributes)) {
                 $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$keyIndex}");
                 $keyIndex++;
@@ -573,11 +573,9 @@ abstract class SQL extends Adapter
         }
 
         $keyIndex = 0;
-        $opIndexForBinding = 0;
         foreach ($attributes as $attributeName => $value) {
             // Skip operators as they don't need value binding
             if (isset($operators[$attributeName])) {
-                $this->bindOperatorParams($stmt, $operators[$attributeName], $opIndexForBinding);
                 continue;
             }
 
@@ -596,6 +594,10 @@ abstract class SQL extends Adapter
             }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $keyIndex++;
+        }
+
+        foreach ($operatorBinds as $bindKey => $bindValue) {
+            $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
         }
 
         try {
@@ -1970,180 +1972,24 @@ abstract class SQL extends Adapter
      *
      * @param string $column
      * @param Operator $operator
-     * @param int &$bindIndex
+     * @param array<string, mixed> $binds
      * @return string|null Returns null if operator can't be expressed in SQL
      */
-    abstract protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string;
+    abstract protected function getOperatorSQL(string $column, Operator $operator, array &$binds): ?string;
 
     /**
-     * Bind operator parameters to prepared statement
+     * Register an operator bind value and return its placeholder name (without leading colon).
+     * Lets getOperatorSQL() capture a parameter's value as it emits the placeholder, so SQL and
+     * binds can never drift out of sync. The placeholder is unique by construction (ID::unique()),
+     * so no shared counter needs to be threaded between callers.
      *
-     * @param \PDOStatement|PDOStatement $stmt
-     * @param \Utopia\Database\Operator $operator
-     * @param int &$bindIndex
-     * @return void
+     * @param array<string, mixed> $binds
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    protected function registerOperatorBind(array &$binds, mixed $value): string
     {
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            // Numeric operators with optional limits
-            case Operator::TYPE_INCREMENT:
-            case Operator::TYPE_DECREMENT:
-            case Operator::TYPE_MULTIPLY:
-            case Operator::TYPE_DIVIDE:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-
-                // Bind limit if provided
-                if (isset($values[1])) {
-                    $limitKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':' . $limitKey, $values[1], $this->getPDOType($values[1]));
-                    $bindIndex++;
-                }
-                break;
-
-            case Operator::TYPE_MODULO:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_POWER:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-
-                // Bind max limit if provided
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':' . $maxKey, $values[1], $this->getPDOType($values[1]));
-                    $bindIndex++;
-                }
-                break;
-
-                // String operators
-            case Operator::TYPE_STRING_CONCAT:
-                $value = $values[0] ?? '';
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_STRING_REPLACE:
-                $search = $values[0] ?? '';
-                $replace = $values[1] ?? '';
-                $searchKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $searchKey, $search, \PDO::PARAM_STR);
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $replaceKey, $replace, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-                // Boolean operators
-            case Operator::TYPE_TOGGLE:
-                // No parameters to bind
-                break;
-
-                // Date operators
-            case Operator::TYPE_DATE_ADD_DAYS:
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $days = $values[0] ?? 0;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $days, \PDO::PARAM_INT);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_DATE_SET_NOW:
-                // No parameters to bind
-                break;
-
-                // Array operators
-            case Operator::TYPE_ARRAY_APPEND:
-            case Operator::TYPE_ARRAY_PREPEND:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
-
-                // Bind JSON array
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_REMOVE:
-                $value = $values[0] ?? null;
-                $bindKey = "op_{$bindIndex}";
-                if (is_array($value)) {
-                    $value = json_encode($value);
-                }
-                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_UNIQUE:
-                // No parameters to bind
-                break;
-
-                // Complex array operators
-            case Operator::TYPE_ARRAY_INSERT:
-                $index = $values[0] ?? 0;
-                $value = $values[1] ?? null;
-                $indexKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $indexKey, $index, \PDO::PARAM_INT);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_INTERSECT:
-            case Operator::TYPE_ARRAY_DIFF:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
-
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_FILTER:
-                $condition = $values[0] ?? 'equal';
-                $value = $values[1] ?? null;
-
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull'  // Null checks
-                ];
-                if (!in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
-                }
-
-                $conditionKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $conditionKey, $condition, \PDO::PARAM_STR);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                if ($value !== null) {
-                    $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue(':' . $valueKey, null, \PDO::PARAM_NULL);
-                }
-                $bindIndex++;
-                break;
-        }
+        $key = ID::unique();
+        $binds[":{$key}"] = $value;
+        return $key;
     }
 
     /**

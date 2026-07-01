@@ -1968,9 +1968,11 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+                    // Compare with the operand moved across (`col > max - val`) instead of
+                    // `col + val > max`, so the guard never overflows BIGINT when col is near the
+                    // integer range limit. Inclusive: a result landing exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
@@ -1982,9 +1984,10 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
+                    // `col < min + val` rather than `col - val < min`: overflow-safe near the
+                    // integer range limit. Inclusive: a result landing exactly on min still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
@@ -1996,10 +1999,12 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+                    // Compare via division (`col > max/val`, sign-aware) instead of computing
+                    // `col * val`, which would overflow BIGINT for large operands. The factor's
+                    // sign flips the inequality. Inclusive: a result exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -2012,7 +2017,7 @@ class MariaDB extends SQL
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -2029,10 +2034,11 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
+                    // Compare via logarithm (val*LN(col) > LN(max)) for col > 1, so POWER() is
+                    // never computed when it would overflow. col <= 1 can't exceed a positive max,
+                    // so it falls through and applies. Inclusive: a result exactly on max applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > 1 AND :$bindKey * LOG(COALESCE({$quotedColumn}, 0)) > LOG(:$maxKey) THEN COALESCE({$quotedColumn}, 0)
                         ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
                     END";
                 }

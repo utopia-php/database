@@ -762,13 +762,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'counter' => Operator::increment(100, 50) // Increment by 100 but max is 50
         ]));
-        $this->assertEquals(50, $updated->getAttribute('counter')); // Should be capped at 50
+        $this->assertEquals(10, $updated->getAttribute('counter')); // Unchanged — would exceed 50
 
         // Test: Decrement with min limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'score' => Operator::decrement(10, 0) // Decrement score by 10 but min is 0
         ]));
-        $this->assertEquals(0, $updated->getAttribute('score')); // Should be capped at 0
+        $this->assertEquals(5.0, $updated->getAttribute('score')); // Unchanged — would go below 0
 
         // Test: Multiply with max limit
         $doc = $database->createDocument($collectionId, new Document([
@@ -781,13 +781,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'counter' => Operator::multiply(10, 75) // 10 * 10 = 100, but max is 75
         ]));
-        $this->assertEquals(75, $updated->getAttribute('counter')); // Should be capped at 75
+        $this->assertEquals(10, $updated->getAttribute('counter')); // Unchanged — would exceed 75
 
         // Test: Power with max limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'score' => Operator::power(3, 100) // 5^3 = 125, but max is 100
         ]));
-        $this->assertEquals(100, $updated->getAttribute('score')); // Should be capped at 100
+        $this->assertEquals(5.0, $updated->getAttribute('score')); // Unchanged — would exceed 100
 
         $database->deleteCollection($collectionId);
     }
@@ -1216,7 +1216,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::increment(5, 10)
         ]));
-        $this->assertEquals(10, $updated->getAttribute('count')); // Should cap at 10
+        $this->assertEquals(8, $updated->getAttribute('count')); // Unchanged — would exceed 10
 
         // Success case - float
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1272,7 +1272,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::decrement(10, 5)
         ]));
-        $this->assertEquals(5, $updated->getAttribute('count')); // Should stop at min 5
+        $this->assertEquals(7, $updated->getAttribute('count')); // Unchanged — would go below 5
 
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1317,7 +1317,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::multiply(3, 20)
         ]));
-        $this->assertEquals(20.0, $updated->getAttribute('value')); // Should cap at 20
+        $this->assertEquals(10.0, $updated->getAttribute('value')); // Unchanged — would exceed 20
 
         $database->deleteCollection($collectionId);
     }
@@ -1352,7 +1352,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::divide(10, 2)
         ]));
-        $this->assertEquals(2.0, $updated->getAttribute('value')); // Should stop at min 2
+        $this->assertEquals(5.0, $updated->getAttribute('value')); // Unchanged — would go below 2
 
         $database->deleteCollection($collectionId);
     }
@@ -1416,7 +1416,194 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'number' => Operator::power(4, 50)
         ]));
-        $this->assertEquals(50, $updated->getAttribute('number')); // Should cap at 50
+        $this->assertEquals(8, $updated->getAttribute('number')); // Unchanged — would exceed 50
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * When an operation makes the value SMALLER, the max limit should not get in the way:
+     * the new (smaller) value is below the max, so it must be saved. Older code had a bug
+     * where, if the current value was already at or above the max, it refused to change it —
+     * so multiply(0.5, 50) on 80 wrongly stayed 50 instead of becoming 40, and a square root
+     * (power(0.5, 50)) on 100 stayed 50 instead of 10.
+     */
+    public function testOperatorBoundedShrinkApplies(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bounded_shrink';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'shrink_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 80.0,
+        ]));
+
+        // 80 * 0.5 = 40. 40 is below the max of 50, so 40 is saved. (Old code wrongly kept 50.)
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::multiply(0.5, 50),
+        ]));
+        $this->assertEquals(40.0, $updated->getAttribute('value'));
+
+        // Square root of 100 is 10. 10 is below the max of 50, so 10 is saved. (Old code kept 50.)
+        $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => 100.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::power(0.5, 50),
+        ]));
+        $this->assertEquals(10.0, $updated->getAttribute('value'));
+
+        // Adding a negative number lowers the value: 52 + (-5) = 47. 47 is below the max of 50,
+        // so 47 is saved even though the starting value 52 was already above the max.
+        // (Older code failed to save 47 here.)
+        $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => 52.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::increment(-5, 50),
+        ]));
+        $this->assertEquals(47.0, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * A limit on one field only affects that one field. In a single update, if one operator
+     * hits its limit and is skipped, the other operators and the normal fields in the same
+     * update still get saved.
+     */
+    public function testOperatorGuardIsPerColumn(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_guard_per_column';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 100, false, '');
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 48,
+            'score' => 10.0,
+            'name' => 'before',
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'count' => Operator::increment(5, 50),  // 48 + 5 = 53, over the max 50, so count is left as 48
+            'score' => Operator::multiply(2, 100),  // 10 * 2 = 20, under the max 100, so score becomes 20
+            'name' => 'after',                      // a normal field, always saved
+        ]));
+
+        $this->assertEquals(48, $updated->getAttribute('count'));     // left unchanged (would have gone over the max)
+        $this->assertEquals(20.0, $updated->getAttribute('score'));   // saved
+        $this->assertEquals('after', $updated->getAttribute('name')); // saved
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * When updating many documents at once, each document is checked against the limit using
+     * its own value. Here d2's count is over the limit so d2's count is left alone, but d2's
+     * score is still under its limit and is saved. So the limit on one field of one document
+     * does not stop other fields, or other documents, from being updated.
+     */
+    public function testOperatorGuardIsPerRowInBatch(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_guard_per_row';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+
+        foreach ([['d1', 10], ['d2', 48]] as [$id, $count]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => $count,
+                'score' => 10.0,
+            ]));
+        }
+
+        $database->updateDocuments($collectionId, new Document([
+            'count' => Operator::increment(5, 50),   // d1: 10+5=15 saved; d2: 48+5=53 is over 50, so d2.count stays 48
+            'score' => Operator::increment(5, 100),  // both: 10+5=15, under 100, so saved
+        ]));
+
+        $d1 = $database->getDocument($collectionId, 'd1');
+        $d2 = $database->getDocument($collectionId, 'd2');
+
+        $this->assertEquals(15, $d1->getAttribute('count'));    // under the max, saved
+        $this->assertEquals(15.0, $d1->getAttribute('score'));
+        $this->assertEquals(48, $d2->getAttribute('count'));    // over the max, left as 48
+        $this->assertEquals(15.0, $d2->getAttribute('score'));  // still saved, even though d2.count was left unchanged
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * The max value itself is allowed. Reaching exactly the max is saved; only going ABOVE
+     * the max leaves the value unchanged.
+     */
+    public function testOperatorBoundIsInclusive(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bound_inclusive';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 48,
+        ]));
+
+        // 48 + 1 = 49, below the max of 50, so 49 is saved
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(1, 50),
+        ]));
+        $this->assertEquals(49, $updated->getAttribute('counter'));
+
+        // Reset. 48 + 2 = 50, exactly the max, so 50 is saved
+        $database->updateDocument($collectionId, 'doc', new Document(['counter' => 48]));
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(2, 50),
+        ]));
+        $this->assertEquals(50, $updated->getAttribute('counter'));
+
+        // Reset. 48 + 3 = 51, above the max of 50, so the value is left as 48
+        $database->updateDocument($collectionId, 'doc', new Document(['counter' => 48]));
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(3, 50),
+        ]));
+        $this->assertEquals(48, $updated->getAttribute('counter'));
 
         $database->deleteCollection($collectionId);
     }
@@ -2630,9 +2817,9 @@ trait OperatorTests
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_overflow', new Document([
-            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, should be capped at 100
+            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, would exceed max 100, so unchanged
         ]));
-        $this->assertEquals(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
+        $this->assertEquals(-60.0, $updated4->getAttribute('value'), 'Negative * negative should leave value unchanged when result would exceed max');
 
         // Test zero multiplier with max
         $doc5 = $database->createDocument($collectionId, new Document([
@@ -2700,9 +2887,9 @@ trait OperatorTests
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
-            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so floor at -10
+            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so unchanged
         ]));
-        $this->assertEquals(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertEquals(100.0, $updated3->getAttribute('value'), 'Positive / negative should leave value unchanged when result would be below min');
 
         // Test negative value / negative divisor that would go below min
         $doc4 = $database->createDocument($collectionId, new Document([
@@ -2712,9 +2899,9 @@ trait OperatorTests
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_underflow', new Document([
-            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so floor at -10
+            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so unchanged
         ]));
-        $this->assertEquals(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertEquals(40.0, $updated4->getAttribute('value'), 'Positive / negative should leave value unchanged when result would be below min');
 
         $database->deleteCollection($collectionId);
     }
@@ -2862,17 +3049,17 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
             'bigint_max' => Operator::increment(2000, PHP_INT_MAX - 500)
         ]));
-        // Should be capped at max
+        // Unchanged — base + 2000 would exceed max
         $this->assertLessThanOrEqual(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
-        $this->assertEquals(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
+        $this->assertEquals($maxValue, $updated->getAttribute('bigint_max'));
 
         // Test decrement near min with limit
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
             'bigint_min' => Operator::decrement(2000, PHP_INT_MIN + 500)
         ]));
-        // Should be capped at min
+        // Unchanged — base - 2000 would go below min
         $this->assertGreaterThanOrEqual(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
-        $this->assertEquals(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
+        $this->assertEquals($minValue, $updated->getAttribute('bigint_min'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3842,13 +4029,13 @@ trait OperatorTests
             'small_int' => 100
         ]));
 
-        // Test increment with max that's within bounds
+        // Test increment with max — 100 + 50 = 150 exceeds max 120, so unchanged
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::increment(50, 120)
         ]));
-        $this->assertEquals(120, $updated->getAttribute('small_int'));
+        $this->assertEquals(100, $updated->getAttribute('small_int'));
 
-        // Test multiply that would exceed without limit
+        // Test multiply that would exceed the max limit — unchanged
         $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => 1000
         ]));
@@ -3856,7 +4043,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::multiply(1000, 5000)
         ]));
-        $this->assertEquals(5000, $updated->getAttribute('small_int'));
+        $this->assertEquals(1000, $updated->getAttribute('small_int'));
 
         $database->deleteCollection($collectionId);
     }

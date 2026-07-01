@@ -1862,28 +1862,28 @@ class Mongo extends Adapter
             case Operator::TYPE_INCREMENT:
                 $expr = ['$add' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_DECREMENT:
                 $expr = ['$subtract' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$max' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_MULTIPLY:
                 $expr = ['$multiply' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_DIVIDE:
                 $expr = ['$divide' => [['$ifNull' => [$ref, 0]], $values[0]]];
                 if (isset($values[1])) {
-                    $expr = ['$max' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
@@ -1893,7 +1893,7 @@ class Mongo extends Adapter
             case Operator::TYPE_POWER:
                 $expr = ['$pow' => [['$ifNull' => [$ref, 0]], $values[0]]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 

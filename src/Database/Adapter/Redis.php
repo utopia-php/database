@@ -4041,8 +4041,12 @@ class Redis extends Adapter
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($max !== null) {
-                    if ($base >= $max || ($max - $base) <= $by) {
-                        return $this->preserveNumericType($base, $max);
+                    // Guard: if the RESULT would exceed the max, leave it unchanged. Comparing
+                    // remaining headroom keeps us inside PHP's int range. Must NOT short-circuit
+                    // on `$base >= $max` — a negative $by moves the value down, so an over-max
+                    // base can still land within bound (e.g. 52 + (-5) = 47 <= 50 must apply).
+                    if (($max - $base) < $by) {
+                        return $this->preserveNumericType($base, $base);
                     }
                 }
 
@@ -4053,8 +4057,10 @@ class Redis extends Adapter
                 $min = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($min !== null) {
-                    if ($base <= $min || ($base - $min) <= $by) {
-                        return $this->preserveNumericType($base, $min);
+                    // Guard: leave unchanged only if the RESULT would go below min. Don't
+                    // short-circuit on `$base <= $min` — a negative $by moves the value up.
+                    if (($base - $min) < $by) {
+                        return $this->preserveNumericType($base, $base);
                     }
                 }
 
@@ -4064,8 +4070,12 @@ class Redis extends Adapter
                 $by = $values[0] ?? 1;
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                $result = $base * $by;
+                if ($max !== null && $result > $max) {
+                    return $this->preserveNumericType($base, $base);
+                }
 
-                return $this->applyNumericLimit($base * $by, $max, true);
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_DIVIDE:
                 $by = $values[0] ?? 1;
@@ -4074,8 +4084,12 @@ class Redis extends Adapter
                     return $current;
                 }
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                $result = $base / $by;
+                if ($min !== null && $result < $min) {
+                    return $this->preserveNumericType($base, $base);
+                }
 
-                return $this->applyNumericLimit($base / $by, $min, false);
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_MODULO:
                 $by = $values[0] ?? 1;
@@ -4090,8 +4104,12 @@ class Redis extends Adapter
                 $by = $values[0] ?? 1;
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                $result = $base ** $by;
+                if ($max !== null && $result > $max) {
+                    return $this->preserveNumericType($base, $base);
+                }
 
-                return $this->applyNumericLimit($base ** $by, $max, true);
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_STRING_CONCAT:
                 return ((string) ($current ?? '')) . (string) ($values[0] ?? '');

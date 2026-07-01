@@ -2023,11 +2023,13 @@ class MariaDB extends SQL
                 $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    // Compare via logarithm (val*LN(col) > LN(max)) for col > 1, so POWER() is
-                    // never computed when it would overflow. col <= 1 can't exceed a positive max,
-                    // so it falls through and applies. Inclusive: a result exactly on max applies.
+                    // A base of 1 or less can't exceed a positive max, so leave it unchanged —
+                    // this also avoids POWER() on 0 or a negative base (which yields NULL for a
+                    // negative/fractional exponent). For a base above 1 compare with logarithms
+                    // so POWER() is computed at most once, and only when the result fits the max.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) > 1 AND :$bindKey * LOG(COALESCE({$quotedColumn}, 0)) > LOG(:$maxKey) THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 0)) > LOG(:$maxKey) THEN COALESCE({$quotedColumn}, 0)
                         ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
                     END";
                 }

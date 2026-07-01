@@ -4104,12 +4104,22 @@ class Redis extends Adapter
                 $by = $values[0] ?? 1;
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
-                $result = $base ** $by;
-                if ($max !== null && $result > $max) {
-                    return $this->preserveNumericType($base, $base);
+                if ($max !== null) {
+                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
+                    // This also avoids INF/NAN from undefined powers (0 to a negative power,
+                    // or a negative base to a fractional power) being stored.
+                    if ($base <= 1) {
+                        return $this->preserveNumericType($base, $base);
+                    }
+                    $result = $base ** $by;
+                    if ($result > $max) {
+                        return $this->preserveNumericType($base, $base);
+                    }
+
+                    return $this->preserveNumericType($base, $result);
                 }
 
-                return $this->preserveNumericType($base, $result);
+                return $this->preserveNumericType($base, $base ** $by);
 
             case Operator::TYPE_STRING_CONCAT:
                 return ((string) ($current ?? '')) . (string) ($values[0] ?? '');

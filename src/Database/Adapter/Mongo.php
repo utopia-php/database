@@ -1891,9 +1891,18 @@ class Mongo extends Adapter
                 return ['$mod' => [['$ifNull' => [$ref, 0]], $values[0]]];
 
             case Operator::TYPE_POWER:
-                $expr = ['$pow' => [['$ifNull' => [$ref, 0]], $values[0]]];
+                $base = ['$ifNull' => [$ref, 0]];
+                $expr = ['$pow' => [$base, $values[0]]];
                 if (isset($values[1])) {
-                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
+                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
+                    // This also avoids storing NaN/Infinity from undefined powers (a negative
+                    // base to a fractional power, or 0 to a negative power) — Mongo orders NaN
+                    // below all numbers, so a plain `result <= max` check would wrongly apply it.
+                    $expr = ['$cond' => [
+                        ['$lte' => [$base, 1]],
+                        $base,
+                        ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, $base]],
+                    ]];
                 }
                 return $expr;
 

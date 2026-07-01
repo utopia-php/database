@@ -2095,8 +2095,13 @@ class SQLite extends MariaDB
 
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // A base of 1 or less can't exceed a positive max, so leave it unchanged —
+                    // this also avoids POWER() on 0 or a negative base (undefined for a
+                    // negative/fractional exponent). For a base above 1 compare with logarithms
+                    // so POWER() is computed at most once, and only when the result fits the max.
                     return "{$quotedColumn} = CASE
-                        WHEN POWER(COALESCE({$quotedColumn}, 0), :$bindKey) > :$maxKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 0)) > LN(:$maxKey) THEN COALESCE({$quotedColumn}, 0)
                         ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
                     END";
                 }

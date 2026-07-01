@@ -1608,6 +1608,49 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    /**
+     * A square root (power 0.5) of a negative number, and zero raised to a negative power, are
+     * not real numbers. With a max set, the operator must not crash the update — it leaves the
+     * value unchanged. (Some databases throw a hard error if asked to compute these directly.)
+     */
+    public function testOperatorPowerOnZeroOrNegativeBase(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_power_edge';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // The square root of a negative number is not a real number, so -4 is left as -4.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'neg',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => -4.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'neg', new Document([
+            'value' => Operator::power(0.5, 100),
+        ]));
+        $this->assertEquals(-4.0, $updated->getAttribute('value'));
+
+        // 0 raised to a negative power is undefined, so 0 is left as 0.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'zero',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'zero', new Document([
+            'value' => Operator::power(-1, 100),
+        ]));
+        $this->assertEquals(0.0, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorStringConcatComprehensive(): void
     {
         $database = static::getDatabase();

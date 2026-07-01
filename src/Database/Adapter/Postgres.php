@@ -2575,8 +2575,14 @@ class Postgres extends SQL
                 $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // A base of 1 or less can't exceed a positive max, so leave it unchanged.
+                    // This also avoids POWER() domain errors: PostgreSQL throws a hard error for
+                    // 0 to a negative power and for a negative number to a fractional power.
+                    // For a base above 1 we compare with logarithms so POWER() is computed at
+                    // most once, and only when the result is within the max.
                     return "{$quotedColumn} = CASE
-                        WHEN POWER(COALESCE({$columnRef}, 0), :$bindKey) > :$maxKey THEN COALESCE({$columnRef}, 0)
+                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 0)) > LN(:$maxKey) THEN COALESCE({$columnRef}, 0)
                         ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
                     END";
                 }

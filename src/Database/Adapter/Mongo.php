@@ -1862,28 +1862,28 @@ class Mongo extends Adapter
             case Operator::TYPE_INCREMENT:
                 $expr = ['$add' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_DECREMENT:
                 $expr = ['$subtract' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$max' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_MULTIPLY:
                 $expr = ['$multiply' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
             case Operator::TYPE_DIVIDE:
                 $expr = ['$divide' => [['$ifNull' => [$ref, 0]], $values[0]]];
                 if (isset($values[1])) {
-                    $expr = ['$max' => [$expr, $values[1]]];
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
                 }
                 return $expr;
 
@@ -1891,9 +1891,30 @@ class Mongo extends Adapter
                 return ['$mod' => [['$ifNull' => [$ref, 0]], $values[0]]];
 
             case Operator::TYPE_POWER:
-                $expr = ['$pow' => [['$ifNull' => [$ref, 0]], $values[0]]];
+                $base = ['$ifNull' => [$ref, 0]];
+                $exponent = $values[0];
+                $expr = ['$pow' => [$base, $exponent]];
                 if (isset($values[1])) {
-                    $expr = ['$min' => [$expr, $values[1]]];
+                    // Apply the power only if the result stays within the max; otherwise leave the
+                    // value unchanged. Overflow yields Infinity, which is greater than the max, so
+                    // it correctly stays put.
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, $base]];
+
+                    // Never compute $pow for an undefined input (0 to a negative power, or a
+                    // negative base to a fractional exponent): it yields NaN, which Mongo orders
+                    // below every number, so a plain `<= max` check would wrongly apply it. The
+                    // exponent is constant, so only guard the base condition it can actually trigger.
+                    $guards = [];
+                    if ($exponent < 0) {
+                        $guards[] = ['$eq' => [$base, 0]];
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = ['$lt' => [$base, 0]];
+                    }
+                    if (!empty($guards)) {
+                        $undefined = \count($guards) === 1 ? $guards[0] : ['$or' => $guards];
+                        $expr = ['$cond' => [$undefined, $base, $expr]];
+                    }
                 }
                 return $expr;
 
@@ -4001,6 +4022,12 @@ class Mongo extends Adapter
         // Invalid operation (MongoDB error code 14)
         if ($e->getCode() === 14) {
             return new TypeException('Invalid operation', $e->getCode(), $e);
+        }
+
+        // Invalid $pow argument (0 raised to a negative power) — matches the SQL adapters, which
+        // report an undefined power as a numeric range error.
+        if ($e->getCode() === 28764) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
         }
 
         return $e;

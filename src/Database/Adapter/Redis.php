@@ -11,6 +11,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -4041,8 +4042,12 @@ class Redis extends Adapter
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($max !== null) {
-                    if ($base >= $max || ($max - $base) <= $by) {
-                        return $this->preserveNumericType($base, $max);
+                    // Guard: if the RESULT would exceed the max, leave it unchanged. Comparing
+                    // remaining headroom keeps us inside PHP's int range. Must NOT short-circuit
+                    // on `$base >= $max` — a negative $by moves the value down, so an over-max
+                    // base can still land within bound (e.g. 52 + (-5) = 47 <= 50 must apply).
+                    if (($max - $base) < $by) {
+                        return $this->preserveNumericType($base, $base);
                     }
                 }
 
@@ -4053,8 +4058,10 @@ class Redis extends Adapter
                 $min = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
                 if ($min !== null) {
-                    if ($base <= $min || ($base - $min) <= $by) {
-                        return $this->preserveNumericType($base, $min);
+                    // Guard: leave unchanged only if the RESULT would go below min. Don't
+                    // short-circuit on `$base <= $min` — a negative $by moves the value up.
+                    if (($base - $min) < $by) {
+                        return $this->preserveNumericType($base, $base);
                     }
                 }
 
@@ -4064,8 +4071,12 @@ class Redis extends Adapter
                 $by = $values[0] ?? 1;
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                $result = $base * $by;
+                if ($max !== null && $result > $max) {
+                    return $this->preserveNumericType($base, $base);
+                }
 
-                return $this->applyNumericLimit($base * $by, $max, true);
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_DIVIDE:
                 $by = $values[0] ?? 1;
@@ -4074,8 +4085,12 @@ class Redis extends Adapter
                     return $current;
                 }
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                $result = $base / $by;
+                if ($min !== null && $result < $min) {
+                    return $this->preserveNumericType($base, $base);
+                }
 
-                return $this->applyNumericLimit($base / $by, $min, false);
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_MODULO:
                 $by = $values[0] ?? 1;
@@ -4090,8 +4105,30 @@ class Redis extends Adapter
                 $by = $values[0] ?? 1;
                 $max = $values[1] ?? null;
                 $base = \is_numeric($current) ? $current + 0 : 0;
+                if ($max !== null) {
+                    // Leave the value unchanged for undefined inputs (0 to a negative power, or a
+                    // negative base to a fractional exponent) — they produce INF/NaN, not a number.
+                    if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) != $by)) {
+                        return $this->preserveNumericType($base, $base);
+                    }
+                    $result = $base ** $by;
+                    // A result that overflows (INF) or exceeds the max also leaves the value as-is.
+                    if (!\is_finite($result) || $result > $max) {
+                        return $this->preserveNumericType($base, $base);
+                    }
 
-                return $this->applyNumericLimit($base ** $by, $max, true);
+                    return $this->preserveNumericType($base, $result);
+                }
+
+                // 0 to a negative power, or a negative base to a fractional exponent, is not a real
+                // number. Fail loudly with a clear exception rather than storing INF/NaN (which
+                // also can't be JSON-encoded, so it would otherwise surface as a raw JsonException).
+                $result = $base ** $by;
+                if (!\is_finite($result)) {
+                    throw new LimitException('Value out of range');
+                }
+
+                return $this->preserveNumericType($base, $result);
 
             case Operator::TYPE_STRING_CONCAT:
                 return ((string) ($current ?? '')) . (string) ($values[0] ?? '');

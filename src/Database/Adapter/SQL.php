@@ -23,12 +23,6 @@ abstract class SQL extends Adapter
     protected mixed $pdo;
 
     /**
-     * Maximum array size for array operations to prevent memory exhaustion.
-     * Large arrays in JSON_TABLE operations can cause significant memory usage.
-     */
-    protected const MAX_ARRAY_OPERATOR_SIZE = 10000;
-
-    /**
      * Controls how many fractional digits are used when binding float parameters.
      */
     protected int $floatPrecision = 17;

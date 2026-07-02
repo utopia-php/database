@@ -126,8 +126,10 @@ trait GeneralTests
 
             $thrown = null;
             try {
+                // A substring scan forces the engine to walk every huge value; a
+                // cheap filter (e.g. notEqual) lets COUNT finish inside the timeout.
                 $database->count('count-timeouts', [
-                    Query::notEqual('longtext', 'appwrite'),
+                    Query::contains('longtext', ['needle-that-does-not-exist']),
                 ]);
             } catch (\Exception $e) {
                 $thrown = $e;

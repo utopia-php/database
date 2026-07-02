@@ -109,9 +109,10 @@ trait GeneralTests
             )
         );
 
+        $longtext = file_get_contents(__DIR__ . '/../../../resources/longtext.txt');
         for ($i = 0; $i < 20; $i++) {
             $database->createDocument('count-timeouts', new Document([
-                'longtext' => file_get_contents(__DIR__ . '/../../../resources/longtext.txt'),
+                'longtext' => $longtext,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
@@ -120,17 +121,22 @@ trait GeneralTests
             ]));
         }
 
-        $database->setTimeout(1);
-
         try {
-            $database->count('count-timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ]);
-            $this->fail('count() failed to throw a timeout exception');
-        } catch (\Exception $e) {
+            $database->setTimeout(1);
+
+            $thrown = null;
+            try {
+                $database->count('count-timeouts', [
+                    Query::notEqual('longtext', 'appwrite'),
+                ]);
+            } catch (\Exception $e) {
+                $thrown = $e;
+            }
+
+            $this->assertInstanceOf(TimeoutException::class, $thrown, 'count() must throw a timeout exception');
+        } finally {
             $database->clearTimeout();
             $database->deleteCollection('count-timeouts');
-            $this->assertInstanceOf(TimeoutException::class, $e);
         }
     }
 

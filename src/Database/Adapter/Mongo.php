@@ -2712,11 +2712,6 @@ class Mongo extends Adapter
         $this->escapeQueryAttributes($collection, $queries);
 
         $filters = [];
-        $options = [];
-
-        if (!\is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
 
         // Build filters from queries
         $filters = $this->buildFilters($queries);
@@ -2791,6 +2786,11 @@ class Mongo extends Adapter
 
             return 0;
         } catch (MongoException $e) {
+            $processed = $this->processException($e);
+            if ($processed instanceof TimeoutException) {
+                throw $processed;
+            }
+
             return 0;
         }
     }
@@ -2854,7 +2854,11 @@ class Mongo extends Adapter
             $options['maxTimeMS'] = $this->timeout;
         }
 
-        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        try {
+            return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**

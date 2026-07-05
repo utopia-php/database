@@ -1038,21 +1038,13 @@ class MariaDB extends SQL
              */
             $keyIndex = 0;
             $operatorBinds = [];
-            $operators = [];
-
-            // Separate regular attributes from operators
-            foreach ($attributes as $attribute => $value) {
-                if (Operator::isOperator($value)) {
-                    $operators[$attribute] = $value;
-                }
-            }
 
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
                 // Check if this is an operator or regular attribute
-                if (isset($operators[$attribute])) {
-                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
+                if (Operator::isOperator($value)) {
+                    $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
                     $columns .= $operatorSQL . ',';
                 } else {
                     $bindKey = 'key_' . $keyIndex;
@@ -1086,7 +1078,7 @@ class MariaDB extends SQL
             $keyIndex = 0;
             foreach ($attributes as $attribute => $value) {
                 // Handle operators separately
-                if (isset($operators[$attribute])) {
+                if (Operator::isOperator($value)) {
                     continue;
                 }
 

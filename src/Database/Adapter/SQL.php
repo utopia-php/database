@@ -510,21 +510,13 @@ abstract class SQL extends Adapter
         $keyIndex = 0;
         $operatorBinds = [];
         $columns = '';
-        $operators = [];
-
-        // Separate regular attributes from operators
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
-            }
-        }
 
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
             // Check if this is an operator, spatial attribute, or regular attribute
-            if (isset($operators[$attribute])) {
-                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
+            if (Operator::isOperator($value)) {
+                $columns .= $this->getOperatorSQL($column, $value, $operatorBinds);
             } elseif (\in_array($attribute, $spatialAttributes)) {
                 $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$keyIndex}");
                 $keyIndex++;
@@ -569,7 +561,7 @@ abstract class SQL extends Adapter
         $keyIndex = 0;
         foreach ($attributes as $attributeName => $value) {
             // Skip operators as they don't need value binding
-            if (isset($operators[$attributeName])) {
+            if (Operator::isOperator($value)) {
                 continue;
             }
 

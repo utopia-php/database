@@ -2042,7 +2042,12 @@ class MariaDB extends SQL
                     }
                     // Cap by magnitude via logarithms so POWER() never runs on a value that would
                     // overflow (base^exp > max  <=>  exp * LOG(base) > LOG(max)).
-                    if ($oddInteger) {
+                    if ($exponent == 0) {
+                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
+                        // check below can't see for a base of 0. The result 1 exceeds the max when
+                        // max < 1, i.e. LOG(max) < 0 (LOG also coerces the bound value numerically).
+                        $whens[] = "WHEN LOG(:$maxKey) < 0 THEN {$col}";
+                    } elseif ($oddInteger) {
                         // An odd exponent keeps a negative base negative, and a negative result is
                         // always within a positive max, so only cap positive bases; negative bases
                         // fall through to POWER() and their (negative) result is applied.

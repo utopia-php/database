@@ -1759,6 +1759,8 @@ trait OperatorTests
             ['negexceeds', -10.0, Operator::power(100, 100), -10.0], // (-10)^100 far exceeds max → left unchanged (no overflow error)
             ['negfrac', -4.0, Operator::power(0.5, 100), -4.0],  // sqrt(-4) undefined → left unchanged
             ['zeroneg', 0.0, Operator::power(-1, 100), 0.0],     // 0^-1 undefined → left unchanged
+            ['zeroexp', 0.0, Operator::power(0, 0.5), 0.0],      // 0^0 = 1 > max 0.5 → left unchanged (not 1)
+            ['zeroexpok', 0.0, Operator::power(0, 5), 1.0],      // 0^0 = 1, within max 5 → applied
         ];
 
         foreach ($cases as [$id, $start, $operator, $expected]) {

@@ -5,7 +5,8 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
@@ -459,7 +460,7 @@ trait OperatorTests
         ]));
 
         // Test increment on non-numeric field
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply increment operator to non-numeric field 'text_field'");
 
         $database->updateDocument($collectionId, 'error_test_doc', new Document([
@@ -496,7 +497,7 @@ trait OperatorTests
         ]));
 
         // Test append on non-array field
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply arrayAppend operator to non-array field 'text_field'");
 
         $database->updateDocument($collectionId, 'array_error_test_doc', new Document([
@@ -531,7 +532,7 @@ trait OperatorTests
         ]));
 
         // Test insert with negative index
-        $this->expectException(DatabaseException::class);
+        $this->expectException(StructureException::class);
         $this->expectExceptionMessage("Cannot apply arrayInsert operator: index must be a non-negative integer");
 
         $database->updateDocument($collectionId, 'insert_error_test_doc', new Document([
@@ -585,7 +586,7 @@ trait OperatorTests
                 'string_field' => Operator::increment(5)
             ]));
             $this->fail('Expected exception for increment on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply increment operator to non-numeric field 'string_field'", $e->getMessage());
         }
 
@@ -595,7 +596,7 @@ trait OperatorTests
                 'int_field' => Operator::stringConcat(' suffix')
             ]));
             $this->fail('Expected exception for concat on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply stringConcat operator", $e->getMessage());
         }
 
@@ -605,7 +606,7 @@ trait OperatorTests
                 'string_field' => Operator::arrayAppend(['new'])
             ]));
             $this->fail('Expected exception for arrayAppend on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply arrayAppend operator to non-array field 'string_field'", $e->getMessage());
         }
 
@@ -615,7 +616,7 @@ trait OperatorTests
                 'int_field' => Operator::toggle()
             ]));
             $this->fail('Expected exception for toggle on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply toggle operator to non-boolean field 'int_field'", $e->getMessage());
         }
 
@@ -625,7 +626,7 @@ trait OperatorTests
                 'string_field' => Operator::dateAddDays(5)
             ]));
             $this->fail('Expected exception for dateAddDays on string field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             // Date operators check if string can be parsed as date
             $this->assertStringContainsString("Cannot apply dateAddDays operator to non-datetime field 'string_field'", $e->getMessage());
         }
@@ -660,7 +661,7 @@ trait OperatorTests
                 'number' => Operator::divide(0)
             ]));
             $this->fail('Expected exception for division by zero');
-        } catch (DatabaseException $e) {
+        } catch (OperatorException $e) {
             $this->assertStringContainsString("Division by zero is not allowed", $e->getMessage());
         }
 
@@ -670,7 +671,7 @@ trait OperatorTests
                 'number' => Operator::modulo(0)
             ]));
             $this->fail('Expected exception for modulo by zero');
-        } catch (DatabaseException $e) {
+        } catch (OperatorException $e) {
             $this->assertStringContainsString("Modulo by zero is not allowed", $e->getMessage());
         }
 
@@ -716,7 +717,7 @@ trait OperatorTests
                 'items' => Operator::arrayInsert(10, 'new') // Index 10 > length 3
             ]));
             $this->fail('Expected exception for out of bounds insert');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply arrayInsert operator: index 10 is out of bounds for array of length 3", $e->getMessage());
         }
 
@@ -762,13 +763,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'counter' => Operator::increment(100, 50) // Increment by 100 but max is 50
         ]));
-        $this->assertEquals(50, $updated->getAttribute('counter')); // Should be capped at 50
+        $this->assertEquals(10, $updated->getAttribute('counter')); // Unchanged — would exceed 50
 
         // Test: Decrement with min limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
             'score' => Operator::decrement(10, 0) // Decrement score by 10 but min is 0
         ]));
-        $this->assertEquals(0, $updated->getAttribute('score')); // Should be capped at 0
+        $this->assertEquals(5.0, $updated->getAttribute('score')); // Unchanged — would go below 0
 
         // Test: Multiply with max limit
         $doc = $database->createDocument($collectionId, new Document([
@@ -781,13 +782,13 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'counter' => Operator::multiply(10, 75) // 10 * 10 = 100, but max is 75
         ]));
-        $this->assertEquals(75, $updated->getAttribute('counter')); // Should be capped at 75
+        $this->assertEquals(10, $updated->getAttribute('counter')); // Unchanged — would exceed 75
 
         // Test: Power with max limit
         $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
             'score' => Operator::power(3, 100) // 5^3 = 125, but max is 100
         ]));
-        $this->assertEquals(100, $updated->getAttribute('score')); // Should be capped at 100
+        $this->assertEquals(5.0, $updated->getAttribute('score')); // Unchanged — would exceed 100
 
         $database->deleteCollection($collectionId);
     }
@@ -865,7 +866,7 @@ trait OperatorTests
                 'number' => Operator::stringReplace('4', '5')
             ]));
             $this->fail('Expected exception for replace on integer field');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString("Cannot apply stringReplace operator to non-string field 'number'", $e->getMessage());
         }
 
@@ -1216,7 +1217,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::increment(5, 10)
         ]));
-        $this->assertEquals(10, $updated->getAttribute('count')); // Should cap at 10
+        $this->assertEquals(8, $updated->getAttribute('count')); // Unchanged — would exceed 10
 
         // Success case - float
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1272,7 +1273,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'count' => Operator::decrement(10, 5)
         ]));
-        $this->assertEquals(5, $updated->getAttribute('count')); // Should stop at min 5
+        $this->assertEquals(7, $updated->getAttribute('count')); // Unchanged — would go below 5
 
         // Edge case: null value
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1317,7 +1318,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::multiply(3, 20)
         ]));
-        $this->assertEquals(20.0, $updated->getAttribute('value')); // Should cap at 20
+        $this->assertEquals(10.0, $updated->getAttribute('value')); // Unchanged — would exceed 20
 
         $database->deleteCollection($collectionId);
     }
@@ -1352,7 +1353,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'value' => Operator::divide(10, 2)
         ]));
-        $this->assertEquals(2.0, $updated->getAttribute('value')); // Should stop at min 2
+        $this->assertEquals(5.0, $updated->getAttribute('value')); // Unchanged — would go below 2
 
         $database->deleteCollection($collectionId);
     }
@@ -1416,7 +1417,492 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'number' => Operator::power(4, 50)
         ]));
-        $this->assertEquals(50, $updated->getAttribute('number')); // Should cap at 50
+        $this->assertEquals(8, $updated->getAttribute('number')); // Unchanged — would exceed 50
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * When an operation makes the value SMALLER, the max limit should not get in the way:
+     * the new (smaller) value is below the max, so it must be saved. Older code had a bug
+     * where, if the current value was already at or above the max, it refused to change it —
+     * so multiply(0.5, 50) on 80 wrongly stayed 50 instead of becoming 40, and a square root
+     * (power(0.5, 50)) on 100 stayed 50 instead of 10.
+     */
+    public function testOperatorBoundedShrinkApplies(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bounded_shrink';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'shrink_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 80.0,
+        ]));
+
+        // 80 * 0.5 = 40. 40 is below the max of 50, so 40 is saved. (Old code wrongly kept 50.)
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::multiply(0.5, 50),
+        ]));
+        $this->assertEquals(40.0, $updated->getAttribute('value'));
+
+        // Square root of 100 is 10. 10 is below the max of 50, so 10 is saved. (Old code kept 50.)
+        $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => 100.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::power(0.5, 50),
+        ]));
+        $this->assertEquals(10.0, $updated->getAttribute('value'));
+
+        // Adding a negative number lowers the value: 52 + (-5) = 47. 47 is below the max of 50,
+        // so 47 is saved even though the starting value 52 was already above the max.
+        // (Older code failed to save 47 here.)
+        $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => 52.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'shrink_doc', new Document([
+            'value' => Operator::increment(-5, 50),
+        ]));
+        $this->assertEquals(47.0, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * A limit on one field only affects that one field. In a single update, if one operator
+     * hits its limit and is skipped, the other operators and the normal fields in the same
+     * update still get saved.
+     */
+    public function testOperatorGuardIsPerColumn(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_guard_per_column';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 100, false, '');
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 48,
+            'score' => 10.0,
+            'name' => 'before',
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'count' => Operator::increment(5, 50),  // 48 + 5 = 53, over the max 50, so count is left as 48
+            'score' => Operator::multiply(2, 100),  // 10 * 2 = 20, under the max 100, so score becomes 20
+            'name' => 'after',                      // a normal field, always saved
+        ]));
+
+        $this->assertEquals(48, $updated->getAttribute('count'));     // left unchanged (would have gone over the max)
+        $this->assertEquals(20.0, $updated->getAttribute('score'));   // saved
+        $this->assertEquals('after', $updated->getAttribute('name')); // saved
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * When updating many documents at once, each document is checked against the limit using
+     * its own value. Here d2's count is over the limit so d2's count is left alone, but d2's
+     * score is still under its limit and is saved. So the limit on one field of one document
+     * does not stop other fields, or other documents, from being updated.
+     */
+    public function testOperatorGuardIsPerRowInBatch(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_guard_per_row';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+
+        foreach ([['d1', 10], ['d2', 48]] as [$id, $count]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => $count,
+                'score' => 10.0,
+            ]));
+        }
+
+        $database->updateDocuments($collectionId, new Document([
+            'count' => Operator::increment(5, 50),   // d1: 10+5=15 saved; d2: 48+5=53 is over 50, so d2.count stays 48
+            'score' => Operator::increment(5, 100),  // both: 10+5=15, under 100, so saved
+        ]));
+
+        $d1 = $database->getDocument($collectionId, 'd1');
+        $d2 = $database->getDocument($collectionId, 'd2');
+
+        $this->assertEquals(15, $d1->getAttribute('count'));    // under the max, saved
+        $this->assertEquals(15.0, $d1->getAttribute('score'));
+        $this->assertEquals(48, $d2->getAttribute('count'));    // over the max, left as 48
+        $this->assertEquals(15.0, $d2->getAttribute('score'));  // still saved, even though d2.count was left unchanged
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * The max value itself is allowed. Reaching exactly the max is saved; only going ABOVE
+     * the max leaves the value unchanged.
+     */
+    public function testOperatorBoundIsInclusive(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bound_inclusive';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 48,
+        ]));
+
+        // 48 + 1 = 49, below the max of 50, so 49 is saved
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(1, 50),
+        ]));
+        $this->assertEquals(49, $updated->getAttribute('counter'));
+
+        // Reset. 48 + 2 = 50, exactly the max, so 50 is saved
+        $database->updateDocument($collectionId, 'doc', new Document(['counter' => 48]));
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(2, 50),
+        ]));
+        $this->assertEquals(50, $updated->getAttribute('counter'));
+
+        // Reset. 48 + 3 = 51, above the max of 50, so the value is left as 48
+        $database->updateDocument($collectionId, 'doc', new Document(['counter' => 48]));
+        $updated = $database->updateDocument($collectionId, 'doc', new Document([
+            'counter' => Operator::increment(3, 50),
+        ]));
+        $this->assertEquals(48, $updated->getAttribute('counter'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * A square root (power 0.5) of a negative number, and zero raised to a negative power, are
+     * not real numbers. With a max set, the operator must not crash the update — it leaves the
+     * value unchanged. (Some databases throw a hard error if asked to compute these directly.)
+     */
+    public function testOperatorPowerOnZeroOrNegativeBase(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_power_edge';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // The square root of a negative number is not a real number, so -4 is left as -4.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'neg',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => -4.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'neg', new Document([
+            'value' => Operator::power(0.5, 100),
+        ]));
+        $this->assertEquals(-4.0, $updated->getAttribute('value'));
+
+        // 0 raised to a negative power is undefined, so 0 is left as 0.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'zero',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0.0,
+        ]));
+        $updated = $database->updateDocument($collectionId, 'zero', new Document([
+            'value' => Operator::power(-1, 100),
+        ]));
+        $this->assertEquals(0.0, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * A power with no maximum is computed directly by the engine on the live row value, so each
+     * adapter behaves as its engine does when the result is not a real number (zero raised to a
+     * negative power, or a negative base with a fractional exponent):
+     *  - Most engines (MariaDB/MySQL/Postgres) and the in-memory adapters (Memory/Redis) reject it
+     *    with a LimitException and leave the stored value untouched.
+     *  - MongoDB rejects 0-to-a-negative-power the same way, but has no error for a negative base
+     *    with a fractional exponent, so it stores NaN.
+     *  - SQLite never raises on undefined math; it stores NULL (or leaves the value as-is).
+     *
+     * The one behaviour that must never happen on any adapter is silently storing a plausible but
+     * wrong real number, so the assertions verify the stored value via a fresh read.
+     */
+    public function testOperatorUnboundedPowerOnUndefinedBase(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_power_undefined';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // [id, starting value, operator]. Each result is mathematically undefined.
+        $undefined = [
+            ['zero', 0.0, Operator::power(-1)],  // 0 to a negative power
+            ['neg', -4.0, Operator::power(0.5)], // square root of a negative number
+        ];
+
+        foreach ($undefined as [$id, $start, $operator]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'value' => $start,
+            ]));
+
+            $caught = false;
+            try {
+                $database->updateDocument($collectionId, $id, new Document(['value' => $operator]));
+            } catch (\Throwable $e) {
+                $caught = true;
+
+                // Whatever the engine raised must surface as a LimitException — not a raw
+                // PDO/Mongo/Json error.
+                $this->assertInstanceOf(LimitException::class, $e);
+
+                // The row must be left exactly as it was — the failed update is rolled back, no
+                // partial write. Verify with a fresh read, not the returned document.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+                $this->assertEquals($start, $stored, "{$id}: value changed even though the update raised a LimitException");
+            }
+
+            if ($caught === false) {
+                // Engines that never raise on undefined math (SQLite, and MongoDB for a negative
+                // base) must still not store a wrong real number: the value is either untouched or
+                // an explicit "not a number" marker (NULL / NaN). Verify with a fresh read.
+                $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+                $safe = $stored === null || $stored == $start || !\is_finite((float) $stored);
+                $this->assertTrue($safe, "{$id}: undefined power neither raised a LimitException nor left a safe value; stored " . \var_export($stored, true));
+            }
+        }
+
+        // A valid unbounded power still computes normally on every adapter: 2^3 = 8.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'valid',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 2.0,
+        ]));
+        $database->updateDocument($collectionId, 'valid', new Document(['value' => Operator::power(3)]));
+        $this->assertEquals(8.0, $database->getDocument($collectionId, 'valid')->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * A bounded power (with a max) must still compute the result whenever it fits within the max —
+     * it only leaves the value unchanged when the result would exceed the max, or when the input is
+     * mathematically undefined. A base of 1 or less is NOT a reason to skip: 0.5^2 = 0.25 and
+     * (-4)^2 = 16 are perfectly valid and within their bounds. Verified via a fresh read.
+     */
+    public function testOperatorBoundedPowerComputesWithinMax(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_bounded_power';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+
+        // [id, starting value, operator, expected stored value].
+        $cases = [
+            ['fraction', 0.5, Operator::power(2, 1), 0.25],      // 0.5^2 = 0.25, within max 1 → applied
+            ['negeven', -4.0, Operator::power(2, 20), 16.0],     // (-4)^2 = 16, within max 20 → applied
+            ['negodd', -2.0, Operator::power(3, 100), -8.0],     // (-2)^3 = -8, within max 100 → applied
+            ['negoddbig', -5.0, Operator::power(3, 100), -125.0], // (-5)^3 = -125, negative so within max 100 → applied
+            ['within', 2.0, Operator::power(3, 100), 8.0],       // 2^3 = 8, within max 100 → applied
+            ['exceeds', 5.0, Operator::power(3, 100), 5.0],      // 5^3 = 125 > 100 → left unchanged
+            ['negexceeds', -10.0, Operator::power(100, 100), -10.0], // (-10)^100 far exceeds max → left unchanged (no overflow error)
+            ['negfrac', -4.0, Operator::power(0.5, 100), -4.0],  // sqrt(-4) undefined → left unchanged
+            ['zeroneg', 0.0, Operator::power(-1, 100), 0.0],     // 0^-1 undefined → left unchanged
+            ['zeroexp', 0.0, Operator::power(0, 0.5), 0.0],      // 0^0 = 1 > max 0.5 → left unchanged (not 1)
+            ['zeroexpok', 0.0, Operator::power(0, 5), 1.0],      // 0^0 = 1, within max 5 → applied
+        ];
+
+        foreach ($cases as [$id, $start, $operator, $expected]) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'value' => $start,
+            ]));
+            $database->updateDocument($collectionId, $id, new Document(['value' => $operator]));
+
+            $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
+            $this->assertEqualsWithDelta($expected, $stored, 0.000001, "bounded power case '{$id}' stored the wrong value");
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Passing more values than the allowed maximum (10000) to an array operator must be rejected
+     * the same way on every adapter. Covers each operator that takes a caller-supplied value list.
+     */
+    public function testOperatorArraySizeLimit(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_array_size_limit';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'tags' => ['a'],
+        ]));
+
+        $tooMany = array_fill(0, Operator::MAX_ARRAY_OPERATOR_SIZE + 1, 'x'); // one over the limit
+
+        $operators = [
+            'arrayAppend' => Operator::arrayAppend($tooMany),
+            'arrayPrepend' => Operator::arrayPrepend($tooMany),
+            'arrayIntersect' => Operator::arrayIntersect($tooMany),
+            'arrayDiff' => Operator::arrayDiff($tooMany),
+            // arrayRemove wraps its argument, so the oversized list lands in values[0].
+            'arrayRemove' => Operator::arrayRemove($tooMany),
+            // A wrapped payload (the list nested in values[0]) must be capped too, not just the
+            // spread form — otherwise count($values) would see 1 and slip past the limit.
+            'arrayAppend (wrapped)' => Operator::arrayAppend([$tooMany]),
+        ];
+
+        foreach ($operators as $name => $operator) {
+            try {
+                $database->updateDocument($collectionId, 'doc', new Document(['tags' => $operator]));
+                $this->fail("Expected an exception for {$name} exceeding the array operator size limit");
+            } catch (StructureException $e) {
+                $this->assertStringContainsString('exceeds maximum allowed size', $e->getMessage());
+            }
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * An invalid array filter condition is rejected the same way on every adapter, because the
+     * operator validator checks it before any adapter runs.
+     */
+    public function testOperatorArrayFilterRejectsUnknownCondition(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_filter_unknown_cond';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'tags' => ['a', 'b', 'c'],
+        ]));
+
+        try {
+            $database->updateDocument($collectionId, 'doc', new Document([
+                'tags' => Operator::arrayFilter('bogusCondition', 'x'),
+            ]));
+            $this->fail('Expected an exception for an invalid array filter condition');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('filter condition', $e->getMessage());
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Every filter condition the validator accepts must actually work the same on all adapters.
+     * Each condition is applied to [1,2,3,4,5] and must keep exactly the matching elements —
+     * an adapter that doesn't handle a condition would keep the whole array instead.
+     */
+    public function testOperatorArrayFilterAllConditions(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'operator_filter_all_conditions';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'numbers' => [1, 2, 3, 4, 5],
+        ]));
+
+        $cases = [
+            ['equal', 3, [3]],
+            ['notEqual', 3, [1, 2, 4, 5]],
+            ['greaterThan', 3, [4, 5]],
+            ['greaterThanEqual', 3, [3, 4, 5]],
+            ['lessThan', 3, [1, 2]],
+            ['lessThanEqual', 3, [1, 2, 3]],
+            ['isNotNull', null, [1, 2, 3, 4, 5]],
+            ['isNull', null, []],
+        ];
+
+        foreach ($cases as [$condition, $compare, $expected]) {
+            $database->updateDocument($collectionId, 'doc', new Document(['numbers' => [1, 2, 3, 4, 5]])); // reset
+            $updated = $database->updateDocument($collectionId, 'doc', new Document([
+                'numbers' => Operator::arrayFilter($condition, $compare),
+            ]));
+            $this->assertEquals($expected, \array_values($updated->getAttribute('numbers')), "arrayFilter('{$condition}') gave the wrong result");
+        }
 
         $database->deleteCollection($collectionId);
     }
@@ -2630,9 +3116,9 @@ trait OperatorTests
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_overflow', new Document([
-            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, should be capped at 100
+            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, would exceed max 100, so unchanged
         ]));
-        $this->assertEquals(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
+        $this->assertEquals(-60.0, $updated4->getAttribute('value'), 'Negative * negative should leave value unchanged when result would exceed max');
 
         // Test zero multiplier with max
         $doc5 = $database->createDocument($collectionId, new Document([
@@ -2700,9 +3186,9 @@ trait OperatorTests
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
-            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so floor at -10
+            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so unchanged
         ]));
-        $this->assertEquals(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertEquals(100.0, $updated3->getAttribute('value'), 'Positive / negative should leave value unchanged when result would be below min');
 
         // Test negative value / negative divisor that would go below min
         $doc4 = $database->createDocument($collectionId, new Document([
@@ -2712,9 +3198,9 @@ trait OperatorTests
         ]));
 
         $updated4 = $database->updateDocument($collectionId, 'negative_underflow', new Document([
-            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so floor at -10
+            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so unchanged
         ]));
-        $this->assertEquals(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+        $this->assertEquals(40.0, $updated4->getAttribute('value'), 'Positive / negative should leave value unchanged when result would be below min');
 
         $database->deleteCollection($collectionId);
     }
@@ -2862,17 +3348,17 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
             'bigint_max' => Operator::increment(2000, PHP_INT_MAX - 500)
         ]));
-        // Should be capped at max
+        // Unchanged — base + 2000 would exceed max
         $this->assertLessThanOrEqual(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
-        $this->assertEquals(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
+        $this->assertEquals($maxValue, $updated->getAttribute('bigint_max'));
 
         // Test decrement near min with limit
         $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
             'bigint_min' => Operator::decrement(2000, PHP_INT_MIN + 500)
         ]));
-        // Should be capped at min
+        // Unchanged — base - 2000 would go below min
         $this->assertGreaterThanOrEqual(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
-        $this->assertEquals(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
+        $this->assertEquals($minValue, $updated->getAttribute('bigint_min'));
 
         $database->deleteCollection($collectionId);
     }
@@ -3445,7 +3931,7 @@ trait OperatorTests
                 'items' => Operator::arrayInsert(10, 'z')
             ]));
             $this->fail('Expected exception for out of bounds insert');
-        } catch (DatabaseException $e) {
+        } catch (StructureException $e) {
             $this->assertStringContainsString('out of bounds', $e->getMessage());
         }
 
@@ -3842,13 +4328,13 @@ trait OperatorTests
             'small_int' => 100
         ]));
 
-        // Test increment with max that's within bounds
+        // Test increment with max — 100 + 50 = 150 exceeds max 120, so unchanged
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::increment(50, 120)
         ]));
-        $this->assertEquals(120, $updated->getAttribute('small_int'));
+        $this->assertEquals(100, $updated->getAttribute('small_int'));
 
-        // Test multiply that would exceed without limit
+        // Test multiply that would exceed the max limit — unchanged
         $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => 1000
         ]));
@@ -3856,7 +4342,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
             'small_int' => Operator::multiply(1000, 5000)
         ]));
-        $this->assertEquals(5000, $updated->getAttribute('small_int'));
+        $this->assertEquals(1000, $updated->getAttribute('small_int'));
 
         $database->deleteCollection($collectionId);
     }

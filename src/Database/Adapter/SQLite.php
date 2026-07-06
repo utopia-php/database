@@ -1336,21 +1336,13 @@ class SQLite extends MariaDB
          */
         $keyIndex = 0;
         $operatorBinds = [];
-        $operators = [];
-
-        // Separate regular attributes from operators
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
-            }
-        }
 
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
             // Check if this is an operator, spatial attribute, or regular attribute
-            if (isset($operators[$attribute])) {
-                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
+            if (Operator::isOperator($value)) {
+                $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
                 $columns .= $operatorSQL;
             } elseif ($this->getSupportForSpatialAttributes() && \in_array($attribute, $spatialAttributes, true)) {
                 $bindKey = 'key_' . $keyIndex;
@@ -1389,7 +1381,7 @@ class SQLite extends MariaDB
         $keyIndex = 0;
         foreach ($attributes as $attribute => $value) {
             // Handle operators separately
-            if (isset($operators[$attribute])) {
+            if (Operator::isOperator($value)) {
                 continue;
             }
 
@@ -2032,8 +2024,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) + :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
@@ -2046,8 +2037,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) - :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
@@ -2060,9 +2050,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) * :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -2075,7 +2063,7 @@ class SQLite extends MariaDB
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -2095,16 +2083,47 @@ class SQLite extends MariaDB
                 }
 
                 $values = $operator->getValues();
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
 
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 1)) > LN(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $col = "COALESCE({$quotedColumn}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted.
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+
+                    $whens = [];
+                    if ($exponent < 0) {
+                        // 0 to a negative power is undefined.
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        // A negative base to a fractional exponent is not a real number.
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
+                    // overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
+                    if ($exponent == 0) {
+                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
+                        // check below can't see for a base of 0. The result 1 exceeds the max when
+                        // max < 1, i.e. LN(max) < 0 (LN also coerces the bound value numerically).
+                        $whens[] = "WHEN LN(:$maxKey) < 0 THEN {$col}";
+                    } elseif ($oddInteger) {
+                        // An odd exponent keeps a negative base negative, and a negative result is
+                        // always within a positive max, so only cap positive bases; negative bases
+                        // fall through to POWER() and their (negative) result is applied.
+                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                    } else {
+                        // Otherwise the result is non-negative, so its magnitude equals its value —
+                        // cap either sign. ABS() keeps LN() defined for a negative even-power base.
+                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
+                    }
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
@@ -2128,9 +2147,6 @@ class SQLite extends MariaDB
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: merge arrays by using json_group_array on extracted elements
                 // We use json_each to extract elements from both arrays and combine them
@@ -2145,9 +2161,6 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_PREPEND:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: prepend by extracting and recombining with new elements first
                 return "{$quotedColumn} = (
@@ -2216,9 +2229,6 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_INTERSECT:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: keep only values that exist in both arrays
                 return "{$quotedColumn} = (
@@ -2229,9 +2239,6 @@ class SQLite extends MariaDB
 
             case Operator::TYPE_ARRAY_DIFF:
                 $values = $operator->getValues();
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 // SQLite: remove values that exist in the comparison array
                 return "{$quotedColumn} = (

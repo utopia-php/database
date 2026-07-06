@@ -1038,21 +1038,13 @@ class MariaDB extends SQL
              */
             $keyIndex = 0;
             $operatorBinds = [];
-            $operators = [];
-
-            // Separate regular attributes from operators
-            foreach ($attributes as $attribute => $value) {
-                if (Operator::isOperator($value)) {
-                    $operators[$attribute] = $value;
-                }
-            }
 
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
                 // Check if this is an operator or regular attribute
-                if (isset($operators[$attribute])) {
-                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
+                if (Operator::isOperator($value)) {
+                    $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
                     $columns .= $operatorSQL . ',';
                 } else {
                     $bindKey = 'key_' . $keyIndex;
@@ -1086,7 +1078,7 @@ class MariaDB extends SQL
             $keyIndex = 0;
             foreach ($attributes as $attribute => $value) {
                 // Handle operators separately
-                if (isset($operators[$attribute])) {
+                if (Operator::isOperator($value)) {
                     continue;
                 }
 
@@ -1966,9 +1958,11 @@ class MariaDB extends SQL
                 $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // Compare with the operand moved across (`col > max - val`) instead of
+                    // `col + val > max`, so the guard never overflows BIGINT when col is near the
+                    // integer range limit. Inclusive: a result landing exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
@@ -1978,9 +1972,10 @@ class MariaDB extends SQL
                 $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
+                    // `col < min + val` rather than `col - val < min`: overflow-safe near the
+                    // integer range limit. Inclusive: a result landing exactly on min still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
@@ -1990,10 +1985,12 @@ class MariaDB extends SQL
                 $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // Compare via division (`col > max/val`, sign-aware) instead of computing
+                    // `col * val`, which would overflow BIGINT for large operands. The factor's
+                    // sign flips the inequality. Inclusive: a result exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -2004,7 +2001,7 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -2015,15 +2012,46 @@ class MariaDB extends SQL
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case Operator::TYPE_POWER:
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $col = "COALESCE({$quotedColumn}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted.
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+
+                    $whens = [];
+                    if ($exponent < 0) {
+                        // 0 to a negative power is undefined (POWER would error / return NULL).
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        // A negative base to a fractional exponent is not a real number.
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
+                    // overflow (base^exp > max  <=>  exp * LOG(base) > LOG(max)).
+                    if ($exponent == 0) {
+                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
+                        // check below can't see for a base of 0. The result 1 exceeds the max when
+                        // max < 1, i.e. LOG(max) < 0 (LOG also coerces the bound value numerically).
+                        $whens[] = "WHEN LOG(:$maxKey) < 0 THEN {$col}";
+                    } elseif ($oddInteger) {
+                        // An odd exponent keeps a negative base negative, and a negative result is
+                        // always within a positive max, so only cap positive bases; negative bases
+                        // fall through to POWER() and their (negative) result is applied.
+                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LOG({$col}) > LOG(:$maxKey) THEN {$col}";
+                    } else {
+                        // Otherwise the result is non-negative, so its magnitude equals its value —
+                        // cap either sign. ABS() keeps LOG() defined for a negative even-power base.
+                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LOG(ABS({$col})) > LOG(:$maxKey) THEN {$col}";
+                    }
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
@@ -2043,16 +2071,10 @@ class MariaDB extends SQL
 
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
@@ -2086,9 +2108,6 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_INTERSECT:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
@@ -2100,9 +2119,6 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_DIFF:
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
                 $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
@@ -2115,14 +2131,6 @@ class MariaDB extends SQL
 
             case Operator::TYPE_ARRAY_FILTER:
                 $condition = $values[0] ?? 'equal';
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull'  // Null checks
-                ];
-                if (!in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
-                }
                 $filterValue = $values[1] ?? null;
                 $conditionKey = $this->registerOperatorBind($binds, $condition);
                 $valueKey = $this->registerOperatorBind($binds, $filterValue === null ? null : json_encode($filterValue));

@@ -1166,21 +1166,13 @@ class Postgres extends SQL
 
         $keyIndex = 0;
         $operatorBinds = [];
-        $operators = [];
-
-        // Separate regular attributes from operators
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
-            }
-        }
 
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
             // Check if this is an operator, spatial attribute, or regular attribute
-            if (isset($operators[$attribute])) {
-                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $operatorBinds);
+            if (Operator::isOperator($value)) {
+                $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
                 $columns .= $operatorSQL . ',';
             } elseif (\in_array($attribute, $spatialAttributes, true)) {
                 $bindKey = 'key_' . $keyIndex;
@@ -1213,7 +1205,7 @@ class Postgres extends SQL
         $keyIndex = 0;
         foreach ($attributes as $attribute => $value) {
             // Handle operators separately
-            if (isset($operators[$attribute])) {
+            if (Operator::isOperator($value)) {
                 continue;
             }
 
@@ -2121,6 +2113,12 @@ class Postgres extends SQL
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
         }
 
+        // Invalid argument for power function (e.g. 0 to a negative power, or a negative base to a
+        // fractional exponent) — matches MariaDB, which reports the same as a numeric range error.
+        if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
@@ -2528,8 +2526,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
-                        WHEN COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) - CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) + CAST(:$bindKey AS NUMERIC) > CAST(:$maxKey AS NUMERIC) THEN COALESCE({$columnRef}, 0)
                         ELSE COALESCE({$columnRef}, 0) + CAST(:$bindKey AS NUMERIC)
                     END";
                 }
@@ -2540,8 +2537,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
-                        WHEN COALESCE({$columnRef}, 0) < CAST(:$minKey AS NUMERIC) + CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) - CAST(:$bindKey AS NUMERIC) < CAST(:$minKey AS NUMERIC) THEN COALESCE({$columnRef}, 0)
                         ELSE COALESCE({$columnRef}, 0) - CAST(:$bindKey AS NUMERIC)
                     END";
                 }
@@ -2552,9 +2548,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
-                        WHEN CAST(:$bindKey AS NUMERIC) > 0 AND COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
-                        WHEN CAST(:$bindKey AS NUMERIC) < 0 AND COALESCE({$columnRef}, 0) < CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) * CAST(:$bindKey AS NUMERIC) > CAST(:$maxKey AS NUMERIC) THEN COALESCE({$columnRef}, 0)
                         ELSE COALESCE({$columnRef}, 0) * CAST(:$bindKey AS NUMERIC)
                     END";
                 }
@@ -2565,7 +2559,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) < CAST(:$minKey AS NUMERIC) THEN COALESCE({$columnRef}, 0)
                         ELSE COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC)
                     END";
                 }
@@ -2576,15 +2570,46 @@ class Postgres extends SQL
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
             case Operator::TYPE_POWER:
-                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
                 if (isset($values[1])) {
                     $maxKey = $this->registerOperatorBind($binds, $values[1]);
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 1)) > LN(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
-                    END";
+                    $col = "COALESCE({$columnRef}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted. PostgreSQL throws
+                    // a hard error for 0 to a negative power and a negative base to a fractional
+                    // exponent, so those must never reach POWER().
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+
+                    $whens = [];
+                    if ($exponent < 0) {
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
+                    // overflow (base^exp > max  <=>  exp * LN(base) > LN(max)).
+                    if ($exponent == 0) {
+                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
+                        // check below can't see for a base of 0. The result 1 exceeds the max when
+                        // max < 1, i.e. LN(max) < 0 (LN also coerces the bound value numerically).
+                        $whens[] = "WHEN LN(:$maxKey) < 0 THEN {$col}";
+                    } elseif ($oddInteger) {
+                        // An odd exponent keeps a negative base negative, and a negative result is
+                        // always within a positive max, so only cap positive bases; negative bases
+                        // fall through to POWER() and their (negative) result is applied.
+                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LN({$col}) > LN(:$maxKey) THEN {$col}";
+                    } else {
+                        // Otherwise the result is non-negative, so its magnitude equals its value —
+                        // cap either sign. ABS() keeps LN() defined for a negative even-power base.
+                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LN(ABS({$col})) > LN(:$maxKey) THEN {$col}";
+                    }
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
@@ -2661,14 +2686,6 @@ class Postgres extends SQL
 
             case Operator::TYPE_ARRAY_FILTER:
                 $condition = $values[0] ?? 'equal';
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull'  // Null checks
-                ];
-                if (!in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
-                }
                 $filterValue = $values[1] ?? null;
                 $conditionKey = $this->registerOperatorBind($binds, $condition);
                 $valueKey = $this->registerOperatorBind($binds, $filterValue === null ? null : json_encode($filterValue));

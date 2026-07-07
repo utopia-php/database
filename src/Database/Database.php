@@ -6641,7 +6641,11 @@ class Database
                 $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc->removeAttribute('$skipPermissionsUpdate');
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                $doc = $this->decode($collection, $doc);
+                // Operator refetch already returns decoded documents honoring the caller's select;
+                // decoding again (without selections) would re-materialize non-selected attributes.
+                if (!$hasOperators) {
+                    $doc = $this->decode($collection, $doc);
+                }
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {

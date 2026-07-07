@@ -431,6 +431,68 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testUpdateDocumentsOperatorsWithSelect(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'test_operators_with_select';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, true);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+
+        for ($i = 1; $i <= 3; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "select_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'category' => 'A',
+                'count' => $i * 10,
+                'score' => $i * 1.5,
+            ]));
+        }
+
+        // Update with an operator while selecting only a subset of attributes.
+        // The operator path refetches to compute values; it must still honor the caller's select.
+        $updated = [];
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(100),
+            ]),
+            [Query::select(['count']), Query::orderAsc('$id')],
+            onNext: function (Document $doc) use (&$updated) {
+                $updated[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $count);
+        $this->assertCount(3, $updated);
+
+        // A plain find with the same select defines the expected projection.
+        $found = $database->find($collectionId, [Query::select(['count']), Query::orderAsc('$id')]);
+
+        foreach ($updated as $index => $doc) {
+            // Computed operator value is present and correct.
+            $this->assertEquals(($index + 1) * 10 + 100, $doc->getAttribute('count'));
+
+            // The operator path must return the same projection as a normal select find,
+            // i.e. it must not leak the non-selected attributes (regression check).
+            $this->assertEquals(
+                \array_keys($found[$index]->getArrayCopy()),
+                \array_keys($doc->getArrayCopy())
+            );
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorErrorHandling(): void
     {
         /** @var Database $database */

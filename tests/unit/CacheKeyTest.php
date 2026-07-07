@@ -33,6 +33,28 @@ class CacheKeyTest extends TestCase
         return $hashKey;
     }
 
+    private function getQueryCacheKey(Database $db, string $collectionId, ?string $namespace = null): string
+    {
+        $method = new \ReflectionMethod(Database::class, 'getQueryCacheKey');
+
+        return $method->invoke($db, $collectionId, $namespace);
+    }
+
+    /**
+     * @param array<Query> $queries
+     */
+    private function getQueryCacheField(
+        Database $db,
+        ?Document $collection = null,
+        array $queries = [],
+        string $field = 'documents',
+        string $forPermission = Database::PERMISSION_READ,
+    ): ?string {
+        $method = new \ReflectionMethod(Database::class, 'getQueryCacheField');
+
+        return $method->invoke($db, $collection, $queries, $field, $forPermission);
+    }
+
     public function testSameConfigProducesSameCacheKey(): void
     {
         $db1 = $this->createDatabase();
@@ -147,7 +169,7 @@ class CacheKeyTest extends TestCase
 
         $this->assertSame(
             'default-cache-mysql-console:_39::collection:ttl_cache_table:query',
-            $db->getQueryCacheKey('ttl_cache_table'),
+            $this->getQueryCacheKey($db, 'ttl_cache_table'),
         );
     }
 
@@ -163,7 +185,7 @@ class CacheKeyTest extends TestCase
 
         $this->assertSame(
             'default-cache-mysql-console:_39::collection:wafrules:query',
-            $db->getQueryCacheKey('wafrules', '_39'),
+            $this->getQueryCacheKey($db, 'wafrules', '_39'),
         );
     }
 
@@ -192,7 +214,7 @@ class CacheKeyTest extends TestCase
             . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
             . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
         );
-        $field = $db->getQueryCacheField($collection, $queries);
+        $field = $this->getQueryCacheField($db, $collection, $queries);
 
         $this->assertStringStartsWith("{$schemaHash}:", $field);
         $this->assertStringEndsWith(':documents', $field);
@@ -203,7 +225,8 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $field = $db->getQueryCacheField(
+        $field = $this->getQueryCacheField(
+            $db,
             new Document([
                 'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
                 'indexes' => [],
@@ -213,7 +236,8 @@ class CacheKeyTest extends TestCase
 
         $this->assertNotSame(
             $field,
-            $db->getQueryCacheField(
+            $this->getQueryCacheField(
+                $db,
                 new Document([
                     'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
                     'indexes' => [],
@@ -221,26 +245,26 @@ class CacheKeyTest extends TestCase
                 [Query::limit(10)],
             ),
         );
-        $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
-        $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
+        $this->assertNotSame($field, $this->getQueryCacheField($db, null, [Query::limit(20)]));
+        $this->assertStringEndsWith(':total', $this->getQueryCacheField($db, null, [Query::limit(10)], 'total'));
     }
 
     public function testQueryCacheFieldChangesWithActiveAuthorizationContext(): void
     {
         $db = $this->createDatabase();
 
-        $field = $db->getQueryCacheField(null, [Query::limit(10)]);
+        $field = $this->getQueryCacheField($db, null, [Query::limit(10)]);
 
         $this->assertNotSame(
             $field,
-            $db->getAuthorization()->skip(fn () => $db->getQueryCacheField(null, [Query::limit(10)])),
+            $db->getAuthorization()->skip(fn () => $this->getQueryCacheField($db, null, [Query::limit(10)])),
         );
 
         $db->getAuthorization()->addRole('user:1');
 
         $this->assertNotSame(
             $field,
-            $db->getQueryCacheField(null, [Query::limit(10)]),
+            $this->getQueryCacheField($db, null, [Query::limit(10)]),
         );
     }
 
@@ -248,21 +272,21 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+        $this->assertNull($this->getQueryCacheField($db, forPermission: Database::PERMISSION_UPDATE));
     }
 
     public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
     {
         $db = $this->createDatabase();
 
-        $fieldA = $db->getQueryCacheField(null, [
+        $fieldA = $this->getQueryCacheField($db, null, [
             Query::orderAsc('name'),
             Query::cursorAfter(new Document([
                 '$id' => 'cursor',
                 'name' => 'alpha',
             ])),
         ]);
-        $fieldB = $db->getQueryCacheField(null, [
+        $fieldB = $this->getQueryCacheField($db, null, [
             Query::orderAsc('name'),
             Query::cursorAfter(new Document([
                 '$id' => 'cursor',
@@ -277,15 +301,15 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $field = $db->getQueryCacheField(null, [Query::limit(10)]);
+        $field = $this->getQueryCacheField($db, null, [Query::limit(10)]);
 
         $this->assertNotSame(
             $field,
-            $db->skipFilters(fn () => $db->getQueryCacheField(null, [Query::limit(10)]), ['json']),
+            $db->skipFilters(fn () => $this->getQueryCacheField($db, null, [Query::limit(10)]), ['json']),
         );
         $this->assertNotSame(
             $field,
-            $db->skipRelationships(fn () => $db->getQueryCacheField(null, [Query::limit(10)])),
+            $db->skipRelationships(fn () => $this->getQueryCacheField($db, null, [Query::limit(10)])),
         );
     }
 
@@ -297,7 +321,7 @@ class CacheKeyTest extends TestCase
         $queries = ['invalid'];
 
         /** @phpstan-ignore-next-line intentionally passing invalid query type */
-        $db->getQueryCacheField(null, $queries);
+        $this->getQueryCacheField($db, null, $queries);
     }
 
 

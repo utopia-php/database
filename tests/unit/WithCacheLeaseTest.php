@@ -39,7 +39,14 @@ class WithCacheLeaseTest extends TestCase
             'name' => 'fresh',
         ]));
 
-        $this->key = $this->database->getQueryCacheKey('projects');
+        $this->key = $this->getQueryCacheKey($this->database, 'projects');
+    }
+
+    private function getQueryCacheKey(Database $database, string $collectionId, ?string $namespace = null): string
+    {
+        $method = new \ReflectionMethod(Database::class, 'getQueryCacheKey');
+
+        return $method->invoke($database, $collectionId, $namespace);
     }
 
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void

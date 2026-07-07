@@ -806,10 +806,11 @@ class Database
      *
      * @param Document $collection
      * @param array<Document> $documents
+     * @param array<Query> $selections Select queries from the caller, preserved so the refetch honors the original projection
      * @return array<Document>
      * @throws DatabaseException
      */
-    protected function refetchDocuments(Document $collection, array $documents): array
+    protected function refetchDocuments(Document $collection, array $documents, array $selections = []): array
     {
         if (empty($documents)) {
             return $documents;
@@ -823,9 +824,12 @@ class Database
             return $sequence;
         }, $documents);
 
-        // Fetch fresh copies with computed operator values
+        // Fetch fresh copies with computed operator values, preserving the caller's projection
         $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find($collection->getId(), [Query::equal('$sequence', $sequences)])
+            fn () => $this->find(
+                $collection->getId(),
+                array_merge([Query::equal('$sequence', $sequences)], $selections)
+            )
         ));
 
         $refetchedMap = [];
@@ -834,8 +838,8 @@ class Database
         }
 
         $result = [];
-        foreach ($documents as $doc) {
-            $result[] = $refetchedMap[$doc->getSequence()] ?? $doc;
+        foreach ($documents as $index => $doc) {
+            $result[$index] = $refetchedMap[$sequences[$index]] ?? $doc;
         }
 
         return $result;
@@ -6383,20 +6387,6 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
-            // If operators were used, refetch document to get computed values
-            $hasOperators = false;
-            foreach ($document->getArrayCopy() as $value) {
-                if (Operator::isOperator($value)) {
-                    $hasOperators = true;
-                    break;
-                }
-            }
-
-            if ($hasOperators) {
-                $refetched = $this->refetchDocuments($collection, [$document]);
-                $document = $refetched[0];
-            }
-
             return $document;
         });
 
@@ -6406,6 +6396,20 @@ class Database
 
         // Purge again after commit so readers cannot re-cache the pre-commit version
         $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
+        // If operators were used, refetch (outside the transaction) to get committed computed values
+        $hasOperators = false;
+        foreach ($document->getArrayCopy() as $value) {
+            if (Operator::isOperator($value)) {
+                $hasOperators = true;
+                break;
+            }
+        }
+
+        if ($hasOperators) {
+            $refetched = $this->refetchDocuments($collection, [$document]);
+            $document = $refetched[0];
+        }
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
@@ -6630,7 +6634,7 @@ class Database
             }
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch);
+                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
 
             foreach ($batch as $index => $doc) {

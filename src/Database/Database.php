@@ -8611,7 +8611,7 @@ class Database
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function withCache(
+    private function withCache(
         string $key,
         callable $callback,
         ?string $hash = '',

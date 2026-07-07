@@ -30,6 +30,23 @@ class QueryCacheTest extends TestCase
     }
 
     /**
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    private function withCache(
+        Database $database,
+        string $key,
+        callable $callback,
+        ?string $hash = '',
+    ): mixed {
+        $method = new \ReflectionMethod(Database::class, 'withCache');
+
+        /** @var T */
+        return $method->invoke($database, $key, $callback, $hash);
+    }
+
+    /**
      * @param array<Query> $queries
      * @return array<Document>
      */
@@ -49,7 +66,8 @@ class QueryCacheTest extends TestCase
         $cacheKey = $database->getQueryCacheKey($collectionDocument->getId(), $namespace);
         $cacheHash = $database->getQueryCacheField($collectionDocument, $queries);
 
-        return $database->withCache(
+        return $this->withCache(
+            $database,
             key: $cacheKey,
             callback: fn (): array => $database->find($collection, $queries),
             hash: $cacheHash,
@@ -63,7 +81,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): array {
                 $callbackCalls++;
@@ -74,7 +93,8 @@ class QueryCacheTest extends TestCase
         $this->assertSame(['value' => 'fresh'], $value);
         $this->assertSame(1, $callbackCalls);
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): array {
                 $callbackCalls++;
@@ -93,7 +113,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): array {
                 $callbackCalls++;
@@ -103,7 +124,8 @@ class QueryCacheTest extends TestCase
 
         $this->assertSame([], $value);
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): array {
                 $callbackCalls++;
@@ -122,7 +144,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
@@ -132,7 +155,8 @@ class QueryCacheTest extends TestCase
 
         $this->assertNull($value);
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): string {
                 $callbackCalls++;
@@ -152,7 +176,8 @@ class QueryCacheTest extends TestCase
         $firstCalls = 0;
         $secondCalls = 0;
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             'key',
             function () use (&$firstCalls): array {
                 $firstCalls++;
@@ -161,7 +186,8 @@ class QueryCacheTest extends TestCase
             'first-field',
         );
 
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             'key',
             function () use (&$secondCalls): array {
                 $secondCalls++;
@@ -170,7 +196,8 @@ class QueryCacheTest extends TestCase
             'second-field',
         );
 
-        $cachedFirst = $database->withCache(
+        $cachedFirst = $this->withCache(
+            $database,
             'key',
             function () use (&$firstCalls): array {
                 $firstCalls++;
@@ -194,7 +221,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): bool {
                 $callbackCalls++;
@@ -205,7 +233,8 @@ class QueryCacheTest extends TestCase
         $this->assertFalse($value);
         $this->assertSame([], $cache->list('key'));
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): string {
                 $callbackCalls++;
@@ -224,7 +253,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use (&$callbackCalls): string {
                 $callbackCalls++;
@@ -232,7 +262,8 @@ class QueryCacheTest extends TestCase
             },
             hash: null,
         );
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use (&$callbackCalls): string {
                 $callbackCalls++;
@@ -254,14 +285,16 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use (&$callbackCalls): Document {
                 $callbackCalls++;
                 return new Document(['$id' => 'first']);
             },
         );
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use (&$callbackCalls): Document {
                 $callbackCalls++;
@@ -290,14 +323,16 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use ($database, &$callbackCalls): array {
                 $callbackCalls++;
                 return ['prefix', $database->getDocument('wafRules', 'rule-a')];
             },
         );
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             key: 'key',
             callback: function () use ($database, &$callbackCalls): array {
                 $callbackCalls++;
@@ -329,7 +364,8 @@ class QueryCacheTest extends TestCase
         $key = $database->getQueryCacheKey($collection->getId(), '_39');
         $hash = $database->getQueryCacheField($collection, field: 'document');
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             key: $key,
             callback: function () use ($database, &$callbackCalls): Document {
                 $callbackCalls++;
@@ -337,7 +373,8 @@ class QueryCacheTest extends TestCase
             },
             hash: $hash,
         );
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             key: $key,
             callback: function () use ($database, &$callbackCalls): Document {
                 $callbackCalls++;
@@ -364,7 +401,8 @@ class QueryCacheTest extends TestCase
         $key = $database->getQueryCacheKey($collection->getId(), '_39');
         $hash = $database->getQueryCacheField($collection, field: 'count');
 
-        $first = $database->withCache(
+        $first = $this->withCache(
+            $database,
             key: $key,
             callback: function () use (&$callbackCalls): int {
                 $callbackCalls++;
@@ -372,7 +410,8 @@ class QueryCacheTest extends TestCase
             },
             hash: $hash,
         );
-        $second = $database->withCache(
+        $second = $this->withCache(
+            $database,
             key: $key,
             callback: function () use (&$callbackCalls): int {
                 $callbackCalls++;
@@ -694,7 +733,8 @@ class QueryCacheTest extends TestCase
         ], $hash);
 
         $callbackCalls = 0;
-        $documents = $database->withCache(
+        $documents = $this->withCache(
+            $database,
             key: $key,
             callback: function () use (&$callbackCalls): array {
                 $callbackCalls++;

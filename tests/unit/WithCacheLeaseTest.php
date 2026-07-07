@@ -14,6 +14,8 @@ use Utopia\Database\Helpers\Role;
 
 class WithCacheLeaseTest extends TestCase
 {
+    use QueryCacheTestHelpers;
+
     private LeasableMemoryCache $cacheAdapter;
 
     private Database $database;
@@ -40,13 +42,6 @@ class WithCacheLeaseTest extends TestCase
         ]));
 
         $this->key = $this->getQueryCacheKey($this->database, 'projects');
-    }
-
-    private function getQueryCacheKey(Database $database, string $collectionId, ?string $namespace = null): string
-    {
-        $method = new \ReflectionMethod(Database::class, 'getQueryCacheKey');
-
-        return $method->invoke($database, $collectionId, $namespace);
     }
 
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void

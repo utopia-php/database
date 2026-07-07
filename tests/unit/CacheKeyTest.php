@@ -13,6 +13,8 @@ use Utopia\Database\Query;
 
 class CacheKeyTest extends TestCase
 {
+    use QueryCacheTestHelpers;
+
     /**
      * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
      */
@@ -31,28 +33,6 @@ class CacheKeyTest extends TestCase
     {
         [, , $hashKey] = $db->getCacheKeys($collection, $docId);
         return $hashKey;
-    }
-
-    private function getQueryCacheKey(Database $db, string $collectionId, ?string $namespace = null): string
-    {
-        $method = new \ReflectionMethod(Database::class, 'getQueryCacheKey');
-
-        return $method->invoke($db, $collectionId, $namespace);
-    }
-
-    /**
-     * @param array<Query> $queries
-     */
-    private function getQueryCacheField(
-        Database $db,
-        ?Document $collection = null,
-        array $queries = [],
-        string $field = 'documents',
-        string $forPermission = Database::PERMISSION_READ,
-    ): ?string {
-        $method = new \ReflectionMethod(Database::class, 'getQueryCacheField');
-
-        return $method->invoke($db, $collection, $queries, $field, $forPermission);
     }
 
     public function testSameConfigProducesSameCacheKey(): void

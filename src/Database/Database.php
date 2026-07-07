@@ -8584,6 +8584,7 @@ class Database
      * @param string|null $namespace
      * @return bool
      */
+    /** @phpstan-ignore-next-line exercised through query cache tests */
     private function purgeCachedQueries(string $collection, ?string $namespace = null): bool
     {
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
@@ -9744,6 +9745,7 @@ class Database
      * @param string $forPermission
      * @return string|null
      */
+    /** @phpstan-ignore-next-line exercised through query cache tests */
     private function getQueryCacheField(
         ?Document $collection = null,
         array $queries = [],

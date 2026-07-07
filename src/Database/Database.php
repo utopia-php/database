@@ -824,17 +824,24 @@ class Database
             return $sequence;
         }, $documents);
 
-        // Fetch fresh copies with computed operator values, preserving the caller's projection
-        $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find(
-                $collection->getId(),
-                array_merge([Query::equal('$sequence', $sequences)], $selections)
-            )
-        ));
-
+        // Fetch fresh copies with computed operator values, preserving the caller's projection.
+        // Chunk by maxQueryValues (the batch can be up to INSERT_BATCH_SIZE) and bound each find()
+        // to the chunk size, otherwise find()'s default limit would silently drop rows past it.
         $refetchedMap = [];
-        foreach ($refetched as $doc) {
-            $refetchedMap[$doc->getSequence()] = $doc;
+        foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
+            $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
+                fn () => $this->find(
+                    $collection->getId(),
+                    array_merge([
+                        Query::equal('$sequence', $chunk),
+                        Query::limit(\count($chunk)),
+                    ], $selections)
+                )
+            ));
+
+            foreach ($refetched as $doc) {
+                $refetchedMap[$doc->getSequence()] = $doc;
+            }
         }
 
         $result = [];
@@ -6641,8 +6648,9 @@ class Database
                 $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc->removeAttribute('$skipPermissionsUpdate');
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                // Operator refetch already returns decoded documents honoring the caller's select;
-                // decoding again (without selections) would re-materialize non-selected attributes.
+                // The operator refetch goes through find(), which already returns fully decoded
+                // documents. Decoding again would double-apply the decode filters (and, because
+                // this call passes no selections, re-materialize non-selected attributes).
                 if (!$hasOperators) {
                     $doc = $this->decode($collection, $doc);
                 }

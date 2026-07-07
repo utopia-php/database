@@ -493,6 +493,63 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testUpdateDocumentsOperatorsBatchLargerThanDefaultLimit(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'test_operators_large_batch';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+
+        // More documents than find()'s default limit (25) so the refetch must page/limit correctly.
+        $total = 60;
+        for ($i = 1; $i <= $total; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "batch_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => $i,
+            ]));
+        }
+
+        // Update every document with an operator. The refetch must return computed values for the
+        // whole batch, not just the first 25 rows (which would otherwise fall back to stale values).
+        $updated = [];
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(1000),
+            ]),
+            [],
+            batchSize: $total,
+            onNext: function (Document $doc) use (&$updated) {
+                $updated[$doc->getId()] = $doc;
+            }
+        );
+
+        $this->assertEquals($total, $count);
+        $this->assertCount($total, $updated);
+
+        // Every document must reflect the computed operator value.
+        for ($i = 1; $i <= $total; $i++) {
+            $doc = $updated["batch_doc_{$i}"] ?? null;
+            $this->assertNotNull($doc, "Missing callback document batch_doc_{$i}");
+            $this->assertEquals($i + 1000, $doc->getAttribute('count'), "Stale value for batch_doc_{$i}");
+
+            // And it must be persisted, not just returned.
+            $fresh = $database->getDocument($collectionId, "batch_doc_{$i}");
+            $this->assertEquals($i + 1000, $fresh->getAttribute('count'));
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorErrorHandling(): void
     {
         /** @var Database $database */
